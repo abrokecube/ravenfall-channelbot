@@ -40,9 +40,6 @@ async def test_command(cmd: ChatCommand):
 
 async def towns_handler(cmd: ChatCommand):
     async with aiohttp.ClientSession() as session:
-        print([
-            f"{x['rf_query_url']}/select * from village" for x in channels
-        ])
         r = await asyncio.gather(*[
             session.get(f"{x['rf_query_url']}/select * from village") for x in channels
         ], return_exceptions=True)
@@ -86,7 +83,7 @@ async def update_handler(cmd: ChatCommand):
         await cmd.send(f"{village_prefix}town {boost_stat.lower()}")
     
 
-@routine(delta=timedelta(hours=6))
+@routine(delta=timedelta(hours=6), wait_first=True)
 async def update_task(chat: Chat):
     async with aiohttp.ClientSession() as session:
         print([
@@ -118,8 +115,8 @@ async def run():
     
     # create chat instance
     chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
-    for channel in channels:
-        chat.set_channel_prefix(channel['ravenbot_prefix'], channel['channel_name'])
+    # for channel in channels:
+    #     chat.set_channel_prefix(channel['ravenbot_prefix'], channel['channel_name'])
 
     # register the handlers for the events you want
 
