@@ -5,6 +5,7 @@ class Channel(TypedDict):
     channel_name: str
     rf_query_url: str
     custom_town_msg: str
+    ravenbot_prefix: str
 
 class GameSession(TypedDict):
     authenticated: bool
