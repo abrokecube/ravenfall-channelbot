@@ -157,7 +157,7 @@ async def update_events():
                     f"Players: {dungeon['playersalive']:,}/{dungeon['players']:,} – "
                     f"Elapsed time: {format_seconds(dungeon['elapsed'])}"
                 )
-        elif raid and raid['started']:
+        elif raid and raid['started'] and raid['boss']['maxhealth'] > 0:
             event_text = (
                 "RAID – "
                 f"Boss HP: {raid['boss']['health']:,}/{raid['boss']['maxhealth']:,} "
