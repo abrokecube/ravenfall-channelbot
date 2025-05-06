@@ -145,30 +145,23 @@ async def update_events():
                     f"Enemies: {dungeon['enemies']:,} – "
                     f"Players: {dungeon['players']:,}"
                 )
-            elif dungeon['started'] and dungeon['enemiesalive'] > 0:
-                max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
-                event_text = (
-                    f"DUNGEON – "
-                    f"Boss HP: {dungeon['boss']['health']:,} – "
-                    f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,} – "
-                    f"Players: {dungeon['playersalive']:,}/{dungeon['players']:,} – "
-                    f"Elapsed time: {format_seconds(dungeon['elapsed'])}"
-                )
             else:
-                if not channel['channel_id'] in max_dungeon_hp:
+                if dungeon['enemiesalive'] > 0 or not channel['channel_id'] in max_dungeon_hp:
                     max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
                 boss_max_hp = max_dungeon_hp[channel['channel_id']]
                 event_text = (
                     f"DUNGEON – "
-                    f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp} – "
+                    f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp} "
+                    f"({dungeon['boss']['health']/boss_max_hp:.1%}) – "
                     f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,} – "
-                    f"Players: {dungeon['playersalive']:,}/{dungeon['players']}:, – "
+                    f"Players: {dungeon['playersalive']:,}/{dungeon['players']:,} – "
                     f"Elapsed time: {format_seconds(dungeon['elapsed'])}"
                 )
         elif raid and raid['started']:
             event_text = (
                 "RAID – "
-                f"Boss HP: {raid['boss']['health']:,}/{raid['boss']['maxhealth']:,} – "
+                f"Boss HP: {raid['boss']['health']:,}/{raid['boss']['maxhealth']:,} "
+                f"({raid['boss']['health']/raid['boss']['maxhealth']:.1%}) – "
                 f"Players: {raid['players']:,} – "
                 f"Time left: {format_seconds(raid['timeleft'])}"
             )
