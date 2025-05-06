@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from models import *
 from utils.routines import routine
+from utils.format_time import *
 
 load_dotenv()
 
@@ -26,6 +27,8 @@ for channel in channels:
 
 async def on_ready(ready_event: EventData):
     update_task.start(ready_event.chat)
+    update_events.start()
+    update_mult.start(ready_event.chat)
     print('Bot is ready for work')
     ...
 
@@ -34,34 +37,37 @@ async def on_message(msg: ChatMessage):
     ...
 
     
-async def test_command(cmd: ChatCommand):
+async def test_cmd(cmd: ChatCommand):
     await cmd.reply(f'hello {cmd.user.name}')
 
 
-async def towns_handler(cmd: ChatCommand):
+async def towns_cmd(cmd: ChatCommand):
     async with aiohttp.ClientSession() as session:
         r = await asyncio.gather(*[
             session.get(f"{x['rf_query_url']}/select * from village") for x in channels
         ], return_exceptions=True)
         villages: List[Village] = await asyncio.gather(*[
-            x.json() for x in r
+            x.json() for x in r if not isinstance(x, Exception)
         ])
     out_str = []
     for idx, village in enumerate(villages):
         if not isinstance(village, dict):
             continue
         channel: Channel = channels[idx]
-        split = village['boost'].split()
-        boost_stat = split[0]
-        boost_value = float(split[1].rstrip("%"))
-        asdf = f"Town #{idx+1}: @{channel['channel_name']} - {boost_stat} {int(round(boost_value))}%"
+        if len(village['boost'].strip()) > 0:
+            split = village['boost'].split()
+            boost_stat = split[0]
+            boost_value = float(split[1].rstrip("%"))
+            asdf = f"Town #{idx+1}: @{channel['channel_name']} - {boost_stat} {int(round(boost_value))}%"
+        else:
+            asdf = f"Town #{idx+1}: @{channel['channel_name']} - No boost"
         if channel['custom_town_msg']:
             asdf += f" {channel['custom_town_msg']}"
         out_str.append(asdf)
         
     await cmd.reply(' ✦ '.join(out_str))
         
-async def update_handler(cmd: ChatCommand):
+async def update_cmd(cmd: ChatCommand):
     for channel in channels:
         if channel['channel_id'] == cmd.room.room_id:
             village_url = channel['rf_query_url']
@@ -82,13 +88,109 @@ async def update_handler(cmd: ChatCommand):
         boost_value = float(split[1].rstrip("%"))
         await cmd.send(f"{village_prefix}town {boost_stat.lower()}")
     
+village_events: Dict[str, str] = {}
+async def event_cmd(cmd: ChatCommand):
+    if not cmd.room.room_id in village_events:
+        await cmd.reply("No active event.")
+        return
+    await cmd.reply(f"{village_events[cmd.room.room_id]}")
+
+async def uptime_cmd(cmd: ChatCommand):
+    for channel in channels:
+        if channel['channel_id'] == cmd.room.room_id:
+            village_url = channel['rf_query_url']
+            break
+    else:
+        await cmd.reply("Town not found :(")
+        return
+    async with aiohttp.ClientSession() as session:
+        try:
+            r = await session.get(f"{village_url}/select * from session")
+        except aiohttp.client_exceptions.ContentTypeError:
+            await cmd.reply("Ravenfall uptime: Offline!")
+            return
+        game_session: GameSession = await r.json()
+        await cmd.reply(f"Ravenfall uptime: {seconds_to_dhms(game_session['secondssincestart'])}")
+
+max_dungeon_hp: Dict[str, int] = {}
+@routine(delta=timedelta(seconds=2))
+async def update_events():
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        tasks.extend([
+            session.get(f"{x['rf_query_url']}/select * from dungeon") for x in channels
+        ])
+        tasks.extend([
+            session.get(f"{x['rf_query_url']}/select * from raid") for x in channels
+        ])
+        r = await asyncio.gather(*tasks, return_exceptions=True)
+        data = await asyncio.gather(*[
+            x.json() for x in r
+        ])
+    a = int(len(tasks) / 2)
+    dungeons: List[Dungeon] = data[a*0:a*1]
+    raids: List[Raid] = data[a*1:a*2]
+    for dungeon, raid, channel in zip(dungeons, raids, channels):
+        event_text = "No active event."
+        if dungeon and dungeon.get('enemies'):
+            if not dungeon['started']:
+                max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
+                time_starting = format_seconds(dungeon['secondsuntilstart'])
+                event_text = (
+                    f"DUNGEON starting in {time_starting} – "
+                    f"Boss HP: {dungeon['boss']['health']:,} – "
+                    f"Enemies: {dungeon['enemies']:,} – "
+                    f"Players: {dungeon['players']:,}"
+                )
+            elif dungeon['started'] and dungeon['enemiesalive'] > 0:
+                max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
+                event_text = (
+                    f"DUNGEON – "
+                    f"Boss HP: {dungeon['boss']['health']:,} – "
+                    f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,} – "
+                    f"Players: {dungeon['playersalive']:,}/{dungeon['players']:,} – "
+                    f"Elapsed time: {format_seconds(dungeon['elapsed'])}"
+                )
+            else:
+                if not channel['channel_id'] in max_dungeon_hp:
+                    max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
+                boss_max_hp = max_dungeon_hp[channel['channel_id']]
+                event_text = (
+                    f"DUNGEON – "
+                    f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp} – "
+                    f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,} – "
+                    f"Players: {dungeon['playersalive']:,}/{dungeon['players']}:, – "
+                    f"Elapsed time: {format_seconds(dungeon['elapsed'])}"
+                )
+        elif raid and raid['started']:
+            event_text = (
+                "RAID – "
+                f"Boss HP: {raid['boss']['health']:,}/{raid['boss']['maxhealth']:,} – "
+                f"Players: {raid['players']:,} – "
+                f"Time left: {format_seconds(raid['timeleft'])}"
+            )
+        village_events[channel['channel_id']] = event_text
+
+current_mult: float = None
+@routine(delta=timedelta(seconds=2))
+async def update_mult(chat: Chat):
+    global current_mult
+    async with aiohttp.ClientSession() as session:
+        r = await session.get(f"{channels[0]['rf_query_url']}/select * from multiplier")
+        multiplier: GameMultiplier = await r.json()
+    if current_mult is None:
+        current_mult = multiplier['multiplier']
+    if multiplier['multiplier'] > current_mult:
+        current_mult = multiplier['multiplier']
+        msg = f"{multiplier['eventname']} increased the multiplier to {int(current_mult)}x!"
+        for channel in channels:
+            await chat.send_message(channel['channel_name'], msg)
+    current_mult = multiplier['multiplier']
+            
 
 @routine(delta=timedelta(hours=6), wait_first=True)
 async def update_task(chat: Chat):
     async with aiohttp.ClientSession() as session:
-        print([
-            f"{x['rf_query_url']}/select * from village" for x in channels
-        ])
         r = await asyncio.gather(*[
             session.get(f"{x['rf_query_url']}/select * from village") for x in channels
         ], return_exceptions=True)
@@ -123,9 +225,11 @@ async def run():
     chat.register_event(ChatEvent.READY, on_ready)
     chat.register_event(ChatEvent.MESSAGE, on_message)
 
-    chat.register_command('hi', test_command)
-    chat.register_command('towns', towns_handler)
-    chat.register_command('update', update_handler)
+    chat.register_command('hi', test_cmd)
+    chat.register_command('towns', towns_cmd)
+    chat.register_command('update', update_cmd)
+    chat.register_command('event', event_cmd)
+    chat.register_command('uptime', uptime_cmd)
 
     chat.start()
 

@@ -1,4 +1,4 @@
-from typing import TypedDict, Dict, Literal, Union
+from typing import TypedDict, Dict, Literal, Union, NamedTuple
 
 class Channel(TypedDict):
     channel_id: str
