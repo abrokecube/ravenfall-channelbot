@@ -201,11 +201,12 @@ async def update_task(chat: Chat):
         if not isinstance(village, dict):
             continue
         channel: Channel = channels[idx]
-        split = village['boost'].split()
-        boost_stat = split[0]
-        boost_value = float(split[1].rstrip("%"))
-        asdf = f"{channel['ravenbot_prefix']}town {boost_stat.lower()}"
-        await chat.send_message(channel['channel_name'], asdf)
+        if len(village['boost'].strip()) > 0:
+            split = village['boost'].split()
+            boost_stat = split[0]
+            boost_value = float(split[1].rstrip("%"))
+            asdf = f"{channel['ravenbot_prefix']}town {boost_stat.lower()}"
+            await chat.send_message(channel['channel_name'], asdf)
 
 # this is where we set up the bot
 async def run():
