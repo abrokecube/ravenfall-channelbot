@@ -151,7 +151,7 @@ async def update_events():
                 boss_max_hp = max_dungeon_hp[channel['channel_id']]
                 event_text = (
                     f"DUNGEON – "
-                    f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp} "
+                    f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp:,} "
                     f"({dungeon['boss']['health']/boss_max_hp:.1%}) – "
                     f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,} – "
                     f"Players: {dungeon['playersalive']:,}/{dungeon['players']:,} – "
