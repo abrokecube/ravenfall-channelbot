@@ -83,10 +83,13 @@ async def update_cmd(cmd: ChatCommand):
             await cmd.reply("This channel's town is currently not online!")
             return
         village: Village = await r.json()
-        split = village['boost'].split()
-        boost_stat = split[0]
-        boost_value = float(split[1].rstrip("%"))
-        await cmd.send(f"{village_prefix}town {boost_stat.lower()}")
+        if len(village['boost'].strip()) > 0:
+            split = village['boost'].split()
+            boost_stat = split[0]
+            boost_value = float(split[1].rstrip("%"))
+            await cmd.send(f"{village_prefix}town {boost_stat.lower()}")
+        else:
+            await cmd.send(f"This town has no active boost.")
     
 village_events: Dict[str, str] = {}
 async def event_cmd(cmd: ChatCommand):
