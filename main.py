@@ -15,7 +15,8 @@ from datetime import datetime, timedelta
 from models import *
 from utils.routines import routine
 from utils.format_time import *
-
+from utils import chatmsg_cd
+from dataclasses import dataclass
 load_dotenv()
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
@@ -33,9 +34,20 @@ async def on_ready(ready_event: EventData):
     ...
 
 async def on_message(msg: ChatMessage):
-    # print(f'#{msg.room.name}: {msg.user.name}: {msg.text}')
-    ...
+    ch_data = get_channel_data(msg.room.room_id)
+    if msg.first and msg.text[:5].lower() == f"{ch_data['ravenbot_prefix']}join":
+        await first_time_joiner(msg)
 
+@chatmsg_cd.chat_autoresponse_cd(5, chatmsg_cd.CooldownType.CHANNEL)
+async def first_time_joiner(msg: ChatMessage):
+    print("called")
+    await asyncio.sleep(3)
+    ch = get_channel_data(msg.room.room_id) 
+    if ch is None:
+        return
+    boost = await get_town_boost(ch)
+    await msg.chat.send_message(msg.room.name, f"FeelsOkayMan welcome to my {boost[0].skill.lower()} town")
+    
     
 async def test_cmd(cmd: ChatCommand):
     await cmd.reply(f'hello {cmd.user.name}')
@@ -66,30 +78,45 @@ async def towns_cmd(cmd: ChatCommand):
         out_str.append(asdf)
         
     await cmd.reply(' ✦ '.join(out_str))
+
+def get_channel_data(channel_id) -> Channel | None:
+    for channel in channels:
+        if channel['channel_id'] == channel_id:
+            return channel
+    return None
+
+async def get_town_boost(channel: Channel) -> List[TownBoost] | None:
+    async with aiohttp.ClientSession() as session:
+        try:
+            r = await session.get(f"{channel['rf_query_url']}/select * from village")
+        except aiohttp.client_exceptions.ContentTypeError:
+            return None
+        village: Village = await r.json()
+        split = village['boost'].split()
+        if len(split) < 2:
+            return []
+        boost_stat = split[0]
+        boost_value = float(split[1].rstrip("%"))
+        return [TownBoost(boost_stat, boost_value/100)]
         
 async def update_cmd(cmd: ChatCommand):
+    this_channel: Channel = None
     for channel in channels:
         if channel['channel_id'] == cmd.room.room_id:
-            village_url = channel['rf_query_url']
-            village_prefix = channel['ravenbot_prefix']
+            town_boost = await get_town_boost(channel)
+            this_channel = channel
             break
     else:
         await cmd.reply("Town not found :(")
         return
-    async with aiohttp.ClientSession() as session:
-        try:
-            r = await session.get(f"{village_url}/select * from village")
-        except aiohttp.client_exceptions.ContentTypeError:
-            await cmd.reply("This channel's town is currently not online!")
-            return
-        village: Village = await r.json()
-        if len(village['boost'].strip()) > 0:
-            split = village['boost'].split()
-            boost_stat = split[0]
-            boost_value = float(split[1].rstrip("%"))
-            await cmd.send(f"{village_prefix}town {boost_stat.lower()}")
-        else:
-            await cmd.send(f"This town has no active boost.")
+    if town_boost is None:
+        await cmd.reply("This channel's town is currently not online!")
+        return
+    if len(town_boost) == 0:
+        await cmd.reply(f"This town has no active boost.")
+        return
+    await cmd.send(f"{this_channel['ravenbot_prefix']}town {town_boost[0].skill.lower()}")
+    
     
 village_events: Dict[str, str] = {}
 async def event_cmd(cmd: ChatCommand):
@@ -167,6 +194,7 @@ async def update_events():
             )
         village_events[channel['channel_id']] = event_text
 
+
 current_mult: float = None
 @routine(delta=timedelta(seconds=2))
 async def update_mult(chat: Chat):
@@ -182,7 +210,8 @@ async def update_mult(chat: Chat):
         for channel in channels:
             await chat.send_message(channel['channel_name'], msg)
     current_mult = multiplier['multiplier']
-            
+    
+
 
 @routine(delta=timedelta(hours=6), wait_first=True)
 async def update_task(chat: Chat):

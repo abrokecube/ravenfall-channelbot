@@ -1,4 +1,9 @@
 from typing import TypedDict, Dict, Literal, Union, NamedTuple
+from dataclasses import dataclass
+
+class TownBoost(NamedTuple):
+    skill: str
+    multiplier: float
 
 class Channel(TypedDict):
     channel_id: str
