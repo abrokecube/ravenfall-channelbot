@@ -175,7 +175,7 @@ async def system_cmd(cmd: ChatCommand):
     uptime = time.time() - psutil.boot_time()
     await cmd.reply(strutils.strjoin(
         " – ", 
-        f"CPU: {cpu_usage/100:.1%} {cpu_freq:.0f} MHz",
+        f"CPU: {cpu_usage/100:.1%}, {cpu_freq:.0f} MHz",
         f"RAM: {bytes_to_human_readable(ram_usage)}/{bytes_to_human_readable(ram_total)}",
         battery_text,
         f"Uptime: {seconds_to_dhms(uptime)}"
