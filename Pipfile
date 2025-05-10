@@ -7,6 +7,7 @@ name = "pypi"
 twitchapi = "*"
 python-dotenv = "*"
 tinydb = "*"
+psutil = "*"
 
 [dev-packages]
 

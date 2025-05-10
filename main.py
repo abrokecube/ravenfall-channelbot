@@ -1,3 +1,4 @@
+import time
 from twitchAPI.twitch import Twitch
 from twitchAPI.oauth import UserAuthenticationStorageHelper
 from twitchAPI.type import AuthScope, ChatEvent
@@ -11,10 +12,12 @@ import aiohttp
 import aiohttp.client_exceptions
 from typing import List
 from datetime import datetime, timedelta
+import psutil
 
 from models import *
 from utils.routines import routine
 from utils.format_time import *
+from utils import strutils
 from utils import chatmsg_cd
 from dataclasses import dataclass
 load_dotenv()
@@ -142,6 +145,42 @@ async def uptime_cmd(cmd: ChatCommand):
         game_session: GameSession = await r.json()
         await cmd.reply(f"Ravenfall uptime: {seconds_to_dhms(game_session['secondssincestart'])}")
 
+def bytes_to_human_readable(size_bytes):
+    if size_bytes == 0:
+        return "0 B"
+    
+    units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
+    power = 1024
+    unit_index = 0
+
+    while size_bytes >= power and unit_index < len(units) - 1:
+        size_bytes /= power
+        unit_index += 1
+
+    return f"{size_bytes:.2f} {units[unit_index]}"
+
+async def system_cmd(cmd: ChatCommand):
+    cpu_usage = await asyncio.to_thread(psutil.cpu_percent, 1)
+    cpu_freq = psutil.cpu_freq().current
+    ram = psutil.virtual_memory()
+    ram_usage = ram.used
+    ram_total = ram.total
+    battery = psutil.sensors_battery()
+    battery_text = ""
+    if battery:
+        battery_percent = battery.percent
+        battery_plugged = "Charging" if battery.plugged else "Not charging"
+        battery_time_left = format_seconds(battery.secsleft)
+        battery_text = f"Battery: {battery_percent}%, {battery_plugged} ({battery_time_left} left)"
+    uptime = time.time() - psutil.boot_time()
+    await cmd.reply(strutils.strjoin(
+        " – ", 
+        f"CPU: {cpu_usage/100:.1%} {cpu_freq:.0f} MHz",
+        f"RAM: {bytes_to_human_readable(ram_usage)}/{bytes_to_human_readable(ram_total)}",
+        battery_text,
+        f"Uptime: {seconds_to_dhms(uptime)}"
+    ))
+
 max_dungeon_hp: Dict[str, int] = {}
 @routine(delta=timedelta(seconds=2))
 async def update_events():
@@ -256,6 +295,7 @@ async def run():
     chat.register_command('update', update_cmd)
     chat.register_command('event', event_cmd)
     chat.register_command('uptime', uptime_cmd)
+    chat.register_command('system', system_cmd)
 
     chat.start()
 
