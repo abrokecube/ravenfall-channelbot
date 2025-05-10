@@ -169,7 +169,7 @@ async def system_cmd(cmd: ChatCommand):
     battery_text = ""
     if battery:
         battery_percent = battery.percent
-        battery_plugged = "Charging" if battery.plugged else "Not charging"
+        battery_plugged = "Charging" if battery.power_plugged else "Not charging"
         battery_time_left = format_seconds(battery.secsleft)
         battery_text = f"Battery: {battery_percent}%, {battery_plugged} ({battery_time_left} left)"
     uptime = time.time() - psutil.boot_time()
