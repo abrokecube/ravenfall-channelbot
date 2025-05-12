@@ -43,7 +43,6 @@ async def on_message(msg: ChatMessage):
 
 @chatmsg_cd.chat_autoresponse_cd(5, chatmsg_cd.CooldownType.CHANNEL)
 async def first_time_joiner(msg: ChatMessage):
-    print("called")
     await asyncio.sleep(3)
     ch = get_channel_data(msg.room.room_id) 
     if ch is None:
@@ -187,6 +186,9 @@ async def system_cmd(cmd: ChatCommand):
         f"Uptime: {seconds_to_dhms(uptime)}"
     ))
 
+async def welcome_msg_cmd(cmd: ChatCommand):
+    await first_time_joiner(cmd)
+
 max_dungeon_hp: Dict[str, int] = {}
 @routine(delta=timedelta(seconds=2))
 async def update_events():
@@ -302,6 +304,7 @@ async def run():
     chat.register_command('event', event_cmd)
     chat.register_command('uptime', uptime_cmd)
     chat.register_command('system', system_cmd)
+    chat.register_command('welcomemsg', welcome_msg_cmd)
 
     chat.start()
 
