@@ -49,7 +49,13 @@ async def first_time_joiner(msg: ChatMessage):
     if ch is None:
         return
     boost = await get_town_boost(ch)
-    await msg.chat.send_message(msg.room.name, f"FeelsOkayMan welcome to my {boost[0].skill.lower()} town")
+    welcome_msg = ch['welcome_message'].format_map({
+        "townSkillLower": boost[0].skill.lower(),
+        "townSkill": boost[0].skill,
+        "userName": msg.user.name,
+        "userDisplayName": msg.user.display_name
+    })
+    await msg.chat.send_message(msg.room.name, welcome_msg)
     
     
 async def test_cmd(cmd: ChatCommand):
