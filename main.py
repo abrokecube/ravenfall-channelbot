@@ -292,7 +292,7 @@ async def event_gotify_msg(msg: gotify.Message, chat: Chat):
     else:
         text = msg['message']
         
-    print(f"Recieved gotify message: {msg['message']}")
+    print(f"Recieved gotify message: {msg}")
     if target is not None:
         targets = target.split(', ')
         for room in targets:
@@ -314,7 +314,8 @@ async def gotify_listener(chat: Chat):
             )
             print("Connected to Gotify")
             async for msg in gotify.stream():
-                await event_gotify_msg(msg, chat)
+                if msg['appid'] == os.getenv("GOTIFY_APP_ID"):
+                    await event_gotify_msg(msg, chat)
         except Exception as e:
             print(f"Gotify listener failed: {e}, retrying...")
 
