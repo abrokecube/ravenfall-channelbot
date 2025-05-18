@@ -8,6 +8,7 @@ twitchapi = "*"
 python-dotenv = "*"
 tinydb = "*"
 psutil = "*"
+gotify = {extras = ["stream"], version = "*"}
 
 [dev-packages]
 

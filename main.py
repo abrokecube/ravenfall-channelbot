@@ -14,6 +14,9 @@ from typing import List
 from datetime import datetime, timedelta
 import psutil
 
+from gotify import AsyncGotify
+from gotify import gotify
+
 from models import *
 from utils.routines import routine
 from utils.format_time import *
@@ -280,6 +283,41 @@ async def update_task(chat: Chat):
             asdf = f"{channel['ravenbot_prefix']}town {boost_stat.lower()}"
             await chat.send_message(channel['channel_name'], asdf)
 
+async def event_gotify_msg(msg: gotify.Message, chat: Chat):
+    split = msg['message'].split(":", 2)
+    target = None
+    text = None
+    if len(split) == 2:
+        target, text = split
+    else:
+        text = msg['message']
+        
+    print(f"Recieved gotify message: {msg['message']}")
+    if target is not None:
+        targets = target.split(', ')
+        for room in targets:
+            if chat.is_in_room(room):
+                await chat.send_message(room, text)
+            else:
+                print(f"Unknown room: {room}")
+    else:
+        for channel in channels:
+            await chat.send_message(channel['channel_name'], text)
+
+async def gotify_listener(chat: Chat):
+    while True:
+        await asyncio.sleep(1)
+        try:
+            gotify = AsyncGotify(
+                base_url=os.getenv("GOTIFY_URL"),
+                client_token=os.getenv("GOTIFY_CLIENT_TOKEN")
+            )
+            print("Connected to Gotify")
+            async for msg in gotify.stream():
+                await event_gotify_msg(msg, chat)
+        except Exception as e:
+            print(f"Gotify listener failed: {e}, retrying...")
+
 # this is where we set up the bot
 async def run():
     # set up twitch api instance and add user authentication with some scopes
@@ -306,13 +344,13 @@ async def run():
     chat.register_command('system', system_cmd)
     chat.register_command('welcomemsg', welcome_msg_cmd)
 
+    asyncio.create_task(gotify_listener(chat))
     chat.start()
 
-    # lets run till we press enter in the console
     try:
-        input('press ENTER to stop\\n')
+        while True:
+            await asyncio.sleep(9999)
     finally:
-        # now we can close the chat bot and the twitch api client
         chat.stop()
         await twitch.close()
 
