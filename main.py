@@ -284,7 +284,7 @@ async def update_task(chat: Chat):
             await chat.send_message(channel['channel_name'], asdf)
 
 async def event_gotify_msg(msg: gotify.Message, chat: Chat):
-    split = msg['message'].split(":", 2)
+    split = msg['message'].split("::", 2)
     target = None
     text = None
     if len(split) == 2:
