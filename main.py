@@ -69,9 +69,12 @@ async def towns_cmd(cmd: ChatCommand):
         r = await asyncio.gather(*[
             session.get(f"{x['rf_query_url']}/select * from village") for x in channels
         ], return_exceptions=True)
-        villages: List[Village] = await asyncio.gather(*[
-            x.json() for x in r if not isinstance(x, Exception)
-        ])
+        tasks = []
+        for x in r:
+            if isinstance(x, Exception):
+                continue
+            tasks.append(x.json())
+        villages: List[Village] = await asyncio.gather(*tasks)
     out_str = []
     for idx, village in enumerate(villages):
         if not isinstance(village, dict):
