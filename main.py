@@ -314,7 +314,7 @@ async def gotify_listener(chat: Chat):
             )
             print("Connected to Gotify")
             async for msg in gotify.stream():
-                if msg['appid'] == os.getenv("GOTIFY_APP_ID"):
+                if msg['appid'] == int(os.getenv("GOTIFY_APP_ID")):
                     await event_gotify_msg(msg, chat)
         except Exception as e:
             print(f"Gotify listener failed: {e}, retrying...")
