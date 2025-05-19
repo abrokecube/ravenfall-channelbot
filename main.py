@@ -387,6 +387,7 @@ async def run():
     chat.register_command('system', system_cmd)
     chat.register_command('welcomemsg', welcome_msg_cmd)
     chat.register_command('exprate', exprate_cmd)
+    chat.register_command('expirate', exprate_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
