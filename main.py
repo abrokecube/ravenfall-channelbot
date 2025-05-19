@@ -22,10 +22,15 @@ from utils.routines import routine
 from utils.format_time import *
 from utils import strutils
 from utils import chatmsg_cd
+from utils.is_twitch_username import is_twitch_username
 from dataclasses import dataclass
+
+import braille
 load_dotenv()
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
+GOTIFY_URL = os.getenv('GOTIFY_URL').strip("/")
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL").strip('/')
 
 with open("channels.json", "r") as f:
     channels: List[Channel] = json.load(f)
@@ -59,7 +64,7 @@ async def first_time_joiner(msg: ChatMessage):
     })
     await msg.chat.send_message(msg.room.name, welcome_msg)
     
-    
+
 async def test_cmd(cmd: ChatCommand):
     await cmd.reply(f'hello {cmd.user.name}')
 
@@ -191,6 +196,40 @@ async def system_cmd(cmd: ChatCommand):
         battery_text,
         f"Uptime: {seconds_to_dhms(uptime)}"
     ))
+
+async def get_prometheus_series(query: str, duration_s, step_s=20):
+    now = time.time()
+    start = now - duration_s
+    async with aiohttp.ClientSession() as session:
+        r = await session.get(
+            f"{PROMETHEUS_URL}/api/v1/query_range?query={query}&start={start}&end={now}&step={step_s}"
+        )
+        result = await r.json()
+    data = result['data']['result']
+    return data
+
+async def exprate_cmd(cmd: ChatCommand):
+    args = cmd.parameter.split()
+    target_user = cmd.user.name
+    if len(cmd.parameter) > 2 and len(args) > 0:
+        target_user = args[0].strip('@')
+    if not is_twitch_username(target_user):
+        await cmd.reply("Invalid username.")
+        return
+    
+    query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\"}[90s]))" % (target_user, cmd.room.name)
+    data = await get_prometheus_series(query, 10*60)
+    if len(data) == 0:
+        await cmd.reply("No data recorded. Your character might not be in this town right now.")
+        return
+    data_pairs = [(x[0], float(x[1])) for x in data[0]['values']]
+    graph = braille.simple_line_graph(
+        data_pairs, max_gap=30, width=26, min_val=1, fill_type=1
+    )
+    await cmd.reply(
+        f"[{graph}] Earning {data_pairs[-1][1]*60*60:,.0f} exp/h (graph: last 10 minutes)"
+    )
+    ...
 
 async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
@@ -347,6 +386,7 @@ async def run():
     chat.register_command('uptime', uptime_cmd)
     chat.register_command('system', system_cmd)
     chat.register_command('welcomemsg', welcome_msg_cmd)
+    chat.register_command('exprate', exprate_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
