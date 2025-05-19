@@ -246,9 +246,12 @@ async def update_events():
             session.get(f"{x['rf_query_url']}/select * from raid") for x in channels
         ])
         r = await asyncio.gather(*tasks, return_exceptions=True)
-        data = await asyncio.gather(*[
-            x.json() for x in r
-        ])
+        tasks = []
+        for x in r:
+            if isinstance(x, Exception):
+                continue
+            tasks.append(x.json())
+        data = asyncio.gather(*tasks)
     a = int(len(tasks) / 2)
     dungeons: List[Dungeon] = data[a*0:a*1]
     raids: List[Raid] = data[a*1:a*2]
