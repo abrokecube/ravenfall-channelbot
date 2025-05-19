@@ -251,7 +251,7 @@ async def update_events():
             if isinstance(x, Exception):
                 continue
             tasks.append(x.json())
-        data = asyncio.gather(*tasks)
+        data = await asyncio.gather(*tasks)
     a = int(len(tasks) / 2)
     dungeons: List[Dungeon] = data[a*0:a*1]
     raids: List[Raid] = data[a*1:a*2]
