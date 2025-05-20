@@ -101,8 +101,8 @@ def simple_line_graph(pairs: Iterable[Tuple[float, float]], width=24, height=4, 
     if hard_max_val is not None:
         max_val = min(hard_max_val, max_val)
     total_range = max_val - min_val
-    if total_range == 0:
-        max_val += 1
+    if total_range <= 0:
+        max_val = min_val + 1
         total_range = 1
     
     values_interpolated = interpolate_with_gap_handling(pairs, width, max_gap)
