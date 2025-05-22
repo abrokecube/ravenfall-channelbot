@@ -294,9 +294,12 @@ current_mult: float = None
 @routine(delta=timedelta(seconds=2))
 async def update_mult(chat: Chat):
     global current_mult
-    async with aiohttp.ClientSession() as session:
-        r = await session.get(f"{channels[0]['rf_query_url']}/select * from multiplier")
-        multiplier: GameMultiplier = await r.json()
+    try:
+        async with aiohttp.ClientSession() as session:
+            r = await session.get(f"{channels[0]['rf_query_url']}/select * from multiplier")
+            multiplier: GameMultiplier = await r.json()
+    except aiohttp.client_exceptions.ClientConnectionError:
+        return
     if current_mult is None:
         current_mult = multiplier['multiplier']
     if multiplier['multiplier'] > current_mult:
