@@ -9,6 +9,8 @@ python-dotenv = "*"
 tinydb = "*"
 psutil = "*"
 gotify = {extras = ["stream"], version = "*"}
+thefuzz = "*"
+async-lru = "*"
 
 [dev-packages]
 

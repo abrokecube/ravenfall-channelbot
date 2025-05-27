@@ -1,0 +1,1824 @@
+{
+  "item_effects": {
+    "DefensePotion": {
+      "name": "DefensePotion",
+      "effects": [
+        {
+          "id": 4,
+          "duration": 120,
+          "percentage": 0.2,
+          "min_amount": 5
+        }
+      ]
+    },
+    "StrengthPotion": {
+      "name": "StrengthPotion",
+      "effects": [
+        {
+          "id": 3,
+          "duration": 120,
+          "percentage": 0.2,
+          "min_amount": 5
+        }
+      ]
+    },
+    "MagicPotion": {
+      "name": "MagicPotion",
+      "effects": [
+        {
+          "id": 12,
+          "duration": 120,
+          "percentage": 0.2,
+          "min_amount": 5
+        }
+      ]
+    },
+    "RangedPotion": {
+      "name": "RangedPotion",
+      "effects": [
+        {
+          "id": 11,
+          "duration": 120,
+          "percentage": 0.2,
+          "min_amount": 5
+        }
+      ]
+    },
+    "HealingPotion": {
+      "name": "HealingPotion",
+      "effects": [
+        {
+          "id": 13,
+          "duration": 120,
+          "percentage": 0.2,
+          "min_amount": 5
+        }
+      ]
+    },
+    "GreatDefensePotion": {
+      "name": "GreatDefensePotion",
+      "effects": [
+        {
+          "id": 4,
+          "duration": 600,
+          "percentage": 0.4,
+          "min_amount": 10
+        }
+      ]
+    },
+    "GreatStrengthPotion": {
+      "name": "GreatStrengthPotion",
+      "effects": [
+        {
+          "id": 3,
+          "duration": 600,
+          "percentage": 0.4,
+          "min_amount": 10
+        }
+      ]
+    },
+    "GreatMagicPotion": {
+      "name": "GreatMagicPotion",
+      "effects": [
+        {
+          "id": 12,
+          "duration": 600,
+          "percentage": 0.4,
+          "min_amount": 10
+        }
+      ]
+    },
+    "GreatRangedPotion": {
+      "name": "GreatRangedPotion",
+      "effects": [
+        {
+          "id": 11,
+          "duration": 600,
+          "percentage": 0.4,
+          "min_amount": 10
+        }
+      ]
+    },
+    "GreatHealingPotion": {
+      "name": "GreatHealingPotion",
+      "effects": [
+        {
+          "id": 13,
+          "duration": 600,
+          "percentage": 0.4,
+          "min_amount": 10
+        }
+      ]
+    },
+    "HealthPotion": {
+      "name": "HealthPotion",
+      "effects": [
+        {
+          "id": 1,
+          "duration": 0.15,
+          "percentage": 10,
+          "min_amount": 0
+        }
+      ]
+    },
+    "GreatHealthPotion": {
+      "name": "GreatHealthPotion",
+      "effects": [
+        {
+          "id": 1,
+          "duration": 0.4,
+          "percentage": 50,
+          "min_amount": 0
+        }
+      ]
+    },
+    "RegenPotion": {
+      "name": "RegenPotion",
+      "effects": [
+        {
+          "id": 2,
+          "duration": 15,
+          "percentage": 0.25,
+          "min_amount": 50
+        }
+      ]
+    },
+    "Sprat": {
+      "name": "Sprat",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.03,
+          "min_amount": 3
+        }
+      ]
+    },
+    "Shrimp": {
+      "name": "Shrimp",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.04,
+          "min_amount": 4
+        }
+      ]
+    },
+    "RedSeaBass": {
+      "name": "RedSeaBass",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.06,
+          "min_amount": 10
+        }
+      ]
+    },
+    "Bass": {
+      "name": "Bass",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.08,
+          "min_amount": 12
+        }
+      ]
+    },
+    "Perch": {
+      "name": "Perch",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.1,
+          "min_amount": 15
+        }
+      ]
+    },
+    "Salmon": {
+      "name": "Salmon",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.12,
+          "min_amount": 20
+        },
+        {
+          "id": 3,
+          "duration": 90,
+          "percentage": 0.05,
+          "min_amount": 2
+        }
+      ]
+    },
+    "Crab": {
+      "name": "Crab",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.15,
+          "min_amount": 25
+        },
+        {
+          "id": 4,
+          "duration": 90,
+          "percentage": 0.05,
+          "min_amount": 2
+        }
+      ]
+    },
+    "Lobster": {
+      "name": "Lobster",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.2,
+          "min_amount": 25
+        },
+        {
+          "id": 10,
+          "duration": 120,
+          "percentage": 0.07,
+          "min_amount": 3
+        }
+      ]
+    },
+    "BlueLobster": {
+      "name": "BlueLobster",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.25,
+          "min_amount": 30
+        },
+        {
+          "id": 12,
+          "duration": 120,
+          "percentage": 0.08,
+          "min_amount": 3
+        }
+      ]
+    },
+    "Swordfish": {
+      "name": "Swordfish",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.25,
+          "min_amount": 30
+        },
+        {
+          "id": 8,
+          "duration": 180,
+          "percentage": 0.1,
+          "min_amount": 3
+        }
+      ]
+    },
+    "PufferFish": {
+      "name": "PufferFish",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.3,
+          "min_amount": 35
+        },
+        {
+          "id": 5,
+          "duration": 150,
+          "percentage": 0.1,
+          "min_amount": 0
+        }
+      ]
+    },
+    "Octopus": {
+      "name": "Octopus",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.35,
+          "min_amount": 40
+        },
+        {
+          "id": 12,
+          "duration": 240,
+          "percentage": 0.12,
+          "min_amount": 4
+        }
+      ]
+    },
+    "MantaRay": {
+      "name": "MantaRay",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.4,
+          "min_amount": 50
+        },
+        {
+          "id": 7,
+          "duration": 240,
+          "percentage": 0.1,
+          "min_amount": 0
+        }
+      ]
+    },
+    "Kraken": {
+      "name": "Kraken",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.45,
+          "min_amount": 60
+        },
+        {
+          "id": 14,
+          "duration": 300,
+          "percentage": 0.12,
+          "min_amount": 0
+        }
+      ]
+    },
+    "RedWine": {
+      "name": "RedWine",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.05,
+          "min_amount": 5
+        },
+        {
+          "id": 24,
+          "duration": 180,
+          "percentage": 0.05,
+          "min_amount": 0
+        },
+        {
+          "id": 3,
+          "duration": 180,
+          "percentage": 0.05,
+          "min_amount": 2
+        }
+      ]
+    },
+    "HamSandwich": {
+      "name": "HamSandwich",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.08,
+          "min_amount": 10
+        }
+      ]
+    },
+    "RoastedChicken": {
+      "name": "RoastedChicken",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.1,
+          "min_amount": 15
+        }
+      ]
+    },
+    "RoastBeef": {
+      "name": "RoastBeef",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.15,
+          "min_amount": 25
+        },
+        {
+          "id": 3,
+          "duration": 180,
+          "percentage": 0.07,
+          "min_amount": 3
+        }
+      ]
+    },
+    "RoastedPork": {
+      "name": "RoastedPork",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.12,
+          "min_amount": 20
+        },
+        {
+          "id": 4,
+          "duration": 150,
+          "percentage": 0.06,
+          "min_amount": 3
+        }
+      ]
+    },
+    "CookedChickenLeg": {
+      "name": "CookedChickenLeg",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.1,
+          "min_amount": 15
+        }
+      ]
+    },
+    "Steak": {
+      "name": "Steak",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.18,
+          "min_amount": 28
+        },
+        {
+          "id": 3,
+          "duration": 200,
+          "percentage": 0.08,
+          "min_amount": 3
+        }
+      ]
+    },
+    "Prings": {
+      "name": "Prings",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.2,
+          "min_amount": 30
+        },
+        {
+          "id": 15,
+          "duration": 60,
+          "percentage": 0.1,
+          "min_amount": 5
+        }
+      ]
+    },
+    "GrilledCheese": {
+      "name": "GrilledCheese",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.09,
+          "min_amount": 12
+        },
+        {
+          "id": 4,
+          "duration": 100,
+          "percentage": 0.05,
+          "min_amount": 2
+        }
+      ]
+    },
+    "ApplePie": {
+      "name": "ApplePie",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.14,
+          "min_amount": 22
+        },
+        {
+          "id": 12,
+          "duration": 150,
+          "percentage": 0.05,
+          "min_amount": 3
+        }
+      ]
+    },
+    "Bread": {
+      "name": "Bread",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.06,
+          "min_amount": 8
+        }
+      ]
+    },
+    "Skewers": {
+      "name": "Skewers",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.11,
+          "min_amount": 18
+        },
+        {
+          "id": 8,
+          "duration": 140,
+          "percentage": 0.06,
+          "min_amount": 2
+        }
+      ]
+    },
+    "HotChocolate": {
+      "name": "HotChocolate",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.05,
+          "min_amount": 8
+        },
+        {
+          "id": 6,
+          "duration": 120,
+          "percentage": 0.05,
+          "min_amount": 0
+        }
+      ]
+    },
+    "ChocolateChipCookies": {
+      "name": "ChocolateChipCookies",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.07,
+          "min_amount": 10
+        },
+        {
+          "id": 15,
+          "duration": 120,
+          "percentage": 0.1,
+          "min_amount": 0
+        }
+      ]
+    },
+    "BurnedGrilledCheese": {
+      "name": "BurnedGrilledCheese",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedChicken": {
+      "name": "BurnedChicken",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedBeef": {
+      "name": "BurnedBeef",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedPork": {
+      "name": "BurnedPork",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedChickenLeg": {
+      "name": "BurnedChickenLeg",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedSteak": {
+      "name": "BurnedSteak",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedApplePie": {
+      "name": "BurnedApplePie",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedBread": {
+      "name": "BurnedBread",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedSkewers": {
+      "name": "BurnedSkewers",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedChocolateChipCookies": {
+      "name": "BurnedChocolateChipCookies",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedSprat": {
+      "name": "BurnedSprat",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.006,
+          "min_amount": 1
+        }
+      ]
+    },
+    "BurnedShrimp": {
+      "name": "BurnedShrimp",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.008,
+          "min_amount": 1
+        }
+      ]
+    },
+    "BurnedRedSeaBass": {
+      "name": "BurnedRedSeaBass",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.012,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedBass": {
+      "name": "BurnedBass",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.016,
+          "min_amount": 2
+        }
+      ]
+    },
+    "BurnedPerch": {
+      "name": "BurnedPerch",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.02,
+          "min_amount": 3
+        }
+      ]
+    },
+    "BurnedSalmon": {
+      "name": "BurnedSalmon",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.024,
+          "min_amount": 4
+        }
+      ]
+    },
+    "BurnedCrab": {
+      "name": "BurnedCrab",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.03,
+          "min_amount": 5
+        }
+      ]
+    },
+    "BurnedLobster": {
+      "name": "BurnedLobster",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.04,
+          "min_amount": 5
+        }
+      ]
+    },
+    "BurnedBlueLobster": {
+      "name": "BurnedBlueLobster",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.05,
+          "min_amount": 6
+        }
+      ]
+    },
+    "BurnedSwordfish": {
+      "name": "BurnedSwordfish",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.05,
+          "min_amount": 6
+        }
+      ]
+    },
+    "BurnedPufferFish": {
+      "name": "BurnedPufferFish",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.06,
+          "min_amount": 7
+        }
+      ]
+    },
+    "BurnedOctopus": {
+      "name": "BurnedOctopus",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.07,
+          "min_amount": 8
+        }
+      ]
+    },
+    "BurnedMantaRay": {
+      "name": "BurnedMantaRay",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.08,
+          "min_amount": 10
+        }
+      ]
+    },
+    "BurnedKraken": {
+      "name": "BurnedKraken",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.09,
+          "min_amount": 12
+        }
+      ]
+    },
+    "MuddledLeviathanBroth": {
+      "name": "MuddledLeviathanBroth",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.09,
+          "min_amount": 12
+        }
+      ]
+    },
+    "RuinedGuardianDelight": {
+      "name": "RuinedGuardianDelight",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.09,
+          "min_amount": 12
+        }
+      ]
+    },
+    "LeviathansRoyalStew": {
+      "name": "LeviathansRoyalStew",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.5,
+          "min_amount": 80
+        },
+        {
+          "id": 4,
+          "duration": 360,
+          "percentage": 0.15,
+          "min_amount": 5
+        },
+        {
+          "id": 3,
+          "duration": 360,
+          "percentage": 0.15,
+          "min_amount": 5
+        }
+      ]
+    },
+    "PoseidonsGuardianFeast": {
+      "name": "PoseidonsGuardianFeast",
+      "effects": [
+        {
+          "id": 1,
+          "duration": -1,
+          "percentage": 0.65,
+          "min_amount": 100
+        },
+        {
+          "id": 12,
+          "duration": 600,
+          "percentage": 0.2,
+          "min_amount": 8
+        },
+        {
+          "id": 10,
+          "duration": 600,
+          "percentage": 0.2,
+          "min_amount": 8
+        },
+        {
+          "id": 13,
+          "duration": 600,
+          "percentage": 0.2,
+          "min_amount": 8
+        }
+      ]
+    }
+  },
+  "item_raid_drops": {
+    "SantaHat": {
+      "name": "SantaHat",
+      "month_start": 12,
+      "months_length": 1,
+      "min_drop": 0.02,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "ChristmasToken": {
+      "name": "ChristmasToken",
+      "month_start": 12,
+      "months_length": 1,
+      "min_drop": 0.025,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "HalloweenToken": {
+      "name": "HalloweenToken",
+      "month_start": 10,
+      "months_length": 1,
+      "min_drop": 0.025,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "FoxPet": {
+      "name": "FoxPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "DeerPet": {
+      "name": "DeerPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "BearPet": {
+      "name": "BearPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "BlueOrbPet": {
+      "name": "BlueOrbPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "WolfPet": {
+      "name": "WolfPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "GreenOrbPet": {
+      "name": "GreenOrbPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "PolarBearPet": {
+      "name": "PolarBearPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "RedOrbPet": {
+      "name": "RedOrbPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Rajah": {
+      "name": "Rajah",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "RavenPet": {
+      "name": "RavenPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "RedPandaPet": {
+      "name": "RedPandaPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Raccoon": {
+      "name": "Raccoon",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "BrownRaccoon": {
+      "name": "BrownRaccoon",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "OctopusPet": {
+      "name": "OctopusPet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "BabyRaccoon": {
+      "name": "BabyRaccoon",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.02,
+      "max_drop": 0.02,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Cat": {
+      "name": "Cat",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Beige Cat": {
+      "name": "Beige Cat",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Cream Cat": {
+      "name": "Cream Cat",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Cat": {
+      "name": "Black Cat",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Mix Cat": {
+      "name": "Mix Cat",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Orange Cat": {
+      "name": "Orange Cat",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Raccoon Cat": {
+      "name": "Raccoon Cat",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Siamese Cat": {
+      "name": "Siamese Cat",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "BronzeBar": {
+      "name": "BronzeBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "IronBar": {
+      "name": "IronBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "SteelBar": {
+      "name": "SteelBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "MithrilBar": {
+      "name": "MithrilBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "AdamantiteBar": {
+      "name": "AdamantiteBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Lavender": {
+      "name": "Lavender",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Elderflower": {
+      "name": "Elderflower",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Valerian": {
+      "name": "Valerian",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Chamomile": {
+      "name": "Chamomile",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Coriander": {
+      "name": "Coriander",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Paprika": {
+      "name": "Paprika",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Turmeric": {
+      "name": "Turmeric",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Sugar": {
+      "name": "Sugar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Cinnamon": {
+      "name": "Cinnamon",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Apple": {
+      "name": "Apple",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Carrots": {
+      "name": "Carrots",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Garlic": {
+      "name": "Garlic",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Onion": {
+      "name": "Onion",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Milk": {
+      "name": "Milk",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Helmet": {
+      "name": "Black Helmet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Chest": {
+      "name": "Black Chest",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Gloves": {
+      "name": "Black Gloves",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Leggings": {
+      "name": "Black Leggings",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Boots": {
+      "name": "Black Boots",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Shield": {
+      "name": "Black Shield",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Staff": {
+      "name": "Black Staff",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Bow": {
+      "name": "Black Bow",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Katana": {
+      "name": "Black Katana",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Axe": {
+      "name": "Black Axe",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Sword": {
+      "name": "Black Sword",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black 2h axe": {
+      "name": "Black 2h axe",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black 2h sword": {
+      "name": "Black 2h sword",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "Black Spear": {
+      "name": "Black Spear",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "ArchersRing": {
+      "name": "ArchersRing",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "ArchersRingII": {
+      "name": "ArchersRingII",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "ArchersRingIII": {
+      "name": "ArchersRingIII",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 30
+    },
+    "MagesRing": {
+      "name": "MagesRing",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "MagesRingII": {
+      "name": "MagesRingII",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "MagesRingIII": {
+      "name": "MagesRingIII",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 30
+    },
+    "Hearthstone": {
+      "name": "Hearthstone",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "WanderersGem": {
+      "name": "WanderersGem",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "IronEmblem": {
+      "name": "IronEmblem",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "KyoCrystal": {
+      "name": "KyoCrystal",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.04,
+      "max_drop": 0.04,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "HeimRune": {
+      "name": "HeimRune",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.03,
+      "max_drop": 0.03,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "AtriasFeather": {
+      "name": "AtriasFeather",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.03,
+      "max_drop": 0.03,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "EldarasMark": {
+      "name": "EldarasMark",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.03,
+      "max_drop": 0.03,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "ExpMultiplierScroll": {
+      "name": "ExpMultiplierScroll",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.02,
+      "max_drop": 0.02,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "RaidScroll": {
+      "name": "RaidScroll",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.02,
+      "max_drop": 0.02,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "DungeonScroll": {
+      "name": "DungeonScroll",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.01,
+      "max_drop": 0.01,
+      "tier": 0,
+      "slayer_requirement": 0
+    },
+    "MagesRingIV": {
+      "name": "MagesRingIV",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 60
+    },
+    "ArchersRingIV": {
+      "name": "ArchersRingIV",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 60
+    },
+    "ArchmagesPendant": {
+      "name": "ArchmagesPendant",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 100
+    },
+    "KnightsEmblem": {
+      "name": "KnightsEmblem",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 100
+    },
+    "OwlsEyeRing": {
+      "name": "OwlsEyeRing",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 100
+    },
+    "RingOfTheCelestial": {
+      "name": "RingOfTheCelestial",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 100
+    },
+    "WarriorsMightRing": {
+      "name": "WarriorsMightRing",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 100
+    },
+    "WindcallersAmulet": {
+      "name": "WindcallersAmulet",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 100
+    },
+    "DragonBar": {
+      "name": "DragonBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "AbraxasBar": {
+      "name": "AbraxasBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "PhantomBar": {
+      "name": "PhantomBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "LioniteBar": {
+      "name": "LioniteBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "EthereumBar": {
+      "name": "EthereumBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "AncientBar": {
+      "name": "AncientBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "AtlarusBar": {
+      "name": "AtlarusBar",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "RawPufferFish": {
+      "name": "RawPufferFish",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "RawOctopus": {
+      "name": "RawOctopus",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "RawMantaRay": {
+      "name": "RawMantaRay",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "RawKraken": {
+      "name": "RawKraken",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "Cacao": {
+      "name": "Cacao",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "Truffle": {
+      "name": "Truffle",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "Goldenrod": {
+      "name": "Goldenrod",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "Wormwood": {
+      "name": "Wormwood",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "Skullcap": {
+      "name": "Skullcap",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "LemonBalm": {
+      "name": "LemonBalm",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    },
+    "Realmstone": {
+      "name": "Realmstone",
+      "month_start": 0,
+      "months_length": 0,
+      "min_drop": 0.05,
+      "max_drop": 0.05,
+      "tier": 4,
+      "slayer_requirement": 0
+    }
+  }
+}

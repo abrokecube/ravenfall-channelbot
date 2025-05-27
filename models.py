@@ -90,3 +90,12 @@ class Village(TypedDict):
     level: int
     tier: int
     boost: str
+
+class FerryCaptain(TypedDict):
+    name: str
+    sailinglevel: int
+
+class Ferry(TypedDict):
+    destination: str
+    players: int
+    captain: FerryCaptain

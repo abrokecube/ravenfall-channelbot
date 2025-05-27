@@ -22,15 +22,142 @@ from utils.routines import routine
 from utils.format_time import *
 from utils import strutils
 from utils import chatmsg_cd
+from utils import langstuff
 from utils.is_twitch_username import is_twitch_username
+from utils import utils
 from dataclasses import dataclass
 
 import braille
+import ravenpy
+from ravenpy import Skills, Islands
+from datetime import timezone, timedelta, datetime
 load_dotenv()
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
 GOTIFY_URL = os.getenv('GOTIFY_URL').strip("/")
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL").strip('/')
+
+class CharacterStat:
+    def __init__(self, skill: ravenpy.Skills, data: PlayerStat):
+        self.skill = skill
+        self.level = data['level']
+        self.level_exp = data['experience']
+        self.total_exp_for_level = ravenpy.experience_for_level(self.level+1)
+        self.enchant_percent = 0
+        self.enchant_levels = 0
+
+    def _add_enchant(self, percent):
+        self.enchant_percent += percent
+        self.enchant_levels = round(self.level * self.enchant_percent)
+
+class Character:
+    def __init__(self, data: Player):
+        self._raw: Dict = data
+        self.time_recieved = datetime.now(timezone.utc)
+        self.id: str = data["id"]
+        self.char_id: str = self.id
+        self.user_name: str = data['name']
+        self.coins: int = data['coins']
+        
+        self.attack = CharacterStat(Skills.Attack, data['stats']['attack'])
+        self.defense = CharacterStat(Skills.Defense, data['stats']['defense'])
+        self.strength = CharacterStat(Skills.Strength, data['stats']['strength'])
+        self.health = CharacterStat(Skills.Health, data['stats']['health'])
+        self.magic = CharacterStat(Skills.Magic, data['stats']['magic'])
+        self.ranged = CharacterStat(Skills.Ranged, data['stats']['ranged'])
+        self.woodcutting = CharacterStat(Skills.Woodcutting, data['stats']['woodcutting'])
+        self.fishing = CharacterStat(Skills.Fishing, data['stats']['fishing'])
+        self.mining = CharacterStat(Skills.Mining, data['stats']['mining'])
+        self.crafting = CharacterStat(Skills.Crafting, data['stats']['crafting'])
+        self.cooking = CharacterStat(Skills.Cooking, data['stats']['cooking'])
+        self.farming = CharacterStat(Skills.Farming, data['stats']['farming'])
+        self.slayer = CharacterStat(Skills.Slayer, data['stats']['slayer'])
+        self.sailing = CharacterStat(Skills.Sailing, data['stats']['sailing'])
+        self.healing = CharacterStat(Skills.Healing, data['stats']['healing'])
+        self.gathering = CharacterStat(Skills.Gathering, data['stats']['gathering'])
+        self.alchemy = CharacterStat(Skills.Alchemy, data['stats']['alchemy'])
+        self.combat_level = int(((self.attack.level + self.defense.level + self.health.level + self.strength.level) / 4) + ((self.ranged.level + self.magic.level + self.healing.level) / 8))
+        self.stats = [
+            self.attack, self.defense, self.strength, self.health, self.magic,
+            self.ranged, self.woodcutting, self.fishing, self.mining, self.crafting,
+            self.cooking, self.farming, self.slayer, self.sailing, self.healing,
+            self.gathering, self.alchemy
+        ]
+        self._skill_dict = {
+            Skills.Attack: self.attack,
+            Skills.Defense: self.defense,
+            Skills.Strength: self.strength,
+            Skills.Health: self.health,
+            Skills.Woodcutting: self.woodcutting,
+            Skills.Fishing: self.fishing,
+            Skills.Mining: self.mining,
+            Skills.Crafting: self.crafting,
+            Skills.Cooking: self.cooking,
+            Skills.Farming: self.farming,
+            Skills.Slayer: self.slayer,
+            Skills.Magic: self.magic,
+            Skills.Ranged: self.ranged,
+            Skills.Sailing: self.sailing,
+            Skills.Healing: self.healing,
+            Skills.Gathering: self.gathering,
+            Skills.Alchemy: self.alchemy
+        }
+        self.hp: int = data['stats']["health"]["currentvalue"]
+        self.in_raid: bool = data['inraid']
+        self.in_arena: bool = data['inarena']
+        self.in_dungeon: bool = data['indungeon']
+        self.in_onsen: bool = data['resting']
+        self.is_resting: bool = self.in_onsen
+        self.is_sailing: bool = data['sailing']
+        
+        self.training: Skills | None = None
+        self.island: Islands = Islands[data['island']] if data['island'] != "" else None
+   
+        self.rested_time = timedelta(seconds=int(data['restedtime']))
+        self.target_item: ravenpy.CharacterItem | None = None
+        if data['training'] == "Fighting":
+            task_arg = data['taskargument'].capitalize()
+            replace = ravenpy.fighting_replacements.get(task_arg)
+            if replace:
+                task_arg = replace
+            self.training = Skills[task_arg]
+        elif (not data['training']) or data['training'].lower() == "none":
+            pass
+        else:
+            self.training = Skills[data['training'].capitalize()]
+            result = ravenpy.get_item(data['taskargument'])
+            if result:
+                target_item = result
+                inv_item = ravenpy.CharacterItem(
+                    itemId=target_item.id,
+                    amount=0,
+                    equipped=False,
+                    soulbound=False,
+                    enchantment=''
+                )
+                self.target_item = inv_item
+
+        if not self.training:
+            if (not self.island) or self.is_sailing:
+                self.training = Skills.Sailing
+                
+        self.training_stats: List[CharacterStat] = []
+        if self.training:
+            if self.training in (Skills.All, Skills.Health):
+                self.training_stats.extend([self.health, self.attack, self.defense, self.strength])
+            else:
+                self.training_stats.append(self.get_skill(self.training))
+                if self.training in ravenpy.combat_skills:
+                    self.training_stats.append(self.health)
+
+            if self.in_raid or self.in_dungeon:
+                self.training_stats.append(self.slayer)
+        self.training_skills: List[Skills] = []
+        for char_stat in self.training_stats:
+            self.training_skills.append(char_stat.skill)
+            
+    def get_skill(self, skill: Skills):
+        return self._skill_dict[skill]
 
 with open("channels.json", "r") as f:
     channels: List[Channel] = json.load(f)
@@ -220,7 +347,7 @@ async def exprate_cmd(cmd: ChatCommand):
     query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\"}[90s]))" % (target_user, cmd.room.name)
     data = await get_prometheus_series(query, 10*60)
     if len(data) == 0:
-        await cmd.reply("No data recorded. Your character might not be in this town right now.")
+        await cmd.reply("No data recorded. Your character may not be in this town right now.")
         return
     data_pairs = [(x[0], float(x[1])) for x in data[0]['values']]
     graph = braille.simple_line_graph(
@@ -231,8 +358,138 @@ async def exprate_cmd(cmd: ChatCommand):
     )
     ...
 
+async def chracter_cmd(cmd: ChatCommand):
+    args = cmd.parameter.split()
+    target_user = cmd.user.name
+    if len(cmd.parameter) > 2 and len(args) > 0:
+        target_user = args[0].strip('@')
+    if not is_twitch_username(target_user):
+        await cmd.reply("Invalid username.")
+        return
+
+    for channel in channels:
+        if channel['channel_id'] == cmd.room.room_id:
+            village_url = channel['rf_query_url']
+            break
+    else:
+        await cmd.reply("Town not found :(")
+        return
+    async with aiohttp.ClientSession() as session:
+        try:
+            r = await session.get(f"{village_url}/select * from players where name = \'{target_user}\'")
+            r2 = await session.get(f"{village_url}/select * from ferry")
+        except aiohttp.client_exceptions.ContentTypeError:
+            await cmd.reply("Ravenfall seems to be offline!")
+            return
+        player_info: Player = await r.json()
+        ferry_info: Ferry = await r2.json()
+        if isinstance(player_info, dict) and player_info:
+            char = Character(player_info)
+        else:
+            await cmd.reply("You are not currently playing.")
+            return
+            
+    where = ""
+    if char.in_raid:
+        where = "in a raid"
+    if char.in_arena:
+        where = "in the arena"
+    if char.in_dungeon:
+        where = "in a dungeon"
+    if char.in_onsen:
+        where = "in the onsen"
+
+    index_and_combat_level = f"(Lv{char.combat_level})"
+
+    what = ""
+    if char.training in (Skills.Attack, Skills.Defense, Skills.Strength, Skills.Health):
+        what = f"training {char.training.name.lower()}"
+    elif char.training in ravenpy.resource_skills:
+        if char.target_item:
+            what = f"{char.training.name.lower()} {char.target_item.item.name.lower()}"
+        else:
+            what = f"{char.training.name.lower()}"
+    elif char.training == Skills.Alchemy:
+        what = f"training alchemy"
+    elif char.training == Skills.Sailing:
+        pass
+    elif char.training is None:
+        pass
+    else:
+        what = f"{char.training.name.lower()}"
+
+    if char.in_onsen:
+        what = "resting"
+
+    target_item = ""
+    if char.target_item and what and not char.in_onsen:
+        target_item = f"{char.target_item.amount}× {char.target_item.item.name}"
+
+    where_island = ""
+    if char.island:
+        where_island = f"at {char.island.name.capitalize()}"
+    else:
+        where_island = "sailing the seas"
+        
+    rested = ""
+    if char.rested_time.total_seconds() > 0:
+        s = utils.TimeSize.SMALL_SPACES 
+        rested = f"with {utils.format_seconds(char.rested_time.total_seconds(),s)} of rest time"
+
+    captain = ""
+    if ferry_info['captain']['name'] == char.user_name:
+        captain = "as the ship captain"
+        
+    stats = []
+    if not char.in_onsen:
+        for char_stat in char.training_stats:
+            skill_name = char_stat.skill.name.capitalize()
+            stats.append(
+                f"{skill_name}: {char_stat.level} [+{char_stat.enchant_levels}] "\
+                f"({char_stat.level_exp/char_stat.total_exp_for_level:.1%}) "\
+                f"{char_stat.level_exp:,.0f}/{char_stat.total_exp_for_level:,.0f} EXP"
+            )
+    query = "sum(deriv(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\"}[2m]))" % (target_user, cmd.room.name)
+    data = await get_prometheus_series(query, 1)
+    data_pairs = [(x[0], float(x[1])) for x in data[0]['values']]
+    char_exp_per_h = data_pairs[-1][1]*60*60
+    train_time = ""
+    if char_exp_per_h > 0 and char.training:
+        closest_stat = char.training_stats[0]
+        exp_to_next_level = closest_stat.total_exp_for_level-closest_stat.level_exp
+        training_time_exp = timedelta(seconds=(exp_to_next_level) / (char_exp_per_h/60/60))
+    else:
+        training_time_exp = timedelta(weeks=9999)
+    s = utils.TimeSize.SMALL_SPACES
+    train_time_format = utils.format_timedelta(training_time_exp, s)
+    now = datetime.now(timezone.utc)
+    if char.island and not char.in_onsen:
+        if training_time_exp.total_seconds() > 60*60*24*100:  # 99 days
+            train_time = f"Level in ∞"
+        else:
+            train_time = f"Level in {train_time_format}"
+    exp_per_hr = f""
+    if char.island and not char.in_onsen:
+        exp_per_hr = f"{char_exp_per_h:,.0f} exp/hr"
+        
+    coins = f"{utils.pl(char.coins, 'coin')}"
+
+    summary = utils.strjoin(
+        " ", index_and_combat_level, "is", what, where, where_island, captain, rested
+    )
+    out_str = utils.strjoin(
+        " – ", summary, target_item, utils.strjoin(', ', *stats), exp_per_hr, train_time, coins
+    )
+    user_name = f"{utils.unping(char.user_name)}"
+    out_msgs = utils.strjoin(" ✦ ", user_name, out_str)
+    out_msgs = utils.strjoin('', out_msgs, f" | Training time is estimated")
+    await cmd.reply(out_msgs)
+
+
 async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
+
+    
 
 max_dungeon_hp: Dict[str, int] = {}
 @routine(delta=timedelta(seconds=2))
@@ -372,6 +629,8 @@ async def run():
     # set up twitch api instance and add user authentication with some scopes
     twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
     helper = UserAuthenticationStorageHelper(twitch, USER_SCOPE)
+    rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
+    await rf.login()
     await helper.bind()
 
     
@@ -394,6 +653,8 @@ async def run():
     chat.register_command('welcomemsg', welcome_msg_cmd)
     chat.register_command('exprate', exprate_cmd)
     chat.register_command('expirate', exprate_cmd)
+    chat.register_command('char', chracter_cmd)
+    chat.register_command('character', chracter_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
