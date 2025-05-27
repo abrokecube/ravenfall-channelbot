@@ -377,17 +377,18 @@ async def chracter_cmd(cmd: ChatCommand):
     async with aiohttp.ClientSession() as session:
         try:
             r = await session.get(f"{village_url}/select * from players where name = \'{target_user}\'")
-            r2 = await session.get(f"{village_url}/select * from ferry")
         except aiohttp.client_exceptions.ContentTypeError:
             await cmd.reply("Ravenfall seems to be offline!")
             return
         player_info: Player = await r.json()
-        ferry_info: Ferry = json.loads(await r2.text())
         if isinstance(player_info, dict) and player_info:
             char = Character(player_info)
         else:
             await cmd.reply("You are not currently playing.")
             return
+    async with aiohttp.ClientSession() as session:
+        r = await session.get(f"{village_url}/select * from ferry")
+        ferry_info: Ferry = await r.json()
             
     where = ""
     if char.in_raid:
