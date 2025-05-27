@@ -382,7 +382,7 @@ async def chracter_cmd(cmd: ChatCommand):
             await cmd.reply("Ravenfall seems to be offline!")
             return
         player_info: Player = await r.json()
-        ferry_info: Ferry = await json.loads(r2.text())
+        ferry_info: Ferry = json.loads(await r2.text())
         if isinstance(player_info, dict) and player_info:
             char = Character(player_info)
         else:
