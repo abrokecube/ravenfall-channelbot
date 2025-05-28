@@ -486,6 +486,30 @@ async def chracter_cmd(cmd: ChatCommand):
     out_msgs = utils.strjoin('', out_msgs, f" | Training time is estimated")
     await cmd.reply(out_msgs)
 
+async def ravenfall_restart_cmd(cmd: ChatCommand):
+    if not cmd.user.mod:
+        return
+    for channel in channels:
+        if channel['channel_id'] == cmd.room.room_id:
+            box = channel['sandboxie_box']
+            start_script = channel['ravenfall_start_script']
+            break
+    else:
+        await cmd.reply("Town not found :(")
+        return
+    proc = await asyncio.subprocess.create_subprocess_shell(
+        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
+        f"taskkill /f /im Ravenfall.exe"
+    )
+    await proc.wait()
+    print(f"Return code: {proc.returncode}")
+    proc = await asyncio.subprocess.create_subprocess_shell(
+        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
+        f"cmd /c \"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}\""
+    )
+    await proc.wait()
+    print(f"Return code: {proc.returncode}")
+    await cmd.reply("Okay")
 
 async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
@@ -657,6 +681,7 @@ async def run():
     chat.register_command('expirate', exprate_cmd)
     chat.register_command('char', chracter_cmd)
     chat.register_command('character', chracter_cmd)
+    chat.register_command('restartrf', ravenfall_restart_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()

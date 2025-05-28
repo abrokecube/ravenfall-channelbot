@@ -13,6 +13,8 @@ class Channel(TypedDict):
     ravenbot_prefix: str
     welcome_message: str
     recieve_global_alerts: bool
+    sandboxie_box: str
+    ravenfall_start_script: str
 
 class GameSession(TypedDict):
     authenticated: bool
