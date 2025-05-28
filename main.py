@@ -511,16 +511,16 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
     else:
         await cmd.reply("Town not found :(")
         return
-    cmd = (
+    shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"taskkill /f /im Ravenfall.exe"
     )
-    await run_cmd(cmd)
-    cmd = (
+    await run_cmd(shellcmd)
+    shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"cmd /c \"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}\""
     )
-    await run_cmd(cmd)
+    await run_cmd(shellcmd)
     await cmd.reply("Okay")
 
 async def welcome_msg_cmd(cmd: ChatCommand):
