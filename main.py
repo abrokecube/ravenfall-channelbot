@@ -43,8 +43,8 @@ class CharacterStat:
         self.level = data['level']
         self.level_exp = data['experience']
         self.total_exp_for_level = ravenpy.experience_for_level(self.level+1)
-        self.enchant_percent = 0
-        self.enchant_levels = 0
+        self.enchant_percent = data['maxlevel']/data['level']
+        self.enchant_levels = data['maxlevel'] - data['level']
 
     def _add_enchant(self, percent):
         self.enchant_percent += percent
