@@ -675,7 +675,7 @@ async def run():
     twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
     helper = UserAuthenticationStorageHelper(twitch, USER_SCOPE)
     rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
-    await rf.login()
+    asyncio.create_task(rf.login())
     await helper.bind()
 
     
