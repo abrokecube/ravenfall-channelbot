@@ -608,7 +608,8 @@ async def event_gotify_msg(msg: gotify.Message, chat: Chat):
                 print(f"Unknown room: {room}")
     else:
         for channel in channels:
-            await chat.send_message(channel['channel_name'], text)
+            if channel['recieve_global_alerts']:
+                await chat.send_message(channel['channel_name'], text)
 
 async def gotify_listener(chat: Chat):
     while True:
