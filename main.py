@@ -486,6 +486,20 @@ async def chracter_cmd(cmd: ChatCommand):
     out_msgs = utils.strjoin('', out_msgs, f" | Training time is estimated")
     await cmd.reply(out_msgs)
 
+async def run_cmd(cmd):
+    proc = await asyncio.create_subprocess_shell(
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE)
+
+    stdout, stderr = await proc.communicate()
+
+    print(f'[{cmd!r} exited with {proc.returncode}]')
+    if stdout:
+        print(f'[stdout]\n{stdout.decode()}')
+    if stderr:
+        print(f'[stderr]\n{stderr.decode()}')
+
 async def ravenfall_restart_cmd(cmd: ChatCommand):
     if not cmd.user.mod:
         return
@@ -497,18 +511,16 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
     else:
         await cmd.reply("Town not found :(")
         return
-    proc = await asyncio.subprocess.create_subprocess_shell(
+    cmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"taskkill /f /im Ravenfall.exe"
     )
-    await proc.wait()
-    print(f"Return code: {proc.returncode}")
-    proc = await asyncio.subprocess.create_subprocess_shell(
+    await run_cmd(cmd)
+    cmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"cmd /c \"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}\""
     )
-    await proc.wait()
-    print(f"Return code: {proc.returncode}")
+    await run_cmd(cmd)
     await cmd.reply("Okay")
 
 async def welcome_msg_cmd(cmd: ChatCommand):
@@ -576,12 +588,19 @@ current_mult: float = None
 @routine(delta=timedelta(seconds=2))
 async def update_mult(chat: Chat):
     global current_mult
-    try:
-        async with aiohttp.ClientSession() as session:
-            r = await session.get(f"{channels[0]['rf_query_url']}/select * from multiplier")
-            multiplier: GameMultiplier = await r.json()
-    except aiohttp.client_exceptions.ClientConnectionError:
-        return
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1)) as session:
+        tasks = []
+        tasks.extend([
+            session.get(f"{x['rf_query_url']}/select * from multiplier") for x in channels
+        ])
+        r = await asyncio.gather(*tasks, return_exceptions=True)
+        tasks = []
+        for x in r:
+            if isinstance(x, Exception):
+                continue
+            tasks.append(x.json())
+        data: List[GameMultiplier] = await asyncio.gather(*tasks)
+        multiplier: GameMultiplier = max(*data, key=lambda x: x['multiplier'])
     if current_mult is None:
         current_mult = multiplier['multiplier']
     if multiplier['multiplier'] > current_mult:
