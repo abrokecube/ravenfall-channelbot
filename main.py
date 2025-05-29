@@ -308,6 +308,10 @@ async def uptime_cmd(cmd: ChatCommand):
         await cmd.reply(f"Ravenfall uptime: {seconds_to_dhms(game_session['secondssincestart'])}")
 
 def bytes_to_human_readable(size_bytes):
+    negative = ''
+    if size_bytes < 0:
+        size_bytes = -size_bytes
+        negative = '-'
     if size_bytes == 0:
         return "0 B"
     
@@ -319,7 +323,7 @@ def bytes_to_human_readable(size_bytes):
         size_bytes /= power
         unit_index += 1
 
-    return f"{size_bytes:.2f} {units[unit_index]}"
+    return f"{negative}{size_bytes:.2f} {units[unit_index]}"
     
 async def get_prometheus_series(query: str, duration_s, step_s=20):
     now = time.time()
