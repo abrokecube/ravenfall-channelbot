@@ -442,7 +442,7 @@ async def chracter_cmd(cmd: ChatCommand):
     index_and_combat_level = f"(Lv{char.combat_level})"
 
     what = ""
-    if char.training in (Skills.Attack, Skills.Defense, Skills.Strength, Skills.Health):
+    if char.training in (Skills.Attack, Skills.Defense, Skills.Strength, Skills.Health, Skills.Magic, Skills.Ranged):
         what = f"training {char.training.name.lower()}"
     elif char.training in ravenpy.resource_skills:
         if char.target_item:
@@ -521,8 +521,9 @@ async def chracter_cmd(cmd: ChatCommand):
         " – ", summary, target_item, utils.strjoin(', ', *stats), exp_per_hr, train_time, coins
     )
     user_name = f"{utils.unping(char.user_name)}"
-    out_msgs = utils.strjoin(" ✦ ", user_name, out_str)
-    out_msgs = utils.strjoin('', out_msgs, f" | Training time is estimated")
+    out_msgs = utils.strjoin(" ", user_name, out_str)
+    if train_time:
+        out_msgs = utils.strjoin('', out_msgs, f" | Training time is estimated")
     await cmd.reply(out_msgs)
 
 async def run_cmd(cmd):
@@ -543,8 +544,9 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
     if cmd.room.room_id in village_events:
-        await cmd.reply("There is an active event.")
-        return
+        if village_events[cmd.room.room_id].split(maxsplit=1)[0] != 'No':
+            await cmd.reply("There is an active event.")
+            return
     for channel in channels:
         if channel['channel_id'] == cmd.room.room_id:
             box = channel['sandboxie_box']
@@ -774,6 +776,7 @@ async def run():
     chat.register_command('exprate', exprate_cmd)
     chat.register_command('expirate', exprate_cmd)
     chat.register_command('char', chracter_cmd)
+    chat.register_command('show', chracter_cmd)
     chat.register_command('character', chracter_cmd)
     chat.register_command('restartrf', ravenfall_restart_cmd)
     chat.register_command('restartrfbot', ravenbot_restart_cmd)
