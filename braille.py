@@ -92,10 +92,11 @@ def interpolate_with_gap_handling(pairs, output_count, max_gap):
 # Expects (timestamp, value) pairs
 def simple_line_graph(pairs: Iterable[Tuple[float, float]], width=24, height=4, min_val=None, max_val=None, hard_min_val=None, hard_max_val=None, fill_type=0, max_gap=20, monospace=False):
     values = [x[1] for x in pairs]
-    if min_val is None:
-        min_val = min(values)
     if max_val is None:
         max_val = max(values)
+    if min_val is None:
+        m = min(values)
+        min_val = max_val - (max_val - m) * 4/5
     if hard_min_val is not None:
         min_val = max(hard_min_val, min_val)
     if hard_max_val is not None:

@@ -453,7 +453,7 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
     else:
         bytes_used, change, series = processes_named[cmd.room.name]
         graph = braille.simple_line_graph(
-            series, max_gap=30, width=26, fill_type=1
+            series, max_gap=30, width=26, fill_type=1, hard_min_val=0
         )
         await cmd.reply(
             f"[{graph}] Ravenfall is using {bytes_to_human_readable(bytes_used)} of memory; "
