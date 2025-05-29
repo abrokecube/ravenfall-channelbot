@@ -435,14 +435,21 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
                 processes_named[name] = processes[pid]
                 break
     out_str = []
-    for name, (bytes_used, change) in processes_named.items():
-        s = "+"
-        if change < 0:
-            s = ''
-        out_str.append(
-            f"{name} - {bytes_to_human_readable(bytes_used)} ({s}{bytes_to_human_readable(change)}/s)"
+    if "all" in cmd.parameter.lower():
+        for name, (bytes_used, change) in processes_named.items():
+            s = "+"
+            if change < 0:
+                s = ''
+            out_str.append(
+                f"{name} - {bytes_to_human_readable(bytes_used)} ({s}{bytes_to_human_readable(change)}/s)"
+            )
+        await cmd.reply(f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes")
+    else:
+        bytes_used, change = processes_named[cmd.room.name]
+        await cmd.reply(
+            f"Currently using {bytes_to_human_readable(bytes_used)}. "
+            f"Changed at a rate of {bytes_to_human_readable(change)}/s over the last 3 mins."
         )
-    await cmd.reply(f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes")
     
 
 async def exprate_cmd(cmd: ChatCommand):
