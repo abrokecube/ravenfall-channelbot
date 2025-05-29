@@ -777,6 +777,8 @@ async def run():
     chat.register_command('character', chracter_cmd)
     chat.register_command('restartrf', ravenfall_restart_cmd)
     chat.register_command('restartrfbot', ravenbot_restart_cmd)
+    chat.register_command('rfrestart', ravenfall_restart_cmd)
+    chat.register_command('rfbotrestart', ravenbot_restart_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
