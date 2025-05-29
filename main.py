@@ -428,12 +428,14 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
     for metric in change_over_time:
         m = metric['metric']
         name = m['process_id']
-        processes[name].append(float(metric['value'][1]))
+        if name in processes:
+            processes[name].append(float(metric['value'][1]))
     for metric in working_set_series:
         m = metric['metric']
         name = m['process_id']
         data_pairs = [(x[0], float(x[1])) for x in metric['values']]
-        processes[name].append(data_pairs)
+        if name in processes:
+            processes[name].append(data_pairs)
     processes_named: Dict[str, List[float]] = {}
     for name, pids in box_pids.items():
         for pid in pids:
