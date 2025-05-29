@@ -447,8 +447,8 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
     else:
         bytes_used, change = processes_named[cmd.room.name]
         await cmd.reply(
-            f"Currently using {bytes_to_human_readable(bytes_used)}. "
-            f"Changed at a rate of {bytes_to_human_readable(change)}/s over the last 3 mins."
+            f"Ravenfall is using {bytes_to_human_readable(bytes_used)} of memory; "
+            f"changed by {bytes_to_human_readable(change)}/s over 3 mins."
         )
     
 
