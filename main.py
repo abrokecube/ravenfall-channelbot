@@ -303,35 +303,21 @@ def bytes_to_human_readable(size_bytes):
         unit_index += 1
 
     return f"{size_bytes:.2f} {units[unit_index]}"
-
-async def system_cmd(cmd: ChatCommand):
-    cpu_usage = await asyncio.to_thread(psutil.cpu_percent, 1)
-    cpu_freq = psutil.cpu_freq().current
-    ram = psutil.virtual_memory()
-    ram_usage = ram.used
-    ram_total = ram.total
-    battery = psutil.sensors_battery()
-    battery_text = ""
-    if battery:
-        battery_percent = battery.percent
-        battery_plugged = "Charging" if battery.power_plugged else "Not charging"
-        battery_time_left = format_seconds(battery.secsleft)
-        battery_text = f"Battery: {battery_percent}%, {battery_plugged} ({battery_time_left} left)"
-    uptime = time.time() - psutil.boot_time()
-    await cmd.reply(strutils.strjoin(
-        " – ", 
-        f"CPU: {cpu_usage/100:.1%}, {cpu_freq:.0f} MHz",
-        f"RAM: {bytes_to_human_readable(ram_usage)}/{bytes_to_human_readable(ram_total)}",
-        battery_text,
-        f"Uptime: {seconds_to_dhms(uptime)}"
-    ))
-
+    
 async def get_prometheus_series(query: str, duration_s, step_s=20):
     now = time.time()
     start = now - duration_s
     async with aiohttp.ClientSession() as session:
         r = await session.get(
             f"{PROMETHEUS_URL}/api/v1/query_range?query={query}&start={start}&end={now}&step={step_s}"
+        )
+        result = await r.json()
+    data = result['data']['result']
+    return data
+async def get_prometheus_instant(query: str):
+    async with aiohttp.ClientSession() as session:
+        r = await session.get(
+            f"{PROMETHEUS_URL}/api/v1/query?query={query}"
         )
         result = await r.json()
     data = result['data']['result']
@@ -374,6 +360,54 @@ def backup_file_with_date(filepath, max_backups=5):
         os.remove(oldest_file)
 
     return new_filepath
+
+
+async def system_cmd(cmd: ChatCommand):
+    cpu_usage = await asyncio.to_thread(psutil.cpu_percent, 1)
+    cpu_freq = psutil.cpu_freq().current
+    ram = psutil.virtual_memory()
+    ram_usage = ram.used
+    ram_total = ram.total
+    battery = psutil.sensors_battery()
+    battery_text = ""
+    if battery:
+        battery_percent = battery.percent
+        battery_plugged = "Charging" if battery.power_plugged else "Not charging"
+        battery_time_left = format_seconds(battery.secsleft)
+        battery_text = f"Battery: {battery_percent}%, {battery_plugged} ({battery_time_left} left)"
+    uptime = time.time() - psutil.boot_time()
+    await cmd.reply(strutils.strjoin(
+        " – ", 
+        f"CPU: {cpu_usage/100:.1%}, {cpu_freq:.0f} MHz",
+        f"RAM: {bytes_to_human_readable(ram_usage)}/{bytes_to_human_readable(ram_total)}",
+        battery_text,
+        f"Uptime: {seconds_to_dhms(uptime)}"
+    ))
+    
+async def ravenfall_ram_cmd(cmd: ChatCommand):
+    processes: Dict[str, List[float]] = {}
+    working_set = await get_prometheus_instant("windows_process_working_set_bytes{process='Ravenfall'}")
+    change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_bytes{process='Ravenfall'}[3m])")
+    for metric in working_set:
+        m = metric['metric']
+        name = m['process_id']
+        processes[name] = [int(metric['value'][1])]
+    for metric in change_over_time:
+        m = metric['metric']
+        name = m['process_id']
+        processes[name].append(float(metric['value'][1]))
+    out_str = []
+    print(processes)
+    for name, (bytes_used, change) in processes.items():
+        s = "+"
+        if change < 0:
+            s = ''
+        out_str.append(
+            f"PID:{name} - {bytes_to_human_readable(bytes_used)} ({s}{bytes_to_human_readable(change)}/s)"
+        )
+    await cmd.reply(f"Ravenfall ram usage: {' • '.join(out_str)}")
+    
+
 async def exprate_cmd(cmd: ChatCommand):
     args = cmd.parameter.split()
     target_user = cmd.user.name
@@ -772,6 +806,7 @@ async def run():
     chat.register_command('event', event_cmd)
     chat.register_command('uptime', uptime_cmd)
     chat.register_command('system', system_cmd)
+    chat.register_command('rfram', ravenfall_ram_cmd)
     chat.register_command('welcomemsg', welcome_msg_cmd)
     chat.register_command('exprate', exprate_cmd)
     chat.register_command('expirate', exprate_cmd)
