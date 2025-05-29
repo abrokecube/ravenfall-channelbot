@@ -579,7 +579,7 @@ async def ravenbot_restart_cmd(cmd: ChatCommand):
     await run_cmd(shellcmd)
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-        f"cmd /c \"cd {os.getenv('RAVENBOT_FOLDER')} & RavenBot.exe\""
+        f"cmd /c \"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe\""
     )
     await run_cmd(shellcmd)
     await cmd.reply("Okay")
