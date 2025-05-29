@@ -169,6 +169,7 @@ async def on_ready(ready_event: EventData):
     update_task.start(ready_event.chat)
     update_events.start()
     update_mult.start(ready_event.chat)
+    backup_state_data.start()
     print('Bot is ready for work')
     ...
 
