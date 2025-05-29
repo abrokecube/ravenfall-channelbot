@@ -457,7 +457,7 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
         )
         await cmd.reply(
             f"[{graph}] Ravenfall is using {bytes_to_human_readable(bytes_used)} of memory; "
-            f"changed by {bytes_to_human_readable(change)}/s over 3 mins."
+            f"changed by {bytes_to_human_readable(change)}/s over 3 mins. (Graph: 10 minutes)"
         )
     
 
