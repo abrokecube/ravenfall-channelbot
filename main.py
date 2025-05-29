@@ -233,6 +233,23 @@ def get_channel_data(channel_id) -> Channel | None:
             return channel
     return None
 
+async def runshell(cmd):
+    proc = await asyncio.create_subprocess_shell(
+        cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE)
+
+    stdout, stderr = await proc.communicate()
+    out_text = None
+    print(f'[{cmd!r} exited with {proc.returncode}]')
+    if stdout:
+        stdout_text = stdout.decode()
+        print(f'[stdout]\n{stdout_text}')
+        out_text = stdout_text
+    if stderr:
+        print(f'[stderr]\n{stderr.decode()}')
+    return out_text
+
 async def get_town_boost(channel: Channel) -> List[TownBoost] | None:
     async with aiohttp.ClientSession() as session:
         try:
@@ -388,6 +405,14 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
     processes: Dict[str, List[float]] = {}
     working_set = await get_prometheus_instant("windows_process_working_set_bytes{process='Ravenfall'}")
     change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_bytes{process='Ravenfall'}[3m])")
+    tasks = []
+    for ch in channels:
+        shellcmd = (
+            f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch['sandboxie_box']} /listpids"
+        )
+        tasks.append(runshell(shellcmd))
+    pids = await asyncio.gather(*tasks)
+    print(pids)
     for metric in working_set:
         m = metric['metric']
         name = m['process_id']
@@ -397,7 +422,6 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
         name = m['process_id']
         processes[name].append(float(metric['value'][1]))
     out_str = []
-    print(processes)
     for name, (bytes_used, change) in processes.items():
         s = "+"
         if change < 0:
@@ -560,20 +584,6 @@ async def chracter_cmd(cmd: ChatCommand):
         out_msgs = utils.strjoin('', out_msgs, f" | Training time is estimated")
     await cmd.reply(out_msgs)
 
-async def run_cmd(cmd):
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE)
-
-    stdout, stderr = await proc.communicate()
-
-    print(f'[{cmd!r} exited with {proc.returncode}]')
-    if stdout:
-        print(f'[stdout]\n{stdout.decode()}')
-    if stderr:
-        print(f'[stderr]\n{stderr.decode()}')
-
 async def ravenfall_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
@@ -593,12 +603,12 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"taskkill /f /im Ravenfall.exe"
     )
-    await run_cmd(shellcmd)
+    await runshell(shellcmd)
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"cmd /c \"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}\""
     )
-    await run_cmd(shellcmd)
+    await runshell(shellcmd)
     await cmd.reply("Okay")
 
 async def ravenbot_restart_cmd(cmd: ChatCommand):
@@ -618,12 +628,12 @@ async def ravenbot_restart_cmd(cmd: ChatCommand):
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"taskkill /f /im RavenBot.exe"
     )
-    await run_cmd(shellcmd)
+    await runshell(shellcmd)
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"cmd /c \"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe\""
     )
-    await run_cmd(shellcmd)
+    await runshell(shellcmd)
     await cmd.reply("Okay")
 
 async def welcome_msg_cmd(cmd: ChatCommand):
