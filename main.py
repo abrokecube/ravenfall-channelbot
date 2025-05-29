@@ -233,7 +233,7 @@ def get_channel_data(channel_id) -> Channel | None:
             return channel
     return None
 
-async def runshell(cmd):
+async def runshell(cmd) -> str | None:
     proc = await asyncio.create_subprocess_shell(
         cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -411,8 +411,11 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
             f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch['sandboxie_box']} /listpids"
         )
         tasks.append(runshell(shellcmd))
-    pids = await asyncio.gather(*tasks)
-    print(pids)
+    responses: List[str | None] = await asyncio.gather(*tasks)
+    pid_lists = [x.splitlines() for x in responses]
+    box_pids = {}
+    for i in range(len(channels)):
+        box_pids[channels[i]['channel_name']] = pid_lists[i]
     for metric in working_set:
         m = metric['metric']
         name = m['process_id']
@@ -421,13 +424,19 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
         m = metric['metric']
         name = m['process_id']
         processes[name].append(float(metric['value'][1]))
+    processes_named: Dict[str, List[float]] = {}
+    for name, pids in box_pids.items():
+        for pid in pids:
+            if pid in processes:
+                processes_named[name] = processes[pid]
+                break
     out_str = []
-    for name, (bytes_used, change) in processes.items():
+    for name, (bytes_used, change) in processes_named.items():
         s = "+"
         if change < 0:
             s = ''
         out_str.append(
-            f"PID:{name} - {bytes_to_human_readable(bytes_used)} ({s}{bytes_to_human_readable(change)}/s)"
+            f"{name} - {bytes_to_human_readable(bytes_used)} ({s}{bytes_to_human_readable(change)}/s)"
         )
     await cmd.reply(f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes")
     
