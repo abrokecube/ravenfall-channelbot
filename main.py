@@ -350,7 +350,7 @@ def backup_file_with_date(filepath, max_backups=5):
     os.makedirs(backup_dir, exist_ok=True)
 
     # Create new backup filename
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     new_filename = f"{name}_{date_str}{ext}"
     new_filepath = os.path.join(backup_dir, new_filename)
 
