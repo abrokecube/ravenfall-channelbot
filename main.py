@@ -562,6 +562,28 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
     await run_cmd(shellcmd)
     await cmd.reply("Okay")
 
+async def ravenbot_restart_cmd(cmd: ChatCommand):
+    if not cmd.user.mod:
+        return
+    for channel in channels:
+        if channel['channel_id'] == cmd.room.room_id:
+            box = channel['sandboxie_box']
+            break
+    else:
+        await cmd.reply("Town not found :(")
+        return
+    shellcmd = (
+        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
+        f"taskkill /f /im RavenBot.exe"
+    )
+    await run_cmd(shellcmd)
+    shellcmd = (
+        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
+        f"cmd /c \"cd {os.getenv('RAVENBOT_FOLDER')} & RavenBot.exe\""
+    )
+    await run_cmd(shellcmd)
+    await cmd.reply("Okay")
+
 async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
 
@@ -748,6 +770,7 @@ async def run():
     chat.register_command('char', chracter_cmd)
     chat.register_command('character', chracter_cmd)
     chat.register_command('restartrf', ravenfall_restart_cmd)
+    chat.register_command('restartrfbot', ravenbot_restart_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
