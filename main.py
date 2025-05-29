@@ -25,6 +25,7 @@ from utils import strutils
 from utils import chatmsg_cd
 from utils import langstuff
 from utils.is_twitch_username import is_twitch_username
+from utils.filter_username import filter_username
 from utils import utils
 from dataclasses import dataclass
 
@@ -467,7 +468,7 @@ async def exprate_cmd(cmd: ChatCommand):
     args = cmd.parameter.split()
     target_user = cmd.user.name
     if len(cmd.parameter) > 2 and len(args) > 0:
-        target_user = args[0].strip('@')
+        target_user = filter_username(args[0])
     if not is_twitch_username(target_user):
         await cmd.reply("Invalid username.")
         return
@@ -490,7 +491,7 @@ async def chracter_cmd(cmd: ChatCommand):
     args = cmd.parameter.split()
     target_user = cmd.user.name
     if len(cmd.parameter) > 2 and len(args) > 0:
-        target_user = args[0].strip('@')
+        target_user = filter_username(args[0])
     if not is_twitch_username(target_user):
         await cmd.reply("Invalid username.")
         return
