@@ -572,6 +572,9 @@ async def ravenbot_restart_cmd(cmd: ChatCommand):
     else:
         await cmd.reply("Town not found :(")
         return
+    if cmd.room.name == "abrokecube":
+        await cmd.reply("Shrug that doesnt work here")
+        return
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
         f"taskkill /f /im RavenBot.exe"
