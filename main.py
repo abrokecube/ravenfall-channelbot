@@ -405,7 +405,7 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
         out_str.append(
             f"PID:{name} - {bytes_to_human_readable(bytes_used)} ({s}{bytes_to_human_readable(change)}/s)"
         )
-    await cmd.reply(f"Ravenfall ram usage: {' • '.join(out_str)}")
+    await cmd.reply(f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes")
     
 
 async def exprate_cmd(cmd: ChatCommand):
