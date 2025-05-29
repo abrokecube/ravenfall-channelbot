@@ -96,7 +96,7 @@ def simple_line_graph(pairs: Iterable[Tuple[float, float]], width=24, height=4, 
         max_val = max(values)
     if min_val is None:
         m = min(values)
-        min_val = max_val - (max_val - m) * 1/(4/5)
+        min_val = max_val - (max_val - m) * 1/(3/4)
     if hard_min_val is not None:
         min_val = max(hard_min_val, min_val)
     if hard_max_val is not None:
