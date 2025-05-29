@@ -540,7 +540,10 @@ async def run_cmd(cmd):
         print(f'[stderr]\n{stderr.decode()}')
 
 async def ravenfall_restart_cmd(cmd: ChatCommand):
-    if not cmd.user.mod:
+    if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
+        return
+    if cmd.room.room_id in village_events:
+        await cmd.reply("There is an active event.")
         return
     for channel in channels:
         if channel['channel_id'] == cmd.room.room_id:
@@ -563,7 +566,7 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
     await cmd.reply("Okay")
 
 async def ravenbot_restart_cmd(cmd: ChatCommand):
-    if not cmd.user.mod:
+    if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
     for channel in channels:
         if channel['channel_id'] == cmd.room.room_id:
