@@ -409,6 +409,7 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
     processes: Dict[str, List[float]] = {}
     working_set = await get_prometheus_instant("windows_process_working_set_bytes{process='Ravenfall'}")
     change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_bytes{process='Ravenfall'}[3m])")
+    working_set_series = await get_prometheus_series("windows_process_working_set_bytes{process='Ravenfall'}", 60*10)
     tasks = []
     for ch in channels:
         shellcmd = (
@@ -428,6 +429,11 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
         m = metric['metric']
         name = m['process_id']
         processes[name].append(float(metric['value'][1]))
+    for metric in working_set_series:
+        m = metric['metric']
+        name = m['process_id']
+        data_pairs = [(x[0], float(x[1])) for x in metric['values']]
+        processes[name].append(data_pairs)
     processes_named: Dict[str, List[float]] = {}
     for name, pids in box_pids.items():
         for pid in pids:
@@ -436,7 +442,7 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
                 break
     out_str = []
     if "all" in cmd.parameter.lower():
-        for name, (bytes_used, change) in processes_named.items():
+        for name, (bytes_used, change, series) in processes_named.items():
             s = "+"
             if change < 0:
                 s = ''
@@ -445,9 +451,12 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
             )
         await cmd.reply(f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes")
     else:
-        bytes_used, change = processes_named[cmd.room.name]
+        bytes_used, change, series = processes_named[cmd.room.name]
+        graph = braille.simple_line_graph(
+            series, max_gap=30, width=26, min_val=1, fill_type=1
+        )
         await cmd.reply(
-            f"Ravenfall is using {bytes_to_human_readable(bytes_used)} of memory; "
+            f"[{graph}] Ravenfall is using {bytes_to_human_readable(bytes_used)} of memory; "
             f"changed by {bytes_to_human_readable(change)}/s over 3 mins."
         )
     
