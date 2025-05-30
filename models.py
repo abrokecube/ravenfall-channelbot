@@ -16,6 +16,8 @@ class Channel(TypedDict):
     sandboxie_box: str
     ravenfall_start_script: str
     auto_restart: bool
+    event_notifications: bool
+    restart_period: int
 
 class GameSession(TypedDict):
     authenticated: bool

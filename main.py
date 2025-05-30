@@ -166,13 +166,6 @@ with open("channels.json", "r") as f:
 for channel in channels:
     channel["rf_query_url"] = channel["rf_query_url"].rstrip("/")
 
-async def on_ready(ready_event: EventData):
-    update_task.start(ready_event.chat)
-    update_events.start()
-    update_mult.start(ready_event.chat)
-    backup_state_data.start()
-    print('Bot is ready for work')
-    ...
 
 async def on_message(msg: ChatMessage):
     ch_data = get_channel_data(msg.room.room_id)
@@ -722,6 +715,29 @@ async def ravenbot_restart_cmd(cmd: ChatCommand):
     # await runshell(shellcmd)
     await cmd.reply("Okay")
 
+async def postpone_restart_cmd(cmd: ChatCommand):
+    if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
+        return
+    args = cmd.parameter.split()
+    seconds = 3*60
+    if len(args) > 0 and args[0].isdigit():
+        seconds = int(args[0])
+    task = postpone_restart_task(cmd.room.room_id, seconds)
+    if task is None:
+        return
+    await cmd.reply(f"Restart postponed by {seconds} seconds.")
+
+async def get_restart_time_left_cmd(cmd: ChatCommand):
+    task = get_restart_task(cmd.room.room_id)
+    if task is None:
+        await cmd.reply("No restart task found.")
+        return
+    time_left = task.get_time_left()
+    if time_left <= 0:
+        await cmd.reply("No restart task found.")
+        return
+    await cmd.reply(f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}")
+
 async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
 
@@ -751,14 +767,32 @@ class RestartTask:
         self.start_t = time.time()
         self.waiting_task = asyncio.create_task(self._waiting())
         self.event_watch_task = asyncio.create_task(self._event_watcher())
+        
+    def cancel(self):
+        self.waiting_task.cancel()
+        self.event_watch_task.cancel()
+
+    async def wait(self):
+        """Wait until the restart task is finished."""
+        if self.waiting_task:
+            try:
+                await self.waiting_task
+            except asyncio.CancelledError:
+                pass
 
     async def _waiting(self):
         warning_idx = -1
+        time_left = self.get_time_left()
+        if time_left - WARNING_MSG_TIMES[0] > 30:
+            await self.chat.send_message(
+                self.channel['channel_name'],
+                f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
+            )
         while True:
             await asyncio.sleep(1)
             if self._paused:
                 continue
-            time_left = self.time_to_restart - (time.time() - self.start_t - self._pause_time)
+            time_left = self.get_time_left()
             if time_left <= 0:
                 break
             new_warning_idx = -1
@@ -769,7 +803,7 @@ class RestartTask:
                 if new_warning_idx >= 0 and new_warning_idx > warning_idx:
                     await self.chat.send_message(
                         self.channel['channel_name'],
-                        f"Restarting Ravenfall in {format_seconds(WARNING_MSG_TIMES[new_warning_idx], TimeSize.LONG)}!"
+                        f"Restarting Ravenfall in {format_seconds(WARNING_MSG_TIMES[new_warning_idx], TimeSize.LONG, 2, False)}!"
                     )
                 warning_idx = new_warning_idx
         await self._execute()
@@ -777,9 +811,11 @@ class RestartTask:
     async def _event_watcher(self):
         while True:
             await asyncio.sleep(1)
+            if self.done:
+                return
             ch_id = self.channel['channel_id']
             if ch_id in village_events:
-                if village_events[ch_id].split(maxsplit=1)[0] != 'No':
+                if village_events[ch_id].split(maxsplit=1)[0] in ('DUNGEON', 'RAID'):
                     if not self._paused:
                         self.pause()
                         await self.chat.send_message(
@@ -787,11 +823,12 @@ class RestartTask:
                             "Postponing restart due to dungeon/raid."
                         )
                 else:
+                    time_left = self.get_time_left()
                     if self._paused:
                         self.unpause()
                         await self.chat.send_message(
                             self.channel['channel_name'], 
-                            "Resuming restart."
+                            f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}."
                         )
     
     async def _execute(self):
@@ -804,6 +841,9 @@ class RestartTask:
     async def finished(self):
         return self.done
 
+    def get_time_left(self):
+        return self.time_to_restart - (time.time() - self.start_t - self._pause_time)
+    
     def pause(self):
         if not self._paused:
             self._paused = True
@@ -825,11 +865,19 @@ def add_restart_task(channel: Channel, chat: Chat, time_to_restart: int | None =
     if channel['channel_id'] in channel_restart_tasks:
         task = channel_restart_tasks[channel['channel_id']]
         if not task.finished():
-            return task
+            task.cancel()
     task = RestartTask(channel, chat, time_to_restart)
     channel_restart_tasks[channel['channel_id']] = task
     task.start()
     return task
+
+def postpone_restart_task(channel_id: str, seconds: int):
+    if channel_id in channel_restart_tasks:
+        task = channel_restart_tasks[channel_id]
+        if not task.finished():
+            task.postpone(seconds)
+            return task
+    return None
 
 def get_restart_task(channel_id: str) -> RestartTask | None:
     return channel_restart_tasks.get(channel_id, None)
@@ -844,8 +892,8 @@ async def backup_state_data():
     print("Backed up state data")
         
 max_dungeon_hp: Dict[str, int] = {}
-@routine(delta=timedelta(seconds=2))
-async def update_events():
+@routine(delta=timedelta(seconds=2), wait_remainder=True)
+async def update_events(chat: Chat):
     async with aiohttp.ClientSession() as session:
         tasks = []
         tasks.extend([
@@ -880,6 +928,15 @@ async def update_events():
                 if dungeon['enemiesalive'] > 0 or not channel['channel_id'] in max_dungeon_hp:
                     max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
                 boss_max_hp = max_dungeon_hp[channel['channel_id']]
+                if event_text.split()[0] != "DUNGEON":
+                    msg = (
+                        f"DUNGEON – "
+                        f"Boss HP: {boss_max_hp:,} "
+                        f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,}"
+                    )
+                    for channel in channels:
+                        if channel['event_notifications']:
+                            await chat.send_message(channel['channel_name'], msg)
                 event_text = (
                     f"DUNGEON – "
                     f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp:,} "
@@ -889,6 +946,14 @@ async def update_events():
                     f"Elapsed time: {format_seconds(dungeon['elapsed'])}"
                 )
         elif raid and raid['started'] and raid['boss']['maxhealth'] > 0:
+            if event_text.split()[0] != "RAID":
+                msg = (
+                    f"RAID – "
+                    f"Boss HP: {raid['boss']['health']:,} "
+                )
+                for channel in channels:
+                    if channel['event_notifications']:
+                        await chat.send_message(channel['channel_name'], msg)
             event_text = (
                 "RAID – "
                 f"Boss HP: {raid['boss']['health']:,}/{raid['boss']['maxhealth']:,} "
@@ -898,9 +963,8 @@ async def update_events():
             )
         village_events[channel['channel_id']] = event_text
 
-
 current_mult: float = None
-@routine(delta=timedelta(seconds=2))
+@routine(delta=timedelta(seconds=2), wait_remainder=True)
 async def update_mult(chat: Chat):
     global current_mult
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1)) as session:
@@ -984,6 +1048,27 @@ async def gotify_listener(chat: Chat):
         except Exception as e:
             print(f"Gotify listener failed: {e}, retrying...")
 
+@routine(delta=timedelta(seconds=10), wait_first=True)
+async def auto_restart(chat: Chat):
+    for channel in channels:
+        if not channel['auto_restart']:
+            continue
+        period = channel.get('restart_period', 0)
+        if period and period > 0:
+            period = max(20*60,period)
+            task = get_restart_task(channel['channel_id'])
+            
+            if (not task) or task.finished():
+                add_restart_task(channel, chat, period)
+
+async def on_ready(ready_event: EventData):
+    update_task.start(ready_event.chat)
+    update_events.start(ready_event.chat)
+    update_mult.start(ready_event.chat)
+    backup_state_data.start()
+    auto_restart.start(ready_event.chat)
+    print('Bot is ready for work')
+
 # this is where we set up the bot
 async def run():
     # set up twitch api instance and add user authentication with some scopes
@@ -1023,6 +1108,8 @@ async def run():
     chat.register_command('rfrestart', ravenfall_restart_cmd)
     chat.register_command('rfbotrestart', ravenbot_restart_cmd)
     chat.register_command('rfqueuerestart', ravenfall_queue_restart_cmd)
+    chat.register_command('postpone', postpone_restart_cmd)
+    chat.register_command('restartstatus', get_restart_time_left_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
