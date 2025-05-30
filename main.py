@@ -742,7 +742,7 @@ class RestartTask:
         self._pause_time = 0
         self._pause_start = 0
 
-    async def start(self):
+    def start(self):
         if not self.done:
             if self.waiting_task and not self.waiting_task.done():
                 self.waiting_task.cancel()
