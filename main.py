@@ -838,7 +838,7 @@ class RestartTask:
         )
         self.done = True
 
-    async def finished(self):
+    def finished(self):
         return self.done
 
     def get_time_left(self):
