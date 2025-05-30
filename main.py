@@ -913,7 +913,7 @@ async def update_events(chat: Chat):
     dungeons: List[Dungeon] = data[a*0:a*1]
     raids: List[Raid] = data[a*1:a*2]
     for dungeon, raid, channel in zip(dungeons, raids, channels):
-        old_event_text = village_events.get(channel['channel_id'], "")
+        old_event_text = village_events.get(channel['channel_id'], "null")
         event_text = "No active event."
         if dungeon and dungeon.get('enemies'):
             if not dungeon['started']:
