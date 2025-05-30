@@ -692,6 +692,7 @@ async def ravenfall_queue_restart_cmd(cmd: ChatCommand):
         return
 
     add_restart_task(this_channel, cmd.chat)
+    await cmd.reply("Restart queued.")
     
 async def ravenbot_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
