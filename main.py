@@ -166,11 +166,15 @@ with open("channels.json", "r") as f:
 for channel in channels:
     channel["rf_query_url"] = channel["rf_query_url"].rstrip("/")
 
-
+recently_restarted: Dict[str, bool] = {}
 async def on_message(msg: ChatMessage):
     ch_data = get_channel_data(msg.room.room_id)
     if msg.first and msg.text[:5].lower() == f"{ch_data['ravenbot_prefix']}join":
         await first_time_joiner(msg)
+    if recently_restarted.get(msg.room.room_id, False):
+        recently_restarted[msg.room.room_id] = False
+        await asyncio.sleep(3)
+        await msg.chat.send_message(msg.room.name, "?sailall")
 
 @chatmsg_cd.chat_autoresponse_cd(5, chatmsg_cd.CooldownType.CHANNEL)
 async def first_time_joiner(msg: ChatMessage):
@@ -642,6 +646,12 @@ async def restart_process(box_name, process_name, startup_command):
     )
     await runshell(shellcmd)
 
+async def restart_ravenfall(channel: Channel):
+    await restart_process(
+        channel['sandboxie_box'], "Ravenfall.exe", f"cd {os.getenv('RAVENFALL_FOLDER')} & {channel['ravenfall_start_script']}"
+    )
+    recently_restarted[channel['channel_id']] = True
+
 async def ravenfall_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
@@ -651,25 +661,12 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
             return
     for channel in channels:
         if channel['channel_id'] == cmd.room.room_id:
-            box = channel['sandboxie_box']
-            start_script = channel['ravenfall_start_script']
+            thechannel = channel
             break
     else:
         await cmd.reply("Town not found :(")
         return
-    await restart_process(
-        box, "Ravenfall.exe", f"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}"
-    )
-    # shellcmd = (
-    #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-    #     f"taskkill /f /im Ravenfall.exe"
-    # )
-    # await runshell(shellcmd)
-    # shellcmd = (
-    #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-    #     f"cmd /c \"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}\""
-    # )
-    # await runshell(shellcmd)
+    await restart_ravenfall(thechannel)
     await cmd.reply("Okay")
 
 async def ravenfall_queue_restart_cmd(cmd: ChatCommand):
@@ -857,9 +854,7 @@ class RestartTask:
     
     async def _execute(self):
         await self.chat.send_message(self.channel['channel_name'], "Restarting Ravenfall...")
-        await restart_process(
-            self.channel['sandboxie_box'], "Ravenfall.exe", f"cd {os.getenv('RAVENFALL_FOLDER')} & {self.channel['ravenfall_start_script']}"
-        )
+        await restart_ravenfall(self.channel)
         self.done = True
 
     def finished(self):
