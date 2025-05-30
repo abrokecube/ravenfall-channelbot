@@ -174,7 +174,7 @@ async def on_message(msg: ChatMessage):
     if msg.user.id == os.getenv("RAVENBOT_USER_ID"):
         if recently_restarted.get(msg.room.room_id, False):
             recently_restarted[msg.room.room_id] = False
-            await asyncio.sleep(3)
+            await asyncio.sleep(10)
             await msg.chat.send_message(msg.room.name, "?sailall")
 
 @chatmsg_cd.chat_autoresponse_cd(5, chatmsg_cd.CooldownType.CHANNEL)
