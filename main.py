@@ -563,8 +563,8 @@ async def chracter_cmd(cmd: ChatCommand):
         
     rested = ""
     if char.rested_time.total_seconds() > 0:
-        s = utils.TimeSize.SMALL_SPACES 
-        rested = f"with {utils.format_seconds(char.rested_time.total_seconds(),s)} of rest time"
+        s = TimeSize.SMALL_SPACES 
+        rested = f"with {format_seconds(char.rested_time.total_seconds(),s)} of rest time"
 
     captain = ""
     if ferry_info['captain']['name'] == char.user_name:
@@ -590,8 +590,8 @@ async def chracter_cmd(cmd: ChatCommand):
         training_time_exp = timedelta(seconds=(exp_to_next_level) / (char_exp_per_h/60/60))
     else:
         training_time_exp = timedelta(weeks=9999)
-    s = utils.TimeSize.SMALL_SPACES
-    train_time_format = utils.format_timedelta(training_time_exp, s)
+    s = TimeSize.SMALL_SPACES
+    train_time_format = format_timedelta(training_time_exp, s)
     now = datetime.now(timezone.utc)
     if char.island and not char.in_onsen:
         if training_time_exp.total_seconds() > 60*60*24*100:  # 99 days
@@ -633,7 +633,7 @@ async def multiplier_cmd(cmd: ChatCommand):
         mult_info: GameMultiplier = await r.json()
     await cmd.reply(
         f"Current global exp multiplier is {mult_info['multiplier']}×, "
-        f"ending in {utils.format_seconds(mult_info['timeleft'], utils.TimeSize.LONG)}, "
+        f"ending in {format_seconds(mult_info['timeleft'], TimeSize.LONG)}, "
         f"thanks to {mult_info['eventname']}!"
     )
 
@@ -750,7 +750,7 @@ class RestartTask:
                 self.event_watch_task.cancel()
         self.start_t = time.time()
         self.waiting_task = asyncio.create_task(self._waiting())
-        self.event_watch_task = asyncio.create_task(self._waiting())
+        self.event_watch_task = asyncio.create_task(self._event_watcher())
 
     async def _waiting(self):
         warning_idx = -1
@@ -766,10 +766,10 @@ class RestartTask:
                 if time_left < x:
                     new_warning_idx = i
             if new_warning_idx != warning_idx:
-                if warning_idx >= 0 and new_warning_idx > warning_idx:
+                if new_warning_idx >= 0 and new_warning_idx > warning_idx:
                     await self.chat.send_message(
                         self.channel['channel_name'],
-                        f"Restarting Ravenfall in {utils.format_seconds(WARNING_MSG_TIMES[new_warning_idx], TimeSize.LONG)}!"
+                        f"Restarting Ravenfall in {format_seconds(WARNING_MSG_TIMES[new_warning_idx], TimeSize.LONG)}!"
                     )
                 warning_idx = new_warning_idx
         await self._execute()
@@ -920,7 +920,7 @@ async def update_mult(chat: Chat):
         current_mult = multiplier['multiplier']
     if multiplier['multiplier'] > current_mult:
         current_mult = multiplier['multiplier']
-        msg = f"{multiplier['eventname']} increased the multiplier to {int(current_mult)}x, ending in {utils.format_seconds(multiplier['timeleft'], utils.TimeSize.MEDIUM_SPACES)}!"
+        msg = f"{multiplier['eventname']} increased the multiplier to {int(current_mult)}x, ending in {format_seconds(multiplier['timeleft'], TimeSize.MEDIUM_SPACES)}!"
         for channel in channels:
             await chat.send_message(channel['channel_name'], msg)
     current_mult = multiplier['multiplier']
