@@ -814,7 +814,7 @@ class RestartTask:
             if self.done:
                 return
             time_left = self.get_time_left()
-            if (time_left > WARNING_MSG_TIMES[-1]) and not self._paused:
+            if (time_left > max(WARNING_MSG_TIMES[-1], 60)) and not self._paused:
                 continue
             ch_id = self.channel['channel_id']
             if ch_id in village_events:
@@ -930,7 +930,7 @@ async def update_events(chat: Chat):
                     )
                 else:
                     event_text = (
-                        f"A dungeon is being prepared... – "
+                        f"DUNGEON is being prepared... – "
                         f"Enemies: {dungeon['enemies']:,}"
                     )
             else:
@@ -940,8 +940,8 @@ async def update_events(chat: Chat):
                 if old_event_text.split()[1] == "starting":
                     msg = (
                         f"DUNGEON – "
-                        f"Boss HP: {boss_max_hp:,} "
-                        f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,}"
+                        f"Boss HP: {boss_max_hp:,} – "
+                        f"Enemies: {dungeon['enemies']:,}"
                     )
                     if channel['event_notifications']:
                         await chat.send_message(channel['channel_name'], msg)
