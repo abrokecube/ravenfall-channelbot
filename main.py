@@ -814,7 +814,7 @@ class RestartTask:
             if self.done:
                 return
             time_left = self.get_time_left()
-            if time_left > WARNING_MSG_TIMES[0]:
+            if (time_left > WARNING_MSG_TIMES[-1]) and not self._paused:
                 continue
             ch_id = self.channel['channel_id']
             if ch_id in village_events:
