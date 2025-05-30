@@ -171,10 +171,11 @@ async def on_message(msg: ChatMessage):
     ch_data = get_channel_data(msg.room.room_id)
     if msg.first and msg.text[:5].lower() == f"{ch_data['ravenbot_prefix']}join":
         await first_time_joiner(msg)
-    if recently_restarted.get(msg.room.room_id, False):
-        recently_restarted[msg.room.room_id] = False
-        await asyncio.sleep(3)
-        await msg.chat.send_message(msg.room.name, "?sailall")
+    if msg.user.id == os.getenv("RAVENBOT_USER_ID"):
+        if recently_restarted.get(msg.room.room_id, False):
+            recently_restarted[msg.room.room_id] = False
+            await asyncio.sleep(3)
+            await msg.chat.send_message(msg.room.name, "?sailall")
 
 @chatmsg_cd.chat_autoresponse_cd(5, chatmsg_cd.CooldownType.CHANNEL)
 async def first_time_joiner(msg: ChatMessage):
@@ -821,7 +822,7 @@ class RestartTask:
                 if new_warning_idx >= 0 and new_warning_idx > warning_idx:
                     await self.chat.send_message(
                         self.channel['channel_name'],
-                        f"Restarting Ravenfall in {format_seconds(WARNING_MSG_TIMES[new_warning_idx], TimeSize.LONG, 2, False)}!"
+                        f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
                     )
                 warning_idx = new_warning_idx
         await self._execute()
