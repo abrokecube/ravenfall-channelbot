@@ -782,14 +782,14 @@ class RestartTask:
                 if village_events[ch_id].split(maxsplit=1)[0] != 'No':
                     if not self._paused:
                         self.pause()
-                        self.chat.send_message(
+                        await self.chat.send_message(
                             self.channel['channel_name'], 
                             "Postponing restart."
                         )
                 else:
                     if self._paused:
                         self.unpause()
-                        self.chat.send_message(
+                        await self.chat.send_message(
                             self.channel['channel_name'], 
                             "Resuming restart."
                         )
