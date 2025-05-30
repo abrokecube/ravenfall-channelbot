@@ -810,9 +810,12 @@ class RestartTask:
 
     async def _event_watcher(self):
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
             if self.done:
                 return
+            time_left = self.get_time_left()
+            if time_left > WARNING_MSG_TIMES[0]:
+                continue
             ch_id = self.channel['channel_id']
             if ch_id in village_events:
                 if village_events[ch_id].split(maxsplit=1)[0] in ('DUNGEON', 'RAID'):
@@ -823,7 +826,6 @@ class RestartTask:
                             "Postponing restart due to dungeon/raid."
                         )
                 else:
-                    time_left = self.get_time_left()
                     if self._paused:
                         self.unpause()
                         await self.chat.send_message(
@@ -923,7 +925,7 @@ async def update_events(chat: Chat):
                     if old_event_text.split()[0] != "DUNGEON":
                         msg = (
                             f"DUNGEON – "
-                            f"Boss HP: {boss_max_hp:,} "
+                            f"Boss HP: {dungeon['boss']['health']:,} "
                             f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,}"
                         )
                         if channel['event_notifications']:
