@@ -675,6 +675,10 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
 async def ravenfall_queue_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
+    args = cmd.parameter.split()
+    seconds = 5*60
+    if len(args) > 0 and args[0].isdigit():
+        seconds = int(args[0])
     this_channel = None
     for channel in channels:
         if channel['channel_id'] == cmd.room.room_id:
@@ -684,9 +688,19 @@ async def ravenfall_queue_restart_cmd(cmd: ChatCommand):
         await cmd.reply("Town not found :(")
         return
 
-    add_restart_task(this_channel, cmd.chat)
-    await cmd.reply("Restart queued.")
-    
+    add_restart_task(this_channel, cmd.chat, time_to_restart=seconds)
+    await cmd.reply(f"Restart queued. Restarting in {seconds}s.")
+
+async def ravenfall_queue_restart_cancel_cmd(cmd: ChatCommand):
+    if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
+        return
+    task = get_restart_task(cmd.room.room_id)
+    if (not task) or task.finished():
+        await cmd.reply("No task to cancel")
+        return
+    task.cancel()
+    await cmd.reply("Cancelled restart task.")
+
 async def ravenbot_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
@@ -736,7 +750,10 @@ async def get_restart_time_left_cmd(cmd: ChatCommand):
     if time_left <= 0:
         await cmd.reply("No restart task found.")
         return
-    await cmd.reply(f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}")
+    out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}"
+    if task.paused():
+        out_text += " (paused)"
+    await cmd.reply(out_text)
 
 async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
@@ -771,6 +788,7 @@ class RestartTask:
     def cancel(self):
         self.waiting_task.cancel()
         self.event_watch_task.cancel()
+        self.done = True
 
     async def wait(self):
         """Wait until the restart task is finished."""
@@ -828,6 +846,7 @@ class RestartTask:
                 else:
                     if self._paused:
                         self.unpause()
+                        time_left = self.get_time_left()
                         await self.chat.send_message(
                             self.channel['channel_name'], 
                             f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}."
@@ -843,8 +862,14 @@ class RestartTask:
     def finished(self):
         return self.done
 
+    def paused(self):
+        return self._paused
+    
     def get_time_left(self):
-        return self.time_to_restart - (time.time() - self.start_t - self._pause_time)
+        pause_time = self._pause_time
+        if self._paused:
+            pause_time += time.time() - self._pause_start
+        return self.time_to_restart - (time.time() - self.start_t - pause_time)
     
     def pause(self):
         if not self._paused:
@@ -1115,6 +1140,7 @@ async def run():
     chat.register_command('rfrestart', ravenfall_restart_cmd)
     chat.register_command('rfbotrestart', ravenbot_restart_cmd)
     chat.register_command('rfqueuerestart', ravenfall_queue_restart_cmd)
+    chat.register_command('rfcancelrestart', ravenfall_queue_restart_cancel_cmd)
     chat.register_command('postpone', postpone_restart_cmd)
     chat.register_command('restartstatus', get_restart_time_left_cmd)
 
