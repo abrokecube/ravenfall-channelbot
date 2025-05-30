@@ -908,7 +908,7 @@ def postpone_restart_task(channel_id: str, seconds: int):
 def get_restart_task(channel_id: str) -> RestartTask | None:
     return channel_restart_tasks.get(channel_id, None)
 
-@routine(delta=timedelta(hours=6))
+@routine(delta=timedelta(hours=6), wait_first=True)
 async def backup_state_data():
     for channel in channels:
         backup_file_with_date(
