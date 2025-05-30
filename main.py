@@ -726,7 +726,7 @@ async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
 
 
-WARNING_MSG_TIMES = (300, 120, 30)
+WARNING_MSG_TIMES = (120, 30)
 class RestartTask:
     def __init__(self, channel: Channel, chat: Chat, time_to_restart: int | None = 0):
         self.channel = channel
