@@ -630,7 +630,7 @@ async def multiplier_cmd(cmd: ChatCommand):
             return
         mult_info: GameMultiplier = await r.json()
     await cmd.reply(
-        f"Current global exp multiplier is {mult_info['multiplier']}×, "
+        f"Current global exp multiplier is {int(mult_info['multiplier'])}×, "
         f"ending in {format_seconds(mult_info['timeleft'], TimeSize.LONG)}, "
         f"thanks to {mult_info['eventname']}!"
     )
