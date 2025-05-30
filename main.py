@@ -915,7 +915,7 @@ async def update_events(chat: Chat):
     dungeons: List[Dungeon] = data[a*0:a*1]
     raids: List[Raid] = data[a*1:a*2]
     for dungeon, raid, channel in zip(dungeons, raids, channels):
-        old_event_text = village_events.get(channel['channel_id'], "null")
+        old_event_text = village_events.get(channel['channel_id'], "null null null")
         event_text = "No active event."
         if dungeon and dungeon.get('enemies'):
             if not dungeon['started']:
@@ -937,7 +937,7 @@ async def update_events(chat: Chat):
                 if dungeon['enemiesalive'] > 0 or not channel['channel_id'] in max_dungeon_hp:
                     max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
                 boss_max_hp = max_dungeon_hp[channel['channel_id']]
-                if old_event_text.split()[0:2] == ("DUNGEON", "starting"):
+                if old_event_text.split()[1] == "starting":
                     msg = (
                         f"DUNGEON – "
                         f"Boss HP: {boss_max_hp:,} "
