@@ -922,14 +922,6 @@ async def update_events(chat: Chat):
                 max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
                 time_starting = format_seconds(dungeon['secondsuntilstart'])
                 if dungeon['boss']['health'] > 0:
-                    if old_event_text.split()[0] != "DUNGEON":
-                        msg = (
-                            f"DUNGEON – "
-                            f"Boss HP: {dungeon['boss']['health']:,} "
-                            f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,}"
-                        )
-                        if channel['event_notifications']:
-                            await chat.send_message(channel['channel_name'], msg)
                     event_text = (
                         f"DUNGEON starting in {time_starting} – "
                         f"Boss HP: {dungeon['boss']['health']:,} – "
@@ -945,6 +937,14 @@ async def update_events(chat: Chat):
                 if dungeon['enemiesalive'] > 0 or not channel['channel_id'] in max_dungeon_hp:
                     max_dungeon_hp[channel['channel_id']] = dungeon["boss"]["health"]
                 boss_max_hp = max_dungeon_hp[channel['channel_id']]
+                if old_event_text.split()[0:2] == ("DUNGEON", "starting"):
+                    msg = (
+                        f"DUNGEON – "
+                        f"Boss HP: {boss_max_hp:,} "
+                        f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,}"
+                    )
+                    if channel['event_notifications']:
+                        await chat.send_message(channel['channel_name'], msg)
                 event_text = (
                     f"DUNGEON – "
                     f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp:,} "
