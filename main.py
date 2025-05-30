@@ -784,7 +784,7 @@ class RestartTask:
                         self.pause()
                         await self.chat.send_message(
                             self.channel['channel_name'], 
-                            "Postponing restart."
+                            "Postponing restart due to dungeon/raid."
                         )
                 else:
                     if self._paused:
