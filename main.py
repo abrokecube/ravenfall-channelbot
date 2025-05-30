@@ -629,11 +629,17 @@ async def multiplier_cmd(cmd: ChatCommand):
             await cmd.reply("Ravenfall seems to be offline!")
             return
         mult_info: GameMultiplier = await r.json()
-    await cmd.reply(
-        f"Current global exp multiplier is {int(mult_info['multiplier'])}×, "
-        f"ending in {format_seconds(mult_info['timeleft'], TimeSize.LONG)}, "
-        f"thanks to {mult_info['eventname']}!"
-    )
+    mult = int(mult_info['multiplier'])
+    if mult <= 1:
+        await cmd.reply(
+            f"Current global exp multiplier is {mult}×."
+        )
+    else:
+        await cmd.reply(
+            f"Current global exp multiplier is {mult}×, "
+            f"ending in {format_seconds(mult_info['timeleft'], TimeSize.LONG)}, "
+            f"thanks to {mult_info['eventname']}!"
+        )
 
 async def restart_process(box_name, process_name, startup_command):
     shellcmd = (
