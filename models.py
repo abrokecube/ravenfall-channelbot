@@ -15,6 +15,7 @@ class Channel(TypedDict):
     recieve_global_alerts: bool
     sandboxie_box: str
     ravenfall_start_script: str
+    auto_restart: bool
 
 class GameSession(TypedDict):
     authenticated: bool

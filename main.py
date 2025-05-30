@@ -616,6 +616,39 @@ async def chracter_cmd(cmd: ChatCommand):
         out_msgs = utils.strjoin('', out_msgs, f" | Training time is estimated")
     await cmd.reply(out_msgs)
 
+async def multiplier_cmd(cmd: ChatCommand):
+    for channel in channels:
+        if channel['channel_id'] == cmd.room.room_id:
+            village_url = channel['rf_query_url']
+            break
+    else:
+        await cmd.reply("Town not found :(")
+        return
+    async with aiohttp.ClientSession() as session:
+        try:
+            r = await session.get(f"{village_url}/select * from multiplier")
+        except aiohttp.client_exceptions.ContentTypeError:
+            await cmd.reply("Ravenfall seems to be offline!")
+            return
+        mult_info: GameMultiplier = await r.json()
+    await cmd.reply(
+        f"Current global exp multiplier is {mult_info['multiplier']}×, "
+        f"ending in {utils.format_seconds(mult_info['timeleft'], utils.TimeSize.LONG)}, "
+        f"thanks to {mult_info['eventname']}!"
+    )
+
+async def restart_process(box_name, process_name, startup_command):
+    shellcmd = (
+        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /wait "
+        f"taskkill /f /im {process_name}"
+    )
+    await runshell(shellcmd)
+    shellcmd = (
+        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /wait "
+        f"cmd /c \"{startup_command}\""
+    )
+    await runshell(shellcmd)
+
 async def ravenfall_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
@@ -631,18 +664,35 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
     else:
         await cmd.reply("Town not found :(")
         return
-    shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-        f"taskkill /f /im Ravenfall.exe"
+    await restart_process(
+        box, "Ravenfall.exe", f"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}"
     )
-    await runshell(shellcmd)
-    shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-        f"cmd /c \"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}\""
-    )
-    await runshell(shellcmd)
+    # shellcmd = (
+    #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
+    #     f"taskkill /f /im Ravenfall.exe"
+    # )
+    # await runshell(shellcmd)
+    # shellcmd = (
+    #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
+    #     f"cmd /c \"cd {os.getenv('RAVENFALL_FOLDER')} & {start_script}\""
+    # )
+    # await runshell(shellcmd)
     await cmd.reply("Okay")
 
+async def ravenfall_queue_restart_cmd(cmd: ChatCommand):
+    if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
+        return
+    this_channel = None
+    for channel in channels:
+        if channel['channel_id'] == cmd.room.room_id:
+            this_channel = channel
+            break
+    else:
+        await cmd.reply("Town not found :(")
+        return
+
+    add_restart_task(this_channel, cmd.chat)
+    
 async def ravenbot_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
@@ -656,22 +706,133 @@ async def ravenbot_restart_cmd(cmd: ChatCommand):
     if cmd.room.name == "abrokecube":
         await cmd.reply("Shrug that doesnt work here")
         return
-    shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-        f"taskkill /f /im RavenBot.exe"
+    await restart_process(
+        box, "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
     )
-    await runshell(shellcmd)
-    shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-        f"cmd /c \"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe\""
-    )
-    await runshell(shellcmd)
+    # shellcmd = (
+    #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
+    #     f"taskkill /f /im RavenBot.exe"
+    # )
+    # await runshell(shellcmd)
+    # shellcmd = (
+    #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
+    #     f"cmd /c \"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe\""
+    # )
+    # await runshell(shellcmd)
     await cmd.reply("Okay")
 
 async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
 
+
+WARNING_MSG_TIMES = (300, 120, 30)
+class RestartTask:
+    def __init__(self, channel: Channel, chat: Chat, time_to_restart: int | None = 0):
+        self.channel = channel
+        self.chat = chat
+        self.time_to_restart = time_to_restart
+        if self.time_to_restart is None:
+            self.time_to_restart = WARNING_MSG_TIMES[0]
+        self.start_t = 0
+        self.waiting_task: asyncio.Task = None
+        self.event_watch_task: asyncio.Task = None
+        self.done = False
+        self._paused = False
+        self._pause_time = 0
+        self._pause_start = 0
+
+    async def start(self):
+        if not self.done:
+            if self.waiting_task and not self.waiting_task.done():
+                self.waiting_task.cancel()
+            if self.event_watch_task and not self.event_watch_task.done():
+                self.event_watch_task.cancel()
+        self.start_t = time.time()
+        self.waiting_task = asyncio.create_task(self._waiting())
+        self.event_watch_task = asyncio.create_task(self._waiting())
+
+    async def _waiting(self):
+        warning_idx = -1
+        while True:
+            await asyncio.sleep(1)
+            if self._paused:
+                continue
+            time_left = self.time_to_restart - (time.time() - self.start_t - self._pause_time)
+            if time_left <= 0:
+                break
+            new_warning_idx = -1
+            for i, x in enumerate(WARNING_MSG_TIMES):
+                if time_left < x:
+                    new_warning_idx = i
+            if new_warning_idx != warning_idx:
+                if warning_idx >= 0 and new_warning_idx > warning_idx:
+                    await self.chat.send_message(
+                        self.channel['channel_name'],
+                        f"Restarting Ravenfall in {utils.format_seconds(WARNING_MSG_TIMES[new_warning_idx], TimeSize.LONG)}!"
+                    )
+                warning_idx = new_warning_idx
+        await self._execute()
+
+    async def _event_watcher(self):
+        while True:
+            await asyncio.sleep(1)
+            ch_id = self.channel['channel_id']
+            if ch_id in village_events:
+                if village_events[ch_id].split(maxsplit=1)[0] != 'No':
+                    if not self._paused:
+                        self.pause()
+                        self.chat.send_message(
+                            self.channel['channel_name'], 
+                            "Postponing restart."
+                        )
+                else:
+                    if self._paused:
+                        self.unpause()
+                        self.chat.send_message(
+                            self.channel['channel_name'], 
+                            "Resuming restart."
+                        )
     
+    async def _execute(self):
+        await self.chat.send_message(self.channel['channel_name'], "Restarting Ravenfall...")
+        await restart_process(
+            self.channel['sandboxie_box'], "Ravenfall.exe", f"cd {os.getenv('RAVENFALL_FOLDER')} & {self.channel['ravenfall_start_script']}"
+        )
+        self.done = True
+
+    async def finished(self):
+        return self.done
+
+    def pause(self):
+        if not self._paused:
+            self._paused = True
+            self._pause_start = time.time()
+
+    def unpause(self):
+        if self._paused:
+            self._paused = False
+            self._pause_time += time.time() - self._pause_start
+
+    def postpone(self, seconds: int):
+        if not self._paused:
+            self.pause()
+        self.time_to_restart += seconds
+        self.start_t = time.time() - self._pause_time
+
+channel_restart_tasks: Dict[str, RestartTask] = {}
+def add_restart_task(channel: Channel, chat: Chat, time_to_restart: int | None = None):
+    if channel['channel_id'] in channel_restart_tasks:
+        task = channel_restart_tasks[channel['channel_id']]
+        if not task.finished():
+            return task
+    task = RestartTask(channel, chat, time_to_restart)
+    channel_restart_tasks[channel['channel_id']] = task
+    task.start()
+    return task
+
+def get_restart_task(channel_id: str) -> RestartTask | None:
+    return channel_restart_tasks.get(channel_id, None)
+
 @routine(delta=timedelta(hours=6))
 async def backup_state_data():
     for channel in channels:
@@ -758,7 +919,7 @@ async def update_mult(chat: Chat):
         current_mult = multiplier['multiplier']
     if multiplier['multiplier'] > current_mult:
         current_mult = multiplier['multiplier']
-        msg = f"{multiplier['eventname']} increased the multiplier to {int(current_mult)}x!"
+        msg = f"{multiplier['eventname']} increased the multiplier to {int(current_mult)}x, ending in {utils.format_seconds(multiplier['timeleft'], utils.TimeSize.MEDIUM_SPACES)}!"
         for channel in channels:
             await chat.send_message(channel['channel_name'], msg)
     current_mult = multiplier['multiplier']
@@ -846,6 +1007,7 @@ async def run():
     chat.register_command('towns', towns_cmd)
     chat.register_command('update', update_cmd)
     chat.register_command('event', event_cmd)
+    chat.register_command('mult', multiplier_cmd)
     chat.register_command('uptime', uptime_cmd)
     chat.register_command('system', system_cmd)
     chat.register_command('rfram', ravenfall_ram_cmd)
@@ -859,6 +1021,7 @@ async def run():
     chat.register_command('restartrfbot', ravenbot_restart_cmd)
     chat.register_command('rfrestart', ravenfall_restart_cmd)
     chat.register_command('rfbotrestart', ravenbot_restart_cmd)
+    chat.register_command('rfqueuerestart', ravenfall_queue_restart_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
