@@ -857,10 +857,10 @@ class RestartTask:
             self._pause_time += time.time() - self._pause_start
 
     def postpone(self, seconds: int):
-        if not self._paused:
-            self.pause()
+        # if not self._paused:
+        #     self.pause()
         self.time_to_restart += seconds
-        self.start_t = time.time() - self._pause_time
+        # self.start_t = time.time() - self._pause_time
 
 channel_restart_tasks: Dict[str, RestartTask] = {}
 def add_restart_task(channel: Channel, chat: Chat, time_to_restart: int | None = None):
