@@ -750,6 +750,9 @@ async def get_restart_time_left_cmd(cmd: ChatCommand):
     if time_left <= 0:
         await cmd.reply("No restart task found.")
         return
+    if task.finished():
+        await cmd.reply("No restart task found.")
+        return
     out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}"
     if task.paused():
         out_text += " (paused)"
@@ -1140,9 +1143,12 @@ async def run():
     chat.register_command('rfrestart', ravenfall_restart_cmd)
     chat.register_command('rfbotrestart', ravenbot_restart_cmd)
     chat.register_command('rfqueuerestart', ravenfall_queue_restart_cmd)
+    chat.register_command('rfqrestart', ravenfall_queue_restart_cmd)
     chat.register_command('rfcancelrestart', ravenfall_queue_restart_cancel_cmd)
+    chat.register_command('rfcrestart', ravenfall_queue_restart_cancel_cmd)
     chat.register_command('postpone', postpone_restart_cmd)
-    chat.register_command('restartstatus', get_restart_time_left_cmd)
+    chat.register_command('rfrestartstatus', get_restart_time_left_cmd)
+    chat.register_command('rfrstatus', get_restart_time_left_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
