@@ -1400,7 +1400,7 @@ async def auto_restart_routine(chat: Chat):
         if period and period > 0:
             period = max(20*60,period)
             task = get_restart_task(channel['channel_id'])
-            
+
             if task and not task.finished():
                 continue
 
@@ -1420,7 +1420,6 @@ async def auto_restart_routine(chat: Chat):
                 print(f"Uptime check failed for {channel['channel_name']}, restarting Ravenfall")
                 add_restart_task(channel, chat, 10, label="Auto restart (could not get uptime)")
                 continue
-
 
             seconds_to_restart = max(10, period - uptime)
             add_restart_task(channel, chat, seconds_to_restart, label="Scheduled restart")
