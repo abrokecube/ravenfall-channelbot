@@ -359,6 +359,7 @@ async def on_message(msg: ChatMessage):
     if content.startswith(prefix):
         event_text = village_events.get(msg.room.room_id, '')
         if 'DUNGEON is being prepared' in event_text:
+            await asyncio.sleep(0.5)
             await msg.reply("please wait, a dungeon is being prepared and is making the game hang...")
         else:
             parts = content[len(prefix):].strip().split(maxsplit=1)
