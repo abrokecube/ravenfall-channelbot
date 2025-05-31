@@ -235,12 +235,16 @@ restart_attempts: Dict[str, Dict[str, Any]] = {}  # channel_id -> {count: int, l
 last_command_time: Dict[str, float] = {}  # channel_id -> timestamp
 
 # Common commands that should trigger a response from RavenBot (without prefix)
-MONITORED_COMMANDS = {'where', 'training', 'join', 'leave', 'town'}
+MONITORED_COMMANDS = {
+    'where', 'training', 'town', 'village', 'ferry', 'rested', 'multiplier',
+    'inspect', 'req', 'requirements', 'items', 'scrolls', 'stats', 'res', 'coins'}
+# Commands that may take longer to respond to
+MONITORED_COMMANDS_LONG = {'join', 'leave', 'gift', 'send'}
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up
 RETRY_WINDOW = 300  # 5 minutes in seconds
 RESTART_COOLDOWN = 10.0  # Seconds to wait before allowing another restart attempt
 
-async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, timeout: float = 10.0):
+async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, timeout: float = 5):
     """
     Monitor for RavenBot's response to a command.
     If no response, restart RavenBot up to MAX_RETRIES times.
@@ -304,7 +308,7 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
                 
                 if attempt < MAX_RETRIES:   
                     await restart_ravenbot(channel)
-                    await asyncio.sleep(6)
+                    await asyncio.sleep(4)
                     await chat.send_message(channel_name, "Okay , try again")
                 elif attempt == MAX_RETRIES:
                     await chat.send_message(channel_name, "okie then i will restart Ravenfall")
@@ -313,13 +317,13 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
                     restart_attempts[channel_id]['count'] = 0
                     await chat.send_message(channel_name, "Okay , try again, surely this time it will work")
                 else:
-                    await chat.send_message(channel_name, "I give up, try again later")
+                    await chat.send_message(channel_name, "@abrokecube I give up")
                 # Always mark that we're done with this restart attempt
                 if channel_id in restart_attempts:
                     restart_attempts[channel_id]['is_restarting'] = False
             else:
                 # Shouldn't reach here due to the check above, but just in case
-                await chat.send_message(channel_name, "I give up, try again later")
+                await chat.send_message(channel_name, "@abrokecube I give up")
     except Exception as e:
         print(f"Error in monitor_ravenbot_response: {e}")
     finally:
@@ -340,12 +344,18 @@ async def on_message(msg: ChatMessage):
     
     # Check if message starts with the channel's command prefix
     if content.startswith(prefix):
-        # Remove the prefix and split into command and arguments
-        parts = content[len(prefix):].strip().split(maxsplit=1)
-        if parts:  # If there's at least a command
-            command = parts[0].lower()
-            if command in MONITORED_COMMANDS:
-                asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command))
+        event_text = village_events.get(channel['channel_id'], '')
+        if 'DUNGEON is being prepared' in event_text:
+            await msg.chat.send_message(msg.room.name, "patience now, a dungeon is being prepared...")
+        else:
+            # Remove the prefix and split into command and arguments
+            parts = content[len(prefix):].strip().split(maxsplit=1)
+            if parts:  # If there's at least a command
+                command = parts[0].lower()
+                if command in MONITORED_COMMANDS:
+                    asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command))
+                elif command in MONITORED_COMMANDS_LONG:
+                    asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, timeout=15))
     
     ch_data = get_channel_data(msg.room.room_id)
     if msg.first and msg.text[:5].lower() == f"{ch_data['ravenbot_prefix']}join":
@@ -1311,7 +1321,7 @@ async def update_boosts_routine(chat: Chat):
                     check=lambda m, user_id=os.getenv("RAVENBOT_USER_ID"): (
                         m.user.id == user_id
                     ),
-                    timeout=10.0
+                    timeout=30.0
                 )
                 if response:
                     break
