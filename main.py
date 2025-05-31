@@ -226,7 +226,7 @@ class MessageWaiter:
 message_waiter = MessageWaiter()
 
 # Track pending commands and their response status
-pending_commands: Dict[str, Dict[str, Any]] = {}
+pending_monitors: Dict[str, Dict[str, Any]] = {}
 
 # Track restart attempts for each channel
 restart_attempts: Dict[str, Dict[str, Any]] = {}  # channel_id -> {count: int, last_attempt: float, is_restarting: bool}
@@ -238,22 +238,7 @@ last_command_time: Dict[str, float] = {}  # channel_id -> timestamp
 MONITORED_COMMANDS = {'where', 'training', 'join', 'leave', 'town'}
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up
 RETRY_WINDOW = 300  # 5 minutes in seconds
-COMMAND_COOLDOWN = 5.0  # Seconds to wait between accepting the same command from the same user
-RESTART_COOLDOWN = 30.0  # Seconds to wait before allowing another restart attempt
-
-def can_process_command(channel_id: str, user_id: str, command: str) -> bool:
-    """Check if we should process this command based on cooldowns and rate limits."""
-    current_time = time.time()
-    
-    # Check if this channel is in cooldown
-    if channel_id in last_command_time:
-        time_since_last = current_time - last_command_time[channel_id]
-        if time_since_last < COMMAND_COOLDOWN:
-            return False
-    
-    # Update last command time for this channel
-    last_command_time[channel_id] = current_time
-    return True
+RESTART_COOLDOWN = 10.0  # Seconds to wait before allowing another restart attempt
 
 async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, timeout: float = 10.0):
     """
@@ -261,23 +246,22 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
     If no response, restart RavenBot up to MAX_RETRIES times.
     If still unresponsive after MAX_RETRIES, restart Ravenfall.
     """
-    # Check if we're already handling a restart for this channel
-    if channel_id in restart_attempts and restart_attempts[channel_id].get('is_restarting', False):
-        print(f"Already handling a restart for channel {channel_id}, ignoring new request")
+    channel = get_channel_data(channel_id)
+    if not channel:
         return
-        
-    command_id = f"{channel_id}_{command}_{time.time()}"
-    pending_commands[command_id] = {
+    if pending_monitors.get(channel_id):
+        print(f"Already monitoring {channel_id} for {command}")
+        return
+
+    pending_monitors[channel_id] = {
         'channel': channel_id,
-        'command': command,
-        'responded': False,
         'task': asyncio.current_task()
     }
     
     try:
         # Wait for a response from RavenBot
         response = await message_waiter.wait_for_message(
-            channel_name=channel_id,
+            channel_name=channel['channel_name'],
             check=lambda m: (
                 m.user.id == os.getenv("RAVENBOT_USER_ID")
             ),
@@ -285,10 +269,6 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
         )
         
         if not response:
-            channel = get_channel_data(channel_id)
-            if not channel:
-                return
-                
             current_time = time.time()
             
             # Initialize or clean up old restart attempts
@@ -343,8 +323,8 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
     except Exception as e:
         print(f"Error in monitor_ravenbot_response: {e}")
     finally:
-        if command_id in pending_commands:
-            del pending_commands[command_id]
+        if channel_id in pending_monitors:
+            del pending_monitors[channel_id]
 
 async def on_message(msg: ChatMessage):
     # Let the message waiter process the message first
@@ -365,12 +345,6 @@ async def on_message(msg: ChatMessage):
         if parts:  # If there's at least a command
             command = parts[0].lower()
             if command in MONITORED_COMMANDS:
-                # Check if we should process this command (rate limiting)
-                if not can_process_command(msg.room.room_id, msg.user.id, command):
-                    print(f"Ignoring duplicate command from {msg.user.name} in {msg.room.name}")
-                    return
-                    
-                # Start monitoring for a response
                 asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command))
     
     ch_data = get_channel_data(msg.room.room_id)
