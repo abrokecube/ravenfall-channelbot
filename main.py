@@ -307,6 +307,7 @@ async def monitor_ravenbot_response(
             
             if attempt <= MAX_RETRIES:
                 print(f"No response to {command} in {channel_name} (Attempt {attempt}/{MAX_RETRIES}), restarting RavenBot...")
+                restart_attempts[channel_id]['last_attempt'] = current_time                
                 
                 # Only send message if this is the first attempt or we've waited long enough
                 if attempt == 1:
@@ -321,11 +322,8 @@ async def monitor_ravenbot_response(
                     asked_to_retry = True
                 elif attempt == MAX_RETRIES:
                     await chat.send_message(channel_name, resp_restart_ravenfall)
-                    # await restart_ravenfall(channel, chat, dont_send_message=True)
                     restart_task = add_restart_task(channel, chat, 5, mute_countdown=True)
                     await restart_task.wait()
-                    # Reset counter after Ravenfall restart
-                    restart_attempts[channel_id]['count'] = 0
                     await chat.send_message(channel_name, resp_user_retry_2)
                     asked_to_retry = True
                 restart_attempts[channel_id]['last_attempt'] = current_time                
@@ -900,12 +898,15 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
         timeout=60.0
     )
     
+    async def post_restart():
+        await asyncio.sleep(9)
+        await chat.send_message(channel_name, "?sailall")
+
     if response:
-        await asyncio.sleep(1)  # Small delay before sending messages
+        await asyncio.sleep(1)
         if not dont_send_message:
             await chat.send_message(channel_name, "Ravenfall has been restarted!")
-        await asyncio.sleep(9)  # Wait for Ravenfall to fully initialize
-        await chat.send_message(channel_name, "?sailall")
+        asyncio.create_task(post_restart())
         future.set_result(True)
         return True
     
@@ -1029,7 +1030,7 @@ async def get_restart_time_left_cmd(cmd: ChatCommand):
         return
     time_left = task.get_time_left()
     if time_left <= 0:
-        await cmd.reply("No restart task found.")
+        await cmd.reply("A restart is currently in progress.")
         return
     if task.finished():
         await cmd.reply("No restart task found.")
@@ -1095,11 +1096,12 @@ class RestartTask:
             await asyncio.sleep(1)
             if self._paused:
                 continue
-            if self.mute_countdown:
-                continue
             time_left = self.get_time_left()
+            print(time_left)
             if time_left <= 0:
                 break
+            if self.mute_countdown:
+                continue
             new_warning_idx = -1
             for i, x in enumerate(WARNING_MSG_TIMES):
                 if time_left < x:
@@ -1371,7 +1373,7 @@ async def gotify_listener(chat: Chat):
             print(f"Gotify listener failed: {e}, retrying...")
 
 @routine(delta=timedelta(seconds=10), wait_first=True)
-async def auto_restart(chat: Chat):
+async def auto_restart_routine(chat: Chat):
     for channel in channels:
         if not channel['auto_restart']:
             continue
@@ -1388,7 +1390,7 @@ async def on_ready(ready_event: EventData):
     update_events_routine.start(ready_event.chat)
     update_mult_routine.start(ready_event.chat)
     backup_state_data_routine.start()
-    auto_restart.start(ready_event.chat)
+    auto_restart_routine.start(ready_event.chat)
     print('Bot is ready for work')
 
 # this is where we set up the bot
