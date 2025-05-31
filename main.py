@@ -264,7 +264,7 @@ async def monitor_ravenbot_response(
         'channel': channel_id,
         'task': asyncio.current_task()
     }
-    
+    asked_to_retry = False
     try:
         # Wait for a response from RavenBot
         response = await message_waiter.wait_for_message(
@@ -297,7 +297,6 @@ async def monitor_ravenbot_response(
             resp_restart_ravenfall = "okie then i will restart Ravenfall, please hold..."
             resp_giveup = "I give up, please try again later (pinging @abrokecube)"
 
-            resent_text = False
             if resend_text:
                 resp_retry = "Hmm"
                 resp_retry_2 = "Hmm ..."
@@ -319,7 +318,7 @@ async def monitor_ravenbot_response(
                     await restart_ravenbot(channel)
                     await asyncio.sleep(5)
                     await chat.send_message(channel_name, resp_user_retry)
-                    resent_text = True
+                    asked_to_retry = True
                 elif attempt == MAX_RETRIES:
                     await chat.send_message(channel_name, resp_restart_ravenfall)
                     # await restart_ravenfall(channel, chat, dont_send_message=True)
@@ -328,7 +327,7 @@ async def monitor_ravenbot_response(
                     # Reset counter after Ravenfall restart
                     restart_attempts[channel_id]['count'] = 0
                     await chat.send_message(channel_name, resp_user_retry_2)
-                    resent_text = True
+                    asked_to_retry = True
                 restart_attempts[channel_id]['last_attempt'] = current_time                
             else:
                 await chat.send_message(channel_name, resp_giveup)
@@ -339,7 +338,7 @@ async def monitor_ravenbot_response(
     finally:
         if channel_id in pending_monitors:
             del pending_monitors[channel_id]
-    if resent_text:
+    if resend_text and asked_to_retry:
         asyncio.create_task(monitor_ravenbot_response(chat, channel_id, command, resend_text=resend_text))
 
 async def on_message(msg: ChatMessage):
