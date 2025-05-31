@@ -1044,7 +1044,7 @@ async def get_restart_time_left_cmd(cmd: ChatCommand):
         return
     task_label = task.label
     if task_label:
-        out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)} Reason: {task_label}"
+        out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}. Reason: {task_label}"
     else:
         out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}"
     if task.paused():
@@ -1395,7 +1395,7 @@ async def gotify_listener(chat: Chat):
         except Exception as e:
             print(f"Gotify listener failed: {e}, retrying...")
 
-@routine(delta=timedelta(seconds=30), wait_first=True)
+@routine(delta=timedelta(seconds=30))
 async def auto_restart_routine(chat: Chat):
     for channel in channels:
         if not channel['auto_restart']:
