@@ -257,7 +257,7 @@ async def monitor_ravenbot_response(
     if not channel:
         return
     if pending_monitors.get(channel_id):
-        print(f"Already monitoring {channel_id} for {command}")
+        print(f"Already monitoring {channel_id}")
         return
 
     pending_monitors[channel_id] = {
@@ -315,7 +315,7 @@ async def monitor_ravenbot_response(
                 
                 if attempt < MAX_RETRIES:   
                     await restart_ravenbot(channel)
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(5)
                     await chat.send_message(channel_name, resp_user_retry)
                 elif attempt == MAX_RETRIES:
                     await chat.send_message(channel_name, resp_restart_ravenfall)
@@ -1323,6 +1323,7 @@ async def update_boosts_routine(chat: Chat):
             boost_value = float(split[1].rstrip("%"))
             asdf = f"{channel['ravenbot_prefix']}town {boost_stat.lower()}"
             await chat.send_message(channel['channel_name'], asdf)
+            asyncio.create_task(monitor_ravenbot_response(chat, channel['channel_id'], 'town', resend_text=asdf))
                 
 
 async def event_gotify_msg(msg: gotify.Message, chat: Chat):
