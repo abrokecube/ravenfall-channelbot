@@ -641,7 +641,7 @@ async def multiplier_cmd(cmd: ChatCommand):
             f"thanks to {mult_info['eventname']}!"
         )
 
-async def restart_process(box_name, process_name, startup_command):
+async def restart_process(box_name, process_name, startup_command: str):
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /wait "
         f"taskkill /f /im {process_name}"
@@ -649,7 +649,7 @@ async def restart_process(box_name, process_name, startup_command):
     await runshell(shellcmd)
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /wait "
-        f"cmd /c \"{startup_command}\""
+        f"cmd /c \"{startup_command.replace("\"", "\\\"")}\""
     )
     await runshell(shellcmd)
 
@@ -717,7 +717,7 @@ async def restart_ravenbot(channel: Channel):
             f"taskkill /f /pid {pid}"
         )
         await runshell(
-            f"cd \"{os.getenv('CUSTOM_RAVENBOT_PATH')}\" & start run.bat"
+            f"cmd /c \"cd \\\"{os.getenv('CUSTOM_RAVENBOT_PATH')}\\\" & {os.getenv('CUSTOM_RAVENBOT_START_CMD')}\""
         )
         
 
