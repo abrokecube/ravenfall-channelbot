@@ -1061,7 +1061,7 @@ async def toggle_auto_restart_cmd(cmd: ChatCommand):
     if channel is None:
         await cmd.reply("Channel not found.")
         return
-    if channel['period'] == 0:
+    if channel['restart_period'] == 0:
         await cmd.reply("Auto restart period is not configured.")
         return
     old_value = channel['auto_restart']
