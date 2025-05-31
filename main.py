@@ -1143,6 +1143,7 @@ class RestartTask:
                         )
     
     async def _execute(self):
+        self.event_watch_task.cancel()
         await restart_ravenfall(self.channel, self.chat)
         self.done = True
 
