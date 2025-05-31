@@ -279,8 +279,7 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
         response = await message_waiter.wait_for_message(
             channel_name=channel_id,
             check=lambda m: (
-                m.user.id == os.getenv("RAVENBOT_USER_ID") and
-                not m.text.startswith('@')
+                m.user.id == os.getenv("RAVENBOT_USER_ID")
             ),
             timeout=timeout
         )
@@ -326,6 +325,7 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
                 if attempt < MAX_RETRIES:   
                     await restart_ravenbot(channel)
                     await asyncio.sleep(6)
+                    await chat.send_message(channel_name, "Okay , try again")
                 elif attempt == MAX_RETRIES:
                     await chat.send_message(channel_name, "okie then i will restart Ravenfall")
                     await restart_ravenfall(channel, chat, dont_send_message=True)
@@ -333,7 +333,7 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
                     restart_attempts[channel_id]['count'] = 0
                     await chat.send_message(channel_name, "Okay , try again, surely this time it will work")
                 else:
-                    await chat.send_message(channel_name, "Okay , try again")
+                    await chat.send_message(channel_name, "I give up, try again later")
                 # Always mark that we're done with this restart attempt
                 if channel_id in restart_attempts:
                     restart_attempts[channel_id]['is_restarting'] = False
