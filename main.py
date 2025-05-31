@@ -5,6 +5,7 @@ from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, EventData, ChatMessage, ChatCommand
 from twitchAPI.chat.middleware import *
 import asyncio
+import subprocess
 import os
 from dotenv import load_dotenv
 import json
@@ -248,6 +249,14 @@ async def runshell(cmd) -> str | None:
     if stderr:
         print(f'[stderr]\n{stderr.decode()}')
     return out_text
+
+def runshell_detached(cmd):
+    DETACHED_PROCESS = 0x00000008
+    subprocess.Popen(
+        cmd,
+        shell=True,
+        creationflags=DETACHED_PROCESS
+    )
 
 async def get_town_boost(channel: Channel) -> List[TownBoost] | None:
     async with aiohttp.ClientSession() as session:
@@ -711,13 +720,14 @@ async def restart_ravenbot(channel: Channel):
             channel['sandboxie_box'], "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
         )
     else:
-        with open(f'{os.getenv('CUSTOM_RAVENBOT_PATH').rstrip('/\\')}/pid', "r") as f:
+        ravenbot_path = os.getenv('CUSTOM_RAVENBOT_PATH').rstrip('/\\')
+        with open(f'{ravenbot_path}/pid', "r") as f:
             pid = f.read()
         await runshell(
             f"taskkill /f /pid {pid}"
         )
-        await runshell(
-            f"cmd /c \"cd \\\"{os.getenv('CUSTOM_RAVENBOT_PATH')}\\\" & {os.getenv('CUSTOM_RAVENBOT_START_CMD')}\""
+        runshell_detached(
+            f"start /d \"{ravenbot_path}\" {os.getenv('CUSTOM_RAVENBOT_START_CMD')}"
         )
         
 
