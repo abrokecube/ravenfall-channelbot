@@ -327,7 +327,7 @@ async def monitor_ravenbot_response(
                     asked_to_retry = True
                 elif attempt == MAX_RETRIES:
                     await chat.send_message(channel_name, resp_restart_ravenfall)
-                    restart_task = add_restart_task(channel, chat, 5, mute_countdown=True)
+                    restart_task = add_restart_task(channel, chat, 5, mute_countdown=True, label="Missing response")
                     await restart_task.wait()
                     await chat.send_message(channel_name, resp_user_retry_2)
                     asked_to_retry = True
@@ -937,7 +937,8 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
     else:
         await cmd.reply("Town not found :(")
         return
-    await restart_ravenfall(thechannel, cmd.chat)
+    add_restart_task(thechannel, cmd.chat, time_to_restart=5, label="User restart")
+    await cmd.reply(f"Restart queued. Restarting in 5s.")
 
 async def ravenfall_queue_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
@@ -955,7 +956,7 @@ async def ravenfall_queue_restart_cmd(cmd: ChatCommand):
         await cmd.reply("Town not found :(")
         return
 
-    add_restart_task(this_channel, cmd.chat, time_to_restart=seconds)
+    add_restart_task(this_channel, cmd.chat, time_to_restart=seconds, label="User restart")
     await cmd.reply(f"Restart queued. Restarting in {seconds}s.")
 
 async def ravenfall_queue_restart_cancel_cmd(cmd: ChatCommand):
@@ -1041,7 +1042,11 @@ async def get_restart_time_left_cmd(cmd: ChatCommand):
     if task.finished():
         await cmd.reply("No restart task found.")
         return
-    out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}"
+    task_label = task.label
+    if task_label:
+        out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)} Reason: {task_label}"
+    else:
+        out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}"
     if task.paused():
         out_text += " (paused)"
     await cmd.reply(out_text)
@@ -1049,10 +1054,28 @@ async def get_restart_time_left_cmd(cmd: ChatCommand):
 async def welcome_msg_cmd(cmd: ChatCommand):
     await first_time_joiner(cmd)
 
+async def toggle_auto_restart_cmd(cmd: ChatCommand):
+    if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
+        return
+    channel = get_channel_data(cmd.room.room_id)
+    if channel is None:
+        await cmd.reply("Channel not found.")
+        return
+    if channel['period'] == 0:
+        await cmd.reply("Auto restart period is not configured.")
+        return
+    old_value = channel['auto_restart']
+    channel['auto_restart'] = not channel['auto_restart']
+    await cmd.reply(f"Auto restart is now {'enabled' if channel['auto_restart'] else 'disabled'}.")
+    if old_value == True:
+        restart_task = get_restart_task(cmd.room.room_id)
+        if restart_task and restart_task.label == "Scheduled restart":
+            restart_task.cancel()
+
 
 WARNING_MSG_TIMES = (120, 30)
 class RestartTask:
-    def __init__(self, channel: Channel, chat: Chat, time_to_restart: int | None = 0, mute_countdown: bool = False):
+    def __init__(self, channel: Channel, chat: Chat, time_to_restart: int | None = 0, mute_countdown: bool = False, label: str = ""):
         self.channel = channel
         self.chat = chat
         self.time_to_restart = time_to_restart
@@ -1066,6 +1089,7 @@ class RestartTask:
         self._pause_time = 0
         self._pause_start = 0
         self.mute_countdown = mute_countdown
+        self.label = label
 
     def start(self):
         if not self.done:
@@ -1177,12 +1201,12 @@ class RestartTask:
         # self.start_t = time.time() - self._pause_time
 
 channel_restart_tasks: Dict[str, RestartTask] = {}
-def add_restart_task(channel: Channel, chat: Chat, time_to_restart: int | None = None, mute_countdown: bool = False):
+def add_restart_task(channel: Channel, chat: Chat, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = ""):
     if channel['channel_id'] in channel_restart_tasks:
         task = channel_restart_tasks[channel['channel_id']]
         if not task.finished():
             task.cancel()
-    task = RestartTask(channel, chat, time_to_restart, mute_countdown)
+    task = RestartTask(channel, chat, time_to_restart, mute_countdown, label)
     channel_restart_tasks[channel['channel_id']] = task
     task.start()
     return task
@@ -1371,7 +1395,7 @@ async def gotify_listener(chat: Chat):
         except Exception as e:
             print(f"Gotify listener failed: {e}, retrying...")
 
-@routine(delta=timedelta(seconds=10), wait_first=True)
+@routine(delta=timedelta(seconds=30), wait_first=True)
 async def auto_restart_routine(chat: Chat):
     for channel in channels:
         if not channel['auto_restart']:
@@ -1381,8 +1405,29 @@ async def auto_restart_routine(chat: Chat):
             period = max(20*60,period)
             task = get_restart_task(channel['channel_id'])
             
-            if (not task) or task.finished():
-                add_restart_task(channel, chat, period)
+            uptime = None
+            for i in range(5):
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+                    try:
+                        r = await session.get(f"{channel['rf_query_url']}/select * from session")
+                        game_session: GameSession = await r.json()
+                        uptime = game_session['secondssincestart']
+                        break
+                    except Exception as e:
+                        print(f"Uptime check failed: {e}")
+                        await asyncio.sleep(10)
+
+            if uptime is None:
+                print(f"Uptime check failed for {channel['channel_name']}, restarting Ravenfall")
+                add_restart_task(channel, chat, 10, label="Auto restart (could not get uptime)")
+                continue
+
+            if (task is not None) and (not task.finished()):
+                continue
+
+            seconds_to_restart = max(10, period - uptime)
+            add_restart_task(channel, chat, seconds_to_restart, label="Scheduled restart")
+
 
 async def on_ready(ready_event: EventData):
     update_boosts_routine.start(ready_event.chat)
@@ -1438,6 +1483,7 @@ async def run():
     chat.register_command('postpone', postpone_restart_cmd)
     chat.register_command('rfrestartstatus', get_restart_time_left_cmd)
     chat.register_command('rfrstatus', get_restart_time_left_cmd)
+    chat.register_command('autorestart', toggle_auto_restart_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
