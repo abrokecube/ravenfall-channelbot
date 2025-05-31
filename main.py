@@ -239,12 +239,11 @@ last_command_time: Dict[str, float] = {}  # channel_id -> timestamp
 # Common commands that should trigger a response from RavenBot (without prefix)
 MONITORED_COMMANDS = {
     'where', 'training', 'town', 'village', 'ferry', 'rested', 'multiplier', 'version',
-    'inspect', 'req', 'requirements', 'items', 'scrolls', 'stats', 'res', 'coins'}
+    'inspect', 'req', 'requirements', 'items', 'scrolls', 'stats', 'res', 'coins', 'dps'}
 # Commands that may take longer to respond to
 MONITORED_COMMANDS_LONG = {'join', 'leave', 'gift', 'send'}
-MAX_RETRIES = 3  # Maximum number of restart attempts before giving up
-RETRY_WINDOW = 300  # 5 minutes in seconds
-RESTART_COOLDOWN = 10.0  # Seconds to wait before allowing another restart attempt
+MAX_RETRIES = 3  # Maximum number of restart attempts before giving up (on the final attempt, restarts Ravenfall)
+RETRY_WINDOW = 3*60  # Number of seconds to wait before resetting attempt counter
 
 async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, timeout: float = 5):
     """
@@ -274,33 +273,24 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
             timeout=timeout
         )
         
+        # Initialize or clean up old restart attempts
+        if channel_id not in restart_attempts:
+            restart_attempts[channel_id] = {'count': 0, 'last_attempt': 0}
+
         if not response:
             current_time = time.time()
-            
-            # Initialize or clean up old restart attempts
-            if channel_id not in restart_attempts:
-                restart_attempts[channel_id] = {'count': 0, 'last_attempt': 0, 'is_restarting': False}
-            
-            # Check if we're in cooldown from a recent restart
             time_since_last_attempt = current_time - restart_attempts[channel_id]['last_attempt']
-            if time_since_last_attempt < RESTART_COOLDOWN:
-                print(f"In cooldown for channel {channel_id}, {RESTART_COOLDOWN - time_since_last_attempt:.1f}s remaining")
-                return
-                
-            # Reset counter if last attempt was outside the retry window
             if time_since_last_attempt > RETRY_WINDOW:
                 restart_attempts[channel_id]['count'] = 0
-                
-            # Mark that we're handling a restart
-            restart_attempts[channel_id]['is_restarting'] = True
+            
             restart_attempts[channel_id]['count'] += 1
-            restart_attempts[channel_id]['last_attempt'] = current_time
             
             attempt = restart_attempts[channel_id]['count']
             channel_name = channel['channel_name']
             
             if attempt <= MAX_RETRIES:
                 print(f"No response to {command} in {channel_name} (Attempt {attempt}/{MAX_RETRIES}), restarting RavenBot...")
+                restart_attempts[channel_id]['last_attempt'] = current_time                
                 
                 # Only send message if this is the first attempt or we've waited long enough
                 if attempt == 1:
@@ -318,14 +308,10 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
                     # Reset counter after Ravenfall restart
                     restart_attempts[channel_id]['count'] = 0
                     await chat.send_message(channel_name, "Okay , try again, surely this time it will work")
-                else:
-                    await chat.send_message(channel_name, "@abrokecube I give up")
-                # Always mark that we're done with this restart attempt
-                if channel_id in restart_attempts:
-                    restart_attempts[channel_id]['is_restarting'] = False
             else:
-                # Shouldn't reach here due to the check above, but just in case
-                await chat.send_message(channel_name, "@abrokecube I give up")
+                await chat.send_message(channel_name, "I give up, please try again later (pinging @abrokecube)")
+        else:
+            restart_attempts[channel_id]['count'] = 0
     except Exception as e:
         print(f"Error in monitor_ravenbot_response: {e}")
     finally:
