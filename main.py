@@ -905,18 +905,14 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
     )
     
     async def post_restart():
-        await asyncio.sleep(9)
+        await asyncio.sleep(10)
         await chat.send_message(channel_name, "?sailall")
 
     if response:
-        await asyncio.sleep(1)
-        if not dont_send_message:
-            await chat.send_message(channel_name, "Ravenfall has been restarted!")
         asyncio.create_task(post_restart())
         future.set_result(True)
         return True
     
-    # If we get here, no response was received
     if not dont_send_message:
         await chat.send_message(channel_name, "Timed out waiting for Ravenfall to respond... maybe RavenBot is down?")
     future.set_result(False)
