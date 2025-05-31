@@ -967,7 +967,7 @@ async def restart_ravenbot(channel: Channel, chat: Chat | None = None):
         await restart_process(
             channel['sandboxie_box'], "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
         )
-        await asyncio.sleep(4)  # python is slower than c# YEP
+        await asyncio.sleep(5)  # python is slower than c# YEP
     else:
         ravenbot_path = os.getenv('CUSTOM_RAVENBOT_PATH').rstrip('/\\')
         with open(f'{ravenbot_path}/pid', "r") as f:
