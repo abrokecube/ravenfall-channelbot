@@ -290,7 +290,6 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
             
             if attempt <= MAX_RETRIES:
                 print(f"No response to {command} in {channel_name} (Attempt {attempt}/{MAX_RETRIES}), restarting RavenBot...")
-                restart_attempts[channel_id]['last_attempt'] = current_time                
                 
                 # Only send message if this is the first attempt or we've waited long enough
                 if attempt == 1:
@@ -303,11 +302,14 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
                     await asyncio.sleep(2)
                     await chat.send_message(channel_name, "Okay , try again")
                 elif attempt == MAX_RETRIES:
-                    await chat.send_message(channel_name, "okie then i will restart Ravenfall")
-                    await restart_ravenfall(channel, chat, dont_send_message=True)
+                    await chat.send_message(channel_name, "okie then i will restart Ravenfall, please hold...")
+                    # await restart_ravenfall(channel, chat, dont_send_message=True)
+                    restart_task = add_restart_task(channel, chat, 5, mute_countdown=True)
+                    await restart_task.wait()
                     # Reset counter after Ravenfall restart
                     restart_attempts[channel_id]['count'] = 0
                     await chat.send_message(channel_name, "Okay , try again, surely this time it will work")
+                restart_attempts[channel_id]['last_attempt'] = current_time                
             else:
                 await chat.send_message(channel_name, "I give up, please try again later (pinging @abrokecube)")
         else:
@@ -848,13 +850,15 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
     channel_id = channel['channel_id']
     channel_name = channel['channel_name']
     
+    future = None
     if channel_id in ravenfall_restart_futures:
         future = ravenfall_restart_futures[channel_id]
         if not future.done():
             if not dont_send_message:
                 await chat.send_message(channel_name, "A restart is already in progress.")
             return await future
-    else:
+
+    if not future or future.done():
         future = asyncio.get_event_loop().create_future()
         ravenfall_restart_futures[channel_id] = future
 
@@ -982,16 +986,6 @@ async def ravenbot_restart_cmd(cmd: ChatCommand):
         return
     await restart_ravenbot(thischannel)
     await cmd.reply("Okay")
-    # shellcmd = (
-    #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-    #     f"taskkill /f /im RavenBot.exe"
-    # )
-    # await runshell(shellcmd)
-    # shellcmd = (
-    #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
-    #     f"cmd /c \"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe\""
-    # )
-    # await runshell(shellcmd)
 
 async def postpone_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
@@ -1028,7 +1022,7 @@ async def welcome_msg_cmd(cmd: ChatCommand):
 
 WARNING_MSG_TIMES = (120, 30)
 class RestartTask:
-    def __init__(self, channel: Channel, chat: Chat, time_to_restart: int | None = 0):
+    def __init__(self, channel: Channel, chat: Chat, time_to_restart: int | None = 0, mute_countdown: bool = False):
         self.channel = channel
         self.chat = chat
         self.time_to_restart = time_to_restart
@@ -1041,6 +1035,7 @@ class RestartTask:
         self._paused = False
         self._pause_time = 0
         self._pause_start = 0
+        self.mute_countdown = mute_countdown
 
     def start(self):
         if not self.done:
@@ -1076,6 +1071,8 @@ class RestartTask:
         while True:
             await asyncio.sleep(1)
             if self._paused:
+                continue
+            if self.mute_countdown:
                 continue
             time_left = self.get_time_left()
             if time_left <= 0:
@@ -1155,12 +1152,12 @@ class RestartTask:
         # self.start_t = time.time() - self._pause_time
 
 channel_restart_tasks: Dict[str, RestartTask] = {}
-def add_restart_task(channel: Channel, chat: Chat, time_to_restart: int | None = None):
+def add_restart_task(channel: Channel, chat: Chat, time_to_restart: int | None = None, mute_countdown: bool = False):
     if channel['channel_id'] in channel_restart_tasks:
         task = channel_restart_tasks[channel['channel_id']]
         if not task.finished():
             task.cancel()
-    task = RestartTask(channel, chat, time_to_restart)
+    task = RestartTask(channel, chat, time_to_restart, mute_countdown)
     channel_restart_tasks[channel['channel_id']] = task
     task.start()
     return task
