@@ -334,9 +334,10 @@ async def on_message(msg: ChatMessage):
     
     # Check if message starts with the channel's command prefix
     if content.startswith(prefix):
-        event_text = village_events.get(channel['channel_id'], '')
+        event_text = village_events.get(msg.room.room_id, '')
+        print(event_text)
         if 'DUNGEON is being prepared' in event_text:
-            await msg.chat.send_message(msg.room.name, "patience now, a dungeon is being prepared...")
+            await msg.chat.send_message(msg.room.name, "patience now, a dungeon is being prepared and is making the game hang...")
         else:
             # Remove the prefix and split into command and arguments
             parts = content[len(prefix):].strip().split(maxsplit=1)
