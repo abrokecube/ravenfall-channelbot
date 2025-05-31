@@ -862,16 +862,15 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
     channel_id = channel['channel_id']
     channel_name = channel['channel_name']
     
-    # Initialize lock for this channel if it doesn't exist
-    if channel_id not in ravenfall_restart_futures:
-        ravenfall_restart_futures[channel_id] = asyncio.get_event_loop().create_future()
-    future = ravenfall_restart_futures[channel_id]
-    
-    # Check if a restart is already in progress
-    if not future.done():
-        if not dont_send_message:
-            await chat.send_message(channel_name, "A restart is already in progress.")
-        return await future
+    if channel_id in ravenfall_restart_futures:
+        future = ravenfall_restart_futures[channel_id]
+        if not future.done():
+            if not dont_send_message:
+                await chat.send_message(channel_name, "A restart is already in progress.")
+            return await future
+    else:
+        future = asyncio.get_event_loop().create_future()
+        ravenfall_restart_futures[channel_id] = future
 
     if not dont_send_message:
         await chat.send_message(channel_name, "Restarting Ravenfall...")
