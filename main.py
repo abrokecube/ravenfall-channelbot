@@ -228,15 +228,17 @@ message_waiter = MessageWaiter()
 # Track pending commands and their response status
 pending_monitors: Dict[str, Dict[str, Any]] = {}
 
-# Track restart attempts for each channel
+# Track restart attempts and locks for each channel
 restart_attempts: Dict[str, Dict[str, Any]] = {}  # channel_id -> {count: int, last_attempt: float, is_restarting: bool}
+# Track Ravenfall restarts to prevent concurrent restarts
+ravenfall_restart_futures: Dict[str, asyncio.Future] = {}  # channel_id -> Future
 
 # Track last command time per channel to prevent command spam
 last_command_time: Dict[str, float] = {}  # channel_id -> timestamp
 
 # Common commands that should trigger a response from RavenBot (without prefix)
 MONITORED_COMMANDS = {
-    'where', 'training', 'town', 'village', 'ferry', 'rested', 'multiplier',
+    'where', 'training', 'town', 'village', 'ferry', 'rested', 'multiplier', 'version',
     'inspect', 'req', 'requirements', 'items', 'scrolls', 'stats', 'res', 'coins'}
 # Commands that may take longer to respond to
 MONITORED_COMMANDS_LONG = {'join', 'leave', 'gift', 'send'}
@@ -308,7 +310,7 @@ async def monitor_ravenbot_response(chat: Chat, channel_id: str, command: str, t
                 
                 if attempt < MAX_RETRIES:   
                     await restart_ravenbot(channel)
-                    await asyncio.sleep(4)
+                    await asyncio.sleep(2)
                     await chat.send_message(channel_name, "Okay , try again")
                 elif attempt == MAX_RETRIES:
                     await chat.send_message(channel_name, "okie then i will restart Ravenfall")
@@ -852,43 +854,55 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
     Args:
         channel: The channel to restart Ravenfall for
         chat: Chat instance to send status messages
+        dont_send_message: If True, suppresses status messages
         
     Returns:
         bool: True if restart was successful, False otherwise
     """
-    try:         
-        await chat.send_message(channel['channel_name'], "Restarting Ravenfall...")
-        await restart_process(
-            channel['sandboxie_box'], 
-            "Ravenfall.exe", 
-            f"cd {os.getenv('RAVENFALL_FOLDER')} & {channel['ravenfall_start_script']}"
-        )
-                
-        response = await message_waiter.wait_for_message(
-            channel_name=channel['channel_name'],
-            check=lambda m: (
-                m.user.id == os.getenv("RAVENBOT_USER_ID")
-            ),
-            timeout=60.0
-        )
-        
-        if response:
-            await asyncio.sleep(1)
-            if not dont_send_message:
-                await chat.send_message(channel['channel_name'], "Ravenfall has been restarted.")
-            await asyncio.sleep(9)
-            await chat.send_message(channel['channel_name'], "?sailall")
-            return True
-        else:
-            if not dont_send_message:
-                await chat.send_message(channel['channel_name'], "@abrokecube dinkDonk ravenfall isn't booting up :(")
-            return False
-    except Exception as e:
-        error_msg = f"❌ Error restarting Ravenfall: {str(e)}"
-        print(error_msg)
+    channel_id = channel['channel_id']
+    channel_name = channel['channel_name']
+    
+    # Initialize lock for this channel if it doesn't exist
+    if channel_id not in ravenfall_restart_futures:
+        ravenfall_restart_futures[channel_id] = asyncio.Future()
+    future = ravenfall_restart_futures[channel_id]
+    
+    # Check if a restart is already in progress
+    if not future.done():
         if not dont_send_message:
-            await chat.send_message(channel['channel_name'], "Restart failed")
-        return False
+            await chat.send_message(channel_name, "A restart is already in progress.")
+        return await future
+
+    if not dont_send_message:
+        await chat.send_message(channel_name, "Restarting Ravenfall...")
+    
+    await restart_process(
+        channel['sandboxie_box'], 
+        "Ravenfall.exe", 
+        f"cd {os.getenv('RAVENFALL_FOLDER')} & {channel['ravenfall_start_script']}"
+    )
+    
+    # Wait for RavenBot to respond after restart
+    response = await message_waiter.wait_for_message(
+        channel_name=channel_name,
+        check=lambda m: m.user.id == os.getenv("RAVENBOT_USER_ID"),
+        timeout=60.0
+    )
+    
+    if response:
+        await asyncio.sleep(1)  # Small delay before sending messages
+        if not dont_send_message:
+            await chat.send_message(channel_name, "Ravenfall has been restarted!")
+        await asyncio.sleep(9)  # Wait for Ravenfall to fully initialize
+        await chat.send_message(channel_name, "?sailall")
+        future.set_result(True)
+        return True
+    
+    # If we get here, no response was received
+    if not dont_send_message:
+        await chat.send_message(channel_name, "Timed out waiting for Ravenfall to respond... maybe RavenBot is down?")
+    future.set_result(False)
+    return False
         
 
 async def ravenfall_restart_cmd(cmd: ChatCommand):
@@ -981,7 +995,8 @@ async def ravenbot_restart_cmd(cmd: ChatCommand):
     else:
         await cmd.reply("Town not found :(")
         return
-    await restart_ravenbot(thischannel, cmd.chat)
+    await restart_ravenbot(thischannel)
+    await cmd.reply("Okay")
     # shellcmd = (
     #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
     #     f"taskkill /f /im RavenBot.exe"
