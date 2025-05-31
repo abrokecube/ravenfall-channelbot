@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import json
 import aiohttp
 import aiohttp.client_exceptions
-from typing import List
+from typing import List, Tuple, Callable
 from datetime import datetime, timedelta
 import psutil
 import shutil
@@ -167,8 +167,66 @@ with open("channels.json", "r") as f:
 for channel in channels:
     channel["rf_query_url"] = channel["rf_query_url"].rstrip("/")
 
+class MessageWaiter:
+    def __init__(self):
+        self.waiting_messages: Dict[str, List[Tuple[Callable[[ChatMessage], bool], asyncio.Future]]] = {}
+    
+    async def wait_for_message(self, channel_name: str, check: Callable[[ChatMessage], bool], timeout: float = 10.0):
+        """Wait for a message that matches the check function in the specified channel.
+        
+        Args:
+            channel_name: Name of the channel to wait in
+            check: A function that takes a message and returns True if it matches
+            timeout: Maximum time to wait in seconds
+            
+        Returns:
+            The matching message if found, or None if timeout
+        """
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        
+        if channel_name not in self.waiting_messages:
+            self.waiting_messages[channel_name] = []
+        self.waiting_messages[channel_name].append((check, future))
+        
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            # Remove our future if it's still in the list
+            if channel_name in self.waiting_messages:
+                for i, (c, f) in enumerate(self.waiting_messages[channel_name]):
+                    if f == future:
+                        self.waiting_messages[channel_name].pop(i)
+                        break
+            return None
+    
+    async def process_message(self, message: ChatMessage):
+        """Process an incoming message and complete any matching futures"""
+        channel_name = message.room.name
+        if channel_name not in self.waiting_messages:
+            return
+            
+        remaining = []
+        for check, future in self.waiting_messages[channel_name]:
+            if not future.done():
+                try:
+                    if check(message):
+                        future.set_result(message)
+                    else:
+                        remaining.append((check, future))
+                except Exception as e:
+                    future.set_exception(e)
+            
+        self.waiting_messages[channel_name] = remaining
+
+# Global message waiter instance
+message_waiter = MessageWaiter()
+
 recently_restarted: Dict[str, bool] = {}
 async def on_message(msg: ChatMessage):
+    # Let the message waiter process the message first
+    await message_waiter.process_message(msg)
+    
     ch_data = get_channel_data(msg.room.room_id)
     if msg.first and msg.text[:5].lower() == f"{ch_data['ravenbot_prefix']}join":
         await first_time_joiner(msg)
@@ -1053,7 +1111,7 @@ async def update_mult(chat: Chat):
     
 
 
-@routine(delta=timedelta(hours=6), wait_first=True)
+@routine(delta=timedelta(hours=3), wait_first=True)
 async def update_task(chat: Chat):
     async with aiohttp.ClientSession() as session:
         r = await asyncio.gather(*[
@@ -1062,6 +1120,7 @@ async def update_task(chat: Chat):
         villages: List[Village] = await asyncio.gather(*[
             x.json() for x in r
         ])
+    
     for idx, village in enumerate(villages):
         if not isinstance(village, dict):
             continue
@@ -1070,8 +1129,28 @@ async def update_task(chat: Chat):
             split = village['boost'].split()
             boost_stat = split[0]
             boost_value = float(split[1].rstrip("%"))
-            asdf = f"{channel['ravenbot_prefix']}town {boost_stat.lower()}"
-            await chat.send_message(channel['channel_name'], asdf)
+            command = f"{channel['ravenbot_prefix']}town {boost_stat.lower()}"
+            
+            # Send the command
+            await chat.send_message(channel['channel_name'], command)
+            
+            # Wait for the response with a 10-second timeout
+            try:
+                response = await message_waiter.wait_for_message(
+                    channel_name=channel['channel_name'],
+                    check=lambda m: (
+                        m.user.id == os.getenv("RAVENBOT_USER_ID") and
+                        "You've changed the village target to" in m.text and
+                        boost_stat.lower() in m.text.lower()
+                    ),
+                    timeout=10.0
+                )
+                if not response:
+                    print(f"No response received for {channel['channel_name']}, restarting RavenBot...")
+                    await restart_ravenbot(channel)
+            except Exception as e:
+                print(f"Error waiting for response in {channel['channel_name']}: {e}")
+                await restart_ravenbot(channel)
 
 async def event_gotify_msg(msg: gotify.Message, chat: Chat):
     split = msg['message'].split("::", 2)
