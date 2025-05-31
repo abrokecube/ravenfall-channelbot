@@ -238,10 +238,15 @@ last_command_time: Dict[str, float] = {}  # channel_id -> timestamp
 
 # Common commands that should trigger a response from RavenBot (without prefix)
 MONITORED_COMMANDS = {
-    'where', 'training', 'town', 'village', 'ferry', 'rested', 'multiplier', 'version',
-    'inspect', 'req', 'requirements', 'items', 'scrolls', 'stats', 'res', 'coins', 'dps'}
+    'coins', 'count', 'damage', 'dmg', 'dps', 'eat', 'effects', 'ferry', 'inspect', 'items',
+    'multiplier', 'online', 'pubsub', 'res', 'resources', 'rested', 'status', 'stats', 'town',
+    'townres', 'training', 'value', 'version', 'village', 'villagers', 'where'
+}
 # Commands that may take longer to respond to
-MONITORED_COMMANDS_LONG = {'join', 'leave', 'gift', 'send'}
+MONITORED_COMMANDS_LONG = {
+    'consume', 'disenchant', 'drink', 'eat', 'enchant',
+    'gift', 'join', 'leave', 'send', 'use', 'scrolls',
+}
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up (on the final attempt, restarts Ravenfall)
 RETRY_WINDOW = 3*60  # Number of seconds to wait before resetting attempt counter
 
@@ -481,8 +486,9 @@ async def update_cmd(cmd: ChatCommand):
     if len(town_boost) == 0:
         await cmd.reply(f"This town has no active boost.")
         return
-    await cmd.send(f"{this_channel['ravenbot_prefix']}town {town_boost[0].skill.lower()}")
-    
+    message = f"{this_channel['ravenbot_prefix']}town {town_boost[0].skill.lower()}"
+    await cmd.send(message)
+    asyncio.create_task(monitor_ravenbot_response(cmd.chat, channel['channel_id'], 'town', resend_text=message))
     
 village_events: Dict[str, str] = {}
 async def event_cmd(cmd: ChatCommand):
@@ -1086,18 +1092,11 @@ class RestartTask:
 
     async def _waiting(self):
         warning_idx = -1
-        # time_left = self.get_time_left()
-        # if time_left - WARNING_MSG_TIMES[0] > 30:
-        #     await self.chat.send_message(
-        #         self.channel['channel_name'],
-        #         f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
-        #     )
         while True:
             await asyncio.sleep(1)
             if self._paused:
                 continue
             time_left = self.get_time_left()
-            print(time_left)
             if time_left <= 0:
                 break
             if self.mute_countdown:
