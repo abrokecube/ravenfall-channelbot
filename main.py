@@ -705,22 +705,34 @@ async def ravenfall_queue_restart_cancel_cmd(cmd: ChatCommand):
     task.cancel()
     await cmd.reply("Cancelled restart task.")
 
+async def restart_ravenbot(channel: Channel):
+    if channel['channel_name'] != "abrokecube":
+        await restart_process(
+            channel['sandboxie_box'], "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
+        )
+    else:
+        with open(f'{os.getenv('CUSTOM_RAVENBOT_PATH').rstrip('/\\')}/pid', "r") as f:
+            pid = f.read()
+        await runshell(
+            f"taskkill /f /pid {pid}"
+        )
+        await runshell(
+            f"cd \"{os.getenv('CUSTOM_RAVENBOT_PATH')}\" & start run.bat"
+        )
+        
+
 async def ravenbot_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
         return
+    thischannel = None
     for channel in channels:
         if channel['channel_id'] == cmd.room.room_id:
-            box = channel['sandboxie_box']
+            thischannel = channel
             break
     else:
         await cmd.reply("Town not found :(")
         return
-    if cmd.room.name == "abrokecube":
-        await cmd.reply("Shrug that doesnt work here")
-        return
-    await restart_process(
-        box, "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
-    )
+    await restart_ravenbot(thischannel)
     # shellcmd = (
     #     f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box} /wait "
     #     f"taskkill /f /im RavenBot.exe"
@@ -854,6 +866,9 @@ class RestartTask:
                     if self._paused:
                         self.unpause()
                         time_left = self.get_time_left()
+                        if time_left < 60:
+                            self.time_to_restart += 60 - time_left
+                            time_left = self.get_time_left()
                         await self.chat.send_message(
                             self.channel['channel_name'], 
                             f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}."
