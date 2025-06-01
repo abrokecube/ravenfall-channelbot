@@ -236,6 +236,9 @@ ravenfall_restart_futures: Dict[str, asyncio.Future] = {}  # channel_id -> Futur
 # Track last command time per channel to prevent command spam
 last_command_time: Dict[str, float] = {}  # channel_id -> timestamp
 
+# Global flag to pause/resume RavenBot response monitoring
+monitoring_paused = False
+
 # Common commands that should trigger a response from RavenBot (without prefix)
 MONITORED_COMMANDS = {
     'coins', 'count', 'damage', 'dmg', 'dps', 'eat', 'effects', 'ferry', 'inspect', 'items',
@@ -365,13 +368,13 @@ async def on_message(msg: ChatMessage):
             parts = content[len(prefix):].strip().split(maxsplit=1)
             if parts:  # If there's at least a command
                 command = parts[0].lower()
-                resend_text = None
-                if msg.user.id == os.getenv("BOT_ID"):
-                    resend_text = msg.text
-                if command in MONITORED_COMMANDS:
-                    asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, resend_text=resend_text))
-                elif command in MONITORED_COMMANDS_LONG:
-                    asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, timeout=15, resend_text=resend_text))
+        resend_text = None
+        if msg.user.id == os.getenv("BOT_ID") and not monitoring_paused:
+            resend_text = msg.text
+            if command in MONITORED_COMMANDS:
+                asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, resend_text=resend_text))
+            elif command in MONITORED_COMMANDS_LONG:
+                asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, timeout=15, resend_text=resend_text))
     
     ch_data = get_channel_data(msg.room.room_id)
     if msg.first and msg.text[:5].lower() == f"{ch_data['ravenbot_prefix']}join":
@@ -1455,7 +1458,6 @@ async def run():
     # Register event handlers
     chat.register_event(ChatEvent.READY, on_ready)
     chat.register_event(ChatEvent.MESSAGE, on_message)
-
     chat.register_command('hi', test_cmd)
     chat.register_command('towns', towns_cmd)
     chat.register_command('update', update_cmd)
@@ -1482,6 +1484,7 @@ async def run():
     chat.register_command('rfrestartstatus', get_restart_time_left_cmd)
     chat.register_command('rfrstatus', get_restart_time_left_cmd)
     chat.register_command('autorestart', toggle_auto_restart_cmd)
+    chat.register_command('pausebotmonitor', pause_monitor_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
@@ -1495,3 +1498,9 @@ async def run():
 
 # lets run our setup
 asyncio.run(run())
+
+# Command handlers for pausing/resuming monitoring
+async def pause_monitor_cmd(cmd: ChatCommand):
+    global monitoring_paused
+    monitoring_paused = not monitoring_paused   
+    await cmd.reply("RavenBot monitoring is now " + ("PAUSED." if monitoring_paused else "RESUMED."))
