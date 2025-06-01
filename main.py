@@ -1072,6 +1072,13 @@ async def toggle_auto_restart_cmd(cmd: ChatCommand):
         if restart_task and restart_task.label == "Scheduled restart":
             restart_task.cancel()
 
+# Command handlers for pausing/resuming monitoring
+async def toggle_bot_monitor_cmd(cmd: ChatCommand):
+    if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
+        return
+    global monitoring_paused
+    monitoring_paused = not monitoring_paused   
+    await cmd.reply("RavenBot monitoring is now " + ("PAUSED." if monitoring_paused else "RESUMED."))
 
 WARNING_MSG_TIMES = (120, 30)
 class RestartTask:
@@ -1484,7 +1491,7 @@ async def run():
     chat.register_command('rfrestartstatus', get_restart_time_left_cmd)
     chat.register_command('rfrstatus', get_restart_time_left_cmd)
     chat.register_command('autorestart', toggle_auto_restart_cmd)
-    chat.register_command('pausebotmonitor', pause_monitor_cmd)
+    chat.register_command('pausebotmonitor', toggle_bot_monitor_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
@@ -1499,8 +1506,3 @@ async def run():
 # lets run our setup
 asyncio.run(run())
 
-# Command handlers for pausing/resuming monitoring
-async def pause_monitor_cmd(cmd: ChatCommand):
-    global monitoring_paused
-    monitoring_paused = not monitoring_paused   
-    await cmd.reply("RavenBot monitoring is now " + ("PAUSED." if monitoring_paused else "RESUMED."))
