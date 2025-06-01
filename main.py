@@ -1307,7 +1307,7 @@ async def update_events_routine(chat: Chat):
         village_events[channel['channel_id']] = event_text
 
 current_mult: float = None
-@routine(delta=timedelta(seconds=2), wait_remainder=True)
+@routine(delta=timedelta(seconds=0.5), wait_remainder=True)
 async def update_mult_routine(chat: Chat):
     global current_mult
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1)) as session:
