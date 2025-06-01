@@ -1128,10 +1128,11 @@ class RestartTask:
                     new_warning_idx = i
             if new_warning_idx != warning_idx:
                 if new_warning_idx >= 0 and new_warning_idx > warning_idx:
-                    await self.chat.send_message(
-                        self.channel['channel_name'],
-                        f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
-                    )
+                    if time_left > 5:
+                        await self.chat.send_message(
+                            self.channel['channel_name'],
+                            f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
+                        )
                 warning_idx = new_warning_idx
         await self._execute()
 
