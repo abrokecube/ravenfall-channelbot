@@ -238,14 +238,14 @@ last_command_time: Dict[str, float] = {}  # channel_id -> timestamp
 
 # Common commands that should trigger a response from RavenBot (without prefix)
 MONITORED_COMMANDS = {
-    'coins', 'count', 'damage', 'dmg', 'dps', 'eat', 'effects', 'ferry', 'inspect', 'items',
+    'coins', 'count', 'damage', 'dmg', 'dps', 'eat', 'effects', 'ferry', 'items',
     'multiplier', 'online', 'pubsub', 'res', 'resources', 'rested', 'status', 'stats', 'town',
     'townres', 'training', 'value', 'version', 'village', 'villagers', 'where'
 }
 # Commands that may take longer to respond to
 MONITORED_COMMANDS_LONG = {
     'consume', 'disenchant', 'drink', 'eat', 'enchant',
-    'gift', 'join', 'leave', 'send', 'use', 'scrolls',
+    'gift', 'join', 'leave', 'use', 'scrolls',
 }
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up (on the final attempt, restarts Ravenfall)
 RETRY_WINDOW = 3*60  # Number of seconds to wait before resetting attempt counter
