@@ -264,6 +264,8 @@ async def monitor_ravenbot_response(
     channel = get_channel_data(channel_id)
     if not channel:
         return
+    if monitoring_paused:
+        return
     if pending_monitors.get(channel_id):
         print(f"Already monitoring {channel_id}")
         return
@@ -282,6 +284,9 @@ async def monitor_ravenbot_response(
             ),
             timeout=timeout
         )
+
+        if monitoring_paused:
+            return
         
         # Initialize or clean up old restart attempts
         if channel_id not in restart_attempts:
@@ -369,7 +374,7 @@ async def on_message(msg: ChatMessage):
             if parts:  # If there's at least a command
                 command = parts[0].lower()
         resend_text = None
-        if msg.user.id == os.getenv("BOT_ID") and not monitoring_paused:
+        if msg.user.id == os.getenv("BOT_ID"):
             resend_text = msg.text
             if command in MONITORED_COMMANDS:
                 asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, resend_text=resend_text))
