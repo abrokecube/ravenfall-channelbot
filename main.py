@@ -1491,7 +1491,7 @@ async def run():
     chat.register_command('rfrestartstatus', get_restart_time_left_cmd)
     chat.register_command('rfrstatus', get_restart_time_left_cmd)
     chat.register_command('autorestart', toggle_auto_restart_cmd)
-    chat.register_command('pausebotmonitor', toggle_bot_monitor_cmd)
+    chat.register_command('togglebotmonitor', toggle_bot_monitor_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
