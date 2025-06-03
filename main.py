@@ -250,6 +250,7 @@ MONITORED_COMMANDS_LONG = {
     'consume', 'disenchant', 'drink', 'eat', 'enchant',
     'gift', 'join', 'leave', 'use', 'scrolls',
 }
+
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up (on the final attempt, restarts Ravenfall)
 RETRY_WINDOW = 3*60  # Number of seconds to wait before resetting attempt counter
 
@@ -366,16 +367,17 @@ async def on_message(msg: ChatMessage):
     
     if content.startswith(prefix):
         event_text = village_events.get(msg.room.room_id, '')
-        if 'DUNGEON is being prepared' in event_text:
+        parts = content[len(prefix):].strip().split(maxsplit=1)
+        if parts:  # If there's at least a command
+            command = parts[0].lower()
+        is_monitored_command = (command in MONITORED_COMMANDS) or (command in MONITORED_COMMANDS_LONG)
+        if 'DUNGEON is being prepared' in event_text and is_monitored_command:
             await asyncio.sleep(0.5)
             await msg.reply("please wait, a dungeon is being prepared and is making the game hang...")
         else:
-            parts = content[len(prefix):].strip().split(maxsplit=1)
-            if parts:  # If there's at least a command
-                command = parts[0].lower()
-        resend_text = None
-        if msg.user.id == os.getenv("BOT_ID"):
-            resend_text = msg.text
+            resend_text = None
+            if msg.user.id == os.getenv("BOT_ID"):
+                resend_text = msg.text
             if command in MONITORED_COMMANDS:
                 asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, resend_text=resend_text))
             elif command in MONITORED_COMMANDS_LONG:
