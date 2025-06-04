@@ -900,7 +900,7 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
         ravenfall_restart_futures[channel_id] = future
 
     await chat.send_message(channel_name, "?randleave")
-    await asyncio.sleep(3)
+    await asyncio.sleep(10)
 
     if not dont_send_message:
         await chat.send_message(channel_name, "Restarting Ravenfall...")
