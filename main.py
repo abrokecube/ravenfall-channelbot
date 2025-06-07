@@ -248,7 +248,7 @@ MONITORED_COMMANDS = {
 # Commands that may take longer to respond to
 MONITORED_COMMANDS_LONG = {
     'consume', 'disenchant', 'drink', 'eat', 'enchant',
-    'gift', 'join', 'leave', 'use', 'scrolls',
+    'gift', 'join', 'leave', 'scrolls',
 }
 
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up (on the final attempt, restarts Ravenfall)
@@ -373,7 +373,7 @@ async def on_message(msg: ChatMessage):
         is_monitored_command = (command in MONITORED_COMMANDS) or (command in MONITORED_COMMANDS_LONG)
         if 'DUNGEON is being prepared' in event_text and is_monitored_command:
             await asyncio.sleep(0.5)
-            await msg.reply("please wait, a dungeon is being prepared and is making the game hang...")
+            await msg.reply("please wait, the game is currently frozen because it is busy preparing a dungeon...")
         else:
             resend_text = None
             if msg.user.id == os.getenv("BOT_ID"):
@@ -900,7 +900,7 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
         ravenfall_restart_futures[channel_id] = future
 
     await chat.send_message(channel_name, "?randleave")
-    await asyncio.sleep(10)
+    await asyncio.sleep(20)
 
     if not dont_send_message:
         await chat.send_message(channel_name, "Restarting Ravenfall...")
