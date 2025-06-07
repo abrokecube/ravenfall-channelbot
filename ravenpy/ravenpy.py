@@ -709,7 +709,7 @@ island_ranges = {
     (200, 400): Islands.Kyo,
     (300, 700): Islands.Heim,
     (500, 900): Islands.Atria,
-    (700, 999): Islands.Eldara
+    (700, math.inf): Islands.Eldara
 }
 
 def experience_for_level(level):
