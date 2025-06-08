@@ -922,7 +922,7 @@ async def restart_ravenfall(
     # )
     
     while True:
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
         session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
         if not session:
             continue
