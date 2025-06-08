@@ -1147,7 +1147,7 @@ class RestartTask:
             if self.mute_countdown:
                 continue
             new_warning_idx = -1
-            for i, x in enumerate(WARNING_MSG_TIMES):
+            for i, (x, _) in enumerate(WARNING_MSG_TIMES):
                 if time_left < x:
                     new_warning_idx = i
             if new_warning_idx != warning_idx:
