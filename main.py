@@ -1155,7 +1155,7 @@ class RestartTask:
                     for i in range(warning_idx + 1, new_warning_idx + 1):
                         if WARNING_MSG_TIMES[i][1] == "randleave":
                             await self.chat.send_message(self.channel['channel_name'], "?randleave")
-                    if time_left > 7:
+                    if WARNING_MSG_TIMES[new_warning_idx][1] == "warning" and time_left > 7:
                         await self.chat.send_message(
                             self.channel['channel_name'],
                             f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
