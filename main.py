@@ -553,6 +553,7 @@ async def get_prometheus_series(query: str, duration_s, step_s=20):
         result = await r.json()
     data = result['data']['result']
     return data
+
 async def get_prometheus_instant(query: str):
     async with aiohttp.ClientSession() as session:
         r = await session.get(
@@ -560,6 +561,15 @@ async def get_prometheus_instant(query: str):
         )
         result = await r.json()
     data = result['data']['result']
+    return data
+
+async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | None:
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(timeout)) as session:
+        try:
+            r = await session.get(f"{url}/{query}")
+        except aiohttp.client_exceptions.ContentTypeError:
+            return None
+        data = await r.json()
     return data
 
 def backup_file_with_date(filepath, max_backups=5):
@@ -872,7 +882,9 @@ async def restart_process(box_name, process_name, startup_command: str):
     )
     await runshell(shellcmd)
 
-async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: bool = False) -> bool:
+async def restart_ravenfall(
+    channel: Channel, chat: Chat, dont_send_message: bool = False,
+) -> bool:
     """
     Restart Ravenfall and wait for confirmation.
     
@@ -909,28 +921,44 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
         f"cd {os.getenv('RAVENFALL_FOLDER')} & {channel['ravenfall_start_script']}"
     )
     
-    # Wait for RavenBot to respond after restart
-    response = await message_waiter.wait_for_message(
-        channel_name=channel_name,
-        check=lambda m: m.user.id == os.getenv("RAVENBOT_USER_ID"),
-        timeout=60.0
-    )
+    # # Wait for RavenBot to respond after restart
+    # response = await message_waiter.wait_for_message(
+    #     channel_name=channel_name,
+    #     check=lambda m: m.user.id == os.getenv("RAVENBOT_USER_ID"),
+    #     timeout=60.0
+    # )
     
+    while True:
+        await asyncio.sleep(2)
+        session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
+        if not session:
+            continue
+        if session.get('authenticated', False):
+            break
+        
     async def post_restart():
-        await asyncio.sleep(5)
+        await asyncio.sleep(1)
         await chat.send_message(channel_name, "?undorandleave")
-        await asyncio.sleep(10)
+        player_count = 0
+        while True:
+            await asyncio.sleep(2)
+            session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
+            if session is None:
+                continue
+            new_player_count = session['players']
+            if player_count > 0 and new_player_count == player_count:
+                break
+            player_count = new_player_count
         await chat.send_message(channel_name, "?sailall")
 
-    if response:
-        asyncio.create_task(post_restart())
-        future.set_result(True)
-        return True
+    asyncio.create_task(post_restart())
+    future.set_result(True)
+    return True
     
-    if not dont_send_message:
-        await chat.send_message(channel_name, "Timed out waiting for Ravenfall to respond... maybe RavenBot is down?")
-    future.set_result(False)
-    return False
+    # if not dont_send_message:
+    #     await chat.send_message(channel_name, "Timed out waiting for Ravenfall to respond... maybe RavenBot is down?")
+    # future.set_result(False)
+    # return False
         
 
 async def ravenfall_restart_cmd(cmd: ChatCommand):
@@ -1089,6 +1117,9 @@ async def toggle_bot_monitor_cmd(cmd: ChatCommand):
     global monitoring_paused
     monitoring_paused = not monitoring_paused   
     await cmd.reply("RavenBot monitoring is now " + ("PAUSED." if monitoring_paused else "RESUMED."))
+
+async def ping_cmd(cmd: ChatCommand):
+    await cmd.reply("Pong!")
 
 WARNING_MSG_TIMES = (
     (120, "warning"), 
@@ -1483,6 +1514,7 @@ async def run():
     chat.register_event(ChatEvent.READY, on_ready)
     chat.register_event(ChatEvent.MESSAGE, on_message)
     chat.register_command('hi', test_cmd)
+    chat.register_command('ping', ping_cmd)
     chat.register_command('towns', towns_cmd)
     chat.register_command('update', update_cmd)
     chat.register_command('event', event_cmd)
