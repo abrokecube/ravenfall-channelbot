@@ -899,8 +899,6 @@ async def restart_ravenfall(channel: Channel, chat: Chat, dont_send_message: boo
         future = asyncio.get_event_loop().create_future()
         ravenfall_restart_futures[channel_id] = future
 
-    await chat.send_message(channel_name, "?randleave")
-    await asyncio.sleep(20)
 
     if not dont_send_message:
         await chat.send_message(channel_name, "Restarting Ravenfall...")
@@ -1092,14 +1090,18 @@ async def toggle_bot_monitor_cmd(cmd: ChatCommand):
     monitoring_paused = not monitoring_paused   
     await cmd.reply("RavenBot monitoring is now " + ("PAUSED." if monitoring_paused else "RESUMED."))
 
-WARNING_MSG_TIMES = (120, 30)
+WARNING_MSG_TIMES = (
+    (120, "warning"), 
+    (30, "warning"),
+    (20, "randleave")
+    )
 class RestartTask:
     def __init__(self, channel: Channel, chat: Chat, time_to_restart: int | None = 0, mute_countdown: bool = False, label: str = ""):
         self.channel = channel
         self.chat = chat
         self.time_to_restart = time_to_restart
         if self.time_to_restart is None:
-            self.time_to_restart = WARNING_MSG_TIMES[0]
+            self.time_to_restart = WARNING_MSG_TIMES[0][0]
         self.start_t = 0
         self.waiting_task: asyncio.Task = None
         self.event_watch_task: asyncio.Task = None
@@ -1150,6 +1152,9 @@ class RestartTask:
                     new_warning_idx = i
             if new_warning_idx != warning_idx:
                 if new_warning_idx >= 0 and new_warning_idx > warning_idx:
+                    for i in range(warning_idx + 1, new_warning_idx + 1):
+                        if WARNING_MSG_TIMES[i][1] == "randleave":
+                            await self.chat.send_message(self.channel['channel_name'], "?randleave")
                     if time_left > 7:
                         await self.chat.send_message(
                             self.channel['channel_name'],
