@@ -555,10 +555,11 @@ async def get_prometheus_instant(query: str):
     return data
 
 async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | None:
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(timeout)) as session:
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
         try:
             r = await session.get(f"{url}/{query}")
-        except aiohttp.client_exceptions.ContentTypeError:
+        except Exception as e:
+            print(f"Error fetching Ravenfall query from {url}: {e}")
             return None
         data = await r.json()
     return data
