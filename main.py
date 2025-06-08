@@ -408,16 +408,7 @@ async def test_cmd(cmd: ChatCommand):
 
 
 async def towns_cmd(cmd: ChatCommand):
-    async with aiohttp.ClientSession() as session:
-        r = await asyncio.gather(*[
-            session.get(f"{x['rf_query_url']}/select * from village") for x in channels
-        ], return_exceptions=True)
-        tasks = []
-        for x in r:
-            if isinstance(x, Exception):
-                continue
-            tasks.append(x.json())
-        villages: List[Village] = await asyncio.gather(*tasks)
+    villages: List[Village] = await asyncio.gather(*[get_ravenfall_query(x['rf_query_url'], 'select * from village') for x in channels])
     out_str = []
     for idx, village in enumerate(villages):
         if not isinstance(village, dict):
@@ -931,11 +922,15 @@ async def restart_ravenfall(
     while True:
         await asyncio.sleep(2)
         session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
+        print(session)
         if not session:
+            print("No data")
             continue
-        if session.get('authenticated', False):
+        is_auth = session.get('authenticated', False)
+        print("Not auth yet")
+        if is_auth:
             break
-        
+    print("Restart successful")
     async def post_restart():
         await asyncio.sleep(1)
         await chat.send_message(channel_name, "?undorandleave")
