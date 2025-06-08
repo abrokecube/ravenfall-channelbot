@@ -931,7 +931,6 @@ async def restart_ravenfall(
             break
     print("Restart successful")
     async def post_restart():
-        await asyncio.sleep(1)
         await chat.send_message(channel_name, "?undorandleave")
         player_count = 0
         while True:
@@ -943,7 +942,7 @@ async def restart_ravenfall(
             player_count = new_player_count
         await chat.send_message(channel_name, "?sailall")
     while True:
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
         session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
         if session['players'] > 0:
             break
