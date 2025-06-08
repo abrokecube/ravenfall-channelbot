@@ -15,6 +15,7 @@ from typing import List, Tuple, Callable, Any
 from datetime import datetime, timedelta
 import psutil
 import shutil
+import traceback
 
 from gotify import AsyncGotify
 from gotify import gotify
@@ -923,12 +924,9 @@ async def restart_ravenfall(
     while True:
         await asyncio.sleep(2)
         session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
-        print(session)
         if not session:
-            print("No data")
             continue
         is_auth = session.get('authenticated', False)
-        print("Not auth yet")
         if is_auth:
             break
     print("Restart successful")
@@ -939,14 +937,16 @@ async def restart_ravenfall(
         while True:
             await asyncio.sleep(2)
             session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
-            if session is None:
-                continue
             new_player_count = session['players']
             if player_count > 0 and new_player_count == player_count:
                 break
             player_count = new_player_count
         await chat.send_message(channel_name, "?sailall")
-
+    while True:
+        await asyncio.sleep(2)
+        session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
+        if session['players'] > 0:
+            break
     asyncio.create_task(post_restart())
     future.set_result(True)
     return True
