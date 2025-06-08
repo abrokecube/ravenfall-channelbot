@@ -947,8 +947,8 @@ async def ravenfall_restart_cmd(cmd: ChatCommand):
     else:
         await cmd.reply("Town not found :(")
         return
-    add_restart_task(thechannel, cmd.chat, time_to_restart=5, label="User restart")
-    await cmd.reply(f"Restart queued. Restarting in 5s.")
+    add_restart_task(thechannel, cmd.chat, time_to_restart=20, label="User restart")
+    await cmd.reply(f"Restart queued. Restarting in 20s.")
 
 async def ravenfall_queue_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
