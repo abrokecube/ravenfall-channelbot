@@ -1216,6 +1216,7 @@ class RestartTask:
         }
         while True:
             old_event_type = event_type
+            event_type = ""
             await asyncio.sleep(2)
             if self.done:
                 return
