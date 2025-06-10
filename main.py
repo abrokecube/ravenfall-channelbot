@@ -1105,10 +1105,13 @@ async def get_restart_time_left_cmd(cmd: ChatCommand):
     out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}."
     if task_label:
         out_text += f" Reason: {task_label}."
-    if task.future_pause_reason:
+    if task.future_pause_reason and not task.paused():
         out_text += f" Will pause for {task.future_pause_reason}."
     if task.paused():
-        out_text += " (paused)"
+        if task.pause_event_name:
+            out_text += f" (paused: {task.pause_event_name})"
+        else:
+            out_text += f" (paused)"
     await cmd.reply(out_text)
 
 async def welcome_msg_cmd(cmd: ChatCommand):
