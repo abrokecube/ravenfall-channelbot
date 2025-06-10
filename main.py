@@ -931,14 +931,30 @@ async def restart_ravenfall(
     #     timeout=60.0
     # )
     
-    while True:
+    start_time = time.time()
+    auth_timeout = 120
+    authenticated = False
+    
+    while time.time() - start_time < auth_timeout:
+        try:
+            session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
+            if session and session.get('authenticated', False):
+                authenticated = True
+                break
+        except Exception as e:
+            print(f"Error checking authentication status: {e}")
         await asyncio.sleep(1)
-        session: GameSession = await get_ravenfall_query(channel['rf_query_url'], "select * from session", 1)
-        if not session:
-            continue
-        is_auth = session.get('authenticated', False)
-        if is_auth:
-            break
+    
+    if not authenticated:
+        error_msg = "Timed out waiting for Ravenfall to start. dinkDonk @abrokecube"
+        print(error_msg)
+        if not dont_send_message:
+            await chat.send_message(channel_name, error_msg)
+        else:
+            await chat.send_message(channel_name, "@abrokecube dinkDonk")
+        future.set_result(False)
+        return False
+        
     print("Restart successful")
     async def post_restart():
         await chat.send_message(channel_name, "?undorandleave")
