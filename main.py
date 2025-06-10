@@ -11,11 +11,12 @@ from dotenv import load_dotenv
 import json
 import aiohttp
 import aiohttp.client_exceptions
-from typing import List, Tuple, Callable, Any
+from typing import List, Tuple, Callable, Any, TypedDict
 from datetime import datetime, timedelta
 import psutil
 import shutil
 import traceback
+import logging
 
 from gotify import AsyncGotify
 from gotify import gotify
@@ -546,7 +547,16 @@ async def get_prometheus_series(query: str, duration_s, step_s=20):
     data = result['data']['result']
     return data
 
-async def get_prometheus_instant(query: str):
+class PrometheusMetric(TypedDict):
+    __name__: str
+    job: str
+    instance: str
+
+class PromethusInstantResult(TypedDict):
+    metric: PrometheusMetric
+    value: List[float | str]
+    
+async def get_prometheus_instant(query: str) -> List[PromethusInstantResult] | None:
     async with aiohttp.ClientSession() as session:
         r = await session.get(
             f"{PROMETHEUS_URL}/api/v1/query?query={query}"
@@ -1076,10 +1086,11 @@ async def get_restart_time_left_cmd(cmd: ChatCommand):
         await cmd.reply("No restart task found.")
         return
     task_label = task.label
+    out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}."
     if task_label:
-        out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}. Reason: {task_label}"
-    else:
-        out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}"
+        out_text += f" Reason: {task_label}."
+    if task.future_pause_reason:
+        out_text += f" Will pause for {task.future_pause_reason}."
     if task.paused():
         out_text += " (paused)"
     await cmd.reply(out_text)
@@ -1135,6 +1146,8 @@ class RestartTask:
         self._paused = False
         self._pause_time = 0
         self._pause_start = 0
+        self.pause_event_name = ""
+        self.future_pause_reason = ""
         self.mute_countdown = mute_countdown
         self.label = label
 
@@ -1190,33 +1203,65 @@ class RestartTask:
         await self._execute()
 
     async def _event_watcher(self):
+        event_type = ""
+        messages = {
+            "server_down": "Restart postponed due to server down.",
+            "dungeon": "Restart postponed due to dungeon.",
+            "raid": "Restart postponed due to raid.",
+        }
+        names = {
+            "server_down": "server down",
+            "dungeon": "dungeon",
+            "raid": "raid",
+        }
         while True:
+            old_event_type = event_type
             await asyncio.sleep(2)
             if self.done:
                 return
             time_left = self.get_time_left()
-            if (time_left > max(WARNING_MSG_TIMES[-1], 60)) and not self._paused:
+            if self._paused:
                 continue
             ch_id = self.channel['channel_id']
             if ch_id in village_events:
-                if village_events[ch_id].split(maxsplit=1)[0] in ('DUNGEON', 'RAID'):
-                    if not self._paused:
-                        self.pause()
-                        await self.chat.send_message(
-                            self.channel['channel_name'], 
-                            "Postponing restart due to dungeon/raid."
-                        )
-                else:
-                    if self._paused:
-                        self.unpause()
+                firstword = village_events[ch_id].split(maxsplit=1)[0]
+                if firstword == 'DUNGEON':
+                    event_type = "dungeon"
+                elif firstword == 'RAID':
+                    event_type = "raid"
+            rf_server_status = await get_prometheus_instant("monitor_status{monitor_name='Ravenfall API'}")
+            if not rf_server_status:
+                event_type = "server_down"
+            else:
+                if rf_server_status[0]['value'][1] != "1":
+                    event_type = "server_down"
+            
+            if event_type:
+                self.future_pause_reason = names[event_type]
+            else:
+                self.future_pause_reason = ""
+
+            if time_left > max(WARNING_MSG_TIMES[-1][0], 60):
+                continue
+
+            if not event_type:
+                if self._paused:
+                    self.unpause()
+                    time_left = self.get_time_left()
+                    if time_left < 60:
+                        self.time_to_restart += 60 - time_left
                         time_left = self.get_time_left()
-                        if time_left < 60:
-                            self.time_to_restart += 60 - time_left
-                            time_left = self.get_time_left()
-                        await self.chat.send_message(
-                            self.channel['channel_name'], 
-                            f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}."
-                        )
+                    await self.chat.send_message(
+                        self.channel['channel_name'], 
+                        f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}."
+                    )
+            else:
+                if (not self._paused) or old_event_type != event_type:
+                    self.pause(names[event_type])
+                    await self.chat.send_message(
+                        self.channel['channel_name'], 
+                        messages[event_type]
+                    )
     
     async def _execute(self):
         self.event_watch_task.cancel()
@@ -1235,15 +1280,17 @@ class RestartTask:
             pause_time += time.time() - self._pause_start
         return self.time_to_restart - (time.time() - self.start_t - pause_time)
     
-    def pause(self):
+    def pause(self, event_name: str = ""):
         if not self._paused:
             self._paused = True
             self._pause_start = time.time()
+            self.pause_event_name = event_name
 
     def unpause(self):
         if self._paused:
             self._paused = False
             self._pause_time += time.time() - self._pause_start
+            self.pause_event_name = ""
 
     def postpone(self, seconds: int):
         # if not self._paused:
