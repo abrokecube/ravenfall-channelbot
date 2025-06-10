@@ -1540,7 +1540,7 @@ async def auto_restart_routine(chat: Chat):
                 add_restart_task(channel, chat, 10, label="Auto restart (could not get uptime)")
                 continue
 
-            seconds_to_restart = max(10, period - uptime)
+            seconds_to_restart = max(60, period - uptime)
             add_restart_task(channel, chat, seconds_to_restart, label="Scheduled restart")
 
 
