@@ -338,7 +338,7 @@ async def monitor_ravenbot_response(
                     asked_to_retry = True
                 elif attempt == MAX_RETRIES:
                     await chat.send_message(channel_name, resp_restart_ravenfall)
-                    restart_task = add_restart_task(channel, chat, 5, mute_countdown=True, label="Missing response")
+                    restart_task = add_restart_task(channel, chat, 20, mute_countdown=True, label="Missing response")
                     await restart_task.wait()
                     await chat.send_message(channel_name, resp_user_retry_2)
                     asked_to_retry = True
@@ -1214,8 +1214,6 @@ class RestartTask:
             time_left = self.get_time_left()
             if time_left <= 0:
                 break
-            if self.mute_countdown:
-                continue
             new_warning_idx = -1
             for i, (x, _) in enumerate(WARNING_MSG_TIMES):
                 if time_left < x:
@@ -1225,7 +1223,7 @@ class RestartTask:
                     for i in range(warning_idx + 1, new_warning_idx + 1):
                         if WARNING_MSG_TIMES[i][1] == "randleave":
                             await self.chat.send_message(self.channel['channel_name'], "?randleave")
-                    if WARNING_MSG_TIMES[new_warning_idx][1] == "warning" and time_left > 7:
+                    if WARNING_MSG_TIMES[new_warning_idx][1] == "warning" and time_left > 7 and not self.mute_countdown:
                         await self.chat.send_message(
                             self.channel['channel_name'],
                             f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
