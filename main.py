@@ -926,6 +926,7 @@ async def restart_ravenfall(
             continue 
         if not other_future.done():
             await other_future  # Wait for any ongoing restarts to finish
+            await asyncio.sleep(3)
             
     if not dont_send_message:
         await chat.send_message(channel_name, "Restarting Ravenfall...")
@@ -1350,17 +1351,22 @@ def get_restart_task(channel_id: str) -> RestartTask | None:
     return channel_restart_tasks.get(channel_id, None)
 
 @routine(delta=timedelta(hours=5), wait_first=True)
-async def backup_state_data_routine():
+async def backup_state_data_routine(chat: Chat):
     for future in ravenfall_restart_futures.values():
         if not future.done():
             print("Waiting for ongoing restarts to finish before backing up state data...")
             await future  # Wait for any ongoing restarts to finish
+            await asyncio.sleep(3)
 
-    for channel in channels:
+    async def backup_task(channel: Channel):
+        await chat.send_message(channel['channel_name'], "?resync")
+        await asyncio.sleep(15)
         backup_file_with_date(
             f"{os.getenv('RAVENFALL_SANDBOXED_FOLDER').replace('{box}', channel['sandboxie_box']).rstrip('\\/')}\\state-data.json",
             int(os.getenv('BACKUP_RETENTION_COUNT'))
         )
+    print("Backing up state data...")
+    await asyncio.gather(*[backup_task(channel) for channel in channels])
     print("Backed up state data")
         
 max_dungeon_hp: Dict[str, int] = {}
