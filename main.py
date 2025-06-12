@@ -918,6 +918,10 @@ async def restart_ravenfall(
     if not dont_send_message:
         await chat.send_message(channel_name, "Restarting Ravenfall...")
     
+    for future in ravenfall_restart_futures.values():
+        if not future.done():
+            await future  # Wait for any ongoing restarts to finish
+    
     await restart_process(
         channel['sandboxie_box'], 
         "Ravenfall.exe", 
@@ -1316,6 +1320,7 @@ class RestartTask:
         self.time_to_restart += seconds
         # self.start_t = time.time() - self._pause_time
 
+
 channel_restart_tasks: Dict[str, RestartTask] = {}
 def add_restart_task(channel: Channel, chat: Chat, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = ""):
     if channel['channel_id'] in channel_restart_tasks:
@@ -1338,8 +1343,13 @@ def postpone_restart_task(channel_id: str, seconds: int):
 def get_restart_task(channel_id: str) -> RestartTask | None:
     return channel_restart_tasks.get(channel_id, None)
 
-@routine(delta=timedelta(hours=6), wait_first=True)
+@routine(delta=timedelta(hours=5), wait_first=True)
 async def backup_state_data_routine():
+    for future in ravenfall_restart_futures.values():
+        if not future.done():
+            print("Waiting for ongoing restarts to finish before backing up state data...")
+            await future  # Wait for any ongoing restarts to finish
+
     for channel in channels:
         backup_file_with_date(
             f"{os.getenv('RAVENFALL_SANDBOXED_FOLDER').replace('{box}', channel['sandboxie_box']).rstrip('\\/')}\\state-data.json",
