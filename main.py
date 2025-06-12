@@ -913,17 +913,23 @@ async def restart_ravenfall(
     if not future or future.done():
         future = asyncio.get_event_loop().create_future()
         ravenfall_restart_futures[channel_id] = future
-
-
-    if not dont_send_message:
-        await chat.send_message(channel_name, "Restarting Ravenfall...")
     
     for other_future in ravenfall_restart_futures.values():
         if other_future is future:
             continue 
         if not other_future.done():
+            await chat.send_message(channel_name, "Waiting for other restarts to finish...")
+            break
+
+    for other_future in ravenfall_restart_futures.values():
+        if other_future is future:
+            continue 
+        if not other_future.done():
             await other_future  # Wait for any ongoing restarts to finish
-    
+            
+    if not dont_send_message:
+        await chat.send_message(channel_name, "Restarting Ravenfall...")
+        
     await restart_process(
         channel['sandboxie_box'], 
         "Ravenfall.exe", 
