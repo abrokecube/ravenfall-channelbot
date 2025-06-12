@@ -918,9 +918,11 @@ async def restart_ravenfall(
     if not dont_send_message:
         await chat.send_message(channel_name, "Restarting Ravenfall...")
     
-    for future in ravenfall_restart_futures.values():
-        if not future.done():
-            await future  # Wait for any ongoing restarts to finish
+    for other_future in ravenfall_restart_futures.values():
+        if other_future is future:
+            continue
+        if not other_future.done():
+            await other_future  # Wait for any ongoing restarts to finish
     
     await restart_process(
         channel['sandboxie_box'], 
