@@ -920,7 +920,7 @@ async def restart_ravenfall(
     
     for other_future in ravenfall_restart_futures.values():
         if other_future is future:
-            continue
+            continue 
         if not other_future.done():
             await other_future  # Wait for any ongoing restarts to finish
     
