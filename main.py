@@ -1160,6 +1160,8 @@ async def ping_cmd(cmd: ChatCommand):
     await cmd.reply("Pong!")
 
 async def backup_state_data_cmd(cmd: ChatCommand):
+    if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
+        return
     await backup_state_data_routine(cmd.chat)
     await cmd.reply("Okay")
 
