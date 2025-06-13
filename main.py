@@ -1571,7 +1571,7 @@ async def on_ready(ready_event: EventData):
     update_boosts_routine.start(ready_event.chat)
     update_events_routine.start(ready_event.chat)
     update_mult_routine.start(ready_event.chat)
-    backup_state_data_routine.start()
+    backup_state_data_routine.start(ready_event.chat)
     auto_restart_routine.start(ready_event.chat)
     print('Bot is ready for work')
 
