@@ -1159,6 +1159,10 @@ async def toggle_bot_monitor_cmd(cmd: ChatCommand):
 async def ping_cmd(cmd: ChatCommand):
     await cmd.reply("Pong!")
 
+async def backup_state_data_cmd(cmd: ChatCommand):
+    await backup_state_data_routine(cmd.chat)
+    await cmd.reply("Okay")
+
 WARNING_MSG_TIMES = (
     (120, "warning"), 
     (30, "warning"),
@@ -1623,6 +1627,7 @@ async def run():
     chat.register_command('rfrstatus', get_restart_time_left_cmd)
     chat.register_command('autorestart', toggle_auto_restart_cmd)
     chat.register_command('togglebotmonitor', toggle_bot_monitor_cmd)
+    chat.register_command('backup', backup_state_data_cmd)
 
     asyncio.create_task(gotify_listener(chat))
     chat.start()
