@@ -269,6 +269,7 @@ async def monitor_ravenbot_response(
         return
     if monitoring_paused:
         return
+        
     if pending_monitors.get(channel_id):
         print(f"Already monitoring {channel_id}")
         return
@@ -279,6 +280,11 @@ async def monitor_ravenbot_response(
     }
     asked_to_retry = False
     try:
+        while True:
+            if 'DUNGEON is being prepared' in village_events.get(channel_id, ''):
+                await asyncio.sleep(5)
+            else:
+                break
         # Wait for a response from RavenBot
         response = await message_waiter.wait_for_message(
             channel_name=channel['channel_name'],
