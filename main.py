@@ -920,11 +920,16 @@ async def restart_ravenfall(
         if not other_future.done():
             await chat.send_message(channel_name, "Waiting for other restarts to finish...")
             break
-
-    for other_future in ravenfall_restart_futures.values():
-        if not other_future.done():
-            await other_future  # Wait for any ongoing restarts to finish
-            await asyncio.sleep(3)
+    
+    while True:
+        for other_future in ravenfall_restart_futures.values():
+            unfinished = False
+            if not other_future.done():
+                unfinished = True
+                break
+        if not unfinished:
+            break
+        await asyncio.sleep(3)
 
     if not future or future.done():
         future = asyncio.get_event_loop().create_future()
