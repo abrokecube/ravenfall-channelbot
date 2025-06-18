@@ -922,15 +922,14 @@ async def restart_ravenfall(
             break
     
     while True:
+        unfinished = False
         for other_future in ravenfall_restart_futures.values():
-            unfinished = False
             if not other_future.done():
                 unfinished = True
                 break
         if not unfinished:
             break
         await asyncio.sleep(3)
-
     if not future or future.done():
         future = asyncio.get_event_loop().create_future()
         ravenfall_restart_futures[channel_id] = future
