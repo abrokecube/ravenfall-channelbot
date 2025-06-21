@@ -269,6 +269,9 @@ async def monitor_ravenbot_response(
         return
     if monitoring_paused:
         return
+    restart_future = ravenfall_restart_futures.get(channel_id)
+    if restart_future and not restart_future.done():
+        return
         
     if pending_monitors.get(channel_id):
         print(f"Already monitoring {channel_id}")
