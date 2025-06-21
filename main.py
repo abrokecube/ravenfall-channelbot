@@ -1387,6 +1387,8 @@ async def backup_state_data_routine(chat: Chat):
 max_dungeon_hp: Dict[str, int] = {}
 @routine(delta=timedelta(seconds=2), wait_remainder=True)
 async def update_events_routine(chat: Chat):
+    async def dummy():
+        return []
     async with aiohttp.ClientSession() as session:
         tasks = []
         tasks.extend([
@@ -1399,6 +1401,7 @@ async def update_events_routine(chat: Chat):
         tasks = []
         for x in r:
             if isinstance(x, Exception):
+                tasks.append(dummy())
                 continue
             tasks.append(x.json())
         data = await asyncio.gather(*tasks)
