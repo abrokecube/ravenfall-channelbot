@@ -1592,6 +1592,12 @@ async def on_ready(ready_event: EventData):
 
 # this is where we set up the bot
 async def run():
+    def handle_loop_exception(loop, context):
+        print("Caught async exception:", context["exception"])
+
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(handle_loop_exception)
+    
     # set up twitch api instance and add user authentication with some scopes
     twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
     helper = UserAuthenticationStorageHelper(twitch, USER_SCOPE)
