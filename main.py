@@ -712,7 +712,7 @@ async def exprate_cmd(cmd: ChatCommand):
         await cmd.reply("Invalid username.")
         return
     
-    query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\"}[90s]))" % (target_user, cmd.room.name)
+    query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[90s]))" % (target_user, cmd.room.name)
     data = await get_prometheus_series(query, 10*60)
     if len(data) == 0:
         await cmd.reply("No data recorded. Your character may not be in this town right now.")
@@ -818,7 +818,7 @@ async def chracter_cmd(cmd: ChatCommand):
                 f"({char_stat.level_exp/char_stat.total_exp_for_level:.1%}) "\
                 f"{char_stat.level_exp:,.0f}/{char_stat.total_exp_for_level:,.0f} EXP"
             )
-    query = "sum(deriv(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\"}[2m]))" % (target_user, cmd.room.name)
+    query = "sum(deriv(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[2m]))" % (target_user, cmd.room.name)
     data = await get_prometheus_series(query, 1)
     data_pairs = [(x[0], float(x[1])) for x in data[0]['values']]
     char_exp_per_h = data_pairs[-1][1]*60*60
