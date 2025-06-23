@@ -653,7 +653,7 @@ async def ravenfall_ram_cmd(cmd: ChatCommand):
     tasks = []
     for ch in channels:
         shellcmd = (
-            f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch['sandboxie_box']} /nosbiectrl /listpids"
+            f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch['sandboxie_box']} /silent /listpids"
         )
         tasks.append(runshell(shellcmd))
     responses: List[str | None] = await asyncio.gather(*tasks)
@@ -884,12 +884,12 @@ async def multiplier_cmd(cmd: ChatCommand):
 
 async def restart_process(box_name, process_name, startup_command: str):
     shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /nosbiectrl /silent /wait "
+        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"taskkill /f /im {process_name}"
     )
     await runshell(shellcmd)
     shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /nosbiectrl /silent /wait "
+        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"cmd /c \"{startup_command.replace("\"", "\\\"")}\""
     )
     await runshell(shellcmd)
