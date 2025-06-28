@@ -18,6 +18,16 @@ import shutil
 import traceback
 import logging
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+    ]
+)
+logger = logging.getLogger(__name__)
+
 from gotify import AsyncGotify
 from gotify import gotify
 
@@ -274,7 +284,7 @@ async def monitor_ravenbot_response(
         return
         
     if pending_monitors.get(channel_id):
-        print(f"Already monitoring {channel_id}")
+        logger.info(f"Already monitoring {channel_id}")
         return
 
     pending_monitors[channel_id] = {
@@ -331,7 +341,7 @@ async def monitor_ravenbot_response(
                 resp_giveup = "I give up (pinging @abrokecube)"
             
             if attempt <= MAX_RETRIES:
-                print(f"No response to {command} in {channel_name} (Attempt {attempt}/{MAX_RETRIES}), restarting RavenBot...")
+                logger.warning(f"No response to {command} in {channel_name} (Attempt {attempt}/{MAX_RETRIES}), restarting RavenBot...")
                 restart_attempts[channel_id]['last_attempt'] = current_time                
                 
                 # Only send message if this is the first attempt or we've waited long enough
@@ -357,7 +367,7 @@ async def monitor_ravenbot_response(
         else:
             restart_attempts[channel_id]['count'] = 0
     except Exception as e:
-        print(f"Error in monitor_ravenbot_response: {e}")
+        logger.error(f"Error in monitor_ravenbot_response: {e}", exc_info=True)
     finally:
         if channel_id in pending_monitors:
             del pending_monitors[channel_id]
@@ -452,13 +462,13 @@ async def runshell(cmd) -> str | None:
 
     stdout, stderr = await proc.communicate()
     out_text = None
-    print(f'[{cmd!r} exited with {proc.returncode}]')
+    logger.debug(f'[{cmd!r} exited with {proc.returncode}]')
     if stdout:
         stdout_text = stdout.decode()
-        print(f'[stdout]\n{stdout_text}')
+        logger.debug(f'[stdout]\n{stdout_text}')
         out_text = stdout_text
     if stderr:
-        print(f'[stderr]\n{stderr.decode()}')
+        logger.error(f'[stderr]\n{stderr.decode()}')
     return out_text
 
 def runshell_detached(cmd):
@@ -579,7 +589,7 @@ async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | N
         try:
             r = await session.get(f"{url}/{query}")
         except Exception as e:
-            print(f"Error fetching Ravenfall query from {url}: {e}")
+            logger.error(f"Error fetching Ravenfall query from {url}: {e}", exc_info=True)
             return None
         data = await r.json()
     return data
@@ -964,12 +974,12 @@ async def restart_ravenfall(
                 authenticated = True
                 break
         except Exception as e:
-            print(f"Error checking authentication status: {e}")
+            logger.error(f"Error checking authentication status: {e}", exc_info=True)
         await asyncio.sleep(1)
     
     if not authenticated:
         error_msg = "Timed out waiting for Ravenfall to start. dinkDonk @abrokecube"
-        print(error_msg)
+        logger.error(error_msg)
         if not dont_send_message:
             await chat.send_message(channel_name, error_msg)
         else:
@@ -977,7 +987,7 @@ async def restart_ravenfall(
         future.set_result(False)
         return False
         
-    print("Restart successful")
+    logger.info("Restart successful")
     async def post_restart():
         await chat.send_message(channel_name, "?undorandleave")
         player_count = 0
@@ -1369,7 +1379,7 @@ def get_restart_task(channel_id: str) -> RestartTask | None:
 async def backup_state_data_routine(chat: Chat):
     for future in ravenfall_restart_futures.values():
         if not future.done():
-            print("Waiting for ongoing restarts to finish before backing up state data...")
+            logger.info("Waiting for ongoing restarts to finish before backing up state data...")
             await future  # Wait for any ongoing restarts to finish
             await asyncio.sleep(3)
 
@@ -1380,9 +1390,9 @@ async def backup_state_data_routine(chat: Chat):
             f"{os.getenv('RAVENFALL_SANDBOXED_FOLDER').replace('{box}', channel['sandboxie_box']).rstrip('\\/')}\\state-data.json",
             int(os.getenv('BACKUP_RETENTION_COUNT'))
         )
-    print("Backing up state data...")
+    logger.info("Backing up state data...")
     await asyncio.gather(*[backup_task(channel) for channel in channels])
-    print("Backed up state data")
+    logger.info("Successfully backed up state data")
         
 max_dungeon_hp: Dict[str, int] = {}
 @routine(delta=timedelta(seconds=2), wait_remainder=True)
@@ -1523,14 +1533,14 @@ async def event_gotify_msg(msg: gotify.Message, chat: Chat):
     else:
         text = msg['message']
         
-    print(f"Recieved gotify message: {msg}")
+    logger.info(f"Received gotify message: {msg}")
     if target is not None:
         targets = target.split(', ')
         for room in targets:
             if chat.is_in_room(room):
                 await chat.send_message(room, text)
             else:
-                print(f"Unknown room: {room}")
+                logger.warning(f"Unknown room: {room}")
     else:
         for channel in channels:
             if channel['recieve_global_alerts']:
@@ -1544,12 +1554,12 @@ async def gotify_listener(chat: Chat):
                 base_url=os.getenv("GOTIFY_URL"),
                 client_token=os.getenv("GOTIFY_CLIENT_TOKEN")
             )
-            print("Connected to Gotify")
+            logger.info("Connected to Gotify")
             async for msg in gotify.stream():
                 if msg['appid'] == int(os.getenv("GOTIFY_APP_ID")):
                     await event_gotify_msg(msg, chat)
         except Exception as e:
-            print(f"Gotify listener failed: {e}, retrying...")
+            logger.error(f"Gotify listener failed: {e}, retrying...", exc_info=True)
 
 @routine(delta=timedelta(seconds=30))
 async def auto_restart_routine(chat: Chat):
@@ -1573,11 +1583,11 @@ async def auto_restart_routine(chat: Chat):
                         uptime = game_session['secondssincestart']
                         break
                     except Exception as e:
-                        print(f"Uptime check failed: {e}")
+                        logger.error(f"Uptime check failed: {e}", exc_info=True)
                         await asyncio.sleep(10)
 
             if uptime is None:
-                print(f"Uptime check failed for {channel['channel_name']}, restarting Ravenfall")
+                logger.warning(f"Uptime check failed for {channel['channel_name']}, restarting Ravenfall")
                 add_restart_task(channel, chat, 10, label="Auto restart (could not get uptime)")
                 continue
 
@@ -1591,12 +1601,12 @@ async def on_ready(ready_event: EventData):
     update_mult_routine.start(ready_event.chat)
     backup_state_data_routine.start(ready_event.chat)
     auto_restart_routine.start(ready_event.chat)
-    print('Bot is ready for work')
+    logger.info('Bot is ready for work')
 
 # this is where we set up the bot
 async def run():
     def handle_loop_exception(loop, context):
-        print("Caught async exception:", context["exception"])
+        logger.error("Caught async exception", exc_info=context["exception"])
 
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(handle_loop_exception)

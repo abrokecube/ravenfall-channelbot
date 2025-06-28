@@ -43,204 +43,10 @@ GOTIFY_URL = os.getenv('GOTIFY_URL').strip("/")
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL").strip('/')
 
 
-with open("channels.json", "r") as f:
-    channels: List[Channel] = json.load(f)
-for channel in channels:
-    channel["rf_query_url"] = channel["rf_query_url"].rstrip("/")
-    # Set default command prefix if not specified
-    if 'command_prefix' not in channel:
-        channel['command_prefix'] = '!'
-
-
-# Global message waiter instance
-message_waiter = MessageWaiter()
-
-# Track pending commands and their response status
-pending_monitors: Dict[str, Dict[str, Any]] = {}
-
-# Track restart attempts and locks for each channel
-restart_attempts: Dict[str, Dict[str, Any]] = {}  # channel_id -> {count: int, last_attempt: float, is_restarting: bool}
-# Track Ravenfall restarts to prevent concurrent restarts
-ravenfall_restart_futures: Dict[str, asyncio.Future] = {}  # channel_id -> Future
-
-# Track last command time per channel to prevent command spam
-last_command_time: Dict[str, float] = {}  # channel_id -> timestamp
 
 # Global flag to pause/resume RavenBot response monitoring
 monitoring_paused = False
 
-# Common commands that should trigger a response from RavenBot (without prefix)
-MONITORED_COMMANDS = {
-    'coins', 'count', 'damage', 'dmg', 'dps', 'eat', 'effects', 'ferry', 'items',
-    'multiplier', 'online', 'pubsub', 'res', 'resources', 'rested', 'status', 'stats', 'town',
-    'townres', 'training', 'value', 'version', 'village', 'villagers', 'where'
-}
-# Commands that may take longer to respond to
-MONITORED_COMMANDS_LONG = {
-    'consume', 'disenchant', 'drink', 'eat', 'enchant',
-    'gift', 'join', 'leave', 'scrolls',
-}
-
-MAX_RETRIES = 3  # Maximum number of restart attempts before giving up (on the final attempt, restarts Ravenfall)
-RETRY_WINDOW = 3*60  # Number of seconds to wait before resetting attempt counter
-
-async def monitor_ravenbot_response(
-    chat: Chat, channel_id: str, command: str, timeout: float = 5, resend_text: str = None
-):
-    """
-    Monitor for RavenBot's response to a command.
-    If no response, restart RavenBot up to MAX_RETRIES times.
-    If still unresponsive after MAX_RETRIES, restart Ravenfall.
-    """
-    channel = get_channel_data(channel_id)
-    if not channel:
-        return
-    if monitoring_paused:
-        return
-    restart_future = ravenfall_restart_futures.get(channel_id)
-    if restart_future and not restart_future.done():
-        return
-        
-    if pending_monitors.get(channel_id):
-        print(f"Already monitoring {channel_id}")
-        return
-
-    pending_monitors[channel_id] = {
-        'channel': channel_id,
-        'task': asyncio.current_task()
-    }
-    asked_to_retry = False
-    try:
-        while True:
-            if 'DUNGEON is being prepared' in village_events.get(channel_id, ''):
-                await asyncio.sleep(5)
-            else:
-                break
-        # Wait for a response from RavenBot
-        response = await message_waiter.wait_for_message(
-            channel_name=channel['channel_name'],
-            check=lambda m: (
-                m.user.id == os.getenv("RAVENBOT_USER_ID")
-            ),
-            timeout=timeout
-        )
-
-        if monitoring_paused:
-            return
-        
-        # Initialize or clean up old restart attempts
-        if channel_id not in restart_attempts:
-            restart_attempts[channel_id] = {'count': 0, 'last_attempt': 0}
-
-        if not response:
-            current_time = time.time()
-            time_since_last_attempt = current_time - restart_attempts[channel_id]['last_attempt']
-            if time_since_last_attempt > RETRY_WINDOW:
-                restart_attempts[channel_id]['count'] = 0
-            
-            restart_attempts[channel_id]['count'] += 1
-            
-            attempt = restart_attempts[channel_id]['count']
-            channel_name = channel['channel_name']
-
-            resp_retry = "Hmm , let me restart RavenBot..."
-            resp_retry_2 = "Hmm , let me restart RavenBot again.."
-            resp_user_retry = "Okay , try again"
-            resp_user_retry_2 = "Okay , try again, surely this time it will work"
-            resp_restart_ravenfall = "okie then i will restart Ravenfall, please hold..."
-            resp_giveup = "I give up, please try again later (pinging @abrokecube)"
-
-            if resend_text:
-                resp_retry = "Hmm"
-                resp_retry_2 = "Hmm ..."
-                resp_user_retry = resend_text
-                resp_user_retry_2 = resend_text
-                resp_restart_ravenfall = "Hmm ........."
-                resp_giveup = "I give up (pinging @abrokecube)"
-            
-            if attempt <= MAX_RETRIES:
-                print(f"No response to {command} in {channel_name} (Attempt {attempt}/{MAX_RETRIES}), restarting RavenBot...")
-                restart_attempts[channel_id]['last_attempt'] = current_time                
-                
-                # Only send message if this is the first attempt or we've waited long enough
-                if attempt == 1:
-                    await chat.send_message(channel_name, resp_retry)
-                elif attempt > 1 and attempt < MAX_RETRIES:
-                    await chat.send_message(channel_name, resp_retry_2)
-                
-                if attempt < MAX_RETRIES:   
-                    await restart_ravenbot(channel)
-                    await asyncio.sleep(3)
-                    await chat.send_message(channel_name, resp_user_retry)
-                    asked_to_retry = True
-                elif attempt == MAX_RETRIES:
-                    await chat.send_message(channel_name, resp_restart_ravenfall)
-                    restart_task = add_restart_task(channel, chat, 20, mute_countdown=True, label="Missing response")
-                    await restart_task.wait()
-                    await chat.send_message(channel_name, resp_user_retry_2)
-                    asked_to_retry = True
-                restart_attempts[channel_id]['last_attempt'] = current_time                
-            else:
-                await chat.send_message(channel_name, resp_giveup)
-        else:
-            restart_attempts[channel_id]['count'] = 0
-    except Exception as e:
-        print(f"Error in monitor_ravenbot_response: {e}")
-    finally:
-        if channel_id in pending_monitors:
-            del pending_monitors[channel_id]
-    if resend_text and asked_to_retry:
-        asyncio.create_task(monitor_ravenbot_response(chat, channel_id, command, resend_text=resend_text))
-
-async def on_message(msg: ChatMessage):
-    # Let the message waiter process the message first
-    await message_waiter.process_message(msg)
-    
-    # Get channel data and check if this is a monitored command
-    ch_data = get_channel_data(msg.room.room_id)
-    if ch_data is None:
-        return
-        
-    content = msg.text.strip()
-    prefix = ch_data.get('ravenbot_prefix', '!')
-    
-    if content.startswith(prefix):
-        event_text = village_events.get(msg.room.room_id, '')
-        parts = content[len(prefix):].strip().split(maxsplit=1)
-        if parts:  # If there's at least a command
-            command = parts[0].lower()
-        is_monitored_command = (command in MONITORED_COMMANDS) or (command in MONITORED_COMMANDS_LONG)
-        if 'DUNGEON is being prepared' in event_text and is_monitored_command:
-            await asyncio.sleep(0.5)
-            await msg.reply("please wait, the game is currently frozen because it is busy preparing a dungeon...")
-        else:
-            resend_text = None
-            if msg.user.id == os.getenv("BOT_ID"):
-                resend_text = msg.text
-            if command in MONITORED_COMMANDS:
-                asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, resend_text=resend_text))
-            elif command in MONITORED_COMMANDS_LONG:
-                asyncio.create_task(monitor_ravenbot_response(msg.chat, msg.room.room_id, command, timeout=15, resend_text=resend_text))
-    
-    ch_data = get_channel_data(msg.room.room_id)
-    if msg.first and msg.text[:5].lower() == f"{ch_data['ravenbot_prefix']}join":
-        await first_time_joiner(msg)
-
-@chatmsg_cd.chat_autoresponse_cd(5, chatmsg_cd.CooldownType.CHANNEL)
-async def first_time_joiner(msg: ChatMessage):
-    await asyncio.sleep(3)
-    ch = get_channel_data(msg.room.room_id) 
-    if ch is None:
-        return
-    boost = await get_town_boost(ch)
-    welcome_msg = ch['welcome_message'].format_map({
-        "townSkillLower": boost[0].skill.lower(),
-        "townSkill": boost[0].skill,
-        "userName": msg.user.name,
-        "userDisplayName": msg.user.display_name
-    })
-    await msg.chat.send_message(msg.room.name, welcome_msg)
-    
 
 async def test_cmd(cmd: ChatCommand):
     await cmd.reply(f'hello {cmd.user.name}')
@@ -272,20 +78,6 @@ def get_channel_data(channel_id) -> Channel | None:
             return channel
     return None
 
-async def get_town_boost(channel: Channel) -> List[TownBoost] | None:
-    async with aiohttp.ClientSession() as session:
-        try:
-            r = await session.get(f"{channel['rf_query_url']}/select * from village")
-        except aiohttp.client_exceptions.ContentTypeError:
-            return None
-        village: Village = await r.json()
-        split = village['boost'].split()
-        if len(split) < 2:
-            return []
-        boost_stat = split[0]
-        boost_value = float(split[1].rstrip("%"))
-        return [TownBoost(boost_stat, boost_value/100)]
-        
 async def update_cmd(cmd: ChatCommand):
     this_channel: Channel = None
     for channel in channels:
@@ -589,17 +381,6 @@ async def multiplier_cmd(cmd: ChatCommand):
             f"thanks to {mult_info['eventname']}!"
         )
 
-async def restart_process(box_name, process_name, startup_command: str):
-    shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
-        f"taskkill /f /im {process_name}"
-    )
-    await runshell(shellcmd)
-    shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
-        f"cmd /c \"{startup_command.replace("\"", "\\\"")}\""
-    )
-    await runshell(shellcmd)        
 
 async def ravenfall_restart_cmd(cmd: ChatCommand):
     if not (cmd.user.mod or cmd.room.room_id == cmd.user.id):
@@ -737,42 +518,8 @@ async def backup_state_data_cmd(cmd: ChatCommand):
     await cmd.reply("Okay")
 
 
-@routine(delta=timedelta(seconds=30))
-async def auto_restart_routine(chat: Chat):
-    for channel in channels:
-        if not channel['auto_restart']:
-            continue
-        period = channel.get('restart_period', 0)
-        if period and period > 0:
-            period = max(20*60,period)
-            task = get_restart_task(channel['channel_id'])
-
-            if task and not task.finished():
-                continue
-
-            uptime = None
-            for i in range(5):
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-                    try:
-                        r = await session.get(f"{channel['rf_query_url']}/select * from session")
-                        game_session: GameSession = await r.json()
-                        uptime = game_session['secondssincestart']
-                        break
-                    except Exception as e:
-                        print(f"Uptime check failed: {e}")
-                        await asyncio.sleep(10)
-
-            if uptime is None:
-                print(f"Uptime check failed for {channel['channel_name']}, restarting Ravenfall")
-                add_restart_task(channel, chat, 10, label="Auto restart (could not get uptime)")
-                continue
-
-            seconds_to_restart = max(60, period - uptime)
-            add_restart_task(channel, chat, seconds_to_restart, label="Scheduled restart")
-
 
 async def on_ready(ready_event: EventData):
-    auto_restart_routine.start(ready_event.chat)
     print('Bot is ready for work')
 
 # this is where we set up the bot

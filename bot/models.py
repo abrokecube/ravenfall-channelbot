@@ -1,5 +1,6 @@
-from typing import TypedDict, Dict, Literal, Union, NamedTuple
+from typing import TypedDict, Dict, Literal, Union, NamedTuple, Optional, List
 from dataclasses import dataclass
+from uuid import UUID
 
 class TownBoost(NamedTuple):
     skill: str
@@ -105,3 +106,47 @@ class Ferry(TypedDict):
     destination: str
     players: int
     captain: FerryCaptain
+
+class Sender(TypedDict):
+    Id: UUID
+    CharacterId: UUID
+    Username: str
+    DisplayName: str
+    Color: str
+    Platform: str
+    PlatformId: str
+    IsBroadcaster: bool
+    IsModerator: bool
+    IsSubscriber: bool
+    IsVip: bool
+    IsGameAdministrator: bool
+    IsGameModerator: bool
+    SubTier: int
+    Identifier: str
+
+class RavenBotMessage(TypedDict):
+    """Represents a message from RavenBot with its metadata."""
+    Identifier: str
+    Sender: Sender
+    Content: str
+    CorrelationId: UUID
+
+
+class Recipient(TypedDict):
+    """Represents the recipient information in a Ravenfall message."""
+    UserId: UUID
+    CharacterId: UUID
+    Platform: str
+    PlatformId: str
+    PlatformUserName: str
+
+
+class RavenfallMessage(TypedDict):
+    """Represents a message received from Ravenfall."""
+    Identifier: str  # e.g., "message"
+    Recipient: Recipient
+    Format: str  # Format string for the message
+    Args: List[str]  # Arguments to be inserted into the format string
+    Tags: List[str]  # Any tags associated with the message
+    Category: str  # Message category (if any)
+    CorrelationId: UUID  # For tracking the message

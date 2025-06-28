@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import time
 import asyncio
 from utils.format_time import format_seconds, TimeSize
 from enum import Enum
-from typing import List, Tuple
-from ravenfallchannel import RFChannel, RFChannelEvent
-from ravenfallmanager import RFChannelManager
+from typing import List, Tuple, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from .ravenfallchannel import RFChannel, RFChannelEvent
+    from .ravenfallmanager import RFChannelManager
 
 class PreRestartEvent(Enum):
     WARNING = "warning"
@@ -143,7 +146,7 @@ class RFRestartTask:
 
     async def _execute(self):
         self.event_watch_task.cancel()
-        await self.channel.ravenfall_restart(
+        await self.channel.restart_ravenfall(
             run_pre_restart=False,
             run_post_restart=True
         )

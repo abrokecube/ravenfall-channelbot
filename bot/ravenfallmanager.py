@@ -5,8 +5,11 @@ from twitchAPI.chat import Chat, ChatMessage
 from ravenpy import RavenNest
 import asyncio
 import aiohttp
+import logging
 from utils.routines import routine
 from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 class RFChannelManager:
     def __init__(self, config: dict, chat: Chat, rfapi: RavenNest):
@@ -34,6 +37,11 @@ class RFChannelManager:
         for channel in self.channels:
             await channel.start()
         self.mult_check_routine.start()
+
+    async def stop(self):
+        for channel in self.channels:
+            await channel.stop()
+        self.mult_check_routine.cancel()
 
     async def event_twitch_message(self, message: ChatMessage):
         for channel in self.channels:
@@ -65,7 +73,7 @@ class RFChannelManager:
                         self.ravennest_is_online = False
             except Exception as e:
                 self.ravennest_is_online = False
-                print(f"Error checking online status: {e}")
+                logger.error(f"Error checking online status: {e}", exc_info=True)
         if self.ravennest_is_online:
             for channel in self.channels:
                 if channel.multiplier['multiplier'] != self.global_multiplier:

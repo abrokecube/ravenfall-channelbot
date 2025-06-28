@@ -4,7 +4,11 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List
 from ravenpy import Skills, Islands
 import aiohttp
+import logging
 from typing import Any
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 class CharacterStat:
     def __init__(self, skill: ravenpy.Skills, data: PlayerStat):
@@ -133,7 +137,7 @@ async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | N
         try:
             r = await session.get(f"{url}/{query}")
         except Exception as e:
-            print(f"Error fetching Ravenfall query from {url}: {e}")
+            logger.error(f"Error fetching Ravenfall query from {url}: {e}", exc_info=True)
             return None
         data = await r.json()
     return data

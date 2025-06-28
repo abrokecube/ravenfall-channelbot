@@ -1,9 +1,9 @@
-from typing import Dict, Type, Optional, TypeVar, Any, Callable, Awaitable, Union, List
+from typing import Dict, Type, Optional, TypeVar, Any, Callable, Awaitable, Union, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from functools import wraps
 
 # Import the necessary types from commands.py
-from .commands import Command, CommandFunc, Context, Commands
+from .commands import Command, CommandFunc, Commands
 
 # Type variable for the cog class
 TCog = TypeVar('TCog', bound='Cog')

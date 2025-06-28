@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import asyncio
-import traceback
-from typing import Callable, List, Dict, Awaitable, Union, Optional, Any, TYPE_CHECKING
+import logging
+from typing import Callable, List, Dict, Awaitable, Union, Optional, TYPE_CHECKING
 from twitchAPI.chat import ChatMessage
 from dataclasses import dataclass
 import re
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .cog import Cog, CogManager
@@ -16,7 +21,7 @@ class Commands:
         self.commands: Dict[str, Command] = {}
         self.prefix: str = "!"
         self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
-        self.cog_manager: Optional['CogManager'] = None
+        self.cog_manager: Optional[CogManager] = None
 
     def add_command(self, name: str, func: CommandFunc) -> 'Command':
         """Add a new command with the given name and handler function.
@@ -34,7 +39,7 @@ class Commands:
         self.commands[cmd.name] = cmd
         return cmd
         
-    def setup_cog_manager(self) -> 'CogManager':
+    def setup_cog_manager(self) -> CogManager:
         """Set up and return the cog manager.
         
         Returns:
@@ -45,7 +50,7 @@ class Commands:
             self.cog_manager = CogManager(self)
         return self.cog_manager
         
-    def load_cog(self, cog_cls: type['Cog'], **kwargs) -> None:
+    def load_cog(self, cog_cls: type[Cog], **kwargs) -> None:
         """Load a cog.
         
         Args:
@@ -65,7 +70,7 @@ class Commands:
         if self.cog_manager:
             self.cog_manager.unload_cog(cog_name)
             
-    def reload_cog(self, cog_cls: type['Cog'], **kwargs) -> None:
+    def reload_cog(self, cog_cls: type[Cog], **kwargs) -> None:
         """Reload a cog.
         
         Args:
@@ -78,7 +83,7 @@ class Commands:
     async def get_prefix(self, msg: ChatMessage) -> str:
         return self.prefix
 
-    async def on_error(self, ctx: 'Context', command: 'Command', error: Exception):
+    async def on_error(self, ctx: Context, command: Command, error: Exception):
         ...
         
     def _find_command(self, text: str) -> tuple[str, str]:
@@ -118,8 +123,7 @@ class Commands:
                 await result
         except Exception as e:
             await self.on_error(ctx, self.commands[command_name], e)
-            print(f"Error executing command '{command_name}':")
-            traceback.print_exc()
+            logger.error(f"Error executing command '{command_name}':", exc_info=True)
 
 class Command:
     def __init__(self, name: str, func: CommandFunc, **kwargs):
@@ -136,7 +140,7 @@ class Command:
         self.help = kwargs.get('help', '')
         self.hidden = kwargs.get('hidden', False)
         
-    async def invoke(self, ctx: 'Context') -> None:
+    async def invoke(self, ctx: Context) -> None:
         """Invoke the command with the given context."""
         try:
             # Get the function to call
@@ -154,8 +158,7 @@ class Command:
                 await ctx.commands.on_error(ctx, self, e)
             else:
                 # Log the error if we can't call the error handler
-                import traceback
-                traceback.print_exc()
+                logger.error("Error in command invocation:", exc_info=True)
 
 class Context:
     def __init__(self, msg: ChatMessage, command: str, remaining_text: str):

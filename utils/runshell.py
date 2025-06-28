@@ -1,6 +1,10 @@
 import asyncio
 import subprocess
 import os
+import logging
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 async def runshell(cmd) -> str | None:
     proc = await asyncio.create_subprocess_shell(
@@ -10,13 +14,13 @@ async def runshell(cmd) -> str | None:
 
     stdout, stderr = await proc.communicate()
     out_text = None
-    print(f'[{cmd!r} exited with {proc.returncode}]')
+    logger.debug(f'Command {cmd!r} exited with code {proc.returncode}')
     if stdout:
         stdout_text = stdout.decode()
-        print(f'[stdout]\n{stdout_text}')
+        logger.debug(f'Command stdout: {stdout_text}')
         out_text = stdout_text
     if stderr:
-        print(f'[stderr]\n{stderr.decode()}')
+        logger.error(f'Command stderr: {stderr.decode()}')
     return out_text
 
 def runshell_detached(cmd):
