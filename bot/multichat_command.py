@@ -5,11 +5,12 @@ This script demonstrates how to send commands to the chat bot using the HTTP end
 Make sure the server is running and the COMMAND_SERVER_HOST and COMMAND_SERVER_PORT
 environment variables are properly set.
 """
-import asyncio
 import aiohttp
-import json
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Configuration - Update these values to match your setup
 COMMAND_SERVER_HOST = os.getenv("MULTICHAT_COMMAND_SERVER_HOST", "localhost")
@@ -49,11 +50,13 @@ async def send_multichat_command(
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload) as response:
                 response_data = await response.json()
+                logger.debug(f"Sent command to multichat: {text}, {user_name}, {user_id}, {channel_name}, {channel_id}")
                 return {
                     "status": response.status,
                     "data": response_data
                 }
     except Exception as e:
+        logger.error(f"Failed to send command: {str(e)}", exc_info=True)
         return {
             "status": 500,
             "error": f"Failed to send command: {str(e)}"
