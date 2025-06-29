@@ -46,7 +46,7 @@ class RFChannelManager:
         msg_feed_port = os.getenv("RF_MIDDLEMAN_PORT", None)
         if msg_feed_host and msg_feed_port:
             self.rf_message_feed_ws = AutoReconnectingWebSocket(
-                f"ws://{msg_feed_host}:{msg_feed_port}",
+                f"ws://{msg_feed_host}:{msg_feed_port}/ws",
                 on_message=self.on_middleman_message,
                 on_connect=self.on_middleman_connect,
                 on_disconnect=self.on_middleman_disconnect,
