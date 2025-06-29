@@ -2,7 +2,7 @@ from typing import List
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier
 from twitchAPI.chat import Chat, ChatMessage
-from ravenpy import RavenNest
+from ravenpy import RavenNest, ExpMult
 import asyncio
 import aiohttp
 import logging
@@ -74,10 +74,12 @@ class RFChannelManager:
             except Exception as e:
                 self.ravennest_is_online = False
                 logger.error(f"Error checking online status: {e}", exc_info=True)
+        
         if self.ravennest_is_online:
-            for channel in self.channels:
-                if channel.multiplier['multiplier'] != self.global_multiplier:
-                    await channel.send_chat_message(f"?say {channel.ravenbot_prefix}multiplier")
+            if data['multiplier'] > 0:
+                for channel in self.channels:
+                    if channel.multiplier['multiplier'] != self.global_multiplier:
+                        await channel.send_chat_message(f"?say {channel.ravenbot_prefix}multiplier")
         if self.ravennest_is_online != old_online:
             if self.ravennest_is_online:
                 msg = "🟢 RavenNest is online!"
