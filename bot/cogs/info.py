@@ -118,7 +118,7 @@ class InfoCog(Cog):
         if None in responses:
             await ctx.reply("Could not get data")
             return
-        pid_lists = [x.splitlines() for x in responses]
+        pid_lists = [x.splitlines() for code, x in responses]
         box_pids = {}
         for i in range(len(self.rf_manager.channels)):
             box_pids[self.rf_manager.channels[i].channel_name] = pid_lists[i]
