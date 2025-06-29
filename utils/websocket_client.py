@@ -1,9 +1,8 @@
 import asyncio
 import logging
 import json
-from typing import Any, Callable, Optional, Dict, Union
+from typing import Any, Callable, Optional, Dict, Union, Awaitable
 import aiohttp
-import json
 from datetime import datetime
 
 class AutoReconnectingWebSocket:
@@ -20,10 +19,10 @@ class AutoReconnectingWebSocket:
     def __init__(
         self,
         url: str,
-        on_message: Optional[Callable[[Dict[str, Any]], None]] = None,
-        on_connect: Optional[Callable[[], None]] = None,
-        on_disconnect: Optional[Callable[[], None]] = None,
-        on_error: Optional[Callable[[Exception], None]] = None,
+        on_message: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+        on_connect: Optional[Callable[[], Awaitable[None]]] = None,
+        on_disconnect: Optional[Callable[[], Awaitable[None]]] = None,
+        on_error: Optional[Callable[[Exception], Awaitable[None]]] = None,
         reconnect_interval: float = 1.0,
         max_reconnect_interval: float = 30.0,
         max_retries: Optional[int] = None,
@@ -149,7 +148,10 @@ class AutoReconnectingWebSocket:
         except Exception as e:
             self.logger.error(f"Error sending message: {e}", exc_info=True)
             if self.on_error:
-                self.on_error(e)
+                try:
+                    await self.on_error(e)
+                except Exception as callback_error:
+                    self.logger.error(f"Error in on_error callback: {callback_error}", exc_info=True)
 
     async def _connect_websocket(self) -> bool:
         """Establish WebSocket connection."""
@@ -175,7 +177,7 @@ class AutoReconnectingWebSocket:
             
             if self.on_connect:
                 try:
-                    self.on_connect()
+                    await self.on_connect()
                 except Exception as e:
                     self.logger.error(f"Error in on_connect callback: {e}", exc_info=True)
             
@@ -185,7 +187,10 @@ class AutoReconnectingWebSocket:
         except Exception as e:
             self.logger.error(f"WebSocket connection error: {e}")
             if self.on_error:
-                self.on_error(e)
+                try:
+                    await self.on_error(e)
+                except Exception as callback_error:
+                    self.logger.error(f"Error in on_error callback: {callback_error}", exc_info=True)
             return False
 
     async def _reconnect_loop(self) -> None:
@@ -221,7 +226,7 @@ class AutoReconnectingWebSocket:
                         data = json.loads(msg.data)
                         if self.on_message:
                             try:
-                                self.on_message(data)
+                                await self.on_message(data)
                             except Exception as e:
                                 self.logger.error(f"Error in on_message callback: {e}", exc_info=True)
                     except json.JSONDecodeError:
