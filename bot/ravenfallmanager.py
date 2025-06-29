@@ -75,11 +75,11 @@ class RFChannelManager:
                 self.ravennest_is_online = False
                 logger.error(f"Error checking online status: {e}", exc_info=True)
         
-        if self.ravennest_is_online:
-            if data['multiplier'] > 1:
-                for channel in self.channels:
-                    if channel.multiplier['multiplier'] != self.global_multiplier:
-                        await channel.send_chat_message(f"?say {channel.ravenbot_prefix}multiplier")
+        # if self.ravennest_is_online:
+        #     if data['multiplier'] > 1:
+        #         for channel in self.channels:
+        #             if channel.multiplier['multiplier'] != self.global_multiplier:
+        #                 await channel.send_chat_message(f"?say {channel.ravenbot_prefix}multiplier")
         if self.ravennest_is_online != old_online:
             if self.ravennest_is_online:
                 msg = "🟢 RavenNest is online!"
