@@ -489,11 +489,11 @@ class RFChannel:
 
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
         if sub_event == RFChannelSubEvent.DUNGEON_BOSS:
-            await middleman.force_reconnect(self.middleman_connection_id, 10)
+            await middleman.ensure_connected(self.middleman_connection_id, 10)
         if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
-            await middleman.force_reconnect(self.middleman_connection_id, 10)
+            await middleman.ensure_connected(self.middleman_connection_id, 10)
         if self.channel_restart_lock.locked():
-            await middleman.force_reconnect(self.middleman_connection_id, 60)
+            await middleman.ensure_connected(self.middleman_connection_id, 60)
 
     @routine(delta=timedelta(hours=5), wait_first=True)
     async def backup_state_data_routine(self):
