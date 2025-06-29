@@ -53,7 +53,7 @@ class AutoReconnectingWebSocket:
         self.max_reconnect_interval = max_reconnect_interval
         self.max_retries = max_retries
         self.retry_count = 0
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or logging.getLogger(f"AutoReconnectingWebSocket: {url}")
         self.session_kwargs = session_kwargs
         
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
@@ -222,6 +222,7 @@ class AutoReconnectingWebSocket:
                 self._last_message_time = datetime.now()
                 
                 if msg.type == aiohttp.WSMsgType.TEXT:
+                    self.logger.debug(f"Received text message: {msg.data}")
                     try:
                         data = json.loads(msg.data)
                         if self.on_message:

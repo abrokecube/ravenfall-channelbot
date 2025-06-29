@@ -75,6 +75,7 @@ class RFChannelManager:
             if ch.middleman_connection_id == message["connection_id"]:
                 channel = ch
         if not channel:
+            logger.warning(f"Received message with unmatched connection ID: {message['connection_id']}")
             return
         if message["source"] == "CLIENT":
             await channel.event_ravenbot_message(message["message"])
