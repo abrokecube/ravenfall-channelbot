@@ -16,6 +16,8 @@ from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessag
 from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command
+from .middleman import POWER_SAVING
+from bot import middleman
 
 if TYPE_CHECKING:
     from .ravenfallmanager import RFChannelManager
@@ -24,6 +26,7 @@ from utils.routines import routine
 from utils.format_time import format_seconds, TimeSize
 from utils.backup_file_with_date import backup_file_with_date_async
 from utils.runshell import restart_process, runshell, runshell_detached
+from utils import utils
 
 import asyncio
 import time
@@ -426,13 +429,6 @@ class RFChannel:
                 if dungeon['enemiesalive'] > 0:
                     self.max_dungeon_hp = dungeon["boss"]["health"]
                 boss_max_hp = self.max_dungeon_hp
-                if old_sub_event == RFChannelSubEvent.DUNGEON_READY and self.event_notifications:
-                    msg = (
-                        f"DUNGEON – "
-                        f"Boss HP: {boss_max_hp:,} – "
-                        f"Enemies: {dungeon['enemies']:,}"
-                    )
-                    await self.send_chat_message(msg)
                 event_text = (
                     f"DUNGEON – "
                     f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp:,} "
@@ -447,12 +443,6 @@ class RFChannel:
                 else:
                     sub_event = RFChannelSubEvent.DUNGEON_BOSS
         elif raid and raid['started'] and raid['boss']['maxhealth'] > 0:
-            if old_sub_event != RFChannelSubEvent.RAID and self.event_notifications:
-                msg = (
-                    f"RAID – "
-                    f"Boss HP: {raid['boss']['health']:,} "
-                )
-                await self.send_chat_message(msg)
             event_text = (
                 "RAID – "
                 f"Boss HP: {raid['boss']['health']:,}/{raid['boss']['maxhealth']:,} "
@@ -465,6 +455,45 @@ class RFChannel:
         self.event_text = event_text
         self.event = event
         self.sub_event = sub_event
+        asyncio.create_task(self.game_event_chat_message(sub_event, old_sub_event))
+        asyncio.create_task(self.game_event_wake_ravenbot(sub_event))
+    
+    async def game_event_chat_message(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
+        if self.event_notifications:
+            if old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
+                msg = (
+                    f"RAID – "
+                    f"Boss HP: {self.raid['boss']['health']:,} "
+                )
+                await self.send_chat_message(msg)
+            elif old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
+                msg = (
+                    f"DUNGEON – "
+                    f"Boss HP: {self.max_dungeon_hp:,} – "
+                    f"Enemies: {self.dungeon['enemies']:,}"
+                )
+                await self.send_chat_message(msg)
+        if POWER_SAVING and self.manager.connected_to_middleman:
+            if old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
+                await asyncio.sleep(2)
+                players = self.dungeon['players']
+                if players == 0:
+                    await self.send_chat_message(f"A dungeon is available!")
+                else:
+                    await self.send_chat_message(f"A dungeon is available! {utils.pl(players, 'player')} have joined!")
+            elif old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
+                await asyncio.sleep(2)
+                players = self.raid['players']
+                if players > 0:
+                    await self.send_chat_message(f"{utils.pl(players, 'player')} have joined the raid!")
+
+    async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
+        if sub_event == RFChannelSubEvent.DUNGEON_BOSS:
+            await middleman.force_reconnect(self.middleman_connection_id, 10)
+        if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
+            await middleman.force_reconnect(self.middleman_connection_id, 10)
+        if self.channel_restart_lock.locked():
+            await middleman.force_reconnect(self.middleman_connection_id, 60)
 
     @routine(delta=timedelta(hours=5), wait_first=True)
     async def backup_state_data_routine(self):
