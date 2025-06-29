@@ -327,10 +327,14 @@ class RFChannel:
         """
         return await self.ravenfall_waiter.wait_for_format_match(format_str, timeout=timeout)
 
-    async def get_query(self, query: str, timeout: int = 5) -> Any:
+    async def get_query(self, query: str, timeout: int = 5, suppress_timeout_error: bool = False) -> Any:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
             try:
                 r = await session.get(f"{self.rf_query_url}/{query}")
+            except asyncio.TimeoutError:
+                if not suppress_timeout_error:
+                    logger.error(f"Timeout fetching Ravenfall query from {self.rf_query_url}")
+                return None
             except Exception as e:
                 logger.error(f"Error fetching Ravenfall query from {self.rf_query_url}: {e}", exc_info=True)
                 return None
@@ -532,7 +536,7 @@ class RFChannel:
         authenticated = False
         
         while time.time() - start_time < auth_timeout:
-            session: GameSession = await self.get_query("select * from session", 1)
+            session: GameSession = await self.get_query("select * from session", 1, suppress_timeout_error=True)
             if session and session.get('authenticated', False):
                 authenticated = True
                 break
