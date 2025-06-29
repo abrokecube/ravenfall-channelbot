@@ -37,8 +37,6 @@ async def restart_process(box_name, process_name, startup_command: str):
         f"taskkill /f /im {process_name}"
     )
     code, text = await runshell(shellcmd)
-    if code != 0:
-        return code, text
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"cmd /c \"{startup_command.replace("\"", "\\\"")}\""
