@@ -13,8 +13,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configuration - Update these values to match your setup
-COMMAND_SERVER_HOST = os.getenv("MULTICHAT_COMMAND_SERVER_HOST", "localhost")
-COMMAND_SERVER_PORT = int(os.getenv("MULTICHAT_COMMAND_SERVER_PORT", "8080"))
+COMMAND_SERVER_HOST = os.getenv("MULTICHAT_COMMAND_SERVER_HOST", None)
+COMMAND_SERVER_PORT = int(os.getenv("MULTICHAT_COMMAND_SERVER_PORT", None))
 BASE_URL = f"http://{COMMAND_SERVER_HOST}:{COMMAND_SERVER_PORT}"
 
 async def send_multichat_command(
@@ -37,6 +37,12 @@ async def send_multichat_command(
     Returns:
         dict: The JSON response from the server
     """
+    if not COMMAND_SERVER_HOST or not COMMAND_SERVER_PORT:
+        logger.error("MULTICHAT_COMMAND_SERVER_HOST or MULTICHAT_COMMAND_SERVER_PORT is not set")
+        return {
+            "status": 500,
+            "error": "MULTICHAT_COMMAND_SERVER_HOST or MULTICHAT_COMMAND_SERVER_PORT is not set"
+        }
     url = f"{BASE_URL}/command"
     payload = {
         "text": text,

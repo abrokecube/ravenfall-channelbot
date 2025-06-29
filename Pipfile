@@ -11,6 +11,7 @@ psutil = "*"
 gotify = {extras = ["stream"], version = "*"}
 thefuzz = "*"
 async-lru = "*"
+aiofiles = "*"
 
 [dev-packages]
 

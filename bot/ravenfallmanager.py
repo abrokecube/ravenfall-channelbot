@@ -1,13 +1,16 @@
 from typing import List
 from .ravenfallchannel import RFChannel
-from .models import GameMultiplier
+from .models import GameMultiplier, RFMiddlemanMessage
 from twitchAPI.chat import Chat, ChatMessage
 from ravenpy import RavenNest, ExpMult
 import asyncio
 import aiohttp
 import logging
 from utils.routines import routine
+from utils.websocket_client import AutoReconnectingWebSocket
 from datetime import timedelta, datetime, timezone
+
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +23,9 @@ class RFChannelManager:
         self.ravennest_is_online = True
         self.global_multiplier = 1.0
 
+        self.rf_message_feed_ws: AutoReconnectingWebSocket | None = None
         self.global_restart_lock = asyncio.Lock()
+        self.connected_to_middleman = False
         self.load_channels()
 
 
@@ -37,16 +42,53 @@ class RFChannelManager:
         for channel in self.channels:
             await channel.start()
         self.mult_check_routine.start()
+        msg_feed_host = os.getenv("RF_MIDDLEMAN_HOST", None)
+        msg_feed_port = os.getenv("RF_MIDDLEMAN_PORT", None)
+        if msg_feed_host and msg_feed_port:
+            self.rf_message_feed_ws = AutoReconnectingWebSocket(
+                f"ws://{msg_feed_host}:{msg_feed_port}",
+                on_message=self.on_middleman_message,
+                on_connect=self.on_middleman_connect,
+                on_disconnect=self.on_middleman_disconnect,
+                on_error=self.on_middleman_error,
+                reconnect_interval=1.0,
+                max_reconnect_interval=30.0,
+                logger=logger,
+            )
+            await self.rf_message_feed_ws.connect()
 
     async def stop(self):
         for channel in self.channels:
             await channel.stop()
         self.mult_check_routine.cancel()
+        if self.rf_message_feed_ws:
+            await self.rf_message_feed_ws.disconnect()
 
     async def event_twitch_message(self, message: ChatMessage):
         for channel in self.channels:
             if channel.channel_id == message.room.room_id:
                 await channel.event_twitch_message(message)
+
+    async def on_middleman_message(self, message: RFMiddlemanMessage):
+        channel = None
+        for ch in self.channels:
+            if ch.middleman_connection_id == message["connection_id"]:
+                channel = ch
+        if not channel:
+            return
+        if message["source"] == "CLIENT":
+            await channel.event_ravenbot_message(message["message"])
+        elif message["source"] == "SERVER":
+            await channel.event_ravenfall_message(message["message"])
+
+    async def on_middleman_connect(self):
+        self.connected_to_middleman = True
+
+    async def on_middleman_disconnect(self):
+        self.connected_to_middleman = False
+
+    async def on_middleman_error(self, error: Exception):
+        logger.error(f"Middleman error: {error}")
 
     def get_channel(self, *, channel_id: str | None = None, channel_name: str | None = None) -> RFChannel | None:
         if channel_id:
@@ -73,7 +115,6 @@ class RFChannelManager:
                         self.global_multiplier = data["multiplier"]
                         multiplier = ExpMult(**data)
             except Exception as e:
-                self.ravennest_is_online = False
                 logger.error(f"Error checking online status: {e}", exc_info=True)
         
         if self.ravennest_is_online != old_online:

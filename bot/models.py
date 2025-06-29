@@ -163,3 +163,11 @@ class RFChannelSubEvent(Enum):
     DUNGEON_STARTED = 3
     DUNGEON_BOSS = 4
     RAID = 5
+
+class RFMiddlemanMessage(TypedDict):
+    source: str
+    client_addr: str
+    server_addr: str
+    connection_id: str
+    timestamp: str
+    message: RavenfallMessage | RavenBotMessage
