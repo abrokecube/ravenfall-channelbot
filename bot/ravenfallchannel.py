@@ -10,10 +10,10 @@ from datetime import timedelta
 
 from .models import (
     Player, Village, Dungeon, Raid, GameMultiplier, GameSession,
-    RavenBotMessage, RavenfallMessage, TownBoost
+    RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
-from .ravenfallrestarttask import RFRestartTask
+from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
 
 if TYPE_CHECKING:
@@ -27,7 +27,6 @@ from utils.runshell import restart_process, runshell, runshell_detached
 import asyncio
 import time
 import logging
-from enum import Enum
 import os
 
 # Configure logger for this module
@@ -47,18 +46,6 @@ COMMAND_TIMEOUTS = {
 }
 
 
-class RFChannelEvent(Enum):
-    NONE = 0
-    DUNGEON = 1
-    RAID = 2
-
-class RFChannelSubEvent(Enum):
-    NONE = 0
-    DUNGEON_PREPARE = 1
-    DUNGEON_READY = 2
-    DUNGEON_STARTED = 3
-    DUNGEON_BOSS = 4
-    RAID = 5
 
 class RFChannel:
     """
@@ -122,7 +109,7 @@ class RFChannel:
         self.global_restart_lock: asyncio.Lock = manager.global_restart_lock
 
         self.channel_restart_lock: asyncio.Lock = asyncio.Lock()
-        self.channel_restart_future: asyncio.Future = asyncio.Future()
+        self.channel_restart_future: asyncio.Future | None = None
         self.channel_post_restart_lock: asyncio.Lock = asyncio.Lock()
 
         self.restart_task: RFRestartTask | None = None
@@ -240,6 +227,7 @@ class RFChannel:
             'command': command,
             'start_time': time.time()
         }
+        logger.debug(f"Monitoring for response to command: {command} in {self.channel_name}")
         
         while self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
             await asyncio.sleep(5)
@@ -295,13 +283,16 @@ class RFChannel:
                 await self.send_chat_message(resp_restart_ravenfall)
                 restart_task = self.queue_restart(
                     time_to_restart=10,  # Start restart in 10 seconds
-                    label="RavenBot is unresponsive"
+                    label="RavenBot is unresponsive",
+                    reason=RestartReason.UNRESPONSIVE
                 )
                 await restart_task.wait()
                 await self.send_chat_message(resp_user_retry_2)
                 asked_to_retry = True
             else:
                 await self.send_chat_message(resp_giveup)
+        else:
+            logger.debug(f"Recieved a response to command: {command} in {self.channel_name}")
 
         self.is_monitoring = False
         self.current_monitor = None
@@ -349,7 +340,7 @@ class RFChannel:
     @routine(delta=timedelta(hours=3), wait_first=True)
     async def update_boosts_routine(self):
         if self.channel_restart_lock.locked():
-            with self.channel_restart_lock:
+            async with self.channel_restart_lock:
                 return
         village: Village = await self.get_query("select * from village")
         if len(village['boost'].strip()) <= 0:
@@ -363,7 +354,7 @@ class RFChannel:
     @routine(delta=timedelta(seconds=3))
     async def update_mult_routine(self):
         if self.channel_restart_lock.locked():
-            with self.channel_restart_lock:
+            async with self.channel_restart_lock:
                 return
         multiplier: GameMultiplier = await self.get_query("select * from multiplier")
         if not multiplier:
@@ -386,7 +377,7 @@ class RFChannel:
             self.event_text = "Ravenfall is restarting..."
             self.dungeon = None
             self.raid = None
-            with self.channel_restart_lock:
+            async with self.channel_restart_lock:
                 return
         dungeon: Dungeon = await self.get_query("select * from dungeon")
         raid: Raid = await self.get_query("select * from raid")
@@ -422,7 +413,7 @@ class RFChannel:
                 if dungeon['enemiesalive'] > 0:
                     self.max_dungeon_hp = dungeon["boss"]["health"]
                 boss_max_hp = self.max_dungeon_hp
-                if old_sub_event == RFChannelSubEvent.DUNGEON_PREPARE and self.event_notifications:
+                if old_sub_event == RFChannelSubEvent.DUNGEON_READY and self.event_notifications:
                     msg = (
                         f"DUNGEON – "
                         f"Boss HP: {boss_max_hp:,} – "
@@ -476,7 +467,7 @@ class RFChannel:
     @routine(delta=timedelta(seconds=20))
     async def auto_restart_routine(self):
         if self.channel_restart_lock.locked():
-            with self.channel_restart_lock:
+            async with self.channel_restart_lock:
                 return
         game_session: GameSession = await self.get_query("select * from session", 1)
         uptime = None
@@ -484,7 +475,7 @@ class RFChannel:
             uptime = game_session['secondssincestart']
         if uptime is None:
             logger.warning(f"{self.channel_name} seems to be offline...")
-            self.queue_restart(5, label="Ravenfall seems to be offline...")
+            self.queue_restart(5, label="Ravenfall seems to be offline...", reason=RestartReason.UNRESPONSIVE)
             return
 
         if not self.auto_restart:
@@ -495,7 +486,7 @@ class RFChannel:
             return
         period = max(20*60,self.restart_period)
         seconds_to_restart = max(60, period - uptime)
-        self.queue_restart(seconds_to_restart, label="Scheduled restart")
+        self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO)
 
     async def ravenfall_pre_restart(self):
         await self.send_chat_message("?randleave")
@@ -507,26 +498,35 @@ class RFChannel:
         run_post_restart: bool = True,
         silent: bool = False,
     ):
-        if not self.channel_restart_future.done():
+        if self.channel_restart_future and not self.channel_restart_future.done():
             return await self.channel_restart_future
         self.channel_restart_future = asyncio.Future()
 
         if run_pre_restart:
             await self.ravenfall_pre_restart()
             
-        self.channel_restart_lock.acquire()
+        await self.channel_restart_lock.acquire()
         if not silent and self.global_restart_lock.locked():
             await self.send_chat_message("Waiting for other restarts to finish...")
-        self.global_restart_lock.acquire()
-        logging.info(f"Restarting Ravenfall for {self.channel_name}")
+        await self.global_restart_lock.acquire()
+        logger.info(f"Restarting Ravenfall for {self.channel_name}")
         if not silent:
             await self.send_chat_message("Restarting Ravenfall...")
-        await restart_process(
+        code, text = await restart_process(
             self.sandboxie_box, 
             "Ravenfall.exe", 
             f"cd {os.getenv('RAVENFALL_FOLDER')} & {self.ravenfall_start_script}"
         )
+        if code != 0:
+            logger.error(f"Failed to restart Ravenfall for {self.channel_name}: code {code}, text {text}")
+            if not silent:
+                await self.send_chat_message("Failed to restart Ravenfall!")
+            self.channel_restart_future.set_result(False)
+            self.channel_restart_lock.release()
+            self.global_restart_lock.release()
+            return False
 
+        await asyncio.sleep(5)
         start_time = time.time()
         auth_timeout = 120
         authenticated = False
@@ -544,9 +544,10 @@ class RFChannel:
             return False
         if not silent:
             await self.send_chat_message("Restarted Ravenfall!")
+        logger.info(f"Restarted Ravenfall for {self.channel_name}")
 
         if run_post_restart:
-            self.channel_post_restart_lock.acquire()
+            await self.channel_post_restart_lock.acquire()
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
             await self.ravenfall_post_restart()
@@ -594,11 +595,12 @@ class RFChannel:
             )
             await asyncio.sleep(3) 
 
-    def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = ""):
+    def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None):
         if self.restart_task:
             self.restart_task.cancel()
-        self.restart_task = RFRestartTask(self, self.manager, time_to_restart, mute_countdown, label)
+        self.restart_task = RFRestartTask(self, self.manager, time_to_restart, mute_countdown, label, reason)
         self.restart_task.start()
+        logger.info(f"Restart task queued for {self.channel_name} with label {label} in {format_seconds(time_to_restart, TimeSize.SMALL, 2, False)}.")
         return self.restart_task
 
     def postpone_restart(self, seconds: int):

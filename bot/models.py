@@ -1,6 +1,6 @@
 from typing import TypedDict, Dict, Literal, Union, NamedTuple, Optional, List
-from dataclasses import dataclass
 from uuid import UUID
+from enum import Enum
 
 class TownBoost(NamedTuple):
     skill: str
@@ -150,3 +150,16 @@ class RavenfallMessage(TypedDict):
     Tags: List[str]  # Any tags associated with the message
     Category: str  # Message category (if any)
     CorrelationId: UUID  # For tracking the message
+
+class RFChannelEvent(Enum):
+    NONE = 0
+    DUNGEON = 1
+    RAID = 2
+
+class RFChannelSubEvent(Enum):
+    NONE = 0
+    DUNGEON_PREPARE = 1
+    DUNGEON_READY = 2
+    DUNGEON_STARTED = 3
+    DUNGEON_BOSS = 4
+    RAID = 5

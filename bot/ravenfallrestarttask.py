@@ -5,10 +5,17 @@ import asyncio
 from utils.format_time import format_seconds, TimeSize
 from enum import Enum
 from typing import List, Tuple, TYPE_CHECKING
+from .models import RFChannelEvent
 
 if TYPE_CHECKING:
-    from .ravenfallchannel import RFChannel, RFChannelEvent
+    from .ravenfallchannel import RFChannel
     from .ravenfallmanager import RFChannelManager
+
+class RestartReason(Enum):
+    AUTO = "auto_restart"
+    USER = "user_restart"
+    UNRESPONSIVE = "unresponsive"
+    
 
 class PreRestartEvent(Enum):
     WARNING = "warning"
@@ -26,7 +33,8 @@ class RFRestartTask:
         manager: RFChannelManager,
         time_to_restart: int | None = 0,
         mute_countdown: bool = False,
-        label: str = ""
+        label: str = "",
+        reason: RestartReason | None = None
     ):
         self.channel = channel
         self.manager = manager
@@ -42,8 +50,9 @@ class RFRestartTask:
         self._pause_start = 0
         self.pause_event_name = ""
         self.future_pause_reason = ""
-        self.mute_countdown = mute_countdown
-        self.label = label
+        self.mute_countdown: bool = mute_countdown
+        self.label: str = label
+        self.reason: RestartReason | None = reason
 
     def start(self):
         if not self.done:
@@ -112,9 +121,9 @@ class RFRestartTask:
             if self.done:
                 return
             time_left = self.get_time_left()
-            if self.channel.event == RFChannelEvent.DUNGEON:
+            if self.channel.event == RFChannelEvent.DUNGEON and self.channel.dungeon['players'] > 0:
                 event_type = "dungeon"
-            elif self.channel.event == RFChannelEvent.RAID:
+            elif self.channel.event == RFChannelEvent.RAID and self.channel.raid["players"] > 0:
                 event_type = "raid"
             if not self.manager.ravennest_is_online:
                 event_type = "server_down"

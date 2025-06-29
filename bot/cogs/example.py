@@ -43,7 +43,7 @@ class ExampleCog(Cog):
     @Cog.command(name="echo", help="Echoes the provided text")
     async def echo(self, ctx: Context):
         """Echo the remaining text."""
-        text = ctx.remaining_text
+        text = ctx.parameter
         if not text:
             await ctx.reply("Please provide some text to echo!")
             return

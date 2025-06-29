@@ -21,7 +21,7 @@ async def runshell(cmd) -> str | None:
         out_text = stdout_text
     if stderr:
         logger.error(f'Command stderr: {stderr.decode()}')
-    return out_text
+    return proc.returncode, out_text
 
 def runshell_detached(cmd):
     DETACHED_PROCESS = 0x00000008
@@ -36,9 +36,12 @@ async def restart_process(box_name, process_name, startup_command: str):
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"taskkill /f /im {process_name}"
     )
-    await runshell(shellcmd)
+    code, text = await runshell(shellcmd)
+    if code != 0:
+        return code, text
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"cmd /c \"{startup_command.replace("\"", "\\\"")}\""
     )
-    await runshell(shellcmd)
+    code, text = await runshell(shellcmd)
+    return code, text

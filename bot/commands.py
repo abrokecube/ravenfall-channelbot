@@ -23,7 +23,7 @@ class Commands:
         self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         self.cog_manager: Optional[CogManager] = None
 
-    def add_command(self, name: str, func: CommandFunc) -> 'Command':
+    def add_command(self, name: str, func: CommandFunc) -> Command:
         """Add a new command with the given name and handler function.
         
         Args:
@@ -34,8 +34,15 @@ class Commands:
                 
         Returns:
             The created Command instance
+            
+        Raises:
+            ValueError: If a command with the same name already exists
         """
-        cmd = Command(name.lower(), func)
+        cmd_name = name.lower()
+        if cmd_name in self.commands:
+            raise ValueError(f"Command '{cmd_name}' already exists")
+            
+        cmd = Command(cmd_name, func)
         self.commands[cmd.name] = cmd
         return cmd
         
@@ -161,11 +168,11 @@ class Command:
                 logger.error("Error in command invocation:", exc_info=True)
 
 class Context:
-    def __init__(self, msg: ChatMessage, command: str, remaining_text: str):
+    def __init__(self, msg: ChatMessage, command: str, parameter: str):
         self.msg: ChatMessage = msg
         self.command: str = command
-        self.remaining_text: str = remaining_text
-        self.args: CommandArgs = CommandArgs(remaining_text)
+        self.parameter: str = parameter
+        self.args: CommandArgs = CommandArgs(parameter)
         self.commands: Commands = Commands()
 
     async def reply(self, text: str):
@@ -183,7 +190,7 @@ class Flag:
         return f"Flag({self.name}, {self.value})"
 
 DELIMETERS = ('=', ':')
-RE_FLAG = re.compile(r'[-a-zA-Z]{2}[a-zA-Z]+[:=]+.+')
+RE_FLAG = re.compile(r'[-a-zA-Z]{2}[a-zA-Z]+[:=]+.+|-[a-zA-Z]\b|--[a-zA-Z]+\b')
 
 class CommandArgs:
     def __init__(self, text: str):
@@ -257,9 +264,11 @@ class CommandArgs:
                     arg = arg[1:-1]
                 self.args.append(arg)
 
-    def get_flag(self, name: str) -> Flag | None:
+    def get_flag(self, name: str | list[str], case_sensitive: bool = False) -> Flag | None:
+        names = name if isinstance(name, list) else [name]
         for flag in self.flags:
-            if flag.name == name:
+            if case_sensitive and flag.name in names:
+                return flag
+            elif not case_sensitive and flag.name.lower() in [n.lower() for n in names]:
                 return flag
         return None
-    

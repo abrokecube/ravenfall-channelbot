@@ -18,8 +18,6 @@ from bot.commands import Commands, Context, Command
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 
-from bot.cogs.testing import TestingCog
-
 load_dotenv()
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
@@ -27,7 +25,7 @@ PROMETHEUS_URL = os.getenv("PROMETHEUS_URL").strip('/')
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
@@ -73,20 +71,28 @@ async def run():
     chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
     commands = MyCommands()
     
-    # Import and set up the testing cog
-    from bot.cogs.testing import TestingCog
-    commands.load_cog(TestingCog)
+    def load_cogs():
+        from bot.cogs.info import InfoCog
+        commands.load_cog(InfoCog, rf_manager=rf_manager)
+        from bot.cogs.testing import TestingCog
+        commands.load_cog(TestingCog)
+        from bot.cogs.game import GameCog
+        commands.load_cog(GameCog, rf_manager=rf_manager)
 
     async def on_ready(ready_event: EventData):
         global rf_manager
         rf_manager = RFChannelManager(channels, chat, rf)
         await rf_manager.start()
+
+        load_cogs()
+
         logger.info("Bot is ready for work")
     chat.register_event(ChatEvent.READY, on_ready)
 
     async def on_message(message: ChatMessage):
         logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
         await commands.process_message(message)
+        await rf_manager.event_twitch_message(message)
     chat.register_event(ChatEvent.MESSAGE, on_message)
 
     chat.start()

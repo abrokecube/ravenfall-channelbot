@@ -1,5 +1,4 @@
 from typing import Dict, Type, Optional, TypeVar, Any, Callable, Awaitable, Union, List, TYPE_CHECKING
-from dataclasses import dataclass, field
 from functools import wraps
 
 # Import the necessary types from commands.py
@@ -8,7 +7,6 @@ from .commands import Command, CommandFunc, Commands
 # Type variable for the cog class
 TCog = TypeVar('TCog', bound='Cog')
 
-@dataclass
 class Cog:
     """Base class for command cogs.
     
@@ -21,23 +19,26 @@ class Cog:
         bot: Reference to the bot instance
         config: Reference to the bot's configuration
     """
-    name: str = field(init=False)
-    description: str = field(default="")
-    commands: Dict[str, Command] = field(default_factory=dict, init=False)
-    bot: Any = field(default=None)
-    config: Dict[str, Any] = field(default_factory=dict)
-    
     def __init_subclass__(cls, **kwargs):
         """Automatically set the name of the cog to the class name."""
         super().__init_subclass__(**kwargs)
         cls.name = cls.__name__.lower()
         
-    def __init__(self, **kwargs):
+    def __init__(self, description: str = "", config: Optional[Dict[str, Any]] = None, **kwargs):
         """Initialize the cog with optional bot and config references.
         
         Args:
+            description: Optional description of the cog
+            config: Optional configuration dictionary
             **kwargs: Additional keyword arguments to store as attributes
         """
+        self.name = self.__class__.__name__.lower()
+        self.description = description
+        self.commands = {}
+        self.bot = None
+        self.config = config or {}
+        
+        # Store any additional attributes
         for key, value in kwargs.items():
             setattr(self, key, value)
     
@@ -64,15 +65,12 @@ class Cog:
         def decorator(func: CommandFunc) -> CommandFunc:
             cmd_name = name or func.__name__.lower()
             
-            # Store the command in the class's commands dictionary
-            if not hasattr(cls, '_commands'):
-                cls._commands = {}
+            # Store the command information in the function itself
+            if not hasattr(func, '_cog_command_info'):
+                func._cog_command_info = []
             
-            # Store the command with a wrapper that will be bound to the instance
-            cls._commands[cmd_name] = {
-                'func': func,
-                'kwargs': kwargs
-            }
+            # Store the command name and kwargs with the function
+            func._cog_command_info.append((cmd_name, kwargs))
             
             # Return the original function so it can still be accessed normally
             return func
@@ -90,23 +88,26 @@ class Cog:
             An instance of the cog
         """
         instance = cls(**kwargs)
-        
-        # Get the class commands
-        class_commands = getattr(cls, '_commands', {})
         instance_commands = {}
         
-        # Create bound methods for each command
-        for cmd_name, cmd_data in class_commands.items():
-            # Create a bound method for the command
-            func = cmd_data['func'].__get__(instance, cls)
-            # Create the command with the bound method
-            instance_commands[cmd_name] = Command(
-                name=cmd_name,
-                func=func,
-                **cmd_data['kwargs']
-            )
-            
+        # Find all methods that have command info
+        for attr_name in dir(instance):
+            attr = getattr(instance, attr_name)
+            if hasattr(attr, '_cog_command_info'):
+                for cmd_name, cmd_kwargs in attr._cog_command_info:
+                    # Create a bound method for the command
+                    bound_method = attr.__get__(instance, cls)
+                    # Create a Command object
+                    command = Command(
+                        name=cmd_name,
+                        func=bound_method,
+                        **cmd_kwargs
+                    )
+                    instance_commands[cmd_name] = command
+        
+        # Set the instance's commands
         instance.commands = instance_commands
+        
         return instance
 
 class CogManager:
@@ -133,8 +134,14 @@ class CogManager:
         cog = cog_cls.create_instance(**kwargs)
         
         # Register all commands from the cog
-        for name, command in cog.commands.items():
-            self.commands.add_command(name, command.func)
+        try:
+            for name, command in cog.commands.items():
+                self.commands.add_command(name, command.func)
+                for alias in command.aliases:
+                    self.commands.add_command(alias, command.func)
+        except ValueError as e:
+            # Add cog context to the error message
+            raise ValueError(f"{e} (in cog '{cog.name}')")
         
         # Store the cog and run setup
         self.loaded_cogs[cog.name] = cog
