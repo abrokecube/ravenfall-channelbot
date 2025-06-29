@@ -7,7 +7,7 @@ import asyncio
 import aiohttp
 import logging
 from utils.routines import routine
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,8 @@ class RFChannelManager:
     @routine(delta=timedelta(seconds=30))
     async def mult_check_routine(self):
         old_online = self.ravennest_is_online
+        self.ravennest_is_online = False
+        multiplier: ExpMult | None = None
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
             try:
                 async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier") as response:
@@ -69,17 +71,11 @@ class RFChannelManager:
                     if data:
                         self.ravennest_is_online = True
                         self.global_multiplier = data["multiplier"]
-                    else:
-                        self.ravennest_is_online = False
+                        multiplier = ExpMult(**data)
             except Exception as e:
                 self.ravennest_is_online = False
                 logger.error(f"Error checking online status: {e}", exc_info=True)
         
-        # if self.ravennest_is_online:
-        #     if data['multiplier'] > 1:
-        #         for channel in self.channels:
-        #             if channel.multiplier['multiplier'] != self.global_multiplier:
-        #                 await channel.send_chat_message(f"?say {channel.ravenbot_prefix}multiplier")
         if self.ravennest_is_online != old_online:
             if self.ravennest_is_online:
                 msg = "🟢 RavenNest is online!"
@@ -87,3 +83,11 @@ class RFChannelManager:
                 msg = "🔴 RavenNest is offline!"
             for channel in self.channels:
                 await channel.send_chat_message(msg)
+
+        if self.ravennest_is_online:
+            now = datetime.now(timezone.utc)
+            if multiplier.start_time and (now - multiplier.start_time) > timedelta(minutes=5):
+                if multiplier.multiplier > 1:
+                    for channel in self.channels:
+                        if channel.multiplier['multiplier'] != self.global_multiplier:
+                            await channel.send_chat_message(f"?say {channel.ravenbot_prefix}multiplier")
