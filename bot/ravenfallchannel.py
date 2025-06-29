@@ -234,7 +234,7 @@ class RFChannel:
 
         # Wait for any message from RavenBot
         response = await self.twitch_message_waiter.wait_for_message(
-            check=lambda m: True,
+            check=lambda m: m.user.id == os.getenv("RAVENBOT_USER_ID"),
             timeout=timeout,
             max_age=1  
         )
