@@ -105,12 +105,12 @@ class RFRestartTask:
     async def _event_watcher(self):
         event_type = ""
         messages = {
-            "server_down": "Restart postponed due to server down.",
+            "server_down": "Restart postponed due to server being offline.",
             "dungeon": "Restart postponed due to dungeon.",
             "raid": "Restart postponed due to raid.",
         }
         names = {
-            "server_down": "server down",
+            "server_down": "server offline",
             "dungeon": "dungeon",
             "raid": "raid",
         }

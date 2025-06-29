@@ -15,6 +15,7 @@ from .models import (
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
 from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
+from .multichat_command import send_multichat_command
 
 if TYPE_CHECKING:
     from .ravenfallmanager import RFChannelManager
@@ -461,8 +462,15 @@ class RFChannel:
     async def backup_state_data_routine(self):
         async with self.channel_restart_lock:
             async with self.channel_post_restart_lock:
-                await self.send_chat_message("?resync")
-                await asyncio.sleep(15)
+                if self.manager.ravennest_is_online:
+                    await send_multichat_command(
+                        text="?resync",
+                        user_id=self.channel_id,
+                        user_name=self.channel_name,
+                        channel_id=self.channel_id,
+                        channel_name=self.channel_name
+                    )
+                    await asyncio.sleep(15)
                 backup_file_with_date(
                     f"{os.getenv('RAVENFALL_SANDBOXED_FOLDER').replace('{box}', self.sandboxie_box).rstrip('\\/')}\\state-data.json",
                     int(os.getenv('BACKUP_RETENTION_COUNT'))
@@ -493,7 +501,13 @@ class RFChannel:
         self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO)
 
     async def ravenfall_pre_restart(self):
-        await self.send_chat_message("?randleave")
+        await send_multichat_command(
+            text="?randleave",
+            user_id=self.channel_id,
+            user_name=self.channel_name,
+            channel_id=self.channel_id,
+            channel_name=self.channel_name
+        )
         await asyncio.sleep(15)
 
     async def restart_ravenfall(
@@ -570,7 +584,13 @@ class RFChannel:
             session: GameSession = await self.get_query("select * from session", 1)
             if session['players'] > 0:
                 break
-        await self.send_chat_message("?undorandleave")
+        await send_multichat_command(
+            text="?undorandleave",
+            user_id=self.channel_id,
+            user_name=self.channel_name,
+            channel_id=self.channel_id,
+            channel_name=self.channel_name
+        )
         # Wait for the game to finish rejoining players
         player_count = 0
         while True:
@@ -580,7 +600,13 @@ class RFChannel:
             if player_count > 0 and new_player_count == player_count:
                 break
             player_count = new_player_count
-        await self.send_chat_message("?sailall")
+        await send_multichat_command(
+            text="?sailall",
+            user_id=self.channel_id,
+            user_name=self.channel_name,
+            channel_id=self.channel_id,
+            channel_name=self.channel_name
+        )
     
     async def restart_ravenbot(self):
         if self.channel_name != "abrokecube":
