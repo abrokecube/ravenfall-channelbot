@@ -379,7 +379,7 @@ class RFChannel:
             self.current_mult = multiplier['multiplier']
         ravenbot_is_muted = POWER_SAVING and self.manager.connected_to_middleman
         if multiplier['multiplier'] > self.current_mult:
-            msg = f"{multiplier['eventname']} increased the multiplier to {int(self.current_mult)}x, ending in {format_seconds(multiplier['timeleft'], TimeSize.MEDIUM_SPACES)}!"
+            msg = f"{multiplier['eventname']} increased the multiplier to {int(multiplier['multiplier'])}x, ending in {format_seconds(multiplier['timeleft'], TimeSize.MEDIUM_SPACES)}!"
             await self.send_chat_message(msg)
         elif ravenbot_is_muted and multiplier['multiplier'] < self.current_mult and multiplier['multiplier'] == 1:
             msg = f"The exp multiplier has expired."
