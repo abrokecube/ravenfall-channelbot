@@ -38,12 +38,12 @@ async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional
             if method.upper() == 'GET':
                 async with session.get(url, headers=headers) as response:
                     response_data = await response.json()
-                    logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data, indent=2)}")
+                    # logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data)}")
                     return response_data, response.status
             else:
                 async with session.post(url, json=data, headers=headers) as response:
                     response_data = await response.json()
-                    logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data, indent=2)}")
+                    # logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data)}")
                     return response_data, response.status
     except Exception as e:
         logger.error(f"Error calling middleman API: {str(e)}", exc_info=True)
