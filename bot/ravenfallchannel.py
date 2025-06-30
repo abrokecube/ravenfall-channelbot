@@ -497,7 +497,7 @@ class RFChannel:
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
         if POWER_SAVING and self.manager.connected_to_middleman:
             if sub_event == RFChannelSubEvent.DUNGEON_BOSS:
-                await middleman.ensure_connected(self.middleman_connection_id, 10)
+                await middleman.ensure_connected(self.middleman_connection_id, 60)
             if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
                 await middleman.ensure_connected(self.middleman_connection_id, 10)
 
