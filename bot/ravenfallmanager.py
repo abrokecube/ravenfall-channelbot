@@ -125,7 +125,7 @@ class RFChannelManager:
                         self.global_multiplier = data["multiplier"]
                         multiplier = ExpMult(**data)
             except Exception as e:
-                logger.error(f"Error checking online status: {e}", exc_info=True)
+                logger.error(f"Can't connect to Ravenfall API: {e}")
         self.ravennest_is_online = is_online
         
         if self.ravennest_is_online != old_online:
