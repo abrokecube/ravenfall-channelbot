@@ -1,6 +1,7 @@
 from typing import List
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFMiddlemanMessage
+from .ravenfallloc import RavenfallLocalization
 from . import middleman
 from twitchAPI.chat import Chat, ChatMessage
 from ravenpy import RavenNest, ExpMult

@@ -12,6 +12,7 @@ gotify = {extras = ["stream"], version = "*"}
 thefuzz = "*"
 async-lru = "*"
 aiofiles = "*"
+"ruamel.yaml" = "*"
 
 [dev-packages]
 
