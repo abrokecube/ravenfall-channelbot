@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import aiohttp
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, TypedDict
 
 # Configuration
 MIDDLEMAN_API_HOST = os.getenv('RF_MIDDLEMAN_HOST', None)
