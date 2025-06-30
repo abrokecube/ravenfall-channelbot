@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 # Suppress twitchAPI.chat logs below WARNING level
 logging.getLogger('twitchAPI.chat').setLevel(logging.INFO)
+logging.getLogger('middleman').setLevel(logging.INFO)
 
 
 with open("channels.json", "r") as f:

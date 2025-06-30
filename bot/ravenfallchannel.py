@@ -651,7 +651,7 @@ class RFChannel:
         # if not silent:
         #     await self.send_chat_message("Ravenfall has been restarted.")
         if self.manager.middleman_power_saving and self.manager.middleman_connected:
-            await middleman.ensure_connected(self.middleman_connection_id, 60)
+            await middleman.force_reconnect(self.middleman_connection_id, 60)
         logger.info(f"Restarted Ravenfall for {self.channel_name}")
 
         if run_post_restart:
