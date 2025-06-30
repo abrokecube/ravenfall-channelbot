@@ -377,7 +377,11 @@ class RFChannel:
         self.multiplier = multiplier
         if not self.current_mult:
             self.current_mult = multiplier['multiplier']
-        ravenbot_is_muted = POWER_SAVING and self.manager.connected_to_middleman
+        conn_status, err = await middleman.get_connection_status(self.middleman_connection_id)
+        server_is_connected = False
+        if conn_status is not None:
+            server_is_connected = conn_status['serverConnected']
+        ravenbot_is_muted = POWER_SAVING and self.manager.connected_to_middleman and not server_is_connected
         if multiplier['multiplier'] > self.current_mult:
             msg = f"{multiplier['eventname']} increased the multiplier to {int(multiplier['multiplier'])}x, ending in {format_seconds(multiplier['timeleft'], TimeSize.MEDIUM_SPACES)}!"
             await self.send_chat_message(msg)
@@ -474,7 +478,11 @@ class RFChannel:
                     f"Players: {self.dungeon['players']:,}"
                 )
                 await self.send_chat_message(msg)
-        if POWER_SAVING and self.manager.connected_to_middleman:
+        conn_status, err = await middleman.get_connection_status(self.middleman_connection_id)
+        server_is_connected = False
+        if conn_status is not None:
+            server_is_connected = conn_status['serverConnected']
+        if POWER_SAVING and self.manager.connected_to_middleman and not server_is_connected:
             if old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
                 await asyncio.sleep(2)
                 players = self.dungeon['players']
@@ -500,6 +508,13 @@ class RFChannel:
                 await middleman.ensure_connected(self.middleman_connection_id, 60)
             if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
                 await middleman.ensure_connected(self.middleman_connection_id, 10)
+
+    @routine(delta=timedelta(seconds=30), wait_first=True)
+    async def dungeon_killswitch_routine(self):
+        if not self.event == RFChannelEvent.DUNGEON:
+            return
+        if self.dungeon['elapsed'] > 60 * 15:  # 15 minutes
+            await self.send_chat_message(f"{self.ravenbot_prefix}dungeon stop")
 
     @routine(delta=timedelta(hours=5), wait_first=True)
     async def backup_state_data_routine(self):

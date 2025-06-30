@@ -119,3 +119,33 @@ async def ensure_connected(connection_id: str, timeout: int = 0) -> Dict:
     }
     response, status = await _call_middleman_api('/api/ensure-connected', 'POST', data)
     return response
+
+class ConnectionStatus(TypedDict):
+    """Type definition for connection status response."""
+    connectionId: str
+    clientConnected: bool
+    serverConnected: bool
+    timeUntilClose: int  # seconds until disconnect, -1 if no timeout set
+
+
+async def get_connection_status(connection_id: str) -> tuple[ConnectionStatus | None, str | None]:
+    """
+    Get the status of a connection.
+    
+    Args:
+        connection_id: The ID of the connection to check
+        
+    Returns:
+        Tuple of (ConnectionStatus, error_message). If successful, error_message is None.
+        On error, ConnectionStatus is None and error_message contains the error.
+    """
+    response, status = await _call_middleman_api(f'/api/connection-status?connectionId={connection_id}', 'GET')
+    
+    if status != 200:
+        return None, response.get('error', 'Unknown error')
+    
+    if not response.get('success', False):
+        return None, response.get('error', 'Failed to get connection status')
+    
+    status_data: ConnectionStatus = response.get('status', {})
+    return status_data, None
