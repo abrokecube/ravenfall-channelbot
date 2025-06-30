@@ -481,12 +481,12 @@ class RFChannel:
                 if players == 0:
                     await self.send_chat_message(f"A dungeon is available!")
                 else:
-                    await self.send_chat_message(f"A dungeon is available! {utils.pl(players, 'player')} have joined.")
+                    await self.send_chat_message(f"A dungeon is available! {utils.pl2(players, 'player has', 'players have')} joined.")
             elif old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
                 await asyncio.sleep(2)
                 players = self.raid['players']
                 if players > 0:
-                    await self.send_chat_message(f"{utils.pl(players, 'player')} have joined the raid!")
+                    await self.send_chat_message(f"{utils.pl2(players, 'player has', 'players have')} joined the raid!")
 
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
         if POWER_SAVING and self.manager.connected_to_middleman:

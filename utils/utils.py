@@ -126,6 +126,17 @@ def pl(number: int | float, word: str, include_number=True):
             return f"{word}"
         else:
             return f"{word}s"
+def pl2(number: int | float, singular: str, plural: str, include_number=True):
+    if include_number:
+        if number == 1:
+            return f"{number:,} {singular}"
+        else:
+            return f"{number:,} {plural}"
+    else:
+        if number == 1:
+            return singular
+        else:
+            return plural
 def unping(in_str: str):
     out = []
     for word in in_str.split():
