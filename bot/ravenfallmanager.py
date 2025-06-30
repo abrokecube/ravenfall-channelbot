@@ -114,18 +114,19 @@ class RFChannelManager:
     @routine(delta=timedelta(seconds=30))
     async def mult_check_routine(self):
         old_online = self.ravennest_is_online
-        self.ravennest_is_online = False
+        is_online = False
         multiplier: ExpMult | None = None
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
             try:
                 async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier") as response:
                     data: GameMultiplier = await response.json()
                     if data:
-                        self.ravennest_is_online = True
+                        is_online = True
                         self.global_multiplier = data["multiplier"]
                         multiplier = ExpMult(**data)
             except Exception as e:
                 logger.error(f"Error checking online status: {e}", exc_info=True)
+        self.ravennest_is_online = is_online
         
         if self.ravennest_is_online != old_online:
             if self.ravennest_is_online:
