@@ -86,7 +86,6 @@ class RFChannel:
         
         # Optional fields with defaults
         self.ravenbot_prefix: str = config.get('ravenbot_prefix', '!')
-        self.ravenbot_is_muted: bool = bool(config.get('ravenbot_is_muted', False))
         self.custom_town_msg: str = config.get('custom_town_msg', '')
         self.welcome_message: str = config.get('welcome_message', '')
         self.auto_restart: bool = bool(config.get('auto_restart', False))
@@ -378,10 +377,11 @@ class RFChannel:
         self.multiplier = multiplier
         if not self.current_mult:
             self.current_mult = multiplier['multiplier']
+        ravenbot_is_muted = POWER_SAVING and self.manager.connected_to_middleman
         if multiplier['multiplier'] > self.current_mult:
             msg = f"{multiplier['eventname']} increased the multiplier to {int(self.current_mult)}x, ending in {format_seconds(multiplier['timeleft'], TimeSize.MEDIUM_SPACES)}!"
             await self.send_chat_message(msg)
-        elif self.ravenbot_is_muted and multiplier['multiplier'] < self.current_mult and multiplier['multiplier'] == 1:
+        elif ravenbot_is_muted and multiplier['multiplier'] < self.current_mult and multiplier['multiplier'] == 1:
             msg = f"The exp multiplier has expired."
             await self.send_chat_message(msg)
         
