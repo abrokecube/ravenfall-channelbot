@@ -16,7 +16,6 @@ from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessag
 from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command
-from .middleman import POWER_SAVING
 from bot import middleman
 
 if TYPE_CHECKING:
@@ -126,6 +125,8 @@ class RFChannel:
         self.restart_future = None  # Current restart future if any
 
         self.cooldowns: Cooldown = Cooldown()
+
+        self.middleman_connection_status: middleman.ConnectionStatus = middleman.ConnectionStatus()
         
     async def start(self):
         await self.chat.join_room(self.channel_name)
@@ -134,6 +135,8 @@ class RFChannel:
         self.update_events_routine.start()
         self.backup_state_data_routine.start()
         self.auto_restart_routine.start()
+        self.dungeon_killswitch_routine.start()
+        self.update_middleman_connection_status_routine.start()
 
     async def stop(self):
         self.update_boosts_routine.cancel()
@@ -141,6 +144,8 @@ class RFChannel:
         self.update_events_routine.cancel()
         self.backup_state_data_routine.cancel()
         self.auto_restart_routine.cancel()
+        self.dungeon_killswitch_routine.cancel()
+        self.update_middleman_connection_status_routine.cancel()
 
     async def send_chat_message(self, message: str):
         await self.chat.send_message(self.channel_name, message)
@@ -237,7 +242,7 @@ class RFChannel:
             await asyncio.sleep(5)
 
         # Wait for any message from RavenBot
-        if not self.manager.connected_to_middleman:
+        if not self.manager.middleman_connected:
             response = await self.twitch_message_waiter.wait_for_message(
                 check=lambda m: m.user.id == os.getenv("RAVENBOT_USER_ID"),
                 timeout=timeout,
@@ -352,6 +357,13 @@ class RFChannel:
             data = await r.json()
         return data
 
+    def _ravenbot_is_muted(self):
+        if not self.manager.middleman_enabled:
+            return False
+        if not self.middleman_connection_status.server_connected:
+            return True
+        return self.manager.middleman_power_saving
+
     @routine(delta=timedelta(hours=3), wait_first=True)
     async def update_boosts_routine(self):
         if self.channel_restart_lock.locked():
@@ -377,11 +389,7 @@ class RFChannel:
         self.multiplier = multiplier
         if not self.current_mult:
             self.current_mult = multiplier['multiplier']
-        conn_status, err = await middleman.get_connection_status(self.middleman_connection_id)
-        server_is_connected = False
-        if conn_status is not None:
-            server_is_connected = conn_status['serverConnected']
-        ravenbot_is_muted = POWER_SAVING and self.manager.connected_to_middleman and not server_is_connected
+        ravenbot_is_muted = self._ravenbot_is_muted()
         if multiplier['multiplier'] > self.current_mult:
             msg = f"{multiplier['eventname']} increased the multiplier to {int(multiplier['multiplier'])}x, ending in {format_seconds(multiplier['timeleft'], TimeSize.MEDIUM_SPACES)}!"
             await self.send_chat_message(msg)
@@ -478,11 +486,7 @@ class RFChannel:
                     f"Players: {self.dungeon['players']:,}"
                 )
                 await self.send_chat_message(msg)
-        conn_status, err = await middleman.get_connection_status(self.middleman_connection_id)
-        server_is_connected = False
-        if conn_status is not None:
-            server_is_connected = conn_status['serverConnected']
-        if POWER_SAVING and self.manager.connected_to_middleman and not server_is_connected:
+        if self._ravenbot_is_muted():
             if old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
                 await asyncio.sleep(2)
                 players = self.dungeon['players']
@@ -503,7 +507,7 @@ class RFChannel:
                         await self.send_chat_message(f"A raid is available! {utils.pl2(players, 'player has', 'players have')} joined.")
 
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
-        if POWER_SAVING and self.manager.connected_to_middleman:
+        if self.manager.middleman_power_saving and self.manager.middleman_connected:
             if sub_event == RFChannelSubEvent.DUNGEON_BOSS:
                 await middleman.ensure_connected(self.middleman_connection_id, 60)
             if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
@@ -560,6 +564,27 @@ class RFChannel:
         period = max(20*60,self.restart_period)
         seconds_to_restart = max(60, period - uptime)
         self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO)
+
+    @routine(delta=timedelta(seconds=1))
+    async def update_middleman_connection_status_routine(self):
+        conn_status = None
+        if self.manager.middleman_connected:
+            conn_status, err = await middleman.get_connection_status(self.middleman_connection_id)
+        if conn_status is None:
+            if self.manager.middleman_enabled:
+                self.middleman_connection_status = middleman.ConnectionStatus(
+                    connection_id=self.middleman_connection_id,
+                    client_connected=False,
+                    server_connected=False,
+                )
+            else:
+                self.middleman_connection_status = middleman.ConnectionStatus(
+                    connection_id=self.middleman_connection_id,
+                    client_connected=True,
+                    server_connected=True,
+                )
+            return
+        self.middleman_connection_status = conn_status
 
     async def ravenfall_pre_restart(self):
         r = await send_multichat_command(
@@ -625,7 +650,7 @@ class RFChannel:
             return False
         # if not silent:
         #     await self.send_chat_message("Ravenfall has been restarted.")
-        if POWER_SAVING and self.manager.connected_to_middleman:
+        if self.manager.middleman_power_saving and self.manager.middleman_connected:
             await middleman.ensure_connected(self.middleman_connection_id, 60)
         logger.info(f"Restarted Ravenfall for {self.channel_name}")
 

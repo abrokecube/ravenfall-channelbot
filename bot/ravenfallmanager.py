@@ -1,6 +1,7 @@
 from typing import List
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFMiddlemanMessage
+from . import middleman
 from twitchAPI.chat import Chat, ChatMessage
 from ravenpy import RavenNest, ExpMult
 import asyncio
@@ -25,7 +26,10 @@ class RFChannelManager:
 
         self.rf_message_feed_ws: AutoReconnectingWebSocket | None = None
         self.global_restart_lock = asyncio.Lock()
-        self.connected_to_middleman = False
+        self.middleman_enabled = False
+        self.middleman_power_saving = False
+        self.middleman_connected = False
+        self.rfloc = RavenfallLocalization()
         self.load_channels()
 
 
@@ -83,10 +87,14 @@ class RFChannelManager:
             await channel.event_ravenfall_message(message["message"])
 
     async def on_middleman_connect(self):
-        self.connected_to_middleman = True
+        self.middleman_connected = True
+        self.middleman_enabled = True
+        serverconf, err = await middleman.get_config()
+        if not err:
+            self.middleman_power_saving = not serverconf['disableTimeout']
 
     async def on_middleman_disconnect(self):
-        self.connected_to_middleman = False
+        self.middleman_connected = False
 
     async def on_middleman_error(self, error: Exception):
         logger.error(f"Middleman error: {error}")

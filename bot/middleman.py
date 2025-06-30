@@ -3,17 +3,12 @@ import json
 import logging
 import os
 import aiohttp
-from typing import Dict, Optional, Tuple, TypedDict
+from typing import Dict, Optional, Tuple, Any, TypedDict
+from dataclasses import dataclass
 
 # Configuration
 MIDDLEMAN_API_HOST = os.getenv('RF_MIDDLEMAN_HOST', None)
 MIDDLEMAN_API_PORT = os.getenv('RF_MIDDLEMAN_PORT', None)
-
-power_saving = os.getenv("RF_MIDDLEMAN_POWER_SAVING", "false")
-if power_saving.lower() == "true":
-    POWER_SAVING = True
-else:
-    POWER_SAVING = False
 
 # Configure logging
 logger = logging.getLogger('middleman')
@@ -120,12 +115,12 @@ async def ensure_connected(connection_id: str, timeout: int = 0) -> Dict:
     response, status = await _call_middleman_api('/api/ensure-connected', 'POST', data)
     return response
 
-class ConnectionStatus(TypedDict):
-    """Type definition for connection status response."""
-    connectionId: str
-    clientConnected: bool
-    serverConnected: bool
-    timeUntilClose: int  # seconds until disconnect, -1 if no timeout set
+@dataclass
+class ConnectionStatus:
+    connection_id: str = ""
+    client_connected: bool = False
+    server_connected: bool = False
+    time_until_close: int = -1
 
 
 async def get_connection_status(connection_id: str) -> tuple[ConnectionStatus | None, str | None]:
@@ -147,5 +142,43 @@ async def get_connection_status(connection_id: str) -> tuple[ConnectionStatus | 
     if not response.get('success', False):
         return None, response.get('error', 'Failed to get connection status')
     
-    status_data: ConnectionStatus = response.get('status', {})
+    # Convert camelCase keys from API to snake_case for our class
+    status_dict = response.get('status', {})
+    status_data = ConnectionStatus(
+        connection_id=status_dict.get('connectionId', ''),
+        client_connected=status_dict.get('clientConnected', False),
+        server_connected=status_dict.get('serverConnected', False),
+        time_until_close=status_dict.get('timeUntilClose', 0)
+    )
     return status_data, None
+
+class ServerConfig(TypedDict):
+    """Type definition for server configuration."""
+    enableMessageLogging: bool
+    disableTimeout: bool
+    defaultTimeoutSeconds: int
+    noIdentifierTimeoutSeconds: int
+    apiPort: int
+    identifier_timeouts: dict[str, int]
+    proxy_mappings: list[dict[str, Any]]
+    messageProcessor: dict[str, Any]
+
+
+async def get_config() -> tuple[ServerConfig | None, str | None]:
+    """
+    Get the server configuration.
+    
+    Returns:
+        Tuple of (ServerConfig, error_message). If successful, error_message is None.
+        On error, ServerConfig is None and error_message contains the error.
+    """
+    response, status = await _call_middleman_api('/api/config', 'GET')
+    
+    if status != 200:
+        return None, response.get('error', 'Unknown error')
+    
+    if not response.get('success', False):
+        return None, response.get('error', 'Failed to get config')
+    
+    return response.get('config'), None
+
