@@ -31,14 +31,20 @@ async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional
     url = f"http://{MIDDLEMAN_API_HOST.rstrip('/')}:{MIDDLEMAN_API_PORT}/{endpoint.lstrip('/')}"
     headers = {'Content-Type': 'application/json'}
     
+    logger.debug(f"API Request: {method} {url}")
+    
     try:
         async with aiohttp.ClientSession() as session:
             if method.upper() == 'GET':
                 async with session.get(url, headers=headers) as response:
-                    return await response.json(), response.status
+                    response_data = await response.json()
+                    logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data, indent=2)}")
+                    return response_data, response.status
             else:
                 async with session.post(url, json=data, headers=headers) as response:
-                    return await response.json(), response.status
+                    response_data = await response.json()
+                    logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data, indent=2)}")
+                    return response_data, response.status
     except Exception as e:
         logger.error(f"Error calling middleman API: {str(e)}", exc_info=True)
         return {"error": f"Failed to connect to middleman API: {str(e)}"}, 500
