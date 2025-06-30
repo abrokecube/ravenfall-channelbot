@@ -466,11 +466,12 @@ class RFChannel:
                     f"Boss HP: {self.raid['boss']['health']:,} "
                 )
                 await self.send_chat_message(msg)
-            elif old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
+            elif old_sub_event != RFChannelSubEvent.DUNGEON_STARTED and sub_event == RFChannelSubEvent.DUNGEON_STARTED:
                 msg = (
                     f"DUNGEON – "
                     f"Boss HP: {self.max_dungeon_hp:,} – "
-                    f"Enemies: {self.dungeon['enemies']:,}"
+                    f"Enemies: {self.dungeon['enemies']:,} – "
+                    f"Players: {self.dungeon['players']:,}"
                 )
                 await self.send_chat_message(msg)
         if POWER_SAVING and self.manager.connected_to_middleman:
@@ -480,7 +481,7 @@ class RFChannel:
                 if players == 0:
                     await self.send_chat_message(f"A dungeon is available!")
                 else:
-                    await self.send_chat_message(f"A dungeon is available! {utils.pl(players, 'player')} have joined!")
+                    await self.send_chat_message(f"A dungeon is available! {utils.pl(players, 'player')} have joined.")
             elif old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
                 await asyncio.sleep(2)
                 players = self.raid['players']
