@@ -489,12 +489,11 @@ class RFChannel:
                     await self.send_chat_message(f"{utils.pl(players, 'player')} have joined the raid!")
 
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
-        if sub_event == RFChannelSubEvent.DUNGEON_BOSS:
-            await middleman.ensure_connected(self.middleman_connection_id, 10)
-        if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
-            await middleman.ensure_connected(self.middleman_connection_id, 10)
-        if self.channel_restart_lock.locked():
-            await middleman.ensure_connected(self.middleman_connection_id, 60)
+        if POWER_SAVING and self.manager.connected_to_middleman:
+            if sub_event == RFChannelSubEvent.DUNGEON_BOSS:
+                await middleman.ensure_connected(self.middleman_connection_id, 10)
+            if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
+                await middleman.ensure_connected(self.middleman_connection_id, 10)
 
     @routine(delta=timedelta(hours=5), wait_first=True)
     async def backup_state_data_routine(self):
@@ -603,8 +602,10 @@ class RFChannel:
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
             return False
-        if not silent:
-            await self.send_chat_message("Restarted Ravenfall!")
+        # if not silent:
+        #     await self.send_chat_message("Ravenfall has been restarted.")
+        if POWER_SAVING and self.manager.connected_to_middleman:
+            await middleman.ensure_connected(self.middleman_connection_id, 60)
         logger.info(f"Restarted Ravenfall for {self.channel_name}")
 
         if run_post_restart:
