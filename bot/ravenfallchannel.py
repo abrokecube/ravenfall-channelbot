@@ -360,9 +360,7 @@ class RFChannel:
     def _ravenbot_is_muted(self):
         if not self.manager.middleman_enabled:
             return False
-        if not self.middleman_connection_status.server_connected:
-            return True
-        return self.manager.middleman_power_saving
+        return not self.middleman_connection_status.server_connected
 
     @routine(delta=timedelta(hours=3), wait_first=True)
     async def update_boosts_routine(self):
