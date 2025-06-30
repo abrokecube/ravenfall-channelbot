@@ -485,8 +485,14 @@ class RFChannel:
             elif old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
                 await asyncio.sleep(2)
                 players = self.raid['players']
-                if players > 0:
-                    await self.send_chat_message(f"{utils.pl2(players, 'player has', 'players have')} joined the raid!")
+                if self.event_notifications:
+                    if players > 0:
+                        await self.send_chat_message(f"{utils.pl2(players, 'player has', 'players have')} joined the raid.")
+                else:
+                    if players == 0:
+                        await self.send_chat_message(f"A raid is available!")
+                    else:
+                        await self.send_chat_message(f"A raid is available! {utils.pl2(players, 'player has', 'players have')} joined.")
 
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
         if POWER_SAVING and self.manager.connected_to_middleman:
