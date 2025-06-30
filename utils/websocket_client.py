@@ -111,7 +111,7 @@ class AutoReconnectingWebSocket:
             
             if self.on_disconnect:
                 try:
-                    self.on_disconnect()
+                    await self.on_disconnect()
                 except Exception as e:
                     self.logger.error(f"Error in on_disconnect callback: {e}", exc_info=True)
 
@@ -264,7 +264,7 @@ class AutoReconnectingWebSocket:
             
             if self.on_disconnect:
                 try:
-                    self.on_disconnect()
+                    await self.on_disconnect()
                 except Exception as e:
                     self.logger.error(f"Error in on_disconnect callback: {e}", exc_info=True)
             
