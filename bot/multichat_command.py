@@ -91,10 +91,7 @@ async def get_desync_info() -> DesyncResponse:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
+                return response_data
     except Exception as e:
         return {
             "status": 500,
