@@ -163,19 +163,17 @@ class RFChannelManager:
             logger.error(f"Failed to fetch desync info: {data['error']}")
             return
         if time.time() - data['data']['last_updated'] > 300:
-            logger.info("Desync data is too old!")
             return
         if not self.ravennest_is_online:
-            logger.info("Not online, skipping resync routine.")
             return
         ch_desync_times: Dict[str, float] = {}
         for channel_id in self.channel_id_to_channel.keys():
             if channel_id in data['data']['towns']:
                 ch_desync_times[channel_id] = data['data']['towns'][channel_id]
-        logger.info(', '.join([
-            f'{self.channel_id_to_channel[channel_id].channel_name}: {round(ch_desync_times[channel_id], 3)}s'
-            for channel_id in ch_desync_times
-        ]))
+        # logger.debug(', '.join([
+        #     f'{self.channel_id_to_channel[channel_id].channel_name}: {round(ch_desync_times[channel_id], 3)}s'
+        #     for channel_id in ch_desync_times
+        # ]))
         resynced_channels = []
         for channel_id, desync in ch_desync_times.items():
             if abs(desync) < 30:  # 30 seconds
@@ -193,7 +191,3 @@ class RFChannelManager:
             if r['status'] != 200:
                 await channel.send_chat_message("?resync")
             resynced_channels.append(channel.channel_name)
-        if resynced_channels:
-            logger.info(f"Attempted resync for {', '.join(resynced_channels)}")
-        else:
-            logger.info("No resync needed.")
