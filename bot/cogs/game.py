@@ -15,7 +15,7 @@ class GameCog(Cog):
         if channel is None:
             return
         town_boost = await channel.get_town_boost()
-        msg_text = f"{channel.ravenbot_prefix}town {town_boost[0].skill.lower()}"
+        msg_text = f"{channel.ravenbot_prefixes[0]}town {town_boost[0].skill.lower()}"
         await channel.send_chat_message(msg_text)
 
     @Cog.command(

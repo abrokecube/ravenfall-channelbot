@@ -59,7 +59,7 @@ class RFChannel:
             - channel_id (str): Unique channel identifier
             - channel_name (str): Name of the channel
             - rf_query_url (str): Base URL for Ravenfall API
-            - ravenbot_prefix (str, optional): Command prefix. Defaults to '!'
+            - ravenbot_prefix (str | list | tuple, optional): Command prefix. Defaults to '!'
             - custom_town_msg (str, optional): Custom town message. Defaults to ''
             - welcome_message (str, optional): Welcome message. Defaults to ''
             - auto_restart (bool, optional): Whether to auto-restart. Defaults to False
@@ -84,7 +84,7 @@ class RFChannel:
         self.rf_query_url: str = config['rf_query_url'].rstrip('/')
         
         # Optional fields with defaults
-        self.ravenbot_prefix: str = config.get('ravenbot_prefix', '!')
+        self.ravenbot_prefixes: tuple = config.get('ravenbot_prefix', ('!',))
         self.custom_town_msg: str = config.get('custom_town_msg', '')
         self.welcome_message: str = config.get('welcome_message', '')
         self.auto_restart: bool = bool(config.get('auto_restart', False))
@@ -93,6 +93,11 @@ class RFChannel:
         self.sandboxie_box: str = config.get('sandboxie_box', '')
         self.ravenfall_start_script: str = config.get('ravenfall_start_script', '')
         self.middleman_connection_id: str = config.get('middleman_connection_id', '')
+
+        if isinstance(self.ravenbot_prefixes, str):
+            self.ravenbot_prefixes = (self.ravenbot_prefixes,)
+        elif isinstance(self.ravenbot_prefixes, list):
+            self.ravenbot_prefixes = tuple(self.ravenbot_prefixes)
 
         self.raid: Raid | None = None
         self.dungeon: Dungeon | None = None
@@ -154,7 +159,7 @@ class RFChannel:
     async def event_twitch_message(self, message: ChatMessage):
         await self.twitch_message_waiter.process_message(message)
         await self.monitor_ravenfall_command(message=message)
-        if message.first and message.text[:5].lower() == f"{self.ravenbot_prefix}join":
+        if message.first and any(message.text.lower().startswith(f"{prefix}join") for prefix in self.ravenbot_prefixes):
             await self.first_time_joiner(message)
     
     async def event_ravenbot_message(self, message: RavenBotMessage):
@@ -200,9 +205,11 @@ class RFChannel:
             content = content  # this is here because of typing yes
         else:
             content = message.text
-        if not content.startswith(self.ravenbot_prefix):
+        prefix = next((p for p in self.ravenbot_prefixes if content.startswith(p)), None)
+        if not prefix:
             return
-        parts = content[len(self.ravenbot_prefix):].strip().split(maxsplit=1)
+
+        parts = content[len(prefix):].strip().split(maxsplit=1)
         if not parts:  # If there's no command after prefix
             return
             
@@ -373,7 +380,7 @@ class RFChannel:
         split = village['boost'].split()
         boost_stat = split[0]
         boost_value = float(split[1].rstrip("%"))
-        msg = f"{self.ravenbot_prefix}town {boost_stat.lower()}"
+        msg = f"{self.ravenbot_prefixes[0]}town {boost_stat.lower()}"
         await self.send_chat_message(msg)
 
     @routine(delta=timedelta(seconds=3))
@@ -516,7 +523,7 @@ class RFChannel:
         if not self.sub_event == RFChannelSubEvent.DUNGEON_BOSS:
             return
         if self.dungeon['elapsed'] > 60 * 15:  # 15 minutes
-            await self.send_chat_message(f"{self.ravenbot_prefix}dungeon stop")
+            await self.send_chat_message(f"{self.ravenbot_prefixes[0]}dungeon stop")
 
     @routine(delta=timedelta(hours=5), wait_first=True)
     async def backup_state_data_routine(self):

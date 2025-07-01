@@ -142,4 +142,4 @@ class RFChannelManager:
                 if multiplier.multiplier > 1:
                     for channel in self.channels:
                         if channel.multiplier['multiplier'] != self.global_multiplier:
-                            await channel.send_chat_message(f"?say {channel.ravenbot_prefix}multiplier")
+                            await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")

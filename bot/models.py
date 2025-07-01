@@ -11,7 +11,7 @@ class Channel(TypedDict):
     channel_name: str
     rf_query_url: str
     custom_town_msg: str
-    ravenbot_prefix: str
+    ravenbot_prefix: str | list | tuple
     welcome_message: str
     recieve_global_alerts: bool
     sandboxie_box: str
