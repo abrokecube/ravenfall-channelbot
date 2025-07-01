@@ -2,6 +2,7 @@ from typing import List
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFMiddlemanMessage
 from .ravenfallloc import RavenfallLocalization
+from .multichat_command import send_multichat_command
 from . import middleman
 from twitchAPI.chat import Chat, ChatMessage
 from ravenpy import RavenNest, ExpMult
@@ -138,8 +139,16 @@ class RFChannelManager:
 
         if self.ravennest_is_online:
             now = datetime.now(timezone.utc)
-            if multiplier.start_time and (now - multiplier.start_time) > timedelta(minutes=5):
+            if multiplier.start_time and (now - multiplier.start_time) > timedelta(minutes=2):
                 if multiplier.multiplier > 1:
                     for channel in self.channels:
                         if channel.multiplier['multiplier'] != self.global_multiplier:
-                            await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
+                            r = await send_multichat_command(
+                                text="?multiplier",
+                                user_id=channel.channel_id,
+                                user_name=channel.channel_name,
+                                channel_id=channel.channel_id,
+                                channel_name=channel.channel_name
+                            )
+                            if r['status'] != 200:
+                                await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
