@@ -7,7 +7,7 @@ environment variables are properly set.
 """
 import aiohttp
 import os
-from typing import Dict, Any
+from typing import Dict, Any, TypedDict, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -66,4 +66,37 @@ async def send_multichat_command(
         return {
             "status": 500,
             "error": f"Failed to send command: {str(e)}"
+        }
+
+class DesyncInfo(TypedDict):
+    """Structure for desync information."""
+    towns: Dict[str, float]  # Channel ID to desync data mapping
+    last_updated: float  # Time since epoch
+
+class DesyncResponse(TypedDict):
+    """Response structure for desync information."""
+    status: int
+    data: DesyncInfo
+    error: Optional[str]
+
+async def get_desync_info() -> DesyncResponse:
+    """Fetch desync information from the server.
+    
+    Returns:
+        dict: The JSON response containing desync information
+    """
+    url = f"{BASE_URL}/get_desync"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response_data = await response.json()
+                return {
+                    "status": response.status,
+                    "data": response_data
+                }
+    except Exception as e:
+        return {
+            "status": 500,
+            "error": f"Failed to fetch desync info: {str(e)}"
         }
