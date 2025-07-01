@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from models import GameSession
 from utils.format_time import seconds_to_dhms, format_seconds, format_timedelta, TimeSize
 from utils.is_twitch_username import is_twitch_username
 from utils.bytes_to_human_readable import bytes_to_human_readable
@@ -18,7 +17,7 @@ from ..prometheus import get_prometheus_instant, get_prometheus_series
 from ..commands import Context, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
-from ..models import Village
+from ..models import Village, GameSession
 from .. import braille
 from ..ravenfall import Character, Skills
 
