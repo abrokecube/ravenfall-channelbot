@@ -87,60 +87,63 @@ def rm_words(string: str, num: int):
         return " ".join(split[:num])
     else:
         return string
-        
-def split_by_bytes(s: str, max_bytes: int, encoding: str = 'utf-16-le') -> list[str]:
-    """
-    Split a string into multiple strings, each not exceeding max_bytes in size.
-    For UTF-16, max_bytes should be even to avoid breaking surrogate pairs.
-    
-    Args:
-        s: The input string to split
-        max_bytes: Maximum number of bytes per chunk (should be even for UTF-16)
-        encoding: Character encoding to use (default: 'utf-16-le')
-    """
-    if not s:
-        return []
-    
-    # Ensure max_bytes is even for UTF-16
-    if '16' in encoding:
-        max_bytes = max_bytes // 2 * 2  # Round down to nearest even number
-    
-    encoded = s.encode(encoding)
-    total_bytes = len(encoded)
-    
-    if total_bytes <= max_bytes:
-        return [s]
-    
-    result = []
-    current_pos = 0
-    
-    while current_pos < total_bytes:
-        # Calculate end position for this chunk
-        end_pos = min(current_pos + max_bytes, total_bytes)
-        chunk = encoded[current_pos:end_pos]
-        
-        # For UTF-16, ensure we don't cut in the middle of a surrogate pair
-        if '16' in encoding and len(chunk) % 2 != 0 and end_pos < total_bytes:
-            chunk = chunk[:-1]  # Remove last byte to keep it even
-            end_pos -= 1
-        
-        try:
-            chunk_str = chunk.decode(encoding)
-            result.append(chunk_str)
-            current_pos = end_pos
-        except UnicodeDecodeError:
-            # If we can't decode, try reducing the chunk size
-            if len(chunk) > 0:
-                chunk = chunk[:-2]  # Remove last 2 bytes (one UTF-16 character)
-                try:
-                    chunk_str = chunk.decode(encoding)
-                    result.append(chunk_str)
-                    current_pos = len(b''.join(s.encode(encoding) for s in result))
-                except UnicodeDecodeError:
-                    # If still can't decode, skip this character
-                    current_pos += 2
-    
-    return [chunk for chunk in result if chunk.strip()]
+
+def split_by_utf16_bytes(text: str, max_bytes: int) -> list[str]:
+    words = text.split(' ')
+    parts = []
+    current = ''
+    current_bytes = 0
+    max_bytes *= 2
+
+    for word in words:
+        if current:
+            sep = ' '
+            sep_bytes = 2  # UTF-16 bytes for space
+        else:
+            sep = ''
+            sep_bytes = 0
+
+        word_bytes = len(word.encode('utf-16-le'))
+        total_bytes = current_bytes + sep_bytes + word_bytes
+
+        if total_bytes > max_bytes:
+            if current:
+                parts.append(current)
+                current = word
+                current_bytes = word_bytes
+            else:
+                # Single word too long; force split it (optional)
+                split_word = split_long_word_utf16(word, max_bytes)
+                parts.extend(split_word[:-1])
+                current = split_word[-1]
+                current_bytes = len(current.encode('utf-16-le'))
+        else:
+            current += sep + word
+            current_bytes = total_bytes
+
+    if current:
+        parts.append(current)
+
+    return parts
+
+
+def split_long_word_utf16(word: str, max_bytes: int) -> list[str]:
+    parts = []
+    current = ''
+    current_bytes = 0
+    for char in word:
+        char_bytes = len(char.encode('utf-16-le'))
+        if current_bytes + char_bytes > max_bytes:
+            if current:
+                parts.append(current)
+            current = char
+            current_bytes = char_bytes
+        else:
+            current += char
+            current_bytes += char_bytes
+    if current:
+        parts.append(current)
+    return parts
 
 def truncate_by_bytes(s: str, max_bytes: int, start_byte: int = 0, encoding: str = 'utf-16-le') -> str:
     """

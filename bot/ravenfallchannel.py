@@ -28,7 +28,7 @@ from utils.routines import routine
 from utils.format_time import format_seconds, TimeSize
 from utils.backup_file_with_date import backup_file_with_date_async
 from utils.runshell import restart_process, runshell, runshell_detached
-from utils.strutils import split_by_bytes
+from utils.strutils import split_by_utf16_bytes
 from utils import utils
 
 import asyncio
@@ -187,7 +187,7 @@ class RFChannel:
         trans_str = self.rfloc.translate_string(message['Format'], message['Args']).strip()
         if len(trans_str) == 0:
             return {'block': True}
-        trans_strs = split_by_bytes(trans_str, 500)
+        trans_strs = split_by_utf16_bytes(trans_str, 500)
         message['Format'] = trans_strs[0]
         message['Args'] = []
         if len(trans_strs) > 1:
