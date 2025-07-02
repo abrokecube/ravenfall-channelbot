@@ -516,7 +516,7 @@ class RFChannel:
             if sub_event == RFChannelSubEvent.DUNGEON_BOSS:
                 await middleman.ensure_connected(self.middleman_connection_id, 60)
             if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
-                await middleman.ensure_connected(self.middleman_connection_id, 10)
+                await middleman.ensure_connected(self.middleman_connection_id, 60)
 
     @routine(delta=timedelta(seconds=30), wait_first=True)
     async def dungeon_killswitch_routine(self):
