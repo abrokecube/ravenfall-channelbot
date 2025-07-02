@@ -60,11 +60,6 @@ class RavenfallMessage(TypedDict):
 RavenMessage = Union[RavenBotMessage, RavenfallMessage, Dict[str, Any]]
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
 logger = logging.getLogger('new_message_processor')
 
 @dataclass
@@ -387,54 +382,3 @@ class MessageProcessor:
             loop.create_task(self.astop())
         else:
             loop.run_until_complete(self.astop())
-
-def main():
-    """Example usage of the WebSocket server."""
-    # Create processor instance
-    processor = MessageProcessor(host='127.0.0.1', port=8000)
-    
-    # Example message callback
-    async def handle_message(message: RavenMessage, metadata: MessageMetadata, client_info: ClientInfo) -> Optional[ProcessorResponse]:
-        logger.info(f"Received message from {client_info.client_id}: {message}")
-        # You can modify the message here before it's processed
-        if "echo" in str(message.get("content", "")).lower():
-            return {"message": {"echo": "Received your message!"}}
-        return None  # Return None to continue with normal processing
-    
-    # Example connection callback
-    async def on_connect(client_info: ClientInfo) -> None:
-        logger.info(f"New client connected: {client_info.client_id} from {client_info.remote_address}")
-        # You can send a welcome message or perform other actions
-        try:
-            await client_info.websocket.send(json.dumps({
-                "status": "connected", 
-                "client_id": client_info.client_id
-            }) + '\n')
-        except Exception as e:
-            logger.error(f"Error sending welcome message: {e}")
-    
-    # Example disconnection callback
-    async def on_disconnect(client_info: ClientInfo) -> None:
-        logger.info(f"Client disconnected: {client_info.client_id}")
-    
-    # Register callbacks
-    processor.add_message_callback(handle_message)
-    processor.add_connection_callback(on_connect)
-    processor.add_disconnection_callback(on_disconnect)
-    
-    # Start the server
-    logger.info("Starting WebSocket server...")
-    processor.start()
-    
-    try:
-        # Keep the main thread alive
-        loop = asyncio.get_event_loop()
-        loop.run_forever()
-    except KeyboardInterrupt:
-        logger.info("Shutdown signal received, stopping server...")
-    finally:
-        processor.stop()
-        logger.info("Server shutdown complete")
-
-if __name__ == "__main__":
-    main()
