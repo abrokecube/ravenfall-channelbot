@@ -176,6 +176,9 @@ class RFChannel:
         return message
 
     async def process_ravenfall_message(self, message: RavenfallMessage, metadata: MessageMetadata):
+        # Make sure session data and other things are not processed
+        if message['Identifier'] != 'message':
+            return message
         trans_str = self.rfloc.translate_string(message['Format'], message['Args']).strip()
         if len(trans_str) == 0:
             return {'block': True}
