@@ -176,6 +176,8 @@ class RFChannel:
         return message
 
     async def process_ravenfall_message(self, message: RavenfallMessage, metadata: MessageMetadata):
+        if not self.ravenfall_loc_strings_path:
+            return message
         # Make sure session data and other things are not processed
         if message['Identifier'] != 'message':
             return message
