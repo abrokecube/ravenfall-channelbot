@@ -188,18 +188,19 @@ class RFChannel:
         if len(trans_str) == 0:
             return {'block': True}
         trans_strs = split_by_utf16_bytes(trans_str, 500)
+        if len(trans_strs) > 1:
+            asyncio.create_task(self.finish_sending_rf_message_task(message, trans_strs))
+            return {'block': True}
         message['Format'] = trans_strs[0]
         message['Args'] = []
-        if len(trans_strs) > 1:
-            asyncio.create_task(self.finish_sending_rf_message_task(message, trans_strs[1:]))
         return message
     
     async def finish_sending_rf_message_task(self, message: RavenfallMessage, msgs: list[str]):
-        await asyncio.sleep(0.5)
         for msg in msgs:
             message['Format'] = msg
             message['Args'] = []
             await send_to_client(self.middleman_connection_id, json.dumps(message))
+            await asyncio.sleep(0.1)
 
     async def get_town_boost(self) -> List[TownBoost] | None:
         village: Village = await self.get_query("select * from village")
