@@ -51,7 +51,7 @@ def unping(in_str: str):
         else:
             a = word[:-2]
             b = word[-2:]
-            out.append(f"\U000e0000{a}\U000e0000{b}")
+            out.append(f"{a}\U000e0000{b}")
     return ' '.join(out)
 
 def pickrand(*args):

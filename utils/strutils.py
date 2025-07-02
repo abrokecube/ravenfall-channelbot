@@ -87,3 +87,110 @@ def rm_words(string: str, num: int):
         return " ".join(split[:num])
     else:
         return string
+def split_by_bytes(s: str, max_bytes: int, encoding: str = 'utf-8') -> list[str]:
+    """
+    Split a string into multiple strings, each not exceeding max_bytes in size.
+    Splits are made at the nearest space character to maintain word boundaries.
+    
+    Args:
+        s: The input string to split
+        max_bytes: Maximum number of bytes per chunk
+        encoding: Character encoding to use (default: 'utf-8')
+        
+    Returns:
+        A list of strings, each not exceeding max_bytes in size
+    """
+    if not s:
+        return []
+        
+    encoded = s.encode(encoding)
+    total_bytes = len(encoded)
+    
+    if total_bytes <= max_bytes:
+        return [s]
+    
+    result = []
+    current_pos = 0
+    
+    while current_pos < total_bytes:
+        # Calculate end position for this chunk
+        end_pos = min(current_pos + max_bytes, total_bytes)
+        chunk = encoded[current_pos:end_pos]
+        
+        # Try to decode the chunk
+        try:
+            chunk_str = chunk.decode(encoding)
+            # If we're at the end or the next character is a space, we can take this chunk
+            if end_pos == total_bytes or encoded[end_pos:end_pos+1] == b' ':
+                result.append(chunk_str)
+                current_pos = end_pos + 1  # +1 to skip the space
+                continue
+                
+            # Otherwise, find the last space in the chunk
+            last_space = chunk.rfind(b' ')
+            if last_space > 0:  # Found a space within the chunk
+                chunk = chunk[:last_space]
+                chunk_str = chunk.decode(encoding)
+                result.append(chunk_str)
+                current_pos += last_space + 1  # +1 to skip the space
+            else:  # No space found, split at max_bytes even if it breaks a word
+                chunk_str = chunk.decode(encoding, errors='ignore')
+                result.append(chunk_str)
+                current_pos = end_pos
+                
+        except UnicodeDecodeError:
+            # If we can't decode, try reducing the chunk size until we can
+            while len(chunk) > 0:
+                try:
+                    chunk_str = chunk.decode(encoding)
+                    result.append(chunk_str)
+                    current_pos += len(chunk)
+                    break
+                except UnicodeDecodeError:
+                    chunk = chunk[:-1]
+            else:
+                # If we can't decode even a single character, skip it
+                current_pos += 1
+    
+    # Remove any empty strings that might have been added
+    return [chunk for chunk in result if chunk.strip()]
+
+
+def truncate_by_bytes(s: str, max_bytes: int, start_byte: int = 0, encoding: str = 'utf-8') -> str:
+    """
+    Truncate a string to a maximum number of bytes, starting from a specific byte position.
+    
+    Args:
+        s: The input string to truncate
+        max_bytes: Maximum number of bytes to keep
+        start_byte: Starting byte position (default: 0)
+        encoding: Character encoding to use (default: 'utf-8')
+        
+    Returns:
+        The truncated string that is at most max_bytes long, starting from start_byte
+    """
+    encoded = s.encode(encoding)
+    total_bytes = len(encoded)
+    
+    # Adjust start_byte if it's negative (counting from the end)
+    if start_byte < 0:
+        start_byte = max(0, total_bytes + start_byte)
+    
+    # If start_byte is beyond the string length, return empty string
+    if start_byte >= total_bytes:
+        return ''
+        
+    # Get the substring starting from start_byte
+    encoded = encoded[start_byte:]
+    
+    if len(encoded) <= max_bytes:
+        return encoded.decode(encoding)
+
+    # Truncate encoded bytes safely
+    truncated = encoded[:max_bytes]
+    # Try decoding, reducing size until it works
+    while True:
+        try:
+            return truncated.decode(encoding)
+        except UnicodeDecodeError:
+            truncated = truncated[:-1]

@@ -13,6 +13,7 @@ from .models import (
     RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
+from .middleman import send_to_client
 from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command
@@ -27,6 +28,7 @@ from utils.routines import routine
 from utils.format_time import format_seconds, TimeSize
 from utils.backup_file_with_date import backup_file_with_date_async
 from utils.runshell import restart_process, runshell, runshell_detached
+from utils.strutils import split_by_bytes
 from utils import utils
 
 import asyncio
@@ -181,12 +183,22 @@ class RFChannel:
         # Make sure session data and other things are not processed
         if message['Identifier'] != 'message':
             return message
-        trans_str = self.rfloc.translate_string(message['Format'], message['Args']).strip()[:490]
+        trans_str = self.rfloc.translate_string(message['Format'], message['Args']).strip()
         if len(trans_str) == 0:
             return {'block': True}
-        message['Format'] = trans_str
+        trans_strs = split_by_bytes(trans_str, 500)
+        message['Format'] = trans_strs[0]
         message['Args'] = []
+        if len(trans_strs) > 1:
+            asyncio.create_task(self.finish_sending_rf_message_task(message, trans_strs))
         return message
+    
+    async def finish_sending_rf_message_task(self, message: RavenfallMessage, msgs: list[str]):
+        await asyncio.sleep(0.5)
+        for i in range(1, len(msgs)):
+            message['Format'] = msgs[i]
+            message['Args'] = []
+            await send_to_client(self.middleman_connection_id, message)
 
     async def get_town_boost(self) -> List[TownBoost] | None:
         village: Village = await self.get_query("select * from village")
