@@ -51,8 +51,8 @@ class RFChannelManager:
             await channel.start()
         self.mult_check_routine.start()
         self.resync_routine.start()
-        msg_processor_host = os.getenv("RF_MESSAGE_PROCESSOR_HOST", None)
-        msg_processor_port = os.getenv("RF_MESSAGE_PROCESSOR_PORT", None)
+        msg_processor_host = os.getenv("RF_MIDDLEMAN_PROCESSOR_HOST", None)
+        msg_processor_port = os.getenv("RF_MIDDLEMAN_PROCESSOR_PORT", None)
         if msg_processor_host and msg_processor_port:
             self.rf_message_processor = MessageProcessor(
                 host=msg_processor_host,
@@ -63,7 +63,7 @@ class RFChannelManager:
             self.rf_message_processor.add_connection_callback(self.on_processor_connect)
             self.rf_message_processor.add_disconnection_callback(self.on_processor_disconnect)
         else:
-            logger.info("RF_MESSAGE_PROCESSOR_HOST or RF_MESSAGE_PROCESSOR_PORT not set, not starting message processor")
+            logger.info("RF_MIDDLEMAN_PROCESSOR_HOST or RF_MIDDLEMAN_PROCESSOR_PORT not set, not starting message processor")
 
     async def stop(self):
         for channel in self.channels:
