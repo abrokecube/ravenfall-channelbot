@@ -1,7 +1,7 @@
 from ..commands import Context, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
-from ...utils.utils import upload_to_pastes
+from utils.utils import upload_to_pastes
 import os
 
 class TestingRFCog(Cog):
