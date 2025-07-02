@@ -5,7 +5,7 @@ import asyncio
 from utils.format_time import format_seconds, TimeSize
 from enum import Enum
 from typing import List, Tuple, TYPE_CHECKING
-from .models import RFChannelEvent
+from .models import RFChannelEvent, RFChannelSubEvent
 
 if TYPE_CHECKING:
     from .ravenfallchannel import RFChannel
@@ -107,11 +107,13 @@ class RFRestartTask:
         messages = {
             "server_down": "Restart postponed due to server being offline.",
             "dungeon": "Restart postponed due to dungeon.",
+            "dungeon_prep": "Restart postponed due to dungeon being prepared.",
             "raid": "Restart postponed due to raid.",
         }
         names = {
             "server_down": "server offline",
             "dungeon": "dungeon",
+            "dungeon_prep": "dungeon being prepared",
             "raid": "raid",
         }
         while True:
@@ -121,6 +123,8 @@ class RFRestartTask:
             if self.done:
                 return
             time_left = self.get_time_left()
+            if self.channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
+                event_type = "dungeon_prep"
             if self.channel.event == RFChannelEvent.DUNGEON and self.channel.dungeon['players'] > 0:
                 event_type = "dungeon"
             elif self.channel.event == RFChannelEvent.RAID and self.channel.raid["players"] > 0:
