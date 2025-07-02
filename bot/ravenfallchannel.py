@@ -445,7 +445,7 @@ class RFChannel:
             else:
                 if dungeon['enemiesalive'] > 0:
                     self.max_dungeon_hp = dungeon["boss"]["health"]
-                boss_max_hp = self.max_dungeon_hp
+                boss_max_hp = min(1, self.max_dungeon_hp)
                 event_text = (
                     f"DUNGEON – "
                     f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp:,} "
@@ -507,9 +507,9 @@ class RFChannel:
                         await self.send_chat_message(f"{utils.pl2(players, 'player has', 'players have')} joined the raid.")
                 else:
                     if players == 0:
-                        await self.send_chat_message(f"A level {self.raid['level']} raid is available!")
+                        await self.send_chat_message(f"A level {self.raid['boss']['combatlevel']} raid is available!")
                     else:
-                        await self.send_chat_message(f"A level {self.raid['level']} raid is available! {utils.pl2(players, 'player has', 'players have')} joined.")
+                        await self.send_chat_message(f"A level {self.raid['boss']['combatlevel']} raid is available! {utils.pl2(players, 'player has', 'players have')} joined.")
 
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
         if self.manager.middleman_power_saving and self.manager.middleman_connected:
