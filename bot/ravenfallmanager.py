@@ -88,14 +88,14 @@ class RFChannelManager:
                         asyncio.create_task(channel.event_ravenfall_message(message))
                 return await channel.handle_processor_message(message, metadata)
 
-    async def on_processor_connect(self):
+    async def on_processor_connect(self, client_info: ClientInfo):
         self.middleman_connected = True
         self.middleman_enabled = True
         serverconf, err = await middleman.get_config()
         if not err:
             self.middleman_power_saving = not serverconf['disableTimeout']
 
-    async def on_processor_disconnect(self):
+    async def on_processor_disconnect(self, client_info: ClientInfo):
         self.middleman_connected = False
 
     def get_channel(self, *, channel_id: str | None = None, channel_name: str | None = None) -> RFChannel | None:
