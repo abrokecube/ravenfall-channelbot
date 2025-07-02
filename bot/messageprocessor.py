@@ -315,8 +315,8 @@ class MessageProcessor:
             
         loop = asyncio.get_event_loop()
         
-        # Create server
-        self.server = websockets.serve(
+        # Create server coroutine
+        server_coro = websockets.serve(
             self._handle_client,
             self.host,
             self.port,
@@ -326,18 +326,29 @@ class MessageProcessor:
             close_timeout=5,   # 5 seconds
         )
         
-        # Start the server
-        self.server = loop.run_until_complete(self.server)
-        self.running = True
-        logger.info(f"WebSocket server started on ws://{self.host}:{self.port}")
-        
-        # Set up signal handlers for graceful shutdown
-        try:
-            loop.add_signal_handler(signal.SIGINT, lambda: asyncio.create_task(self.stop()))
-            loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(self.stop()))
-        except NotImplementedError:
-            # Windows compatibility
-            pass
+        # Start the server, handling both running and new event loops
+        if loop.is_running():
+            # If loop is already running, create a task to start the server
+            async def start_server():
+                self.server = await server_coro
+                self.running = True
+                logger.info(f"WebSocket server started on ws://{self.host}:{self.port}")
+            
+            # Schedule the server to start
+            loop.create_task(start_server())
+        else:
+            # If no loop is running, use run_until_complete
+            self.server = loop.run_until_complete(server_coro)
+            self.running = True
+            logger.info(f"WebSocket server started on ws://{self.host}:{self.port}")
+            
+            # Only set up signal handlers if we're not in a running loop
+            try:
+                loop.add_signal_handler(signal.SIGINT, lambda: asyncio.create_task(self.astop()))
+                loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(self.astop()))
+            except NotImplementedError:
+                # Windows compatibility
+                pass
     
     async def astop(self) -> None:
         """Asynchronously stop the WebSocket server."""
