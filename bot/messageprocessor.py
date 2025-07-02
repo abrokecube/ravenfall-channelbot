@@ -257,14 +257,19 @@ class MessageProcessor:
             return json.dumps({"error": error_msg, "original_message": message}) + '\n'
     
     async def _handle_client(self, websocket: WebSocketServer, path: str) -> None:
-        """Handle a new WebSocket client connection."""
-        client_id = str(id(websocket))
-        remote_addr = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+        """Handle a new WebSocket client connection.
+        
+        Args:
+            websocket: The WebSocket connection instance
+            path: The requested path (part of the WebSocket protocol)
+        """
+        client_id = str(uuid.uuid4())
+        remote_address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
         
         client_info = ClientInfo(
             websocket=websocket,
             client_id=client_id,
-            remote_address=remote_addr
+            remote_address=remote_address
         )
         
         self.clients[client_id] = client_info
