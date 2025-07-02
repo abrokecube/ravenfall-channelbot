@@ -66,7 +66,11 @@ class Commands:
         """
         if self.cog_manager is None:
             self.setup_cog_manager()
-        self.cog_manager.load_cog(cog_cls, **kwargs)
+        try:
+            self.cog_manager.load_cog(cog_cls, **kwargs)
+        except Exception as e:
+            logger.error(f"Error loading cog '{cog_cls.name}':", exc_info=True)
+            raise
         
     def unload_cog(self, cog_name: str) -> None:
         """Unload a cog.

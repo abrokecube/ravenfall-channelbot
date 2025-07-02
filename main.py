@@ -86,6 +86,8 @@ async def run():
         commands.load_cog(GameCog, rf_manager=rf_manager)
         from bot.cogs.testing_rf import TestingRFCog
         commands.load_cog(TestingRFCog, rf_manager=rf_manager)
+        from bot.cogs.bot import BotStuffCog
+        commands.load_cog(BotStuffCog, rf_manager=rf_manager)
 
     async def on_ready(ready_event: EventData):
         global rf_manager

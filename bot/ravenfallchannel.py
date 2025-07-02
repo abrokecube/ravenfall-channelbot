@@ -17,6 +17,7 @@ from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command
 from .messageprocessor import RavenMessage, MessageMetadata
+from .ravenfallloc import RavenfallLocalization
 from bot import middleman
 
 if TYPE_CHECKING:
@@ -94,6 +95,7 @@ class RFChannel:
         self.sandboxie_box: str = config.get('sandboxie_box', '')
         self.ravenfall_start_script: str = config.get('ravenfall_start_script', '')
         self.middleman_connection_id: str = config.get('middleman_connection_id', '')
+        self.ravenfall_loc_strings_path: str | None = config.get('ravenfall_loc_strings_path', None)
 
         if isinstance(self.ravenbot_prefixes, str):
             self.ravenbot_prefixes = (self.ravenbot_prefixes,)
@@ -112,11 +114,12 @@ class RFChannel:
         self.ravenbot_waiter: RavenBotMessageWaiter = RavenBotMessageWaiter()
         self.ravenfall_waiter: RavenfallMessageWaiter = RavenfallMessageWaiter()
         
+        self.rfloc = RavenfallLocalization('data/definitions.yaml', self.ravenfall_loc_strings_path)
+
         self.max_dungeon_hp: int = 0
         self.current_mult: float | None = None
 
         self.global_restart_lock: asyncio.Lock = manager.global_restart_lock
-
         self.channel_restart_lock: asyncio.Lock = asyncio.Lock()
         self.channel_restart_future: asyncio.Future | None = None
         self.channel_post_restart_lock: asyncio.Lock = asyncio.Lock()
@@ -169,7 +172,15 @@ class RFChannel:
     async def event_ravenfall_message(self, message: RavenfallMessage):
         await self.ravenfall_waiter.process_message(message)
 
-    async def handle_processor_message(self, message: RavenMessage, metadata: MessageMetadata):
+    async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
+        return message
+
+    async def process_ravenfall_message(self, message: RavenfallMessage, metadata: MessageMetadata):
+        trans_str = self.rfloc.translate_string(message['Format'], message['Args']).strip()
+        if len(trans_str) == 0:
+            return {'block': True}
+        message['Format'] = trans_str
+        message['Args'] = []
         return message
 
     async def get_town_boost(self) -> List[TownBoost] | None:

@@ -1,7 +1,6 @@
 from typing import List, Dict
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent
-from .ravenfallloc import RavenfallLocalization
 from .multichat_command import send_multichat_command, get_desync_info
 from . import middleman
 from .messageprocessor import MessageProcessor, RavenMessage, MessageMetadata, ClientInfo
@@ -35,7 +34,6 @@ class RFChannelManager:
         self.middleman_enabled = False
         self.middleman_power_saving = False
         self.middleman_connected = False
-        self.rfloc = RavenfallLocalization()
         self.load_channels()
 
 
@@ -86,7 +84,13 @@ class RFChannelManager:
                         asyncio.create_task(channel.event_ravenbot_message(message))
                     elif metadata.source.lower() == "server":
                         asyncio.create_task(channel.event_ravenfall_message(message))
-                return await channel.handle_processor_message(message, metadata)
+                if metadata.source.lower() == "client":
+                    return await channel.process_ravenbot_message(message, metadata)
+                elif metadata.source.lower() == "server":
+                    return await channel.process_ravenfall_message(message, metadata)
+                else:
+                    return message
+        return message
 
     async def on_processor_connect(self, client_info: ClientInfo):
         self.middleman_connected = True
