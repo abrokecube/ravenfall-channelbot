@@ -87,22 +87,24 @@ def rm_words(string: str, num: int):
         return " ".join(split[:num])
     else:
         return string
-def split_by_bytes(s: str, max_bytes: int, encoding: str = 'utf-8') -> list[str]:
+        
+def split_by_bytes(s: str, max_bytes: int, encoding: str = 'utf-16-le') -> list[str]:
     """
     Split a string into multiple strings, each not exceeding max_bytes in size.
-    Splits are made at the nearest space character to maintain word boundaries.
+    For UTF-16, max_bytes should be even to avoid breaking surrogate pairs.
     
     Args:
         s: The input string to split
-        max_bytes: Maximum number of bytes per chunk
-        encoding: Character encoding to use (default: 'utf-8')
-        
-    Returns:
-        A list of strings, each not exceeding max_bytes in size
+        max_bytes: Maximum number of bytes per chunk (should be even for UTF-16)
+        encoding: Character encoding to use (default: 'utf-16-le')
     """
     if not s:
         return []
-        
+    
+    # Ensure max_bytes is even for UTF-16
+    if '16' in encoding:
+        max_bytes = max_bytes // 2 * 2  # Round down to nearest even number
+    
     encoded = s.encode(encoding)
     total_bytes = len(encoded)
     
@@ -117,64 +119,53 @@ def split_by_bytes(s: str, max_bytes: int, encoding: str = 'utf-8') -> list[str]
         end_pos = min(current_pos + max_bytes, total_bytes)
         chunk = encoded[current_pos:end_pos]
         
-        # Try to decode the chunk
+        # For UTF-16, ensure we don't cut in the middle of a surrogate pair
+        if '16' in encoding and len(chunk) % 2 != 0 and end_pos < total_bytes:
+            chunk = chunk[:-1]  # Remove last byte to keep it even
+            end_pos -= 1
+        
         try:
             chunk_str = chunk.decode(encoding)
-            # If we're at the end or the next character is a space, we can take this chunk
-            if end_pos == total_bytes or encoded[end_pos:end_pos+1] == b' ':
-                result.append(chunk_str)
-                current_pos = end_pos + 1  # +1 to skip the space
-                continue
-                
-            # Otherwise, find the last space in the chunk
-            last_space = chunk.rfind(b' ')
-            if last_space > 0:  # Found a space within the chunk
-                chunk = chunk[:last_space]
-                chunk_str = chunk.decode(encoding)
-                result.append(chunk_str)
-                current_pos += last_space + 1  # +1 to skip the space
-            else:  # No space found, split at max_bytes even if it breaks a word
-                chunk_str = chunk.decode(encoding, errors='ignore')
-                result.append(chunk_str)
-                current_pos = end_pos
-                
+            result.append(chunk_str)
+            current_pos = end_pos
         except UnicodeDecodeError:
-            # If we can't decode, try reducing the chunk size until we can
-            while len(chunk) > 0:
+            # If we can't decode, try reducing the chunk size
+            if len(chunk) > 0:
+                chunk = chunk[:-2]  # Remove last 2 bytes (one UTF-16 character)
                 try:
                     chunk_str = chunk.decode(encoding)
                     result.append(chunk_str)
-                    current_pos += len(chunk)
-                    break
+                    current_pos = len(b''.join(s.encode(encoding) for s in result))
                 except UnicodeDecodeError:
-                    chunk = chunk[:-1]
-            else:
-                # If we can't decode even a single character, skip it
-                current_pos += 1
+                    # If still can't decode, skip this character
+                    current_pos += 2
     
-    # Remove any empty strings that might have been added
     return [chunk for chunk in result if chunk.strip()]
 
-
-def truncate_by_bytes(s: str, max_bytes: int, start_byte: int = 0, encoding: str = 'utf-8') -> str:
+def truncate_by_bytes(s: str, max_bytes: int, start_byte: int = 0, encoding: str = 'utf-16-le') -> str:
     """
-    Truncate a string to a maximum number of bytes, starting from a specific byte position.
+    Truncate a string to a maximum number of bytes in UTF-16 encoding.
     
     Args:
         s: The input string to truncate
-        max_bytes: Maximum number of bytes to keep
+        max_bytes: Maximum number of bytes to keep (will be rounded down to nearest even number)
         start_byte: Starting byte position (default: 0)
-        encoding: Character encoding to use (default: 'utf-8')
-        
-    Returns:
-        The truncated string that is at most max_bytes long, starting from start_byte
+        encoding: Character encoding to use (default: 'utf-16-le')
     """
+    # Ensure max_bytes is even for UTF-16
+    if '16' in encoding:
+        max_bytes = max_bytes // 2 * 2  # Round down to nearest even number
+    
     encoded = s.encode(encoding)
     total_bytes = len(encoded)
     
     # Adjust start_byte if it's negative (counting from the end)
     if start_byte < 0:
         start_byte = max(0, total_bytes + start_byte)
+    
+    # Ensure start_byte is even for UTF-16
+    if '16' in encoding:
+        start_byte = start_byte // 2 * 2
     
     # If start_byte is beyond the string length, return empty string
     if start_byte >= total_bytes:
@@ -185,12 +176,10 @@ def truncate_by_bytes(s: str, max_bytes: int, start_byte: int = 0, encoding: str
     
     if len(encoded) <= max_bytes:
         return encoded.decode(encoding)
-
-    # Truncate encoded bytes safely
+    
+    # Truncate to max_bytes, ensuring we don't cut in the middle of a surrogate pair
     truncated = encoded[:max_bytes]
-    # Try decoding, reducing size until it works
-    while True:
-        try:
-            return truncated.decode(encoding)
-        except UnicodeDecodeError:
-            truncated = truncated[:-1]
+    if '16' in encoding and len(truncated) % 2 != 0:
+        truncated = truncated[:-1]  # Remove last byte to keep it even
+    
+    return truncated.decode(encoding, errors='ignore')
