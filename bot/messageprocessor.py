@@ -6,10 +6,10 @@ import os
 import signal
 import uuid
 from typing import Dict, Any, Optional, Tuple, Callable, Awaitable, List, Union, TypedDict, TypeVar, Generic, Type, Literal
-from dataclasses import dataclass, field
-import websockets
-from websockets.legacy.server import WebSocketServerProtocol as WebSocketServer
 from uuid import UUID
+from dataclasses import dataclass, field
+from websockets import WebSocketServerProtocol as WebSocketServer
+import websockets
 
 # Type variable for message content types
 T = TypeVar('T', bound=Dict[str, Any])
@@ -74,6 +74,7 @@ class ProcessorResponse(TypedDict, total=False):
     message: Dict[str, Any]  # Modified message content (optional)
     error: str  # Error message (optional)
 
+@dataclass
 class MessageMetadata:
     """Metadata about a message being processed."""
     source: str = "unknown"
