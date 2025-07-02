@@ -104,9 +104,9 @@ class InfoCog(Cog):
     @Cog.command(name="rfram", help="Ravenfall RAM usage")
     async def rfram(self, ctx: Context):
         processes: Dict[str, List[float]] = {}
-        working_set = await get_prometheus_instant("windows_process_working_set_bytes{process='Ravenfall'}")
-        change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_bytes{process='Ravenfall'}[3m])")
-        working_set_series = await get_prometheus_series("windows_process_working_set_bytes{process='Ravenfall'}", 60*10)
+        working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
+        change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
+        working_set_series = await get_prometheus_series("windows_process_working_set_private_bytes{process='Ravenfall'}", 60*10)
         tasks = []
         for ch in self.rf_manager.channels:
             shellcmd = (
