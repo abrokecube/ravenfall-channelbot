@@ -4,6 +4,7 @@ from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent
 from .ravenfallloc import RavenfallLocalization
 from .multichat_command import send_multichat_command, get_desync_info
 from . import middleman
+from .messageprocessor import MessageProcessor, RavenMessage, MessageMetadata, ClientInfo
 from twitchAPI.chat import Chat, ChatMessage
 from ravenpy import RavenNest, ExpMult
 import asyncio
@@ -29,7 +30,7 @@ class RFChannelManager:
         self.ravennest_is_online = True
         self.global_multiplier = 1.0
 
-        self.rf_message_feed_ws: AutoReconnectingWebSocket | None = None
+        self.rf_message_processor: MessageProcessor | None = None
         self.global_restart_lock = asyncio.Lock()
         self.middleman_enabled = False
         self.middleman_power_saving = False
@@ -50,69 +51,60 @@ class RFChannelManager:
             await channel.start()
         self.mult_check_routine.start()
         self.resync_routine.start()
-        msg_feed_host = os.getenv("RF_MIDDLEMAN_HOST", None)
-        msg_feed_port = os.getenv("RF_MIDDLEMAN_PORT", None)
-        if msg_feed_host and msg_feed_port:
-            self.rf_message_feed_ws = AutoReconnectingWebSocket(
-                f"ws://{msg_feed_host}:{msg_feed_port}/ws",
-                on_message=self.on_middleman_message,
-                on_connect=self.on_middleman_connect,
-                on_disconnect=self.on_middleman_disconnect,
-                on_error=self.on_middleman_error,
-                reconnect_interval=1.0,
-                max_reconnect_interval=30.0,
-                logger=logger,
+        msg_processor_host = os.getenv("RF_MESSAGE_PROCESSOR_HOST", None)
+        msg_processor_port = os.getenv("RF_MESSAGE_PROCESSOR_PORT", None)
+        if msg_processor_host and msg_processor_port:
+            self.rf_message_processor = MessageProcessor(
+                host=msg_processor_host,
+                port=msg_processor_port,
             )
-            await self.rf_message_feed_ws.connect()
+            self.rf_message_processor.start()
+            self.rf_message_processor.add_message_callback(self.handle_processor_message)
+            self.rf_message_processor.add_connection_callback(self.on_processor_connect)
+            self.rf_message_processor.add_disconnection_callback(self.on_processor_disconnect)
+        else:
+            logger.info("RF_MESSAGE_PROCESSOR_HOST or RF_MESSAGE_PROCESSOR_PORT not set, not starting message processor")
 
     async def stop(self):
         for channel in self.channels:
             await channel.stop()
         self.mult_check_routine.cancel()
         self.resync_routine.cancel()
-        if self.rf_message_feed_ws:
-            await self.rf_message_feed_ws.disconnect()
+        if self.rf_message_processor:
+            await self.rf_message_processor.stop()
 
     async def event_twitch_message(self, message: ChatMessage):
         for channel in self.channels:
             if channel.channel_id == message.room.room_id:
                 await channel.event_twitch_message(message)
 
-    async def on_middleman_message(self, message: RFMiddlemanMessage):
-        channel = None
-        for ch in self.channels:
-            if ch.middleman_connection_id == message["connection_id"]:
-                channel = ch
-        if not channel:
-            logger.warning(f"Received message with unmatched connection ID: {message['connection_id']}")
-            return
-        if message["source"] == "CLIENT":
-            await channel.event_ravenbot_message(message["message"])
-        elif message["source"] == "SERVER":
-            await channel.event_ravenfall_message(message["message"])
+    async def handle_processor_message(self, message: RavenMessage, metadata: MessageMetadata, client_info: ClientInfo):
+        for channel in self.channels:
+            if metadata.connection_id == channel.middleman_connection_id:
+                if not metadata.is_api:
+                    if metadata.source.lower() == "client":
+                        asyncio.create_task(channel.event_ravenbot_message(message))
+                    elif metadata.source.lower() == "server":
+                        asyncio.create_task(channel.event_ravenfall_message(message))
+                return await channel.handle_processor_message(message, metadata)
 
-    async def on_middleman_connect(self):
+    async def on_processor_connect(self):
         self.middleman_connected = True
         self.middleman_enabled = True
         serverconf, err = await middleman.get_config()
         if not err:
             self.middleman_power_saving = not serverconf['disableTimeout']
 
-    async def on_middleman_disconnect(self):
+    async def on_processor_disconnect(self):
         self.middleman_connected = False
-
-    async def on_middleman_error(self, error: Exception):
-        logger.error(f"Middleman error: {error}")
 
     def get_channel(self, *, channel_id: str | None = None, channel_name: str | None = None) -> RFChannel | None:
         if channel_id:
-            for channel in self.channels:
-                if channel.channel_id == channel_id:
-                    return channel
+            if channel_id in self.channel_id_to_channel:
+                return self.channel_id_to_channel[channel_id]
         elif channel_name:
-            for channel in self.channels:
-                if channel.channel_name == channel_name:
-                    return channel
+            if channel_name in self.channel_name_to_channel:
+                return self.channel_name_to_channel[channel_name]
         return None
 
     @routine(delta=timedelta(seconds=30))

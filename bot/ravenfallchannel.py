@@ -16,6 +16,7 @@ from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessag
 from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command
+from .messageprocessor import RavenMessage, MessageMetadata
 from bot import middleman
 
 if TYPE_CHECKING:
@@ -167,6 +168,9 @@ class RFChannel:
 
     async def event_ravenfall_message(self, message: RavenfallMessage):
         await self.ravenfall_waiter.process_message(message)
+
+    async def handle_processor_message(self, message: RavenMessage, metadata: MessageMetadata):
+        return message
 
     async def get_town_boost(self) -> List[TownBoost] | None:
         village: Village = await self.get_query("select * from village")
