@@ -35,6 +35,7 @@ import asyncio
 import time
 import logging
 import os
+import json
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -190,15 +191,15 @@ class RFChannel:
         message['Format'] = trans_strs[0]
         message['Args'] = []
         if len(trans_strs) > 1:
-            asyncio.create_task(self.finish_sending_rf_message_task(message, trans_strs))
+            asyncio.create_task(self.finish_sending_rf_message_task(message, trans_strs[1:]))
         return message
     
     async def finish_sending_rf_message_task(self, message: RavenfallMessage, msgs: list[str]):
         await asyncio.sleep(0.5)
-        for i in range(1, len(msgs)):
-            message['Format'] = msgs[i]
+        for msg in msgs:
+            message['Format'] = msg
             message['Args'] = []
-            await send_to_client(self.middleman_connection_id, message)
+            await send_to_client(self.middleman_connection_id, json.dumps(message))
 
     async def get_town_boost(self) -> List[TownBoost] | None:
         village: Village = await self.get_query("select * from village")
