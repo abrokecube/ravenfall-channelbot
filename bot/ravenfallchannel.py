@@ -181,7 +181,7 @@ class RFChannel:
         # Make sure session data and other things are not processed
         if message['Identifier'] != 'message':
             return message
-        trans_str = self.rfloc.translate_string(message['Format'], message['Args']).strip()[:495]
+        trans_str = self.rfloc.translate_string(message['Format'], message['Args']).strip()[:490]
         if len(trans_str) == 0:
             return {'block': True}
         message['Format'] = trans_str
