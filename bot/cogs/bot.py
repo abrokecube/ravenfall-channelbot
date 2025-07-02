@@ -11,6 +11,15 @@ class BotStuffCog(Cog):
     async def reloadstrings(self, ctx: Context):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
+        
+        do_all = ctx.args.get_flag(['a', 'all']) is not None
+        if do_all:
+            for channel in self.rf_manager.channels:
+                channel.rfloc.load_definitions()
+                channel.rfloc.load_translations()
+            await ctx.reply("Strings reloaded for all channels!")
+            return
+
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
