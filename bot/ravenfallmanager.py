@@ -111,7 +111,7 @@ class RFChannelManager:
                 return self.channel_name_to_channel[channel_name]
         return None
 
-    @routine(delta=timedelta(seconds=30))
+    @routine(delta=timedelta(seconds=45))
     async def mult_check_routine(self):
         old_online = self.ravennest_is_online
         is_online = False
@@ -143,7 +143,7 @@ class RFChannelManager:
                     for channel in self.channels:
                         if channel.multiplier['multiplier'] != self.global_multiplier:
                             r = await send_multichat_command(
-                                text="?multiplier",
+                                text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
                                 user_id=channel.channel_id,
                                 user_name=channel.channel_name,
                                 channel_id=channel.channel_id,
