@@ -117,7 +117,6 @@ class MessageProcessor:
         self.server = None
         self.clients: Dict[str, ClientInfo] = {}
         self.running = False
-        self._loop = None
         
         # Callback lists
         self.message_callbacks: List[MessageCallback] = []
@@ -306,97 +305,84 @@ class MessageProcessor:
                     logger.error(f"Error in disconnection callback: {e}", exc_info=True)
     
     def start(self) -> None:
-        """Start the WebSocket server synchronously."""
+        """Start the WebSocket server.
+        
+        Note: This method is synchronous. The server will run in the current event loop.
+        """
         if self.running:
             logger.warning("Server is already running")
             return
-
-        # Create a new event loop for this thread
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-
+            
+        loop = asyncio.get_event_loop()
+        
+        # Create server
+        self.server = websockets.serve(
+            self._handle_client,
+            self.host,
+            self.port,
+            max_size=self.max_message_size,
+            ping_interval=20,  # 20 seconds
+            ping_timeout=20,   # 20 seconds
+            close_timeout=5,   # 5 seconds
+        )
+        
+        # Start the server
+        self.server = loop.run_until_complete(self.server)
+        self.running = True
+        logger.info(f"WebSocket server started on ws://{self.host}:{self.port}")
+        
+        # Set up signal handlers for graceful shutdown
         try:
-            # Start the server in the event loop
-            self.server = self._loop.run_until_complete(
-                websockets.serve(
-                    self._handle_client,
-                    self.host,
-                    self.port,
-                    max_size=self.max_message_size,
-                    ping_interval=20,  # 20 seconds
-                    ping_timeout=20,   # 20 seconds
-                    close_timeout=5,   # 5 seconds
-                )
-            )
-            
-            self.running = True
-            logger.info(f"WebSocket server started on ws://{self.host}:{self.port}")
-            
-            # Keep the server running
-            try:
-                self._loop.run_forever()
-            except (KeyboardInterrupt, SystemExit):
-                logger.info("Server shutdown requested")
-            except Exception as e:
-                logger.error(f"Server error: {e}", exc_info=True)
-            finally:
-                self.stop()
-                
-        except Exception as e:
-            logger.error(f"Failed to start server: {e}", exc_info=True)
-            raise
+            loop.add_signal_handler(signal.SIGINT, lambda: asyncio.create_task(self.stop()))
+            loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(self.stop()))
+        except NotImplementedError:
+            # Windows compatibility
+            pass
     
-    def stop(self) -> None:
-        """Stop the WebSocket server synchronously."""
+    async def astop(self) -> None:
+        """Asynchronously stop the WebSocket server."""
         if not self.running:
             return
             
         logger.info("Stopping WebSocket server...")
         self.running = False
         
-        if hasattr(self, '_loop') and self._loop:
-            # Schedule the async cleanup
-            async def _stop():
-                if self.server:
-                    self.server.close()
-                    await self.server.wait_closed()
-                    self.server = None
-                
-                # Close all client connections
-                if self.clients:
-                    logger.info(f"Closing {len(self.clients)} client connections...")
-                    for client_id, client_info in list(self.clients.items()):
-                        try:
-                            await client_info.websocket.close()
-                        except Exception as e:
-                            logger.error(f"Error closing client {client_id}: {e}")
-                    self.clients.clear()
-                
-                logger.info("WebSocket server stopped")
+        if self.server:
+            self.server.close()
+            await self.server.wait_closed()
+            self.server = None
             
-            # Run the cleanup synchronously
-            try:
-                self._loop.run_until_complete(_stop())
-            except Exception as e:
-                logger.error(f"Error during server shutdown: {e}", exc_info=True)
+        # Close all client connections
+        if self.clients:
+            logger.info(f"Closing {len(self.clients)} client connections...")
+            tasks = [
+                client_info.websocket.close() 
+                for client_info in self.clients.values()
+            ]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self.clients.clear()
             
-            # Stop the event loop
-            self._loop.stop()
-            if not self._loop.is_closed():
-                self._loop.close()
-            self._loop = None
-    
-# Example usage with WebSocket server
-async def main():
+        logger.info("WebSocket server stopped")
+        
+    def stop(self) -> None:
+        """Synchronously stop the WebSocket server."""
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(self.astop())
+        else:
+            loop.run_until_complete(self.astop())
+
+def main():
+    """Example usage of the WebSocket server."""
     # Create processor instance
     processor = MessageProcessor(host='127.0.0.1', port=8000)
     
     # Example message callback
-    async def handle_message(message: Dict[str, Any], client_info: ClientInfo) -> Optional[Dict[str, Any]]:
+    async def handle_message(message: RavenMessage, metadata: MessageMetadata, client_info: ClientInfo) -> Optional[ProcessorResponse]:
         logger.info(f"Received message from {client_info.client_id}: {message}")
         # You can modify the message here before it's processed
-        if "echo" in message.get("message", ""):
-            return {"echo": "Received your message!"}
+        if "echo" in str(message.get("content", "")).lower():
+            return {"message": {"echo": "Received your message!"}}
         return None  # Return None to continue with normal processing
     
     # Example connection callback
@@ -404,7 +390,10 @@ async def main():
         logger.info(f"New client connected: {client_info.client_id} from {client_info.remote_address}")
         # You can send a welcome message or perform other actions
         try:
-            await client_info.websocket.send(json.dumps({"status": "connected", "client_id": client_info.client_id}) + '\n')
+            await client_info.websocket.send(json.dumps({
+                "status": "connected", 
+                "client_id": client_info.client_id
+            }) + '\n')
         except Exception as e:
             logger.error(f"Error sending welcome message: {e}")
     
@@ -419,24 +408,17 @@ async def main():
     
     # Start the server
     logger.info("Starting WebSocket server...")
-    
-    # Handle graceful shutdown
-    def handle_signal(signum, frame):
-        logger.info(f"Received signal {signum}, stopping server...")
-        processor.stop()
-    
-    # Set up signal handlers
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGTERM, handle_signal)
+    processor.start()
     
     try:
-        processor.start()
+        # Keep the main thread alive
+        loop = asyncio.get_event_loop()
+        loop.run_forever()
     except KeyboardInterrupt:
-        logger.info("Server stopped by user")
-    except Exception as e:
-        logger.error(f"Server error: {e}", exc_info=True)
+        logger.info("Shutdown signal received, stopping server...")
     finally:
         processor.stop()
+        logger.info("Server shutdown complete")
 
 if __name__ == "__main__":
     main()
