@@ -120,10 +120,10 @@ class RavenfallLocalization:
         """Load string translations from YAML file."""
         yaml = YAML()
         if self.strings_path is None:
-            logging.debug("No strings file was loaded")
+            logger.debug("No strings file was loaded")
             return
         if not os.path.exists(self.strings_path):
-            logging.warning(f"Strings file not found: {self.strings_path}")
+            logger.warning(f"Strings file not found: {self.strings_path}")
             return
             
         with open(self.strings_path, 'r', encoding='utf-8') as f:
@@ -422,11 +422,11 @@ for key, value in BotString.__dict__.items():
 
 def _test():
     """Test function for the localization system."""
-    logging.basicConfig(
-        level=logging.DEBUG,
+    logger.basicConfig(
+        level=logger.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.StreamHandler(),
+            logger.StreamHandler(),
         ]
     )
     # Example test cases
