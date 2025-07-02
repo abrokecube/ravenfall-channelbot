@@ -256,12 +256,11 @@ class MessageProcessor:
             logger.error(error_msg, exc_info=True)
             return json.dumps({"error": error_msg, "original_message": message}) + '\n'
     
-    async def _handle_client(self, websocket: WebSocketServer, path: str) -> None:
+    async def _handle_client(self, websocket: WebSocketServer) -> None:
         """Handle a new WebSocket client connection.
         
         Args:
             websocket: The WebSocket connection instance
-            path: The requested path (part of the WebSocket protocol)
         """
         client_id = str(uuid.uuid4())
         remote_address = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
@@ -273,7 +272,7 @@ class MessageProcessor:
         )
         
         self.clients[client_id] = client_info
-        logger.info(f"Client connected: {client_id} from {remote_addr}")
+        logger.info(f"Client connected: {client_id} from {remote_address}")
         
         # Notify connection callbacks
         for callback in self.connection_callbacks:
