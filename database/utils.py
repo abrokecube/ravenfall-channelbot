@@ -27,7 +27,7 @@ async def get_user(
     user_obj = result.scalar_one_or_none()
     if user_obj is None:
         user_obj = User(
-            id=id,
+            twitch_id=id,
             name=name
         )
         session.add(user_obj)
