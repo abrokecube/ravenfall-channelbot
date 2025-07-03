@@ -307,10 +307,15 @@ class RFChannel:
     
     async def restore_auto_raid(self, session: AsyncSession, char_id: str, username: str):
         result = await session.execute(
-            select(AutoRaidStatus, Character.twitch_id).where(AutoRaidStatus.char_id == char_id).join(Character)
+            select(AutoRaidStatus, Character.twitch_id)
+            .where(AutoRaidStatus.char_id == char_id)
+            .join(Character)
         )
-        auto_raid, twitch_id = result.scalar_one_or_none()
-        if auto_raid is not None:
+        row = result.one_or_none()  # Returns a Row object or None
+        if row is not None:
+            auto_raid: AutoRaidStatus
+            twitch_id: int
+            auto_raid, twitch_id = row  # Unpack the row
             logging.debug(f"Restoring auto raid for {username}")
             sender = SenderBuilder(
                 username=username,
@@ -320,7 +325,7 @@ class RFChannel:
             msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
             await send_to_client(self.middleman_connection_id, msg)
         else:
-            logging.debug(f"No auto raid found for {username}")
+            logging.debug(f"No auto raid found for {username}")   
     
     async def send_ravenbot_chat_message(self, text: str, cid: str):
         message = {

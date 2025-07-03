@@ -11,7 +11,7 @@ class SenderBuilder:
         user_id: Union[str, UUID] = "00000000-0000-0000-0000-000000000000",
         character_id: Union[str, UUID] = "00000000-0000-0000-0000-000000000000",
         display_name: str = "",
-        color: str = "",
+        color: str = "#7F7F7F",
         platform: str = "twitch",
         platform_id: str = "",
         is_broadcaster: bool = False,
