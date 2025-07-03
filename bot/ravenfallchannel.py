@@ -247,6 +247,7 @@ class RFChannel:
             session.add(auto_raid_obj)
         else:
             auto_raid_obj.auto_raid_count = count
+        logging.debug(f"Added auto raid for {username} with count {count}")
     
     async def remove_auto_raid(self, session: AsyncSession, char_id: str):
         result = await session.execute(
@@ -255,6 +256,7 @@ class RFChannel:
         auto_raid_obj = result.scalar_one_or_none()
         if auto_raid_obj is not None:
             session.delete(auto_raid_obj)
+        logging.debug(f"Removed auto raid for {char_id}")
 
     async def get_auto_raids(self, session: AsyncSession, char_ids: list[str]):
         result = await session.execute(
@@ -285,6 +287,7 @@ class RFChannel:
         chars: List[Player] = await self.get_query("select * from players")
         char_ids = [char['id'] for char in chars]
         char_id_to_player = {char['id']: char for char in chars}
+        logging.debug(f"Restoring auto raids for {len(char_ids)} characters")
         async with get_async_session() as session:
             result = await session.execute(
                 select(AutoRaidStatus).where(AutoRaidStatus.char_id.in_(char_ids))
@@ -304,12 +307,15 @@ class RFChannel:
         )
         auto_raid = result.scalar_one_or_none()
         if auto_raid is not None:
+            logging.debug(f"Restoring auto raid for {username}")
             sender = SenderBuilder(
                 username=username,
                 display_name=username,
             ).build()
             msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
             await send_to_client(self.middleman_connection_id, msg)
+        else:
+            logging.debug(f"No auto raid found for {username}")
     
     async def send_ravenbot_chat_message(self, text: str, cid: str):
         message = {
