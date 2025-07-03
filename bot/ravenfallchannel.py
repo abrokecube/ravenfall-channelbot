@@ -230,7 +230,7 @@ class RFChannel:
                 await self.remove_auto_raid(session, char_id)
             case "auto_raid_status_none":
                 await self.remove_auto_raid(session, char_id)
-            case "player_joined":
+            case "join_welcome":
                 await self.restore_auto_raid(session, char_id, twitch_name)
     
     async def add_auto_raid(self, session: AsyncSession, char_id: str, twitch_id: str, username: str, count: int = 2147483647):
@@ -255,7 +255,7 @@ class RFChannel:
         )
         auto_raid_obj = result.scalar_one_or_none()
         if auto_raid_obj is not None:
-            session.delete(auto_raid_obj)
+            await session.delete(auto_raid_obj)
         logging.debug(f"Removed auto raid for {char_id}")
 
     async def get_auto_raids(self, session: AsyncSession, char_ids: list[str]):

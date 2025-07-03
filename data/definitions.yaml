@@ -51,9 +51,6 @@ server_error: "Server was not able to give back a valid response. Uh oh.. BUG!"
 
 dps_no_damage: "You have not dealt any damage or healed anyone yet."
 
-player_joined: Welcome to Ravenfall!
-player_joined_first_time: Welcome to Ravenfall, {playerName}! You can get started by using the !train command. Why don't you try using !train all to train your Attack, Defense, and Strength all at once?
-
 patreon_only: This command is for Patreon supporters only. Consider supporting the game on Patreon to gain access to this command.
 
 petrace_no_pet: You need to equip a pet to play.
