@@ -85,9 +85,9 @@ class RFChannelManager:
                     elif metadata.source.lower() == "server":
                         asyncio.create_task(channel.event_ravenfall_message(message))
                 if metadata.source.lower() == "client":
-                    return await channel.process_ravenbot_message(message, metadata)
+                    return await channel.process_ravenbot_message(message.copy(), metadata)
                 elif metadata.source.lower() == "server":
-                    return await channel.process_ravenfall_message(message, metadata)
+                    return await channel.process_ravenfall_message(message.copy(), metadata)
                 else:
                     return message
         return message

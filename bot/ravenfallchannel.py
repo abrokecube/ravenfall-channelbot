@@ -194,7 +194,7 @@ class RFChannel:
         if message['Identifier'] != 'message':
             return message
         match = self.rfloc.get_match(message['Format'])
-        asyncio.create_task(self.process_auto_raid_sessionless(message, match.key))
+        asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), match.key))
         trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
         if len(trans_str) == 0:
             return {'block': True}
