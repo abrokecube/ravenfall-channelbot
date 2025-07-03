@@ -31,7 +31,7 @@ class SenderBuilder:
             "DisplayName": display_name or username,
             "Color": color,
             "Platform": platform,
-            "PlatformId": platform_id or str(user_id),
+            "PlatformId": platform_id,
             "IsBroadcaster": is_broadcaster,
             "IsModerator": is_moderator,
             "IsSubscriber": is_subscriber,

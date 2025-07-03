@@ -25,7 +25,7 @@ from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from bot import middleman
 from database.session import get_async_session
-from database.models import AutoRaidStatus
+from database.models import AutoRaidStatus, Character
 import database.utils as db_utils
 from sqlalchemy import select
 
@@ -290,27 +290,32 @@ class RFChannel:
         logging.debug(f"Restoring auto raids for {len(char_ids)} characters")
         async with get_async_session() as session:
             result = await session.execute(
-                select(AutoRaidStatus).where(AutoRaidStatus.char_id.in_(char_ids))
+                select(AutoRaidStatus, Character.twitch_id).where(AutoRaidStatus.char_id.in_(char_ids)).join(Character)
             )
-            auto_raids = result.scalars().all()
-            for auto_raid in auto_raids:
+            auto_raids = result.all()
+            for row in auto_raids:
+                auto_raid: AutoRaidStatus
+                twitch_id: int
+                auto_raid, twitch_id = row
                 sender = SenderBuilder(
                     username=char_id_to_player[auto_raid.char_id]['name'],
                     display_name=char_id_to_player[auto_raid.char_id]['name'],
+                    platform_id=str(twitch_id)
                 ).build()
                 msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
                 await send_to_client(self.middleman_connection_id, msg)
     
     async def restore_auto_raid(self, session: AsyncSession, char_id: str, username: str):
         result = await session.execute(
-            select(AutoRaidStatus).where(AutoRaidStatus.char_id == char_id)
+            select(AutoRaidStatus, Character.twitch_id).where(AutoRaidStatus.char_id == char_id).join(Character)
         )
-        auto_raid = result.scalar_one_or_none()
+        auto_raid, twitch_id = result.scalar_one_or_none()
         if auto_raid is not None:
             logging.debug(f"Restoring auto raid for {username}")
             sender = SenderBuilder(
                 username=username,
                 display_name=username,
+                platform_id=str(twitch_id)
             ).build()
             msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
             await send_to_client(self.middleman_connection_id, msg)
