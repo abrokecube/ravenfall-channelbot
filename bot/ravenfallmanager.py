@@ -78,6 +78,7 @@ class RFChannelManager:
                 await channel.event_twitch_message(message)
 
     async def handle_processor_message(self, message: RavenMessage, metadata: MessageMetadata, client_info: ClientInfo):
+        out_message = message.copy()
         for channel in self.channels:
             if metadata.connection_id == channel.middleman_connection_id:
                 if not metadata.is_api:
@@ -86,12 +87,10 @@ class RFChannelManager:
                     elif metadata.source.lower() == "server":
                         asyncio.create_task(channel.event_ravenfall_message(message))
                 if metadata.source.lower() == "client":
-                    return await channel.process_ravenbot_message(message.copy(), metadata)
+                    out_message = await channel.process_ravenbot_message(message.copy(), metadata)
                 elif metadata.source.lower() == "server":
-                    return await channel.process_ravenfall_message(message.copy(), metadata)
-                else:
-                    return message
-        return message
+                    out_message = await channel.process_ravenfall_message(message.copy(), metadata)
+        return {"message": out_message}
 
     async def on_processor_connect(self, client_info: ClientInfo):
         self.middleman_connected = True
