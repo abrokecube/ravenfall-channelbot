@@ -66,28 +66,17 @@ async def get_channel(
 
 async def get_character(
     session: AsyncSession,
+    id: Union[int, str],
     *, 
-    id: Union[int, str] = None,
-    twitch_id: str = None,
+    twitch_id: Union[int, str] = None,
     name: str = None,
 ):
-    if isinstance(id, str):
-        id = int(id)
+    if isinstance(twitch_id, str):
+        twitch_id = int(twitch_id)
 
-    if id:
-        result = await session.execute(
-            select(Character).where(Character.id == id)
-        )
-    elif name:
-        result = await session.execute(
-            select(Character).where(Character.name == name)
-        )
-    elif twitch_id:
-        result = await session.execute(
-            select(Character).where(Character.twitch_id == twitch_id)
-        )
-    else:
-        return None
+    result = await session.execute(
+        select(Character).where(Character.id == id)
+    )
     
     user_obj = result.scalar_one_or_none()
     if user_obj is None:

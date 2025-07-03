@@ -234,7 +234,7 @@ class RFChannel:
                 await self.restore_auto_raid(session, char_id, twitch_name)
     
     async def add_auto_raid(self, session: AsyncSession, char_id: str, twitch_id: str, username: str, count: int = 2147483647):
-        _char = await db_utils.get_character(session, id=char_id, twitch_id=twitch_id, name=username)
+        _char = await db_utils.get_character(session, char_id, twitch_id=twitch_id, name=username)
         result = await session.execute(
             select(AutoRaidStatus).where(AutoRaidStatus.char_id == char_id)
         )
