@@ -72,7 +72,7 @@ async def send_to_server(connection_id: str, message: str) -> Dict:
     return response
 
 
-async def send_and_wait_response(connection_id: str, message: str, correlation_id: str = "", timeout: int = 30) -> Dict:
+async def send_to_server_and_wait_response(connection_id: str, message: str, correlation_id: str = "", timeout: int = 30) -> Dict:
     """
     Send a message to the server and wait for a response with the given correlation ID.
     

@@ -15,7 +15,7 @@ from .models import (
     RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
-from .middleman import send_to_client, send_and_wait_response
+from .middleman import send_to_client, send_to_server_and_wait_response, send_to_server
 from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command
@@ -279,7 +279,7 @@ class RFChannel:
                     display_name=char_id_to_player[auto_raid.char_id]['name'],
                 ).build()
                 msg = RavenBotTemplates.auto_raid_status(sender)
-                response: RavenfallMessage = await send_and_wait_response(self.middleman_connection_id, msg)
+                response: RavenfallMessage = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
                 match = self.rfloc.get_match(response['Format'])
                 await self.process_auto_raid(session, response, match.key)
     
@@ -303,7 +303,7 @@ class RFChannel:
                     platform_id=str(twitch_id)
                 ).build()
                 msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
-                await send_to_client(self.middleman_connection_id, msg)
+                await send_to_server(self.middleman_connection_id, msg)
     
     async def restore_auto_raid(self, session: AsyncSession, char_id: str, username: str):
         result = await session.execute(
@@ -323,7 +323,7 @@ class RFChannel:
                 platform_id=str(twitch_id)
             ).build()
             msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
-            await send_to_client(self.middleman_connection_id, msg)
+            await send_to_server(self.middleman_connection_id, msg)
         else:
             logging.debug(f"No auto raid found for {username}")   
     
