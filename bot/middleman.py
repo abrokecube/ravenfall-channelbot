@@ -5,6 +5,7 @@ import os
 import aiohttp
 from typing import Dict, Optional, Tuple, Any, TypedDict
 from dataclasses import dataclass
+from .messageprocessor import RavenfallMessage
 
 # Configuration
 MIDDLEMAN_API_HOST = os.getenv('RF_MIDDLEMAN_HOST', None)
@@ -71,8 +72,19 @@ async def send_to_server(connection_id: str, message: str) -> Dict:
     response, status = await _call_middleman_api('/api/send-to-server', 'POST', data)
     return response
 
+class SendAndWaitResult(TypedDict, total=False):
+    """Type definition for API responses from the middleman server."""
+    success: bool
+    correlationId: str
+    responses: list[RavenfallMessage]
+    complete: bool
+    count: int
+    expectedCount: int
+    timeout: bool
+    error: str  # Optional error message
 
-async def send_to_server_and_wait_response(connection_id: str, message: str, correlation_id: str = "", timeout: int = 30) -> Dict:
+
+async def send_to_server_and_wait_response(connection_id: str, message: str, correlation_id: str = "", timeout: int = 30) -> SendAndWaitResult:
     """
     Send a message to the server and wait for a response with the given correlation ID.
     

@@ -286,9 +286,10 @@ class RFChannel:
                     platform_id=str(twitch_id)
                 ).build()
                 msg = RavenBotTemplates.auto_raid_status(sender)
-                response: RavenfallMessage = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
-                match = self.rfloc.get_match(response['Format'])
-                await self.process_auto_raid(session, response, match.key)
+                response = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
+                if response['success']:
+                    match = self.rfloc.get_match(response['responses'][0]['Format'])
+                    await self.process_auto_raid(session, response['responses'][0], match.key)
     
     async def restore_auto_raids(self):
         chars: List[Player] = await self.get_query("select * from players")
