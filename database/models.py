@@ -15,7 +15,7 @@ class Base(AsyncAttrs, DeclarativeBase):
 class User(Base):
     __tablename__ = 'users'
 
-    id = Column(Integer, primary_key=True)
+    twitch_id = Column(Integer, primary_key=True)
     name = Column(String)
     
     characters = relationship("Character", back_populates='user')
@@ -34,10 +34,10 @@ class Character(Base):
     
     id = Column(String, primary_key=True)
     name = Column(String)
-    twitch_id = Column(Integer)
-    
-    user_id = Column(Integer, ForeignKey('users.id'))
+
+    twitch_id = Column(Integer, ForeignKey('users.twitch_id'))
     user = relationship("User", back_populates='characters')
+
     auto_raid_status = relationship("AutoRaidStatus", back_populates='char', uselist=False)
 
 

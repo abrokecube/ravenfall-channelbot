@@ -15,7 +15,7 @@ async def get_user(
     
     if id:
         result = await session.execute(
-            select(User).where(User.id == id)
+            select(User).where(User.twitch_id == id)
         )
     elif name:
         result = await session.execute(
@@ -31,6 +31,8 @@ async def get_user(
             name=name
         )
         session.add(user_obj)
+    if name:
+        user_obj.name = name
     return user_obj
 
 async def get_channel(
@@ -86,7 +88,8 @@ async def get_character(
             twitch_id=twitch_id
         )
         session.add(user_obj)
-
-    user_obj.name = name  # update name if it was changed
+    await get_user(session, id=twitch_id, name=name)
+    if name:
+        user_obj.name = name  # update name if it was changed
 
     return user_obj
