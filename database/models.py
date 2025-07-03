@@ -38,12 +38,14 @@ class Character(Base):
     
     user_id = Column(Integer, ForeignKey('users.id'))
     user = relationship("User", back_populates='characters')
+    auto_raid_status = relationship("AutoRaidStatus", back_populates='char', uselist=False)
 
 
 class AutoRaidStatus(Base):
     __tablename__ = 'auto_raid_status'
     
-    char_id = Column(Integer, ForeignKey('characters.id'))
+    id = Column(Integer, primary_key=True)
+    char_id = Column(Integer, ForeignKey('characters.id'), unique=True)
     auto_raid_count = Column(Integer, default=-1)
     char = relationship("Character", back_populates='auto_raid_status')
 
