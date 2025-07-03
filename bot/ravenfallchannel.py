@@ -218,9 +218,9 @@ class RFChannel:
             await self.process_auto_raid(session, message, key)
     
     async def process_auto_raid(self, session: AsyncSession, message: RavenfallMessage, key: str):
-        char_id = message['Recipient']['CharacterId']
-        twitch_name = message['Recipient']['PlatformUserName']
-        twitch_id = message['Recipient']['PlatformId']
+        char_id = message['Recipent']['CharacterId']
+        twitch_name = message['Recipent']['PlatformUserName']
+        twitch_id = message['Recipent']['PlatformId']
         match key:
             case "auto_raid_activate_count":
                 await self.add_auto_raid(session, char_id, twitch_id, twitch_name, int(message['Args'][0]))
