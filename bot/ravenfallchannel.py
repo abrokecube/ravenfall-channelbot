@@ -321,7 +321,7 @@ class RFChannel:
         message = {
             "Identifier": "message",
             "CorrelationId": cid,
-            "Recipient": {
+            "Recipent": {
                 "UserId": "00000000-0000-0000-0000-000000000000",
                 "CharacterId": "00000000-0000-0000-0000-000000000000",
                 "Platform": "twitch",

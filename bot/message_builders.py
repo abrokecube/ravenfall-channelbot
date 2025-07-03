@@ -156,7 +156,7 @@ class RavenfallMessageBuilder:
         self.message_data = {
             "Identifier": identifier,
             "CorrelationId": str(correlation_id) if correlation_id else str(uuid4()),
-            "Recipient": recipient,
+            "Recipent": recipient,
             "Format": format_str or "",
             "Args": list(args) if args else [],
             "Tags": [],
@@ -165,7 +165,7 @@ class RavenfallMessageBuilder:
     
     def with_recipient(self, recipient: Dict[str, Any]) -> 'RavenfallMessageBuilder':
         """Set the recipient of the message."""
-        self.message_data["Recipient"] = recipient
+        self.message_data["Recipent"] = recipient
         return self
     
     def with_format(self, format_str: str) -> 'RavenfallMessageBuilder':
@@ -211,7 +211,7 @@ class RavenfallMessageBuilder:
     
     def build(self) -> str:
         """Build and return the message dictionary."""
-        if "Recipient" not in self.message_data:
+        if "Recipent" not in self.message_data:
             raise ValueError("Recipient is required")
         if not self.message_data["Format"] and not self.message_data["Args"]:
             raise ValueError("Either Format or Args must be provided")
