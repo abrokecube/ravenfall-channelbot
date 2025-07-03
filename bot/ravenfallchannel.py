@@ -309,7 +309,9 @@ class RFChannel:
         logging.debug(f"Restoring auto raids for {len(char_ids)} characters")
         async with get_async_session() as session:
             result = await session.execute(
-                select(AutoRaidStatus, Character.twitch_id).where(AutoRaidStatus.char_id.in_(char_ids)).join(Character)
+                select(AutoRaidStatus, Character.twitch_id)
+                .where(AutoRaidStatus.char_id.in_(char_ids))
+                .join(Character)
             )
             auto_raids = result.all()
             for row in auto_raids:

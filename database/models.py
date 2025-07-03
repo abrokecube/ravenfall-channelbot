@@ -33,7 +33,6 @@ class Character(Base):
     __tablename__ = 'characters'
     
     id = Column(String, primary_key=True)
-    name = Column(String)
 
     twitch_id = Column(Integer, ForeignKey('users.twitch_id'))
     user = relationship("User", back_populates='characters')
