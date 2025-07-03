@@ -270,6 +270,8 @@ class RFChannel:
         return result.scalars().all()
 
     async def fetch_auto_raids(self):
+        if not self.manager.middleman_connected:
+            return
         chars: List[Player] = await self.get_query("select * from players")
         char_ids = [char['id'] for char in chars]
         char_id_to_player = {char['id']: char for char in chars}
@@ -294,6 +296,8 @@ class RFChannel:
                     await self.process_auto_raid(session, response['responses'][0], match.key)
     
     async def restore_auto_raids(self):
+        if not self.manager.middleman_connected:
+            return
         chars: List[Player] = await self.get_query("select * from players")
         char_ids = [char['id'] for char in chars]
         char_id_to_player = {char['id']: char for char in chars}
@@ -316,6 +320,8 @@ class RFChannel:
                 await send_to_server_and_wait_response(self.middleman_connection_id, msg)
     
     async def restore_auto_raid(self, session: AsyncSession, char_id: str, username: str):
+        if not self.manager.middleman_connected:
+            return
         result = await session.execute(
             select(AutoRaidStatus, Character.twitch_id)
             .where(AutoRaidStatus.char_id == char_id)
@@ -706,7 +712,7 @@ class RFChannel:
 
     async def game_event_fetch_auto_raids(self, old_sub_event: RFChannelSubEvent, sub_event: RFChannelSubEvent):
         if old_sub_event != sub_event and sub_event == RFChannelSubEvent.RAID:
-            await asyncio.sleep(10)
+            await asyncio.sleep(2)
             await self.fetch_auto_raids()
 
     @routine(delta=timedelta(seconds=30), wait_first=True)
