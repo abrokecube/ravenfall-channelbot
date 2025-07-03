@@ -229,6 +229,8 @@ class RFChannel:
                 await self.add_auto_raid(session, char_id, twitch_id, twitch_name, int(message['Args'][0]))
             case "auto_raid_activate":
                 await self.add_auto_raid(session, char_id, twitch_id, twitch_name)
+            case "auto_raid_activate_cost":
+                await self.add_auto_raid(session, char_id, twitch_id, twitch_name)
             case "auto_raid_deactivate":
                 await self.remove_auto_raid(session, char_id)
             case "auto_raid_status_none":
