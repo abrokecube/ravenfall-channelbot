@@ -12,6 +12,8 @@ thefuzz = "*"
 async-lru = "*"
 aiofiles = "*"
 "ruamel.yaml" = "*"
+aiosqlite = "*"
+sqlalchemy = "*"
 
 [dev-packages]
 

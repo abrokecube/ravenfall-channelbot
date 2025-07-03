@@ -434,7 +434,7 @@ auto_dungeon_deactivate: "You will no longer automatically join dungeons"
 auto_dungeon_invalid_value: "{query} is not a valid value for dungeon auto join settings"
 auto_dungeon_joined: "You have automatically joined the dungeon!"
 auto_dungeon_joined_count: 'You have automatically joined the dungeon! You will join {counter} more.'
-auto_raid_activate_count: "You will automatically join the next {count} raids, until you use !raid join off. It will cost {cost} each time you automatically join a raid."
+auto_raid_activate_count: "You will automatically join the next {autoJoinCounter} raids, until you use !raid join off. It will cost {cost} each time you automatically join a raid."
 auto_raid_activate: "You will automatically join raids until you use !raid join off."
 auto_raid_activate_cost: "You will automatically join raids until you use !raid join off. It will cost {cost} each time you automatically join a raid."
 auto_raid_status_none: "You have are not set to automatically join any raids."
