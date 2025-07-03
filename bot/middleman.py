@@ -59,6 +59,7 @@ async def send_to_client(connection_id: str, message: str) -> Dict:
         "connectionId": connection_id,
         "data": message
     }
+    logger.debug(f"Sending message to client: {message}")
     response, status = await _call_middleman_api('/api/send-to-client', 'POST', data)
     return response
 
@@ -68,6 +69,7 @@ async def send_to_server(connection_id: str, message: str) -> Dict:
         "connectionId": connection_id,
         "data": message
     }
+    logger.debug(f"Sending message to server: {message}")
     response, status = await _call_middleman_api('/api/send-to-server', 'POST', data)
     return response
 
@@ -90,11 +92,12 @@ async def send_to_server_and_wait_response(connection_id: str, message: str, cor
         "data": message,
         "timeout": timeout
     }
-    
+    logger.debug(f"Sending message to server and waiting for response: {message}")    
     if correlation_id:
         data["correlationId"] = correlation_id
         
     response, status = await _call_middleman_api('/api/send-and-wait-response', 'POST', data)
+    logger.debug(f"Response from server: {response}")
     return response
 
 async def ensure_connected(connection_id: str, timeout: int = 0) -> Dict:

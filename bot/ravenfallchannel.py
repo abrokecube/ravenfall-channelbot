@@ -273,13 +273,17 @@ class RFChannel:
         char_id_to_player = {char['id']: char for char in chars}
         async with get_async_session() as session:
             result = await session.execute(
-                select(AutoRaidStatus).where(AutoRaidStatus.char_id.in_(char_ids))
+                select(AutoRaidStatus, Character.twitch_id).where(AutoRaidStatus.char_id.in_(char_ids)).join(Character)
             )
-            auto_raids = result.scalars().all()
-            for auto_raid in auto_raids:
+            auto_raids = result.all()
+            for row in auto_raids:
+                auto_raid: AutoRaidStatus
+                twitch_id: int
+                auto_raid, twitch_id = row
                 sender = SenderBuilder(
                     username=char_id_to_player[auto_raid.char_id]['name'],
                     display_name=char_id_to_player[auto_raid.char_id]['name'],
+                    platform_id=str(twitch_id)
                 ).build()
                 msg = RavenBotTemplates.auto_raid_status(sender)
                 response: RavenfallMessage = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
