@@ -32,9 +32,9 @@ class Channel(Base):
 class Character(Base):
     __tablename__ = 'characters'
     
-    id = Column(Integer, primary_key=True)
+    id = Column(String, primary_key=True)
     name = Column(String)
-    twitch_id = Column(String)
+    twitch_id = Column(Integer)
     
     user_id = Column(Integer, ForeignKey('users.id'))
     user = relationship("User", back_populates='characters')
@@ -45,7 +45,7 @@ class AutoRaidStatus(Base):
     __tablename__ = 'auto_raid_status'
     
     id = Column(Integer, primary_key=True)
-    char_id = Column(Integer, ForeignKey('characters.id'), unique=True)
+    char_id = Column(String, ForeignKey('characters.id'), unique=True)
     auto_raid_count = Column(Integer, default=-1)
     char = relationship("Character", back_populates='auto_raid_status')
 
