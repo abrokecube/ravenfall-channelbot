@@ -17,6 +17,7 @@ class RavenBotTemplates:
     ) -> str:
         return RavenBotMessageBuilder(
             sender=sender,
+            content="status",
             identifier="raid_auto",
             correlation_id=correlation_id
         ).build()
