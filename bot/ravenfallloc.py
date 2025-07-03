@@ -178,6 +178,7 @@ class RavenfallLocalization:
                 return f"{self._fill_args(in_str, in_args)}"
         else:
             logger.debug(f"Using key {match.key}")
+            matched = match
             key = match.key
 
         translation = None
@@ -185,7 +186,7 @@ class RavenfallLocalization:
             translation = self.translated_strings[key]
             
         if translation is None:
-            logger.warning(f"No translation for {key}")
+            logger.info(f"No translation for {key}")
             return self._fill_args(in_str, in_args)
             
         if not translation.strings:
