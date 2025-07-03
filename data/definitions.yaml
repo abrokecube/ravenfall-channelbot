@@ -51,9 +51,6 @@ server_error: "Server was not able to give back a valid response. Uh oh.. BUG!"
 
 dps_no_damage: "You have not dealt any damage or healed anyone yet."
 
-player_joined: Welcome to Ravenfall!
-player_joined_first_time: Welcome to Ravenfall, {playerName}! You can get started by using the !train command. Why don't you try using !train all to train your Attack, Defense, and Strength all at once?
-
 patreon_only: This command is for Patreon supporters only. Consider supporting the game on Patreon to gain access to this command.
 
 petrace_no_pet: You need to equip a pet to play.
@@ -434,7 +431,7 @@ auto_dungeon_deactivate: "You will no longer automatically join dungeons"
 auto_dungeon_invalid_value: "{query} is not a valid value for dungeon auto join settings"
 auto_dungeon_joined: "You have automatically joined the dungeon!"
 auto_dungeon_joined_count: 'You have automatically joined the dungeon! You will join {counter} more.'
-auto_raid_activate_count: "You will automatically join the next {count} raids, until you use !raid join off. It will cost {cost} each time you automatically join a raid."
+auto_raid_activate_count: "You will automatically join the next {autoJoinCounter} raids, until you use !raid join off. It will cost {cost} each time you automatically join a raid."
 auto_raid_activate: "You will automatically join raids until you use !raid join off."
 auto_raid_activate_cost: "You will automatically join raids until you use !raid join off. It will cost {cost} each time you automatically join a raid."
 auto_raid_status_none: "You have are not set to automatically join any raids."

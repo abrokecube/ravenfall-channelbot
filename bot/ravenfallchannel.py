@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
 from datetime import datetime
+
+from sqlalchemy.ext.asyncio import AsyncSession
 from twitchAPI.chat import Chat, ChatMessage
 from ravenpy import RavenNest
 import aiohttp
@@ -13,13 +15,19 @@ from .models import (
     RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
-from .middleman import send_to_client
+from .middleman import send_to_client, send_to_server_and_wait_response
 from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command
 from .messageprocessor import RavenMessage, MessageMetadata
 from .ravenfallloc import RavenfallLocalization
+from .message_templates import RavenBotTemplates
+from .message_builders import SenderBuilder
 from bot import middleman
+from database.session import get_async_session
+from database.models import AutoRaidStatus, Character
+import database.utils as db_utils
+from sqlalchemy import select
 
 if TYPE_CHECKING:
     from .ravenfallmanager import RFChannelManager
@@ -36,6 +44,7 @@ import time
 import logging
 import os
 import json
+import math
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -184,23 +193,171 @@ class RFChannel:
         # Make sure session data and other things are not processed
         if message['Identifier'] != 'message':
             return message
-        trans_str = self.rfloc.translate_string(message['Format'], message['Args']).strip()
+        match = self.rfloc.get_match(message['Format'])
+        key = ""
+        if match is not None:
+            key = match.key
+        asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
+        trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
         if len(trans_str) == 0:
             return {'block': True}
         trans_strs = split_by_utf16_bytes(trans_str, 500)
         if len(trans_strs) > 1:
-            asyncio.create_task(self.finish_sending_rf_message_task(message, trans_strs))
+            asyncio.create_task(self.send_split_msgs(message, trans_strs))
             return {'block': True}
         message['Format'] = trans_strs[0]
         message['Args'] = []
         return message
     
-    async def finish_sending_rf_message_task(self, message: RavenfallMessage, msgs: list[str]):
+    async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
         for msg in msgs:
             message['Format'] = msg
             message['Args'] = []
             await send_to_client(self.middleman_connection_id, json.dumps(message))
             await asyncio.sleep(0.1)
+
+    async def process_auto_raid_sessionless(self, message: RavenfallMessage, key: str):
+        async with get_async_session() as session:
+            await self.process_auto_raid(session, message, key)
+    
+    async def process_auto_raid(self, session: AsyncSession, message: RavenfallMessage, key: str):
+        char_id = message['Recipent']['CharacterId']
+        twitch_name = message['Recipent']['PlatformUserName']
+        twitch_id = message['Recipent']['PlatformId']
+        match key:
+            case "auto_raid_activate_count":
+                await self.add_auto_raid(session, char_id, twitch_id, twitch_name, int(message['Args'][0]))
+            case "auto_raid_activate":
+                await self.add_auto_raid(session, char_id, twitch_id, twitch_name)
+            case "auto_raid_activate_cost":
+                await self.add_auto_raid(session, char_id, twitch_id, twitch_name)
+            case "auto_raid_deactivate":
+                await self.remove_auto_raid(session, char_id)
+            case "auto_raid_status_none":
+                await self.remove_auto_raid(session, char_id)
+            case "join_welcome":
+                await self.restore_auto_raid(session, char_id, twitch_name)
+    
+    async def add_auto_raid(self, session: AsyncSession, char_id: str, twitch_id: str, username: str, count: int = 2147483647):
+        _char = await db_utils.get_character(session, char_id, twitch_id=twitch_id, name=username)
+        result = await session.execute(
+            select(AutoRaidStatus).where(AutoRaidStatus.char_id == char_id)
+        )
+        auto_raid_obj = result.scalar_one_or_none()
+        if auto_raid_obj is None:
+            auto_raid_obj = AutoRaidStatus(
+                char_id=char_id,
+                auto_raid_count=count
+            )
+            session.add(auto_raid_obj)
+        else:
+            auto_raid_obj.auto_raid_count = count
+        logging.debug(f"Added auto raid for {username} with count {count}")
+    
+    async def remove_auto_raid(self, session: AsyncSession, char_id: str):
+        result = await session.execute(
+            select(AutoRaidStatus).where(AutoRaidStatus.char_id == char_id)
+        )
+        auto_raid_obj = result.scalar_one_or_none()
+        if auto_raid_obj is not None:
+            await session.delete(auto_raid_obj)
+        logging.debug(f"Removed auto raid for {char_id}")
+
+    async def get_auto_raids(self, session: AsyncSession, char_ids: list[str]):
+        result = await session.execute(
+            select(AutoRaidStatus).where(AutoRaidStatus.char_id.in_(char_ids))
+        )
+        return result.scalars().all()
+
+    async def fetch_auto_raids(self):
+        if not self.manager.middleman_connected:
+            return
+        chars: List[Player] = await self.get_query("select * from players")
+        char_ids = [char['id'] for char in chars]
+        char_id_to_player = {char['id']: char for char in chars}
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(AutoRaidStatus, Character.twitch_id).where(AutoRaidStatus.char_id.in_(char_ids)).join(Character)
+            )
+            auto_raids = result.all()
+            for row in auto_raids:
+                auto_raid: AutoRaidStatus
+                twitch_id: int
+                auto_raid, twitch_id = row
+                sender = SenderBuilder(
+                    username=char_id_to_player[auto_raid.char_id]['name'],
+                    display_name=char_id_to_player[auto_raid.char_id]['name'],
+                    platform_id=str(twitch_id)
+                ).build()
+                msg = RavenBotTemplates.auto_raid_status(sender)
+                response = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
+                if response['success']:
+                    match = self.rfloc.get_match(response['responses'][0]['Format'])
+                    await self.process_auto_raid(session, response['responses'][0], match.key)
+    
+    async def restore_auto_raids(self):
+        if not self.manager.middleman_connected:
+            return
+        chars: List[Player] = await self.get_query("select * from players")
+        char_ids = [char['id'] for char in chars]
+        char_id_to_player = {char['id']: char for char in chars}
+        logging.debug(f"Restoring auto raids for {len(char_ids)} characters")
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(AutoRaidStatus, Character.twitch_id).where(AutoRaidStatus.char_id.in_(char_ids)).join(Character)
+            )
+            auto_raids = result.all()
+            for row in auto_raids:
+                auto_raid: AutoRaidStatus
+                twitch_id: int
+                auto_raid, twitch_id = row
+                sender = SenderBuilder(
+                    username=char_id_to_player[auto_raid.char_id]['name'],
+                    display_name=char_id_to_player[auto_raid.char_id]['name'],
+                    platform_id=str(twitch_id)
+                ).build()
+                msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
+                await send_to_server_and_wait_response(self.middleman_connection_id, msg)
+    
+    async def restore_auto_raid(self, session: AsyncSession, char_id: str, username: str):
+        if not self.manager.middleman_connected:
+            return
+        result = await session.execute(
+            select(AutoRaidStatus, Character.twitch_id)
+            .where(AutoRaidStatus.char_id == char_id)
+            .join(Character)
+        )
+        row = result.one_or_none()  # Returns a Row object or None
+        if row is not None:
+            auto_raid: AutoRaidStatus
+            twitch_id: int
+            auto_raid, twitch_id = row  # Unpack the row
+            logging.debug(f"Restoring auto raid for {username}")
+            sender = SenderBuilder(
+                username=username,
+                display_name=username,
+                platform_id=str(twitch_id)
+            ).build()
+            msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
+            await send_to_server_and_wait_response(self.middleman_connection_id, msg)
+        else:
+            logging.debug(f"No auto raid found for {username}")   
+    
+    async def send_ravenbot_chat_message(self, text: str, cid: str):
+        message = {
+            "Identifier": "message",
+            "CorrelationId": cid,
+            "Recipent": {
+                "UserId": "00000000-0000-0000-0000-000000000000",
+                "CharacterId": "00000000-0000-0000-0000-000000000000",
+                "Platform": "twitch",
+                "PlatformId": "",
+                "PlatformUserName": ""
+            },
+            "Format": text,
+            "Args": []
+        }
+        await send_to_client(self.middleman_connection_id, json.dumps(message))
 
     async def get_town_boost(self) -> List[TownBoost] | None:
         village: Village = await self.get_query("select * from village")
@@ -508,6 +665,7 @@ class RFChannel:
         self.sub_event = sub_event
         asyncio.create_task(self.game_event_chat_message(sub_event, old_sub_event))
         asyncio.create_task(self.game_event_wake_ravenbot(sub_event))
+        asyncio.create_task(self.game_event_fetch_auto_raids(old_sub_event, sub_event))
     
     async def game_event_chat_message(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
         if self.event_notifications:
@@ -551,6 +709,11 @@ class RFChannel:
                 await middleman.ensure_connected(self.middleman_connection_id, 60)
             if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
                 await middleman.ensure_connected(self.middleman_connection_id, 60)
+
+    async def game_event_fetch_auto_raids(self, old_sub_event: RFChannelSubEvent, sub_event: RFChannelSubEvent):
+        if old_sub_event != sub_event and sub_event == RFChannelSubEvent.RAID:
+            await asyncio.sleep(2)
+            await self.fetch_auto_raids()
 
     @routine(delta=timedelta(seconds=30), wait_first=True)
     async def dungeon_killswitch_routine(self):
@@ -740,6 +903,7 @@ class RFChannel:
         )
         if r['status'] != 200:
             await self.send_chat_message("?sailall")
+        await self.restore_auto_raids()
     
     async def restart_ravenbot(self):
         if self.channel_name != "abrokecube":

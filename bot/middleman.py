@@ -5,6 +5,7 @@ import os
 import aiohttp
 from typing import Dict, Optional, Tuple, Any, TypedDict
 from dataclasses import dataclass
+from .messageprocessor import RavenfallMessage
 
 # Configuration
 MIDDLEMAN_API_HOST = os.getenv('RF_MIDDLEMAN_HOST', None)
@@ -25,8 +26,6 @@ async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional
     """Make an API call to the middleman server."""
     url = f"http://{MIDDLEMAN_API_HOST.rstrip('/')}:{MIDDLEMAN_API_PORT}/{endpoint.lstrip('/')}"
     headers = {'Content-Type': 'application/json'}
-    
-    logger.debug(f"API Request: {method} {url}")
     
     try:
         async with aiohttp.ClientSession() as session:
@@ -59,6 +58,7 @@ async def send_to_client(connection_id: str, message: str) -> Dict:
         "connectionId": connection_id,
         "data": message
     }
+    logger.debug(f"Sending message to client: {message}")
     response, status = await _call_middleman_api('/api/send-to-client', 'POST', data)
     return response
 
@@ -68,11 +68,23 @@ async def send_to_server(connection_id: str, message: str) -> Dict:
         "connectionId": connection_id,
         "data": message
     }
+    logger.debug(f"Sending message to server: {message}")
     response, status = await _call_middleman_api('/api/send-to-server', 'POST', data)
     return response
 
+class SendAndWaitResult(TypedDict, total=False):
+    """Type definition for API responses from the middleman server."""
+    success: bool
+    correlationId: str
+    responses: list[RavenfallMessage]
+    complete: bool
+    count: int
+    expectedCount: int
+    timeout: bool
+    error: str  # Optional error message
 
-async def send_and_wait_response(connection_id: str, message: str, correlation_id: str = "", timeout: int = 30) -> Dict:
+
+async def send_to_server_and_wait_response(connection_id: str, message: str, correlation_id: str = "", timeout: int = 30) -> SendAndWaitResult:
     """
     Send a message to the server and wait for a response with the given correlation ID.
     
@@ -90,11 +102,12 @@ async def send_and_wait_response(connection_id: str, message: str, correlation_i
         "data": message,
         "timeout": timeout
     }
-    
+    logger.debug(f"Sending message to server and waiting for response: {message}")    
     if correlation_id:
         data["correlationId"] = correlation_id
         
     response, status = await _call_middleman_api('/api/send-and-wait-response', 'POST', data)
+    logger.debug(f"Response from server: {response}")
     return response
 
 async def ensure_connected(connection_id: str, timeout: int = 0) -> Dict:

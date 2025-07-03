@@ -144,7 +144,7 @@ class Recipient(TypedDict):
 class RavenfallMessage(TypedDict):
     """Represents a message received from Ravenfall."""
     Identifier: str  # e.g., "message"
-    Recipient: Recipient
+    Recipent: Recipient
     Format: str  # Format string for the message
     Args: List[str]  # Arguments to be inserted into the format string
     Tags: List[str]  # Any tags associated with the message

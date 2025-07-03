@@ -17,6 +17,7 @@ import ravenpy
 from bot.commands import Commands, Context, Command
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
+from database.models import create_all_tables
 
 load_dotenv()
 
@@ -37,8 +38,9 @@ logger = logging.getLogger(__name__)
 
 # Suppress twitchAPI.chat logs below WARNING level
 logging.getLogger('twitchAPI.chat').setLevel(logging.INFO)
-logging.getLogger('middleman').setLevel(logging.INFO)
-logging.getLogger('websockets.server').setLevel(logging.INFO)
+logging.getLogger('middleman').setLevel(logging.DEBUG)
+logging.getLogger('aiosqlite').setLevel(logging.INFO)
+logging.getLogger('new_message_processor').setLevel(logging.INFO)
 
 
 with open("channels.json", "r") as f:
@@ -67,6 +69,8 @@ async def run():
 
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(handle_loop_exception)
+    
+    await create_all_tables()
     
     # set up twitch api instance and add user authentication with some scopes
     twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))

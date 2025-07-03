@@ -34,6 +34,7 @@ class RFChannelManager:
         self.middleman_enabled = False
         self.middleman_power_saving = False
         self.middleman_connected = False
+        self.middleman_processor_server_client_count = 0
         self.load_channels()
 
 
@@ -85,9 +86,9 @@ class RFChannelManager:
                     elif metadata.source.lower() == "server":
                         asyncio.create_task(channel.event_ravenfall_message(message))
                 if metadata.source.lower() == "client":
-                    return await channel.process_ravenbot_message(message, metadata)
+                    return await channel.process_ravenbot_message(message.copy(), metadata)
                 elif metadata.source.lower() == "server":
-                    return await channel.process_ravenfall_message(message, metadata)
+                    return await channel.process_ravenfall_message(message.copy(), metadata)
                 else:
                     return message
         return message
@@ -95,12 +96,15 @@ class RFChannelManager:
     async def on_processor_connect(self, client_info: ClientInfo):
         self.middleman_connected = True
         self.middleman_enabled = True
+        self.middleman_processor_server_client_count += 1
         serverconf, err = await middleman.get_config()
         if not err:
             self.middleman_power_saving = not serverconf['disableTimeout']
 
     async def on_processor_disconnect(self, client_info: ClientInfo):
-        self.middleman_connected = False
+        self.middleman_processor_server_client_count -= 1
+        if self.middleman_processor_server_client_count <= 0:
+            self.middleman_enabled = False
 
     def get_channel(self, *, channel_id: str | None = None, channel_name: str | None = None) -> RFChannel | None:
         if channel_id:

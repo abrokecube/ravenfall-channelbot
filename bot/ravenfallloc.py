@@ -148,7 +148,7 @@ class RavenfallLocalization:
             expl_args[argname] = argvalue
         return in_str.format_map(expl_args)
     
-    def get_key(self, in_str: str):
+    def get_match(self, in_str: str):
         if in_str in self.simple_matches:
             return self.simple_matches[in_str]
         else:
@@ -157,7 +157,7 @@ class RavenfallLocalization:
                     return m
         return None
 
-    def translate_string(self, in_str: str, in_args: List):
+    def translate_string(self, in_str: str, in_args: List, match: 'Match' = None):
         """
         Translate a string using the loaded definitions and translations.
         
@@ -168,19 +168,24 @@ class RavenfallLocalization:
         Returns:
             str: The translated string
         """
-        matched = self.get_key(in_str)
-        if matched:
-            logger.debug(f"Matched key {matched.key}")
+        if match is None:
+            matched = self.get_match(in_str)
+            if matched:
+                logger.debug(f"Matched key {matched.key}")
+                key = matched.key
+            else:
+                logger.warning(f"🚨🚨 No matched key for string: {in_str}")
+                return f"{self._fill_args(in_str, in_args)}"
         else:
-            logger.warning(f"🚨🚨 No matched key for string: {in_str}")
-            return f"{self._fill_args(in_str, in_args)}"
-            
+            logger.debug(f"Using key {match.key}")
+            key = match.key
+
         translation = None
-        if matched.key in self.translated_strings:
-            translation = self.translated_strings[matched.key]
+        if key in self.translated_strings:
+            translation = self.translated_strings[key]
             
         if translation is None:
-            logger.warning(f"No translation for {matched.key}")
+            logger.warning(f"No translation for {key}")
             return self._fill_args(in_str, in_args)
             
         if not translation.strings:

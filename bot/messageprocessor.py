@@ -10,6 +10,9 @@ from uuid import UUID
 from dataclasses import dataclass, field
 from websockets import WebSocketServerProtocol as WebSocketServer
 import websockets
+import logging
+
+logger = logging.getLogger('new_message_processor')
 
 # Type variable for message content types
 T = TypeVar('T', bound=Dict[str, Any])
@@ -324,6 +327,7 @@ class MessageProcessor:
             ping_interval=20,  # 20 seconds
             ping_timeout=20,   # 20 seconds
             close_timeout=5,   # 5 seconds
+            logger=logger
         )
         
         # Start the server, handling both running and new event loops
