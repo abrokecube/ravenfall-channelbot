@@ -84,7 +84,6 @@ async def get_character(
     if user_obj is None:
         user_obj = Character(
             id=id,
-            name=name,
             twitch_id=twitch_id
         )
         session.add(user_obj)
