@@ -26,8 +26,6 @@ async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional
     url = f"http://{MIDDLEMAN_API_HOST.rstrip('/')}:{MIDDLEMAN_API_PORT}/{endpoint.lstrip('/')}"
     headers = {'Content-Type': 'application/json'}
     
-    logger.debug(f"API Request: {method} {url}")
-    
     try:
         async with aiohttp.ClientSession() as session:
             if method.upper() == 'GET':

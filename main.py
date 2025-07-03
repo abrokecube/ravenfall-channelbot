@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Suppress twitchAPI.chat logs below WARNING level
 logging.getLogger('twitchAPI.chat').setLevel(logging.INFO)
-logging.getLogger('middleman').setLevel(logging.INFO)
+logging.getLogger('middleman').setLevel(logging.DEBUG)
 logging.getLogger('aiosqlite').setLevel(logging.INFO)
 logging.getLogger('new_message_processor').setLevel(logging.INFO)
 
