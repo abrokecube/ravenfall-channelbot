@@ -35,6 +35,26 @@ class TestingRFCog(Cog):
             await ctx.reply(f"Result too long. {url}")
         else:
             await ctx.reply(result_text)
+    
+    @Cog.command(name="restore auto raids", help="Restore auto raids")
+    async def restore_auto_raids(self, ctx: Context):
+        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+            return
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        await channel.restore_auto_raids()
+        await ctx.reply("Auto raids restored.")
+
+    @Cog.command(name="restore sailors", help="Restore sailors")
+    async def restore_sailors(self, ctx: Context):
+        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+            return
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        await channel.restore_sailors()
+        await ctx.reply("Sailors restored.")
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.
