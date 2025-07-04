@@ -1119,7 +1119,7 @@ class RFChannel:
                     continue
                 training = char_data['training']
                 if (not training) or training == "None":
-                    if (not char_data['island']) or char_data['is_sailing']:
+                    if (not char_data['island']) or char_data['sailing']:
                         training = "Sailing"
                     else:
                         continue
@@ -1141,7 +1141,7 @@ class RFChannel:
                 return
             training = char['training']
             if (not training) or training == "None":
-                if (not char['island']) or char['is_sailing']:
+                if (not char['island']) or char['sailing']:
                     training = "Sailing"
                 else:
                     return
