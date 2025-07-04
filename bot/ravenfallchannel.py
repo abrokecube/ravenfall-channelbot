@@ -201,8 +201,13 @@ class RFChannel:
         await self.ravenfall_waiter.process_message(message)
 
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
+        platform_id = message['Sender']['PlatformId']
+        # sometimes the server may send "server-request" as the platform ID
+        # i think it applies to when a character leaves
+        if not platform_id.isdigit():
+            return message
         asyncio.create_task(self.record_user(
-            message['Sender']['PlatformId'],
+            int(platform_id),
             message['Sender']['Username'],
             message['Sender']['Color'],
             message['Sender']['DisplayName']
