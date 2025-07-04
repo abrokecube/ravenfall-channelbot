@@ -90,6 +90,9 @@ class RFChannelManager:
                     out_message = await channel.process_ravenbot_message(message.copy(), metadata)
                 elif metadata.source.lower() == "server":
                     out_message = await channel.process_ravenfall_message(message.copy(), metadata)
+                break
+        else:
+            logger.error(f"Unknown connection id: {metadata.connection_id}")
         return {"message": out_message}
 
     async def on_processor_connect(self, client_info: ClientInfo):
