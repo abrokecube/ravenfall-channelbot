@@ -202,6 +202,7 @@ class RFChannel:
 
     # Messages from ravenbot
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
+        logger.debug(f"{self.channel_name} received ravenbot message: {message}")
         platform_id = message['Sender']['PlatformId']
         # sometimes "server-request" is the platform ID
         if not platform_id.isdigit():
@@ -220,8 +221,7 @@ class RFChannel:
 
     # Messages from ravenfall
     async def process_ravenfall_message(self, message: RavenfallMessage, metadata: MessageMetadata):
-        if not self.ravenfall_loc_strings_path:
-            return message
+        logger.debug(f"{self.channel_name} received ravenfall message: {message}")
         # Make sure session data and other things are not processed
         if message['Identifier'] != 'message':
             return message
@@ -241,16 +241,16 @@ class RFChannel:
                 # Auto raid is already handled in process_auto_raid_sessionless
                 asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
                 asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait_first=True))
-            
-        trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
-        if len(trans_str) == 0:
-            return {'block': True}
-        trans_strs = split_by_utf16_bytes(trans_str, 500)
-        if len(trans_strs) > 1:
-            asyncio.create_task(self.send_split_msgs(message, trans_strs))
-            return {'block': True}
-        message['Format'] = trans_strs[0]
-        message['Args'] = []
+        if self.ravenfall_loc_strings_path:
+            trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
+            if len(trans_str) == 0:
+                return {'block': True}
+            trans_strs = split_by_utf16_bytes(trans_str, 500)
+            if len(trans_strs) > 1:
+                asyncio.create_task(self.send_split_msgs(message, trans_strs))
+                return {'block': True}
+            message['Format'] = trans_strs[0]
+            message['Args'] = []
         return message
     
     async def record_character(
