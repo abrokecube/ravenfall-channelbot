@@ -1066,6 +1066,8 @@ class RFChannel:
         char: Player = await self.get_query(f"select * from players where name = '{username}'")
         if not char:
             return
+        if char['training'] != "None":
+            return
         sender = await self.build_sender_from_character_id(char['id'], default_username=char['name'])
         if not sender:
             logging.debug(f"Could not build sender for character {char['id']}")
