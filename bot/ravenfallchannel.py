@@ -336,14 +336,18 @@ class RFChannel:
         name_tag_color: str,
         display_name: Optional[str] = None
     ):
-        async with get_async_session() as session:
-            await db_utils.record_user(
-                session=session,
-                user_name=user_name,
-                name_tag_color=name_tag_color,
-                twitch_id=twitch_id,
-                display_name=display_name
-            )
+        logger.debug(f"Recording user {user_name} with twitch_id {twitch_id}")
+        try:
+            async with get_async_session() as session:
+                await db_utils.record_user(
+                    session=session,
+                    user_name=user_name,
+                    name_tag_color=name_tag_color,
+                    twitch_id=twitch_id,
+                    display_name=display_name
+                )
+        except Exception as e:
+            logger.error(f"Error recording user {user_name} with twitch_id {twitch_id}: {e}", exc_info=True)
 
     async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
         for msg in msgs:
