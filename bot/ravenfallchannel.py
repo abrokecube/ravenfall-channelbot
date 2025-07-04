@@ -229,6 +229,7 @@ class RFChannel:
         key = ""
         if match is not None:
             key = match.key
+        logger.debug(f"Message for platform {message['Recipent']['Platform']}")
         if message['Recipent']['Platform'].lower() == 'twitch':
             asyncio.create_task(self.record_character(
                 message['Recipent']['CharacterId'],
