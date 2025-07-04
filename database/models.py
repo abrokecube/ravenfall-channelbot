@@ -8,6 +8,10 @@ from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class Base(AsyncAttrs, DeclarativeBase):
     pass
 
@@ -133,6 +137,6 @@ async def update_schema():
                     
                     try:
                         await conn.execute(text(alter_stmt))
-                        logging.info(f"Added column {column_name} to table {table_name}")
+                        logger.info(f"Added column {column_name} to table {table_name}")
                     except Exception as e:
-                        logging.error(f"Error adding column {column_name} to table {table_name}: {e}")
+                        logger.error(f"Error adding column {column_name} to table {table_name}: {e}")
