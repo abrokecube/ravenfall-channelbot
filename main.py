@@ -18,6 +18,7 @@ from bot.commands import Commands, Context, Command
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
+from utils.logging_fomatter import ColorFormatter
 
 load_dotenv()
 
@@ -32,9 +33,12 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-    ]
+    ], 
 )
+handler = logging.StreamHandler()
+handler.setFormatter(ColorFormatter())
 logger = logging.getLogger(__name__)
+logger.addHandler(handler)
 
 # Suppress twitchAPI.chat logs below WARNING level
 logging.getLogger('twitchAPI.chat').setLevel(logging.INFO)
