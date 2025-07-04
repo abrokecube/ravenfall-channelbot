@@ -97,8 +97,6 @@ class RavenBotMessageBuilder:
         """
         if not sender:
             raise ValueError("Sender is required")
-        if not content:
-            raise ValueError("Content is required")
             
         self.message_data = {
             "Identifier": identifier,
