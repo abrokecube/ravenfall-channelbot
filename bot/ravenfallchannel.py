@@ -224,12 +224,13 @@ class RFChannel:
         key = ""
         if match is not None:
             key = match.key
-        asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
-        asyncio.create_task(self.record_character(
-            message['Recipent']['CharacterId'],
-            message['Recipent']['PlatformUserName'],
-            message['Recipent']['PlatformId'],
-        ))
+        if message['Recipent']['Platform'].lower() == 'twitch':
+            asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
+            asyncio.create_task(self.record_character(
+                message['Recipent']['CharacterId'],
+                message['Recipent']['PlatformUserName'],
+                message['Recipent']['PlatformId'],
+            ))
         trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
         if len(trans_str) == 0:
             return {'block': True}
