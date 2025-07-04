@@ -245,7 +245,7 @@ class RFChannel:
         display_name: str = None
     ):
         async with get_async_session() as session:
-            if len(name_tag_color) != 7:
+            if name_tag_color and len(name_tag_color) != 7:
                 name_tag_color = None
             await db_utils.record_character_and_user(
                 session=session,
