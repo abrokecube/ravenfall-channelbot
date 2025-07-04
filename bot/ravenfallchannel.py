@@ -650,6 +650,7 @@ class RFChannel:
         self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO)
 
     async def _ravenfall_pre_restart(self):
+        await self.fetch_all_training()
         r = await send_multichat_command(
             text="?randleave",
             user_id=self.channel_id,
@@ -659,8 +660,6 @@ class RFChannel:
         )
         if r['status'] != 200:
             await self.send_chat_message("?randleave")
-        await self.fetch_all_training()
-        await asyncio.sleep(15)
 
     async def _restart_ravenfall(
         self, 
