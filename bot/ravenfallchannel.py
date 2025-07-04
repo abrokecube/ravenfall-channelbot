@@ -739,6 +739,7 @@ class RFChannel:
         )
         if r['status'] != 200:
             await self.send_chat_message("?sailall")
+        await self.restore_sailors()
         await self.restore_auto_raids()
     
     async def restart_ravenbot(self):

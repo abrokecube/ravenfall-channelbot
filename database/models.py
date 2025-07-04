@@ -16,7 +16,7 @@ class User(Base):
     __tablename__ = 'users'
 
     twitch_id = Column(Integer, primary_key=True)
-    name_tag_color = Column(String)
+    name_tag_color = Column(String, default="#7F7F7F")
     name = Column(String)
     
     characters = relationship("Character", back_populates='user')
