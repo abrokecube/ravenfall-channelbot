@@ -1068,6 +1068,17 @@ class RFChannel:
             return
         if char['training'] != "None":
             return
+        not_trained = True
+        for stat in (
+            "attack", "defense", "strength", "health", "woodcutting", "fishing", "mining",
+            "crafting", "cooking", "farming", "magic", "ranged", "sailing", "gathering",
+            "alchemy"
+        ):
+            if char['stats'][stat]['level'] > 1:
+                not_trained = False
+                break
+        if not_trained:
+            return
         sender = await self.build_sender_from_character_id(char['id'], default_username=char['name'])
         if not sender:
             logging.debug(f"Could not build sender for character {char['id']}")
