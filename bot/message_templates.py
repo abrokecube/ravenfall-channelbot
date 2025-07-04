@@ -38,6 +38,16 @@ class RavenBotTemplates:
             content=content
         ).build()
     
+    @staticmethod
+    def sail(
+        sender: Dict[str, Any],
+        correlation_id: Optional[Union[str, UUID]] = None
+    ) -> str:
+        return RavenBotMessageBuilder(
+            sender=sender,
+            identifier="ferry_enter",
+            correlation_id=correlation_id
+        ).build()
 
 class RavenfallTemplates:
     """Predefined templates for Ravenfall messages."""

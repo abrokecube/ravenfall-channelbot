@@ -94,7 +94,7 @@ class RFRestartTask:
                 if new_warning_idx >= 0 and new_warning_idx > warning_idx:
                     for i in range(warning_idx + 1, new_warning_idx + 1):
                         if WARNING_MSG_TIMES[i][1] == PreRestartEvent.PRE_RESTART:
-                            await self.channel.ravenfall_pre_restart()
+                            await self.channel._ravenfall_pre_restart()
                     if WARNING_MSG_TIMES[new_warning_idx][1] == PreRestartEvent.WARNING and time_left > 7 and not self.mute_countdown:
                         await self.channel.send_chat_message(
                             f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
@@ -159,7 +159,7 @@ class RFRestartTask:
 
     async def _execute(self):
         self.event_watch_task.cancel()
-        await self.channel.restart_ravenfall(
+        await self.channel._restart_ravenfall(
             run_pre_restart=False,
             run_post_restart=True
         )

@@ -25,7 +25,7 @@ from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from bot import middleman
 from database.session import get_async_session
-from database.models import AutoRaidStatus, Character
+from database.models import AutoRaidStatus, Character, User
 import database.utils as db_utils
 from sqlalchemy import select
 
@@ -201,6 +201,11 @@ class RFChannel:
         await self.ravenfall_waiter.process_message(message)
 
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
+        asyncio.create_task(self.record_user(
+            message['Sender']['PlatformId'],
+            message['Sender']['PlatformUserName'],
+            message['Sender']['NameTagColor']
+        ))
         return message
 
     async def process_ravenfall_message(self, message: RavenfallMessage, metadata: MessageMetadata):
@@ -214,6 +219,11 @@ class RFChannel:
         if match is not None:
             key = match.key
         asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
+        asyncio.create_task(self.record_character(
+            message['Recipent']['CharacterId'],
+            message['Recipent']['PlatformUserName'],
+            message['Recipent']['PlatformId'],
+        ))
         trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
         if len(trans_str) == 0:
             return {'block': True}
@@ -225,6 +235,72 @@ class RFChannel:
         message['Args'] = []
         return message
     
+    async def record_character(self, char_id: str, username: str, twitch_id: int, name_tag_color: str):
+        async with get_async_session() as session:
+            if len(name_tag_color) != 7:
+                name_tag_color = None
+            await db_utils.record_character_and_user(
+                session=session,
+                character_id=char_id,
+                twitch_id=twitch_id,
+                user_name=username,
+                name_tag_color=name_tag_color
+            )
+    
+    async def build_sender_from_character_id(self, char_id: str, session: AsyncSession = None, default_username: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Build a Sender dictionary from a character ID by looking up user and character data.
+        
+        Args:
+            char_id: The character ID to look up
+            session: Optional database session to use. If not provided, a new session will be created.
+            default_username: Default username to use if not found in the database
+            
+        Returns:
+            Dictionary suitable for SenderBuilder or None if character not found
+        """
+        async def _build_sender(session: AsyncSession):
+            result = await session.execute(
+                select(Character, User)
+                .where(Character.id == char_id)
+                .join(User, Character.twitch_id == User.twitch_id, isouter=True)
+            )
+            row = result.one_or_none()
+            
+            if not row:
+                if default_username:
+                    return SenderBuilder(
+                        username=default_username,
+                        display_name=default_username,
+                        platform_id=""
+                    ).build()
+                return None
+                
+            character, user = row
+            username = default_username or character.id  # Fallback to character ID if no default provided
+            display_name = (user.name if user and user.name else username) if user else username
+            
+            return SenderBuilder(
+                username=username,
+                display_name=display_name,
+                platform_id=str(character.twitch_id) if character.twitch_id else "",
+                color=user.name_tag_color if user else None
+            ).build()
+            
+        if session is not None:
+            return await _build_sender(session)
+            
+        async with get_async_session() as session:
+            return await _build_sender(session)
+
+    async def record_user(self, twitch_id: int, user_name: str, name_tag_color: str):
+        async with get_async_session() as session:
+            await db_utils.record_user(
+                session=session,
+                user_name=user_name,
+                name_tag_color=name_tag_color
+            )
+
     async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
         for msg in msgs:
             message['Format'] = msg
@@ -274,102 +350,6 @@ class RFChannel:
             else:
                 resend_text = message.text if message.user.id == os.getenv("BOT_ID") else None
             self.monitor_ravenbot_response(command, timeout=timeout, resend_text=resend_text)
-
-    async def _monitor_ravenbot_response_task(self, command: str, timeout: float = 5, resend_text: str = None):
-        """
-        Monitor for RavenBot's response to a command.
-        If no response, restart RavenBot up to MAX_RETRIES times.
-        If still unresponsive after MAX_RETRIES, restart Ravenfall.
-        """
-        if self.monitoring_paused or self.is_monitoring:
-            return
-            
-        self.is_monitoring = True
-        self.current_monitor = {
-            'command': command,
-            'start_time': time.time()
-        }
-        logger.debug(f"Monitoring for response to command: {command} in {self.channel_name}")
-        
-        while self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
-            await asyncio.sleep(5)
-
-        # Wait for any message from RavenBot
-        if not self.manager.middleman_connected:
-            response = await self.twitch_message_waiter.wait_for_message(
-                check=lambda m: m.user.id == os.getenv("RAVENBOT_USER_ID"),
-                timeout=timeout,
-                max_age=1  
-            )
-        else:
-            response = await self.ravenbot_waiter.wait_for_message(
-                timeout=timeout,
-                max_age=1,
-                check=lambda m: True
-            )
-        
-        asked_to_retry = False
-        if response is None:
-            # No response, handle retry or restart
-            current_time = time.time()
-            
-            # Reset counter if last attempt was long ago
-            if current_time - self.restart_attempts['last_attempt'] > RETRY_WINDOW:
-                self.restart_attempts['count'] = 0
-            
-            self.restart_attempts['count'] += 1
-            self.restart_attempts['last_attempt'] = current_time
-            attempts = self.restart_attempts['count']
-            attempts_remaining = MAX_RETRIES - attempts
-            
-            resp_retry = "Hmm , let me restart RavenBot..."
-            resp_retry_2 = "Hmm , let me restart RavenBot again.."
-            resp_user_retry = "Okay , try again"
-            resp_user_retry_2 = "Okay , try again, surely this time it will work"
-            resp_restart_ravenfall = "okie then i will restart Ravenfall, please hold..."
-            resp_giveup = "I give up, please try again later (pinging @abrokecube)"
-
-            if resend_text:
-                resp_retry = "Hmm"
-                resp_retry_2 = "Hmm ..."
-                resp_user_retry = resend_text
-                resp_user_retry_2 = resend_text
-                resp_restart_ravenfall = "Hmm ........."
-                resp_giveup = "I give up @abrokecube dinkDonk"
-            
-            if attempts_remaining > 0:
-                if attempts == 1:
-                    await self.send_chat_message(resp_retry)
-                elif attempts > 1 and attempts < MAX_RETRIES:
-                    await self.send_chat_message(resp_retry_2)
-
-                await self.restart_ravenbot()
-                await asyncio.sleep(3)
-                asked_to_retry = True
-                
-                await self.send_chat_message(resp_user_retry)
-            elif attempts_remaining == 0:
-                await self.send_chat_message(resp_restart_ravenfall)
-                restart_task = self.queue_restart(
-                    time_to_restart=10,  # Start restart in 10 seconds
-                    label="RavenBot is unresponsive",
-                    reason=RestartReason.UNRESPONSIVE
-                )
-                await restart_task.wait()
-                await self.send_chat_message(resp_user_retry_2)
-                asked_to_retry = True
-            else:
-                await self.send_chat_message(resp_giveup)
-        else:
-            logger.debug(f"Recieved a response to command: {command} in {self.channel_name}")
-
-        self.is_monitoring = False
-        self.current_monitor = None
-        if asked_to_retry and resend_text:
-            self.monitor_ravenbot_response(command, timeout, resend_text)
-
-    def monitor_ravenbot_response(self, command: str, timeout: float = 10.0, resend_text: str = None):
-        asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))
                         
     async def wait_for_ravenbot_command(self, command: str, timeout: float = 10.0) -> Optional[RavenBotMessage]:
         return await self.ravenbot_waiter.wait_for_command(command, timeout=timeout)
@@ -500,18 +480,21 @@ class RFChannel:
         self.event = event
         self.sub_event = sub_event
         asyncio.create_task(self.game_event_notification(sub_event, old_sub_event))
+        asyncio.create_task(self.game_event_muted_ravenbot_notification(sub_event, old_sub_event))
         asyncio.create_task(self.game_event_wake_ravenbot(sub_event))
         asyncio.create_task(self.game_event_fetch_auto_raids(old_sub_event, sub_event))
     
     async def game_event_notification(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
         if self.event_notifications:
             if old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
+                await asyncio.sleep(2)
                 msg = (
                     f"RAID – "
                     f"Boss HP: {self.raid['boss']['health']:,} "
                 )
                 await self.send_chat_message(msg)
             elif old_sub_event != RFChannelSubEvent.DUNGEON_STARTED and sub_event == RFChannelSubEvent.DUNGEON_STARTED:
+                await asyncio.sleep(2)
                 msg = (
                     f"DUNGEON – "
                     f"Boss HP: {self.max_dungeon_hp:,} – "
@@ -519,6 +502,8 @@ class RFChannel:
                     f"Players: {self.dungeon['players']:,}"
                 )
                 await self.send_chat_message(msg)
+
+    async def game_event_muted_ravenbot_notification(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
         if self._ravenbot_is_muted():
             if old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
                 await asyncio.sleep(2)
@@ -639,7 +624,7 @@ class RFChannel:
         seconds_to_restart = max(60, period - uptime)
         self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO)
 
-    async def ravenfall_pre_restart(self):
+    async def _ravenfall_pre_restart(self):
         r = await send_multichat_command(
             text="?randleave",
             user_id=self.channel_id,
@@ -651,7 +636,7 @@ class RFChannel:
             await self.send_chat_message("?randleave")
         await asyncio.sleep(15)
 
-    async def restart_ravenfall(
+    async def _restart_ravenfall(
         self, 
         run_pre_restart: bool = True, 
         run_post_restart: bool = True,
@@ -662,7 +647,7 @@ class RFChannel:
         self.channel_restart_future = asyncio.Future()
 
         if run_pre_restart:
-            await self.ravenfall_pre_restart()
+            await self._ravenfall_pre_restart()
             
         await self.channel_restart_lock.acquire()
         if not silent and self.global_restart_lock.locked():
@@ -711,7 +696,7 @@ class RFChannel:
             await self.channel_post_restart_lock.acquire()
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
-            await self.ravenfall_post_restart()
+            await self._ravenfall_post_restart()
             self.channel_post_restart_lock.release()
         else:
             self.channel_restart_lock.release()
@@ -720,7 +705,7 @@ class RFChannel:
         self.channel_restart_future.set_result(True)
         return True
 
-    async def ravenfall_post_restart(self):
+    async def _ravenfall_post_restart(self):
         # Wait for the game to start rejoining players
         while True:
             await asyncio.sleep(1)
@@ -772,6 +757,102 @@ class RFChannel:
                 f"start /d \"{ravenbot_path}\" {os.getenv('CUSTOM_RAVENBOT_START_CMD')}"
             )
             await asyncio.sleep(3) 
+
+    async def _monitor_ravenbot_response_task(self, command: str, timeout: float = 5, resend_text: str = None):
+        """
+        Monitor for RavenBot's response to a command.
+        If no response, restart RavenBot up to MAX_RETRIES times.
+        If still unresponsive after MAX_RETRIES, restart Ravenfall.
+        """
+        if self.monitoring_paused or self.is_monitoring:
+            return
+            
+        self.is_monitoring = True
+        self.current_monitor = {
+            'command': command,
+            'start_time': time.time()
+        }
+        logger.debug(f"Monitoring for response to command: {command} in {self.channel_name}")
+        
+        while self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
+            await asyncio.sleep(5)
+
+        # Wait for any message from RavenBot
+        if not self.manager.middleman_connected:
+            response = await self.twitch_message_waiter.wait_for_message(
+                check=lambda m: m.user.id == os.getenv("RAVENBOT_USER_ID"),
+                timeout=timeout,
+                max_age=1  
+            )
+        else:
+            response = await self.ravenbot_waiter.wait_for_message(
+                timeout=timeout,
+                max_age=1,
+                check=lambda m: True
+            )
+        
+        asked_to_retry = False
+        if response is None:
+            # No response, handle retry or restart
+            current_time = time.time()
+            
+            # Reset counter if last attempt was long ago
+            if current_time - self.restart_attempts['last_attempt'] > RETRY_WINDOW:
+                self.restart_attempts['count'] = 0
+            
+            self.restart_attempts['count'] += 1
+            self.restart_attempts['last_attempt'] = current_time
+            attempts = self.restart_attempts['count']
+            attempts_remaining = MAX_RETRIES - attempts
+            
+            resp_retry = "Hmm , let me restart RavenBot..."
+            resp_retry_2 = "Hmm , let me restart RavenBot again.."
+            resp_user_retry = "Okay , try again"
+            resp_user_retry_2 = "Okay , try again, surely this time it will work"
+            resp_restart_ravenfall = "okie then i will restart Ravenfall, please hold..."
+            resp_giveup = "I give up, please try again later (pinging @abrokecube)"
+
+            if resend_text:
+                resp_retry = "Hmm"
+                resp_retry_2 = "Hmm ..."
+                resp_user_retry = resend_text
+                resp_user_retry_2 = resend_text
+                resp_restart_ravenfall = "Hmm ........."
+                resp_giveup = "I give up @abrokecube dinkDonk"
+            
+            if attempts_remaining > 0:
+                if attempts == 1:
+                    await self.send_chat_message(resp_retry)
+                elif attempts > 1 and attempts < MAX_RETRIES:
+                    await self.send_chat_message(resp_retry_2)
+
+                await self.restart_ravenbot()
+                await asyncio.sleep(3)
+                asked_to_retry = True
+                
+                await self.send_chat_message(resp_user_retry)
+            elif attempts_remaining == 0:
+                await self.send_chat_message(resp_restart_ravenfall)
+                restart_task = self.queue_restart(
+                    time_to_restart=10,  # Start restart in 10 seconds
+                    label="RavenBot is unresponsive",
+                    reason=RestartReason.UNRESPONSIVE
+                )
+                await restart_task.wait()
+                await self.send_chat_message(resp_user_retry_2)
+                asked_to_retry = True
+            else:
+                await self.send_chat_message(resp_giveup)
+        else:
+            logger.debug(f"Recieved a response to command: {command} in {self.channel_name}")
+
+        self.is_monitoring = False
+        self.current_monitor = None
+        if asked_to_retry and resend_text:
+            self.monitor_ravenbot_response(command, timeout, resend_text)
+
+    def monitor_ravenbot_response(self, command: str, timeout: float = 10.0, resend_text: str = None):
+        asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))
 
     def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None):
         if self.restart_task:
@@ -849,79 +930,105 @@ class RFChannel:
         if not self.manager.middleman_connected:
             return
         chars: List[Player] = await self.get_query("select * from players")
-        char_ids = [char['id'] for char in chars]
         char_id_to_player = {char['id']: char for char in chars}
+        
         async with get_async_session() as session:
             result = await session.execute(
-                select(AutoRaidStatus, Character.twitch_id)
+                select(AutoRaidStatus)
                 .where(
-                    AutoRaidStatus.char_id.in_(char_ids),
+                    AutoRaidStatus.char_id.in_(char_id_to_player.keys()),
                     AutoRaidStatus.auto_raid_count != 2147483647
                 )
-                .join(Character)
             )
-            auto_raids = result.all()
-            for row in auto_raids:
-                auto_raid: AutoRaidStatus
-                twitch_id: int
-                auto_raid, twitch_id = row
-                sender = SenderBuilder(
-                    username=char_id_to_player[auto_raid.char_id]['name'],
-                    display_name=char_id_to_player[auto_raid.char_id]['name'],
-                    platform_id=str(twitch_id)
-                ).build()
+            auto_raids = result.scalars().all()
+            
+            for auto_raid in auto_raids:
+                char_data = char_id_to_player.get(auto_raid.char_id)
+                if not char_data:
+                    continue
+                    
+                sender = await self.build_sender_from_character_id(
+                    char_id=auto_raid.char_id,
+                    session=session,
+                    default_username=char_data['name']
+                )
+                
+                if not sender:
+                    continue
+                    
                 msg = RavenBotTemplates.auto_raid_status(sender)
                 response = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
-                if response['success']:
+                if response['success'] and response['responses']:
                     match = self.rfloc.get_match(response['responses'][0]['Format'])
                     await self.process_auto_raid(session, response['responses'][0], match.key)
     
     async def restore_auto_raids(self):
         if not self.manager.middleman_connected:
             return
+            
         chars: List[Player] = await self.get_query("select * from players")
-        char_ids = [char['id'] for char in chars]
         char_id_to_player = {char['id']: char for char in chars}
-        logging.debug(f"Restoring auto raids for {len(char_ids)} characters")
+        logging.debug(f"Restoring auto raids for {len(char_id_to_player)} characters")
+        
         async with get_async_session() as session:
             result = await session.execute(
-                select(AutoRaidStatus, Character.twitch_id)
-                .where(AutoRaidStatus.char_id.in_(char_ids))
-                .join(Character)
+                select(AutoRaidStatus)
+                .where(AutoRaidStatus.char_id.in_(char_id_to_player.keys()))
             )
-            auto_raids = result.all()
-            for row in auto_raids:
-                auto_raid: AutoRaidStatus
-                twitch_id: int
-                auto_raid, twitch_id = row
-                sender = SenderBuilder(
-                    username=char_id_to_player[auto_raid.char_id]['name'],
-                    display_name=char_id_to_player[auto_raid.char_id]['name'],
-                    platform_id=str(twitch_id)
-                ).build()
+            auto_raids = result.scalars().all()
+            
+            for auto_raid in auto_raids:
+                char_data = char_id_to_player.get(auto_raid.char_id)
+                if not char_data:
+                    continue
+                    
+                sender = await self.build_sender_from_character_id(
+                    char_id=auto_raid.char_id,
+                    session=session,
+                    default_username=char_data['name']
+                )
+                
+                if not sender:
+                    continue
+                    
                 msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
                 await send_to_server_and_wait_response(self.middleman_connection_id, msg)
     
     async def restore_auto_raid(self, session: AsyncSession, char_id: str, username: str):
         if not self.manager.middleman_connected:
             return
+            
         result = await session.execute(
-            select(AutoRaidStatus, Character.twitch_id)
+            select(AutoRaidStatus)
             .where(AutoRaidStatus.char_id == char_id)
-            .join(Character)
         )
-        row = result.one_or_none()  # Returns a Row object or None
-        if row is not None:
-            auto_raid: AutoRaidStatus
-            twitch_id: int
-            auto_raid, twitch_id = row  # Unpack the row
-            logging.debug(f"Restoring auto raid for {username}")
-            sender = SenderBuilder(
-                username=username,
-                display_name=username,
-                platform_id=str(twitch_id)
-            ).build()
+        auto_raid = result.scalar_one_or_none()
+        
+        if auto_raid is not None:
+            sender = await self.build_sender_from_character_id(char_id, session=session, default_username=username)
+            if not sender:
+                logging.debug(f"Could not build sender for character {char_id}")
+                return
+                
+            logging.debug(f"Restoring auto raid for {sender.get('display_name', username)}")
             msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
             await send_to_server_and_wait_response(self.middleman_connection_id, msg)
         else:
             logging.debug(f"No auto raid found for {username}")   
+
+    async def restore_sailors(self, session: AsyncSession):
+        if not self.manager.middleman_connected:
+            return
+        chars: List[Player] = await self.get_query("select * from players")
+        char_ids = [char['id'] for char in chars]
+        logging.debug(f"Restoring sailors")
+        for p in chars:
+            if p['training'] != "None":
+                continue
+            sender = await self.build_sender_from_character_id(p['id'], session=session, default_username=p['name'])
+            if not sender:
+                logging.debug(f"Could not build sender for character {p['id']}")
+                return
+            msg = RavenBotTemplates.sail(sender)
+            await send_to_server_and_wait_response(self.middleman_connection_id, msg)
+    

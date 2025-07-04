@@ -85,7 +85,7 @@ class RecipientBuilder:
 class RavenBotMessageBuilder:
     """Helper class to build RavenBot messages."""
     
-    def __init__(self, sender: Dict[str, Any], content: Any, identifier: str = "message", 
+    def __init__(self, sender: Dict[str, Any], identifier: str, content: Any = {}, 
                  correlation_id: Optional[Union[str, UUID]] = None):
         """Initialize with required sender, content, and optional identifier and correlation ID.
         

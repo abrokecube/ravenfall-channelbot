@@ -17,7 +17,7 @@ import ravenpy
 from bot.commands import Commands, Context, Command
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
-from database.models import create_all_tables
+from database.models import update_schema
 
 load_dotenv()
 
@@ -70,7 +70,7 @@ async def run():
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(handle_loop_exception)
     
-    await create_all_tables()
+    await update_schema()
     
     # set up twitch api instance and add user authentication with some scopes
     twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
