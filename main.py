@@ -18,7 +18,7 @@ from bot.commands import Commands, Context, Command
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
-from utils.logging_fomatter import ColorFormatter
+from utils.logging_fomatter import setup_logging
 
 load_dotenv()
 
@@ -28,17 +28,8 @@ USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
 log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
 log_level = getattr(logging, log_level, logging.INFO)  # Default to INFO if invalid level provided
 
-logging.basicConfig(
-    level=log_level,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-    ], 
-)
-handler = logging.StreamHandler()
-handler.setFormatter(ColorFormatter())
+setup_logging(level=log_level)
 logger = logging.getLogger(__name__)
-logger.addHandler(handler)
 
 # Suppress twitchAPI.chat logs below WARNING level
 logging.getLogger('twitchAPI.chat').setLevel(logging.INFO)
