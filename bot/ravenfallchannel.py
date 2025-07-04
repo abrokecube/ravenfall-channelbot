@@ -229,7 +229,6 @@ class RFChannel:
         key = ""
         if match is not None:
             key = match.key
-        logger.debug(f"Message for platform {message['Recipent']['Platform']}")
         if message['Recipent']['Platform'].lower() == 'twitch':
             asyncio.create_task(self.record_character(
                 message['Recipent']['CharacterId'],
@@ -1121,7 +1120,7 @@ class RFChannel:
                 return
             if training != "Sailing":
                 return
-            sender = await self.build_sender_from_character_id(char.id, session=session)
+            sender = await self.build_sender_from_character_id(char['id'], session=session)
             if not sender:
                 logging.debug(f"Could not build sender for character {char['id']}")
                 return
