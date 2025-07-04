@@ -200,10 +200,10 @@ class RFChannel:
     async def event_ravenfall_message(self, message: RavenfallMessage):
         await self.ravenfall_waiter.process_message(message)
 
+    # Messages from ravenbot
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
         platform_id = message['Sender']['PlatformId']
-        # sometimes the server may send "server-request" as the platform ID
-        # i think it applies to when a character leaves
+        # sometimes "server-request" is the platform ID
         if not platform_id.isdigit():
             return message
         asyncio.create_task(self.record_user(
@@ -212,8 +212,13 @@ class RFChannel:
             message['Sender']['Color'],
             message['Sender']['DisplayName']
         ))
+        if message['Identifier'] == 'task':
+            asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait=True))
+        if message['Identifier'] == 'leave':
+            self.fetch_training(message['Sender']['Username'])
         return message
 
+    # Messages from ravenfall
     async def process_ravenfall_message(self, message: RavenfallMessage, metadata: MessageMetadata):
         if not self.ravenfall_loc_strings_path:
             return message
@@ -232,7 +237,10 @@ class RFChannel:
             ))
             asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
             if key == "join_welcome":
+                # Auto raid is already handled in process_auto_raid_sessionless
                 asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
+                asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait=True))
+            
         trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
         if len(trans_str) == 0:
             return {'block': True}
@@ -252,10 +260,11 @@ class RFChannel:
         name_tag_color: str = None,
         display_name: str = None
     ):
+        # char_data: Player = await self.get_query(f"select * from players where name = '{username}'")
         async with get_async_session() as session:
             if name_tag_color and len(name_tag_color) != 7:
                 name_tag_color = None
-            await db_utils.record_character_and_user(
+            user, character = await db_utils.record_character_and_user(
                 session=session,
                 character_id=char_id,
                 twitch_id=twitch_id,
@@ -263,7 +272,17 @@ class RFChannel:
                 name_tag_color=name_tag_color,
                 display_name=display_name
             )
-    
+            # if not char_data:
+            #     return
+            # training = char_data['training']
+            # if (not training) or training == "None":
+            #     if (not char_data['island']) or char_data['sailing']:
+            #         training = "Sailing"
+            #     else:
+            #         return
+            # character.training = training    
+
+
     async def build_sender_from_character_id(self, char_id: str, session: AsyncSession = None, default_username: str = None) -> Optional[Dict[str, Any]]:
         """
         Build a Sender dictionary from a character ID by looking up user and character data.
@@ -1125,9 +1144,11 @@ class RFChannel:
                         continue
                 char.training = training
     
-    async def fetch_training(self, username: str):
+    async def fetch_training(self, username: str, wait: bool = False):
         if not self.manager.middleman_connected:
             return
+        if wait:
+            await asyncio.sleep(1)
         char: Player = await self.get_query(f"select * from players where name = '{username}'")
         if not char:
             return

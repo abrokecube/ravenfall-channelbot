@@ -147,6 +147,7 @@ async def record_character_and_user(
     
     # Link character to user
     character.user = user
+    return user, character
 
 async def record_user(
     session: AsyncSession,
