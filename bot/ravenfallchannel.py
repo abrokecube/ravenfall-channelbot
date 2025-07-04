@@ -659,6 +659,7 @@ class RFChannel:
         )
         if r['status'] != 200:
             await self.send_chat_message("?randleave")
+        await self.fetch_all_training()
         await asyncio.sleep(15)
 
     async def _restart_ravenfall(
@@ -1048,14 +1049,27 @@ class RFChannel:
         if not self.manager.middleman_connected:
             return
         chars: List[Player] = await self.get_query("select * from players")
+        char_id_to_player = {char['id']: char for char in chars}
+
         logging.debug(f"Restoring sailors for {len(chars)} characters")
         async with get_async_session() as session:
-            for p in chars:
-                if p['training'] != "None":
+            result = await session.execute(
+                select(Character)
+                .where(Character.id.in_(char_id_to_player.keys()))
+            )
+            characters = result.scalars().all()
+
+            for char in characters:
+                char_data = char_id_to_player.get(char.id)
+                if not char_data:
                     continue
-                sender = await self.build_sender_from_character_id(p['id'], session=session, default_username=p['name'])
+                if char_data['training'] != "None":
+                    continue
+                if char.training != "Sailing":
+                    continue
+                sender = await self.build_sender_from_character_id(char.id, session=session, default_username=char_data['name'])
                 if not sender:
-                    logging.debug(f"Could not build sender for character {p['id']}")
+                    logging.debug(f"Could not build sender for character {char.id}")
                     return
                 msg = RavenBotTemplates.sail(sender)
                 await send_to_server_and_wait_response(self.middleman_connection_id, msg)
@@ -1068,22 +1082,68 @@ class RFChannel:
             return
         if char['training'] != "None":
             return
-        not_trained = True
-        for stat in (
-            "attack", "defense", "strength", "health", "woodcutting", "fishing", "mining",
-            "crafting", "cooking", "farming", "magic", "ranged", "sailing", "gathering",
-            "alchemy"
-        ):
-            if char['stats'][stat]['level'] > 1:
-                not_trained = False
-                break
-        if not_trained:
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(Character.training)
+                .where(Character.id == char['id'])
+            )
+            training = result.scalar_one_or_none()
+            if not training:
+                return
+            if training != "Sailing":
+                return
+            sender = await self.build_sender_from_character_id(char.id, session=session)
+            if not sender:
+                logging.debug(f"Could not build sender for character {char['id']}")
+                return
+            msg = RavenBotTemplates.sail(sender)
+            logging.debug(f"Restoring sailing for {username}")
+            await send_to_server_and_wait_response(self.middleman_connection_id, msg)
+
+    async def fetch_all_training(self):
+        if not self.manager.middleman_connected:
             return
-        sender = await self.build_sender_from_character_id(char['id'], default_username=char['name'])
-        if not sender:
-            logging.debug(f"Could not build sender for character {char['id']}")
+        chars: List[Player] = await self.get_query("select * from players")
+        char_id_to_player = {char['id']: char for char in chars}
+        
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(Character)
+                .where(
+                    Character.id.in_(char_id_to_player.keys()),
+                )
+            )
+            characters = result.scalars().all()
+            for char in characters:
+                char_data = char_id_to_player.get(char.id)
+                if not char_data:
+                    continue
+                training = char_data['training']
+                if (not training) or training == "None":
+                    if (not char_data['island']) or char_data['is_sailing']:
+                        training = "Sailing"
+                    else:
+                        continue
+                char.training = training
+    
+    async def fetch_training(self, username: str):
+        if not self.manager.middleman_connected:
             return
-        msg = RavenBotTemplates.sail(sender)
-        await asyncio.sleep(1)
-        logging.debug(f"Restoring sailing for {username}")
-        await send_to_server_and_wait_response(self.middleman_connection_id, msg)
+        char: Player = await self.get_query(f"select * from players where name = '{username}'")
+        if not char:
+            return
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(Character)
+                .where(Character.id == char['id'])
+            )
+            char_db = result.scalar_one_or_none()
+            if not char_db:
+                return
+            training = char['training']
+            if (not training) or training == "None":
+                if (not char['island']) or char['is_sailing']:
+                    training = "Sailing"
+                else:
+                    return
+            char.training = training

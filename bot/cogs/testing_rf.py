@@ -56,6 +56,16 @@ class TestingRFCog(Cog):
         await channel.restore_sailors()
         await ctx.reply("Sailors restored.")
 
+    @Cog.command(name="fetch training", help="Fetch training")
+    async def fetch_training(self, ctx: Context):
+        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+            return
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        await channel.fetch_all_training()
+        await ctx.reply("Training fetched.")
+
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.
     

@@ -41,6 +41,7 @@ class Character(Base):
     id = Column(String, primary_key=True)
 
     twitch_id = Column(Integer, ForeignKey('users.twitch_id'))
+    training = Column(String, default="None")
     user = relationship("User", back_populates='characters')
 
     auto_raid_status = relationship("AutoRaidStatus", back_populates='char', uselist=False)
