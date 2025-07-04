@@ -1166,4 +1166,4 @@ class RFChannel:
                     training = "Sailing"
                 else:
                     return
-            char.training = training
+            char_db.training = training
