@@ -232,7 +232,7 @@ class RFChannel:
             ))
             asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
             if key == "join_welcome":
-                asyncio.create_task(self.restore_sailor())
+                asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
         trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
         if len(trans_str) == 0:
             return {'block': True}
