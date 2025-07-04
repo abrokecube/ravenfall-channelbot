@@ -119,13 +119,17 @@ async def update_schema():
                 # Add missing columns
                 for column in columns_to_add:
                     column_type = column.type.compile(engine.dialect)
-                    column_name = column.compile(dialect=engine.dialect)
+                    column_name = column.name  # Get the raw column name without table prefix
                     
                     # Handle column defaults
                     default = ""
                     if column.default is not None:
                         if column.default.is_scalar:
-                            default = f"DEFAULT {column.default.arg}"
+                            # Properly quote string literals in SQL
+                            default_value = column.default.arg
+                            if isinstance(default_value, str):
+                                default_value = f"'{default_value}'"
+                            default = f"DEFAULT {default_value}"
                         elif column.default.is_callable:
                             default = f"DEFAULT {column.default.arg()}"
                     
@@ -140,3 +144,4 @@ async def update_schema():
                         logger.info(f"Added column {column_name} to table {table_name}")
                     except Exception as e:
                         logger.error(f"Error adding column {column_name} to table {table_name}: {e}")
+                        logger.error(f"SQL: {alter_stmt}")
