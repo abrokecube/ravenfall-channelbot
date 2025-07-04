@@ -202,7 +202,6 @@ class RFChannel:
 
     # Messages from ravenbot
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
-        logger.debug(f"{self.channel_name} received ravenbot message: {message}")
         platform_id = message['Sender']['PlatformId']
         # sometimes "server-request" is the platform ID
         if not platform_id.isdigit():
@@ -221,8 +220,7 @@ class RFChannel:
 
     # Messages from ravenfall
     async def process_ravenfall_message(self, message: RavenfallMessage, metadata: MessageMetadata):
-        logger.debug(f"{self.channel_name} received ravenfall message: {message}")
-        # Make sure session data and other things are not processed
+        # Make sure session data messages and other things are not processed
         if message['Identifier'] != 'message':
             return message
         match = self.rfloc.get_match(message['Format'])
@@ -260,32 +258,17 @@ class RFChannel:
         name_tag_color: str = None,
         display_name: str = None
     ):
-        logger.debug(f"Recording character {username} with twitch_id {twitch_id}")
-        # char_data: Player = await self.get_query(f"select * from players where name = '{username}'")
-        try:
-            async with get_async_session() as session:
-                if name_tag_color and len(name_tag_color) != 7:
-                    name_tag_color = None
-                user, character = await db_utils.record_character_and_user(
-                    session=session,
-                    character_id=char_id,
-                    twitch_id=twitch_id,
-                    user_name=username,
-                    name_tag_color=name_tag_color,
-                    display_name=display_name
-                )
-            logger.debug(f"Recorded character {username} with twitch_id {twitch_id}")
-        except Exception as e:
-            logger.error(f"Error recording character {username} with twitch_id {twitch_id}: {e}", exc_info=True)
-            # if not char_data:
-            #     return
-            # training = char_data['training']
-            # if (not training) or training == "None":
-            #     if (not char_data['island']) or char_data['sailing']:
-            #         training = "Sailing"
-            #     else:
-            #         return
-            # character.training = training    
+        async with get_async_session() as session:
+            if name_tag_color and len(name_tag_color) != 7:
+                name_tag_color = None
+            user, character = await db_utils.record_character_and_user(
+                session=session,
+                character_id=char_id,
+                twitch_id=twitch_id,
+                user_name=username,
+                name_tag_color=name_tag_color,
+                display_name=display_name
+            )
 
 
     async def build_sender_from_character_id(self, char_id: str, session: AsyncSession = None, default_username: str = None) -> Optional[Dict[str, Any]]:
@@ -341,19 +324,14 @@ class RFChannel:
         name_tag_color: str,
         display_name: Optional[str] = None
     ):
-        logger.debug(f"Recording user {user_name} with twitch_id {twitch_id}")
-        try:
-            async with get_async_session() as session:
-                await db_utils.record_user(
-                    session=session,
-                    user_name=user_name,
-                    name_tag_color=name_tag_color,
-                    twitch_id=twitch_id,
-                    display_name=display_name
-                )
-            logger.debug(f"Recorded user {user_name} with twitch_id {twitch_id}")
-        except Exception as e:
-            logger.error(f"Error recording user {user_name} with twitch_id {twitch_id}: {e}", exc_info=True)
+        async with get_async_session() as session:
+            await db_utils.record_user(
+                session=session,
+                user_name=user_name,
+                name_tag_color=name_tag_color,
+                twitch_id=twitch_id,
+                display_name=display_name
+            )
 
     async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
         for msg in msgs:
