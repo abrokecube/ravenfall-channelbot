@@ -1073,6 +1073,6 @@ class RFChannel:
             logging.debug(f"Could not build sender for character {char['id']}")
             return
         msg = RavenBotTemplates.sail(sender)
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
         logging.debug(f"Restoring sailing for {username}")
         await send_to_server_and_wait_response(self.middleman_connection_id, msg)
