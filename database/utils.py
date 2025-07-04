@@ -28,7 +28,8 @@ async def get_user(
     if user_obj is None:
         user_obj = User(
             twitch_id=id,
-            name=name
+            name=name,
+            display_name=name
         )
         session.add(user_obj)
     if name:
@@ -100,6 +101,7 @@ async def record_character_and_user(
     twitch_id: Union[int, str],
     # User fields
     user_name: Optional[str] = None,
+    display_name: Optional[str] = None,
     name_tag_color: Optional[str] = None
 ) -> Tuple[User, Character]:
     """
@@ -125,6 +127,8 @@ async def record_character_and_user(
     # Update user fields if provided
     if user_name is not None:
         user.name = user_name
+    if display_name is not None:
+        user.display_name = display_name
     if name_tag_color is not None:
         user.name_tag_color = name_tag_color
     
@@ -147,9 +151,13 @@ async def record_character_and_user(
 async def record_user(
     session: AsyncSession,
     user_name: str,
-    name_tag_color: Optional[str] = None
+    twitch_id: Union[int, str],
+    name_tag_color: Optional[str] = None,
+    display_name: Optional[str] = None,
 ) -> User:
-    user = await get_user(session, name=user_name)
+    user = await get_user(session, name=user_name, id=twitch_id)
     if name_tag_color is not None:
         user.name_tag_color = name_tag_color
+    if display_name is not None:
+        user.display_name = display_name
     return user

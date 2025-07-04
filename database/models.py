@@ -22,6 +22,7 @@ class User(Base):
     twitch_id = Column(Integer, primary_key=True)
     name_tag_color = Column(String, default="#7F7F7F")
     name = Column(String)
+    display_name = Column(String)
     
     characters = relationship("Character", back_populates='user')
 

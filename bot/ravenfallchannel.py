@@ -203,8 +203,9 @@ class RFChannel:
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
         asyncio.create_task(self.record_user(
             message['Sender']['PlatformId'],
-            message['Sender']['PlatformUserName'],
-            message['Sender']['NameTagColor']
+            message['Sender']['Username'],
+            message['Sender']['NameTagColor'],
+            message['Sender']['DisplayName']
         ))
         return message
 
@@ -235,7 +236,14 @@ class RFChannel:
         message['Args'] = []
         return message
     
-    async def record_character(self, char_id: str, username: str, twitch_id: int, name_tag_color: str):
+    async def record_character(
+        self, 
+        char_id: str, 
+        username: str, 
+        twitch_id: int, 
+        name_tag_color: str = None,
+        display_name: str = None
+    ):
         async with get_async_session() as session:
             if len(name_tag_color) != 7:
                 name_tag_color = None
@@ -244,7 +252,8 @@ class RFChannel:
                 character_id=char_id,
                 twitch_id=twitch_id,
                 user_name=username,
-                name_tag_color=name_tag_color
+                name_tag_color=name_tag_color,
+                display_name=display_name
             )
     
     async def build_sender_from_character_id(self, char_id: str, session: AsyncSession = None, default_username: str = None) -> Optional[Dict[str, Any]]:
@@ -278,13 +287,13 @@ class RFChannel:
                 
             character, user = row
             username = default_username or character.id  # Fallback to character ID if no default provided
-            display_name = (user.name if user and user.name else username) if user else username
+            display_name = user.display_name if user else username
             
             return SenderBuilder(
                 username=username,
                 display_name=display_name,
                 platform_id=str(character.twitch_id) if character.twitch_id else "",
-                color=user.name_tag_color if user else None
+                color=user.name_tag_color if user else None,
             ).build()
             
         if session is not None:
@@ -293,12 +302,20 @@ class RFChannel:
         async with get_async_session() as session:
             return await _build_sender(session)
 
-    async def record_user(self, twitch_id: int, user_name: str, name_tag_color: str):
+    async def record_user(
+        self, 
+        twitch_id: int, 
+        user_name: str, 
+        name_tag_color: str,
+        display_name: Optional[str] = None
+    ):
         async with get_async_session() as session:
             await db_utils.record_user(
                 session=session,
                 user_name=user_name,
-                name_tag_color=name_tag_color
+                name_tag_color=name_tag_color,
+                twitch_id=twitch_id,
+                display_name=display_name
             )
 
     async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
