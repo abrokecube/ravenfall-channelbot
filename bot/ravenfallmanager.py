@@ -70,7 +70,7 @@ class RFChannelManager:
         self.mult_check_routine.cancel()
         self.resync_routine.cancel()
         if self.rf_message_processor:
-            await self.rf_message_processor.stop()
+            self.rf_message_processor.stop()
 
     async def event_twitch_message(self, message: ChatMessage):
         for channel in self.channels:
