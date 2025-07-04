@@ -204,7 +204,7 @@ class RFChannel:
         asyncio.create_task(self.record_user(
             message['Sender']['PlatformId'],
             message['Sender']['Username'],
-            message['Sender']['NameTagColor'],
+            message['Sender']['Color'],
             message['Sender']['DisplayName']
         ))
         return message
