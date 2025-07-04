@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 logging.getLogger('twitchAPI.chat').setLevel(logging.INFO)
 logging.getLogger('middleman').setLevel(logging.INFO)
 logging.getLogger('aiosqlite').setLevel(logging.INFO)
-logging.getLogger('new_message_processor').setLevel(logging.INFO)
+logging.getLogger('new_message_processor').setLevel(logging.DEBUG)
 
 
 with open("channels.json", "r") as f:
