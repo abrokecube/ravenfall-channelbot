@@ -60,54 +60,79 @@ async def update_schema():
     Update the database schema by adding any missing columns to existing tables.
     This is a non-destructive operation that only adds missing columns.
     """
-    from sqlalchemy import inspect
+    from sqlalchemy import inspect, text
     
     async with engine.begin() as conn:
         # Create all tables if they don't exist
         await conn.run_sync(Base.metadata.create_all)
         
-        # Create an inspector to examine the database
-        inspector = inspect(engine.sync_engine)
-        
-        # Get all tables in the database
+        # Get all tables in the metadata
         tables = Base.metadata.tables
         
-        for table_name, table in tables.items():
-            # Get columns that should exist according to our models
-            expected_columns = {column.name: column for column in table.columns}
+        # Use a raw connection for inspection
+        async with engine.connect() as inspection_conn:
+            # Get the dialect-specific SQL for checking if a column exists
+            dialect = engine.dialect.name
             
-            # Get columns that actually exist in the database
-            existing_columns = {column['name']: column for column in inspector.get_columns(table_name)}
-            
-            # Find columns that are in our models but not in the database
-            columns_to_add = [
-                column for column_name, column in expected_columns.items()
-                if column_name not in existing_columns
-            ]
-            
-            # Add missing columns
-            for column in columns_to_add:
-                column_type = column.type.compile(engine.dialect)
-                column_name = column.compile(dialect=engine.dialect)
+            for table_name, table in tables.items():
+                # Get columns that should exist according to our models
+                expected_columns = {column.name: column for column in table.columns}
                 
-                # Handle column defaults
-                default = ''
-                if column.default is not None:
-                    if column.default.is_scalar:
-                        default = f"DEFAULT {column.default.arg}"
-                elif not column.nullable and not column.primary_key:
-                    if hasattr(column.type, 'length'):
-                        default = "DEFAULT ''" if column.type.length else "DEFAULT 0"
-                    else:
-                        default = "DEFAULT ''"
+                # Get existing columns from the database
+                if dialect == 'sqlite':
+                    # SQLite specific query
+                    result = await inspection_conn.execute(
+                        text(f"PRAGMA table_info({table_name})")
+                    )
+                    existing_columns = {row[1]: row for row in result.fetchall()}
+                elif dialect == 'postgresql':
+                    # PostgreSQL specific query
+                    result = await inspection_conn.execute(
+                        text("""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = :table_name
+                        """),
+                        {'table_name': table_name}
+                    )
+                    existing_columns = {row[0]: row for row in result.fetchall()}
+                else:
+                    # Fallback for other databases
+                    inspector = inspect(engine)
+                    existing_columns = {
+                        col['name']: col 
+                        for col in await conn.run_sync(
+                            lambda conn: inspector.get_columns(table_name, connection=conn)
+                        )
+                    }
                 
-                # Handle nullable
-                nullable = 'NULL' if column.nullable or column.primary_key else 'NOT NULL'
+                # Find columns that are in our models but not in the database
+                columns_to_add = [
+                    column for column_name, column in expected_columns.items()
+                    if column_name not in existing_columns
+                ]
                 
-                # Construct and execute ALTER TABLE statement
-                alter_stmt = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type} {default} {nullable}"
-                try:
-                    await conn.execute(alter_stmt)
-                    print(f"Added column {column_name} to table {table_name}")
-                except Exception as e:
-                    print(f"Error adding column {column_name} to table {table_name}: {e}")
+                # Add missing columns
+                for column in columns_to_add:
+                    column_type = column.type.compile(engine.dialect)
+                    column_name = column.compile(dialect=engine.dialect)
+                    
+                    # Handle column defaults
+                    default = ""
+                    if column.default is not None:
+                        if column.default.is_scalar:
+                            default = f"DEFAULT {column.default.arg}"
+                        elif column.default.is_callable:
+                            default = f"DEFAULT {column.default.arg()}"
+                    
+                    # Handle NULL/NOT NULL
+                    nullable = "NULL" if column.nullable else "NOT NULL"
+                    
+                    # Build and execute the ALTER TABLE statement
+                    alter_stmt = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type} {default} {nullable}"
+                    
+                    try:
+                        await conn.execute(text(alter_stmt))
+                        logging.info(f"Added column {column_name} to table {table_name}")
+                    except Exception as e:
+                        logging.error(f"Error adding column {column_name} to table {table_name}: {e}")
