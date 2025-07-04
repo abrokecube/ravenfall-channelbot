@@ -747,17 +747,19 @@ class RFChannel:
             if player_count > 0 and new_player_count == player_count:
                 break
             player_count = new_player_count
-        r = await send_multichat_command(
-            text="?sailall",
-            user_id=self.channel_id,
-            user_name=self.channel_name,
-            channel_id=self.channel_id,
-            channel_name=self.channel_name
-        )
-        if r['status'] != 200:
-            await self.send_chat_message("?sailall")
-        await self.restore_sailors()
-        await self.restore_auto_raids()
+        if not self.manager.middleman_connected:
+            r = await send_multichat_command(
+                text="?sailall",
+                user_id=self.channel_id,
+                user_name=self.channel_name,
+                channel_id=self.channel_id,
+                channel_name=self.channel_name
+            )
+            if r['status'] != 200:
+                await self.send_chat_message("?sailall")
+        else:
+            await self.restore_sailors()
+            await self.restore_auto_raids()
     
     async def restart_ravenbot(self):
         if self.channel_name != "abrokecube":
