@@ -1046,8 +1046,7 @@ class RFChannel:
         if not self.manager.middleman_connected:
             return
         chars: List[Player] = await self.get_query("select * from players")
-        char_ids = [char['id'] for char in chars]
-        logging.debug(f"Restoring sailors")
+        logging.debug(f"Restoring sailors for {len(chars)} characters")
         for p in chars:
             if p['training'] != "None":
                 continue
