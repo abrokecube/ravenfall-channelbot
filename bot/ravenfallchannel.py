@@ -213,7 +213,7 @@ class RFChannel:
             message['Sender']['DisplayName']
         ))
         if message['Identifier'] == 'task':
-            asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait=True))
+            asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait_first=True))
         if message['Identifier'] == 'leave':
             self.fetch_training(message['Sender']['Username'])
         return message
@@ -239,7 +239,7 @@ class RFChannel:
             if key == "join_welcome":
                 # Auto raid is already handled in process_auto_raid_sessionless
                 asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
-                asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait=True))
+                asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait_first=True))
             
         trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
         if len(trans_str) == 0:
@@ -1144,10 +1144,10 @@ class RFChannel:
                         continue
                 char.training = training
     
-    async def fetch_training(self, username: str, wait: bool = False):
+    async def fetch_training(self, username: str, wait_first: bool = False):
         if not self.manager.middleman_connected:
             return
-        if wait:
+        if wait_first:
             await asyncio.sleep(1)
         char: Player = await self.get_query(f"select * from players where name = '{username}'")
         if not char:
