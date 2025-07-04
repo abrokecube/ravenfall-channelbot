@@ -86,10 +86,14 @@ class RFChannelManager:
                         asyncio.create_task(channel.event_ravenbot_message(message))
                     elif metadata.source.lower() == "server":
                         asyncio.create_task(channel.event_ravenfall_message(message))
+                    else:
+                        logger.error(f"Unknown source: {metadata.source}")
                 if metadata.source.lower() == "client":
                     out_message = await channel.process_ravenbot_message(message.copy(), metadata)
                 elif metadata.source.lower() == "server":
                     out_message = await channel.process_ravenfall_message(message.copy(), metadata)
+                else:
+                    logger.error(f"Unknown source: {metadata.source}")
                 break
         else:
             logger.error(f"Unknown connection id: {metadata.connection_id}")
