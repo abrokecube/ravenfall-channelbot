@@ -260,18 +260,23 @@ class RFChannel:
         name_tag_color: str = None,
         display_name: str = None
     ):
+        logger.debug(f"Recording character {username} with twitch_id {twitch_id}")
         # char_data: Player = await self.get_query(f"select * from players where name = '{username}'")
-        async with get_async_session() as session:
-            if name_tag_color and len(name_tag_color) != 7:
-                name_tag_color = None
-            user, character = await db_utils.record_character_and_user(
-                session=session,
-                character_id=char_id,
-                twitch_id=twitch_id,
-                user_name=username,
-                name_tag_color=name_tag_color,
-                display_name=display_name
-            )
+        try:
+            async with get_async_session() as session:
+                if name_tag_color and len(name_tag_color) != 7:
+                    name_tag_color = None
+                user, character = await db_utils.record_character_and_user(
+                    session=session,
+                    character_id=char_id,
+                    twitch_id=twitch_id,
+                    user_name=username,
+                    name_tag_color=name_tag_color,
+                    display_name=display_name
+                )
+            logger.debug(f"Recorded character {username} with twitch_id {twitch_id}")
+        except Exception as e:
+            logger.error(f"Error recording character {username} with twitch_id {twitch_id}: {e}", exc_info=True)
             # if not char_data:
             #     return
             # training = char_data['training']
@@ -346,6 +351,7 @@ class RFChannel:
                     twitch_id=twitch_id,
                     display_name=display_name
                 )
+            logger.debug(f"Recorded user {user_name} with twitch_id {twitch_id}")
         except Exception as e:
             logger.error(f"Error recording user {user_name} with twitch_id {twitch_id}: {e}", exc_info=True)
 
