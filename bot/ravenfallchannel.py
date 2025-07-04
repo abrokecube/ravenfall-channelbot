@@ -225,12 +225,14 @@ class RFChannel:
         if match is not None:
             key = match.key
         if message['Recipent']['Platform'].lower() == 'twitch':
-            asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
             asyncio.create_task(self.record_character(
                 message['Recipent']['CharacterId'],
                 message['Recipent']['PlatformUserName'],
                 message['Recipent']['PlatformId'],
             ))
+            asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
+            if key == "join_welcome":
+                asyncio.create_task(self.restore_sailor())
         trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
         if len(trans_str) == 0:
             return {'block': True}
@@ -1042,18 +1044,33 @@ class RFChannel:
         else:
             logging.debug(f"No auto raid found for {username}")   
 
-    async def restore_sailors(self, session: AsyncSession):
+    async def restore_sailors(self):
         if not self.manager.middleman_connected:
             return
         chars: List[Player] = await self.get_query("select * from players")
         logging.debug(f"Restoring sailors for {len(chars)} characters")
-        for p in chars:
-            if p['training'] != "None":
-                continue
-            sender = await self.build_sender_from_character_id(p['id'], session=session, default_username=p['name'])
-            if not sender:
-                logging.debug(f"Could not build sender for character {p['id']}")
-                return
-            msg = RavenBotTemplates.sail(sender)
-            await send_to_server_and_wait_response(self.middleman_connection_id, msg)
+        async with get_async_session() as session:
+            for p in chars:
+                if p['training'] != "None":
+                    continue
+                sender = await self.build_sender_from_character_id(p['id'], session=session, default_username=p['name'])
+                if not sender:
+                    logging.debug(f"Could not build sender for character {p['id']}")
+                    return
+                msg = RavenBotTemplates.sail(sender)
+                await send_to_server_and_wait_response(self.middleman_connection_id, msg)
     
+    async def restore_sailor(self, username: str):
+        if not self.manager.middleman_connected:
+            return
+        char: Player = await self.get_query(f"select * from players where name = '{username}'")
+        if not char:
+            return
+        sender = await self.build_sender_from_character_id(char['id'], default_username=char['name'])
+        if not sender:
+            logging.debug(f"Could not build sender for character {char['id']}")
+            return
+        msg = RavenBotTemplates.sail(sender)
+        await asyncio.sleep(2)
+        logging.debug(f"Restoring sailing for {username}")
+        await send_to_server_and_wait_response(self.middleman_connection_id, msg)
