@@ -215,7 +215,7 @@ class RFChannel:
         if message['Identifier'] == 'task':
             asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait_first=True))
         if message['Identifier'] == 'leave':
-            self.fetch_training(message['Sender']['Username'])
+            await self.fetch_training(message['Sender']['Username'])
         return message
 
     # Messages from ravenfall
