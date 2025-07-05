@@ -7,3 +7,4 @@ highest_skill: "{{unping(player)}} has the highest level {skillName} with level 
 auto_dungeon_status_none: "You are not set to automatically join any dungeons."
 auto_raid_status_none: "You are not set to automatically join any raids."
 dungeon_countdown: null
+multiplier_ends: null
