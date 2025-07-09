@@ -49,7 +49,7 @@ class RFChannelManager:
         for channel in self.channels:
             await channel.start()
         self.mult_check_routine.start()
-        self.resync_routine.start()
+        # self.resync_routine.start()
         msg_processor_host = os.getenv("RF_MIDDLEMAN_PROCESSOR_HOST", None)
         msg_processor_port = os.getenv("RF_MIDDLEMAN_PROCESSOR_PORT", None)
         if msg_processor_host and msg_processor_port:

@@ -235,8 +235,8 @@ class RFChannel:
             ))
             asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
             if key == "join_welcome":
-                # Auto raid is already handled in process_auto_raid_sessionless
-                asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
+            #     # Auto raid is already handled in process_auto_raid_sessionless
+            #     asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
                 asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait_first=True))
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
@@ -762,19 +762,19 @@ class RFChannel:
             if player_count > 0 and new_player_count == player_count:
                 break
             player_count = new_player_count
-        if not self.manager.middleman_connected:
-            r = await send_multichat_command(
-                text="?sailall",
-                user_id=self.channel_id,
-                user_name=self.channel_name,
-                channel_id=self.channel_id,
-                channel_name=self.channel_name
-            )
-            if r['status'] != 200:
-                await self.send_chat_message("?sailall")
-        else:
-            await self.restore_sailors()
-            await self.restore_auto_raids()
+        # if not self.manager.middleman_connected:
+        #     r = await send_multichat_command(
+        #         text="?sailall",
+        #         user_id=self.channel_id,
+        #         user_name=self.channel_name,
+        #         channel_id=self.channel_id,
+        #         channel_name=self.channel_name
+        #     )
+        #     if r['status'] != 200:
+        #         await self.send_chat_message("?sailall")
+        # else:
+        #     await self.restore_sailors()
+        #     await self.restore_auto_raids()
     
     async def restart_ravenbot(self):
         if self.channel_name != "abrokecube":
@@ -927,8 +927,8 @@ class RFChannel:
                 await self.remove_auto_raid(session, char_id)
             case "auto_raid_status_none":
                 await self.remove_auto_raid(session, char_id)
-            case "join_welcome":
-                await self.restore_auto_raid(session, char_id, twitch_name)
+            # case "join_welcome":
+            #     await self.restore_auto_raid(session, char_id, twitch_name)
     
     async def add_auto_raid(self, session: AsyncSession, char_id: str, twitch_id: str, username: str, count: int = 2147483647):
         _char = await db_utils.get_character(session, char_id, twitch_id=twitch_id, name=username)
