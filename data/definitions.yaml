@@ -6,6 +6,7 @@
 #   - aga
 
 raid_auto_joined: "{playerNames} have automatically joined the raid!"
+raid_auto_joined_count: "{playerCount} players have automatically joined the raid!"
 raid_finished_with_treasure: "Victorious!! The raid boss was slain and yielded {itemCount} item treasures!"
 raid_finished_without_treasure: Victorious!! The raid boss was slain but did not yield any treasure.
 raid_failed: "Oh no! The raid boss was not killed in time. No rewards will be given."
@@ -18,7 +19,7 @@ dungeon_start_fail_2: "Dungeon could not be started. Try again later"
 dungeon_scrolls_missing: "You do not have any Dungeon Scrolls! Redeem them under streamer loyalty on the website."
 dungeon_scroll_used_joined: "You have used a Dungeon Scroll and joined the dungeon. Good luck!"
 dungeon_scroll_used: "You have used a Dungeon Scroll."
-dungeon_spawned: '{dungeonName} is available. Type !dungeon to join.'
+dungeon_spawned: '{{dungeonName:.*}} is available. Type !dungeon to join.'
 dungeon_auto_joined: '{playerNames} have automatically joined the dungeon!'
 dungeon_countdown: '{seconds}s until dungeon starts.'
 dungeon_finished_with_treasure: "Victorious!! The dungeon boss was slain and yielded {{itemCount:\\d+}} item treasures!"
