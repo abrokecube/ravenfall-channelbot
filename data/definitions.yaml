@@ -10,6 +10,7 @@ raid_auto_joined_count: "{playerCount} players have automatically joined the rai
 raid_finished_with_treasure: "Victorious!! The raid boss was slain and yielded {itemCount} item treasures!"
 raid_finished_without_treasure: Victorious!! The raid boss was slain but did not yield any treasure.
 raid_failed: "Oh no! The raid boss was not killed in time. No rewards will be given."
+dungeon_auto_joined_count: "{playerCount} players have automatically joined the dungeon!"
 
 dungeon_disabled: "Dungeons has been disabled in this stream by the broadcaster."
 dungeon_scroll_overlap: "Someone just used a dungeon scroll."
