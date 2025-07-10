@@ -28,6 +28,7 @@ class RFChannelManager:
         self.channel_name_to_channel: Dict[str, RFChannel] = {}
         self.ravennest_is_online = True
         self.global_multiplier = 1.0
+        self.global_multiplier_last_change = datetime.now(timezone.utc)
 
         self.rf_message_processor: MessageProcessor | None = None
         self.global_restart_lock = asyncio.Lock()
@@ -123,6 +124,7 @@ class RFChannelManager:
 
     @routine(delta=timedelta(seconds=45))
     async def mult_check_routine(self):
+        now = datetime.now(timezone.utc)
         old_online = self.ravennest_is_online
         is_online = False
         multiplier: ExpMult | None = None
@@ -132,7 +134,9 @@ class RFChannelManager:
                     data: GameMultiplier = await response.json()
                     if data:
                         is_online = True
-                        self.global_multiplier = data["multiplier"]
+                        if data["multiplier"] != self.global_multiplier:
+                            self.global_multiplier = data["multiplier"]
+                            self.global_multiplier_last_change = now
                         multiplier = ExpMult(**data)
             except Exception as e:
                 logger.error(f"Can't connect to Ravenfall API: {e}")
@@ -146,21 +150,23 @@ class RFChannelManager:
             for channel in self.channels:
                 await channel.send_chat_message(msg)
 
-        if self.ravennest_is_online:
-            now = datetime.now(timezone.utc)
-            if multiplier.start_time and (now - multiplier.start_time) > timedelta(minutes=2):
-                if multiplier.multiplier > 1:
-                    for channel in self.channels:
-                        if channel.multiplier['multiplier'] != self.global_multiplier:
-                            r = await send_multichat_command(
-                                text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
-                                user_id=channel.channel_id,
-                                user_name=channel.channel_name,
-                                channel_id=channel.channel_id,
-                                channel_name=channel.channel_name
-                            )
-                            if r['status'] != 200:
-                                await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
+        if not self.ravennest_is_online:
+            return
+        if multiplier.multiplier <= 1:
+            return
+        if (now - self.global_multiplier_last_change) < timedelta(minutes=2):
+            return
+        for channel in self.channels:
+            if channel.multiplier['multiplier'] != self.global_multiplier:
+                r = await send_multichat_command(
+                text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
+                user_id=channel.channel_id,
+                user_name=channel.channel_name,
+                channel_id=channel.channel_id,
+                channel_name=channel.channel_name
+            )
+            if r['status'] != 200:
+                await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
     
     @routine(delta=timedelta(seconds=120))
     async def resync_routine(self):
