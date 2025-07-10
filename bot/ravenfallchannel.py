@@ -763,7 +763,7 @@ class RFChannel:
         )
         if r['status'] != 200:
             await self.send_chat_message("?undorandleave")
-        if not self.manager.middleman_connected:
+        # if not self.manager.middleman_connected:
         #     r = await send_multichat_command(
         #         text="?sailall",
         #         user_id=self.channel_id,
@@ -773,10 +773,9 @@ class RFChannel:
         #     )
         #     if r['status'] != 200:
         #         await self.send_chat_message("?sailall")
-            ...
-        else:
+        # else:
             # await self.restore_sailors()
-            await self.restore_auto_raids()
+            # await self.restore_auto_raids()
     
     async def restart_ravenbot(self):
         if self.channel_name != "abrokecube":
@@ -929,8 +928,8 @@ class RFChannel:
                 await self.remove_auto_raid(session, char_id)
             case "auto_raid_status_none":
                 await self.remove_auto_raid(session, char_id)
-            case "join_welcome":
-                await self.restore_auto_raid(session, char_id, twitch_name)
+            # case "join_welcome":
+            #     await self.restore_auto_raid(session, char_id, twitch_name)
     
     async def add_auto_raid(self, session: AsyncSession, char_id: str, twitch_id: str, username: str, count: int = 2147483647):
         _char = await db_utils.get_character(session, char_id, twitch_id=twitch_id, name=username)
