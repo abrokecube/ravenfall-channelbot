@@ -744,15 +744,6 @@ class RFChannel:
             session: GameSession = await self.get_query("select * from session", 1)
             if session['players'] > 0:
                 break
-        r = await send_multichat_command(
-            text="?undorandleave",
-            user_id=self.channel_id,
-            user_name=self.channel_name,
-            channel_id=self.channel_id,
-            channel_name=self.channel_name
-        )
-        if r['status'] != 200:
-            await self.send_chat_message("?undorandleave")
         # Wait for the game to finish rejoining players
         player_count = 0
         while True:
@@ -762,6 +753,16 @@ class RFChannel:
             if player_count > 0 and new_player_count == player_count:
                 break
             player_count = new_player_count
+            
+        r = await send_multichat_command(
+            text="?undorandleave",
+            user_id=self.channel_id,
+            user_name=self.channel_name,
+            channel_id=self.channel_id,
+            channel_name=self.channel_name
+        )
+        if r['status'] != 200:
+            await self.send_chat_message("?undorandleave")
         if not self.manager.middleman_connected:
         #     r = await send_multichat_command(
         #         text="?sailall",
