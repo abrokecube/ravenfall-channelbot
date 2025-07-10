@@ -158,15 +158,16 @@ class RFChannelManager:
             return
         for channel in self.channels:
             if channel.multiplier['multiplier'] != self.global_multiplier:
+                logger.debug(f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}")
                 r = await send_multichat_command(
-                text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
-                user_id=channel.channel_id,
-                user_name=channel.channel_name,
-                channel_id=channel.channel_id,
-                channel_name=channel.channel_name
-            )
-            if r['status'] != 200:
-                await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
+                    text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
+                    user_id=channel.channel_id,
+                    user_name=channel.channel_name,
+                    channel_id=channel.channel_id,
+                    channel_name=channel.channel_name
+                )
+                if r['status'] != 200:
+                    await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
     
     @routine(delta=timedelta(seconds=120))
     async def resync_routine(self):
