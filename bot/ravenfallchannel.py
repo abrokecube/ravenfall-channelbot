@@ -108,6 +108,7 @@ class RFChannel:
         self.ravenfall_start_script: str = config.get('ravenfall_start_script', '')
         self.middleman_connection_id: str = config.get('middleman_connection_id', '')
         self.ravenfall_loc_strings_path: str | None = config.get('ravenfall_loc_strings_path', None)
+        self.auto_restore_raids: bool = config.get('auto_restore_raids', False)
 
         if isinstance(self.ravenbot_prefixes, str):
             self.ravenbot_prefixes = (self.ravenbot_prefixes,)
@@ -776,6 +777,8 @@ class RFChannel:
         # else:
             # await self.restore_sailors()
             # await self.restore_auto_raids()
+        if self.manager.middleman_connected and self.auto_restore_raids:
+            await self.restore_auto_raids()
     
     async def restart_ravenbot(self):
         if self.channel_name != "abrokecube":
@@ -928,8 +931,9 @@ class RFChannel:
                 await self.remove_auto_raid(session, char_id)
             case "auto_raid_status_none":
                 await self.remove_auto_raid(session, char_id)
-            # case "join_welcome":
-            #     await self.restore_auto_raid(session, char_id, twitch_name)
+            case "join_welcome":
+                if self.auto_restore_raids:
+                    await self.restore_auto_raid(session, char_id, twitch_name)
     
     async def add_auto_raid(self, session: AsyncSession, char_id: str, twitch_id: str, username: str, count: int = 2147483647):
         _char = await db_utils.get_character(session, char_id, twitch_id=twitch_id, name=username)
@@ -1033,7 +1037,7 @@ class RFChannel:
     async def restore_auto_raid(self, session: AsyncSession, char_id: str, username: str):
         if not self.manager.middleman_connected:
             return
-            
+                    
         result = await session.execute(
             select(AutoRaidStatus)
             .where(AutoRaidStatus.char_id == char_id)
