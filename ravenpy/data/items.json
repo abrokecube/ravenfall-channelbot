@@ -7538,14 +7538,14 @@
     "stats": [],
     "level": 400,
     "equip_requirements": [],
-    "type": 35,
+    "type": 25,
     "category": 7,
     "material": 0,
     "sell_price": 400,
     "buy_price": 0,
     "enchantments": 0,
     "soulbound": false,
-    "modified": null,
+    "modified": "2025-05-12T07:44:01",
     "craft_skill": null,
     "craft_level": 0,
     "min_success_rate": 0,
@@ -8053,14 +8053,14 @@
     "stats": [],
     "level": 120,
     "equip_requirements": [],
-    "type": 35,
+    "type": 33,
     "category": 7,
     "material": 0,
     "sell_price": 120,
     "buy_price": 0,
     "enchantments": 0,
     "soulbound": false,
-    "modified": null,
+    "modified": "2025-05-12T07:44:01",
     "craft_skill": null,
     "craft_level": 0,
     "min_success_rate": 0,
@@ -11668,11 +11668,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 637
+        "level": 649
       },
       {
         "stat": 1,
-        "level": 797
+        "level": 812
       }
     ],
     "level": 963,
@@ -11723,11 +11723,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 725
+        "level": 739
       },
       {
         "stat": 1,
-        "level": 725
+        "level": 739
       }
     ],
     "level": 963,
@@ -11778,11 +11778,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 478
+        "level": 488
       },
       {
         "stat": 1,
-        "level": 541
+        "level": 552
       }
     ],
     "level": 959,
@@ -11897,7 +11897,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 309
+        "level": 315
       }
     ],
     "level": 954,
@@ -11948,11 +11948,11 @@
     "stats": [
       {
         "stat": 4,
-        "level": 725
+        "level": 739
       },
       {
         "stat": 5,
-        "level": 725
+        "level": 739
       }
     ],
     "level": 963,
@@ -12007,7 +12007,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 483
+        "level": 492
       }
     ],
     "level": 967,
@@ -12058,7 +12058,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 348
+        "level": 355
       }
     ],
     "level": 955,
@@ -12109,7 +12109,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 441
+        "level": 450
       }
     ],
     "level": 956,
@@ -12160,11 +12160,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 669
+        "level": 682
       },
       {
         "stat": 1,
-        "level": 778
+        "level": 793
       }
     ],
     "level": 964,
@@ -12215,7 +12215,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 420
+        "level": 428
       }
     ],
     "level": 965,
@@ -12266,7 +12266,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 420
+        "level": 428
       }
     ],
     "level": 964,
@@ -12317,11 +12317,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 688
+        "level": 701
       },
       {
         "stat": 1,
-        "level": 753
+        "level": 767
       }
     ],
     "level": 963,
@@ -12376,11 +12376,11 @@
     "stats": [
       {
         "stat": 2,
-        "level": 725
+        "level": 739
       },
       {
         "stat": 3,
-        "level": 725
+        "level": 739
       }
     ],
     "level": 963,
@@ -12435,11 +12435,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 511
+        "level": 521
       },
       {
         "stat": 1,
-        "level": 511
+        "level": 521
       }
     ],
     "level": 955,
@@ -12490,11 +12490,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 657
+        "level": 682
       },
       {
         "stat": 1,
-        "level": 823
+        "level": 854
       }
     ],
     "level": 1012,
@@ -12545,11 +12545,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 748
+        "level": 776
       },
       {
         "stat": 1,
-        "level": 748
+        "level": 776
       }
     ],
     "level": 1012,
@@ -12600,11 +12600,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 494
+        "level": 512
       },
       {
         "stat": 1,
-        "level": 559
+        "level": 580
       }
     ],
     "level": 1008,
@@ -12719,7 +12719,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 319
+        "level": 331
       }
     ],
     "level": 1003,
@@ -12770,11 +12770,11 @@
     "stats": [
       {
         "stat": 4,
-        "level": 748
+        "level": 776
       },
       {
         "stat": 5,
-        "level": 748
+        "level": 776
       }
     ],
     "level": 1012,
@@ -12829,7 +12829,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 499
+        "level": 517
       }
     ],
     "level": 1016,
@@ -12880,7 +12880,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 360
+        "level": 373
       }
     ],
     "level": 1004,
@@ -12931,7 +12931,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 456
+        "level": 473
       }
     ],
     "level": 1005,
@@ -12982,11 +12982,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 691
+        "level": 717
       },
       {
         "stat": 1,
-        "level": 804
+        "level": 834
       }
     ],
     "level": 1013,
@@ -13037,7 +13037,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 434
+        "level": 450
       }
     ],
     "level": 1014,
@@ -13088,7 +13088,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 434
+        "level": 450
       }
     ],
     "level": 1013,
@@ -13139,11 +13139,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 710
+        "level": 737
       },
       {
         "stat": 1,
-        "level": 777
+        "level": 806
       }
     ],
     "level": 1012,
@@ -13198,11 +13198,11 @@
     "stats": [
       {
         "stat": 2,
-        "level": 748
+        "level": 776
       },
       {
         "stat": 3,
-        "level": 748
+        "level": 776
       }
     ],
     "level": 1012,
@@ -13257,11 +13257,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 528
+        "level": 547
       },
       {
         "stat": 1,
-        "level": 528
+        "level": 547
       }
     ],
     "level": 1004,
@@ -13312,11 +13312,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 411
+        "level": 462
       },
       {
         "stat": 1,
-        "level": 514
+        "level": 578
       }
     ],
     "level": 1,
@@ -13362,11 +13362,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 468
+        "level": 526
       },
       {
         "stat": 1,
-        "level": 468
+        "level": 526
       }
     ],
     "level": 1,
@@ -13412,11 +13412,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 309
+        "level": 347
       },
       {
         "stat": 1,
-        "level": 349
+        "level": 393
       }
     ],
     "level": 1,
@@ -13462,7 +13462,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 199
+        "level": 224
       }
     ],
     "level": 1,
@@ -13508,11 +13508,11 @@
     "stats": [
       {
         "stat": 4,
-        "level": 468
+        "level": 526
       },
       {
         "stat": 5,
-        "level": 468
+        "level": 526
       }
     ],
     "level": 1,
@@ -13558,7 +13558,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 312
+        "level": 351
       }
     ],
     "level": 1,
@@ -13604,7 +13604,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 225
+        "level": 253
       }
     ],
     "level": 1,
@@ -13650,7 +13650,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 285
+        "level": 320
       }
     ],
     "level": 1,
@@ -13696,11 +13696,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 432
+        "level": 486
       },
       {
         "stat": 1,
-        "level": 502
+        "level": 565
       }
     ],
     "level": 1,
@@ -13746,7 +13746,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 271
+        "level": 305
       }
     ],
     "level": 1,
@@ -13792,7 +13792,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 271
+        "level": 305
       }
     ],
     "level": 1,
@@ -13838,11 +13838,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 444
+        "level": 499
       },
       {
         "stat": 1,
-        "level": 486
+        "level": 546
       }
     ],
     "level": 1,
@@ -13888,11 +13888,11 @@
     "stats": [
       {
         "stat": 2,
-        "level": 468
+        "level": 526
       },
       {
         "stat": 3,
-        "level": 468
+        "level": 526
       }
     ],
     "level": 1,
@@ -13938,11 +13938,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 330
+        "level": 371
       },
       {
         "stat": 1,
-        "level": 330
+        "level": 371
       }
     ],
     "level": 1,
@@ -15632,14 +15632,14 @@
     "stats": [
       {
         "stat": 0,
-        "level": 595
+        "level": 624
       },
       {
         "stat": 1,
-        "level": 746
+        "level": 782
       }
     ],
-    "level": 888,
+    "level": 913,
     "equip_requirements": [
       {
         "skill": 0,
@@ -15651,11 +15651,11 @@
     "material": 26,
     "sell_price": 94000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 888,
+    "craft_level": 913,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -15687,14 +15687,14 @@
     "stats": [
       {
         "stat": 0,
-        "level": 678
+        "level": 711
       },
       {
         "stat": 1,
-        "level": 678
+        "level": 711
       }
     ],
-    "level": 888,
+    "level": 913,
     "equip_requirements": [
       {
         "skill": 0,
@@ -15706,11 +15706,11 @@
     "material": 26,
     "sell_price": 94000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 888,
+    "craft_level": 913,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -15742,14 +15742,14 @@
     "stats": [
       {
         "stat": 0,
-        "level": 448
+        "level": 469
       },
       {
         "stat": 1,
-        "level": 506
+        "level": 531
       }
     ],
-    "level": 884,
+    "level": 909,
     "equip_requirements": [
       {
         "skill": 0,
@@ -15761,11 +15761,11 @@
     "material": 26,
     "sell_price": 94000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 884,
+    "craft_level": 909,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -15797,10 +15797,10 @@
     "stats": [
       {
         "stat": 6,
-        "level": 289
+        "level": 303
       }
     ],
-    "level": 879,
+    "level": 904,
     "equip_requirements": [
       {
         "skill": 1,
@@ -15812,11 +15812,11 @@
     "material": 26,
     "sell_price": 56000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 879,
+    "craft_level": 904,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -15848,14 +15848,14 @@
     "stats": [
       {
         "stat": 4,
-        "level": 678
+        "level": 711
       },
       {
         "stat": 5,
-        "level": 678
+        "level": 711
       }
     ],
-    "level": 888,
+    "level": 913,
     "equip_requirements": [
       {
         "skill": 12,
@@ -15867,11 +15867,11 @@
     "material": 26,
     "sell_price": 77000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 888,
+    "craft_level": 913,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -15907,10 +15907,10 @@
     "stats": [
       {
         "stat": 6,
-        "level": 452
+        "level": 474
       }
     ],
-    "level": 892,
+    "level": 917,
     "equip_requirements": [
       {
         "skill": 1,
@@ -15922,11 +15922,11 @@
     "material": 26,
     "sell_price": 94000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 892,
+    "craft_level": 917,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -15958,10 +15958,10 @@
     "stats": [
       {
         "stat": 6,
-        "level": 326
+        "level": 342
       }
     ],
-    "level": 880,
+    "level": 905,
     "equip_requirements": [
       {
         "skill": 1,
@@ -15973,11 +15973,11 @@
     "material": 26,
     "sell_price": 56000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 880,
+    "craft_level": 905,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -16009,10 +16009,10 @@
     "stats": [
       {
         "stat": 6,
-        "level": 413
+        "level": 433
       }
     ],
-    "level": 881,
+    "level": 906,
     "equip_requirements": [
       {
         "skill": 1,
@@ -16024,11 +16024,11 @@
     "material": 26,
     "sell_price": 56000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 881,
+    "craft_level": 906,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -16060,14 +16060,14 @@
     "stats": [
       {
         "stat": 0,
-        "level": 626
+        "level": 656
       },
       {
         "stat": 1,
-        "level": 728
+        "level": 763
       }
     ],
-    "level": 889,
+    "level": 914,
     "equip_requirements": [
       {
         "skill": 0,
@@ -16079,11 +16079,11 @@
     "material": 26,
     "sell_price": 94000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 889,
+    "craft_level": 914,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -16115,10 +16115,10 @@
     "stats": [
       {
         "stat": 6,
-        "level": 393
+        "level": 412
       }
     ],
-    "level": 890,
+    "level": 915,
     "equip_requirements": [
       {
         "skill": 1,
@@ -16130,11 +16130,11 @@
     "material": 26,
     "sell_price": 75000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 890,
+    "craft_level": 915,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -16166,10 +16166,10 @@
     "stats": [
       {
         "stat": 6,
-        "level": 393
+        "level": 412
       }
     ],
-    "level": 889,
+    "level": 914,
     "equip_requirements": [
       {
         "skill": 1,
@@ -16181,11 +16181,11 @@
     "material": 26,
     "sell_price": 75000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 889,
+    "craft_level": 914,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -16217,14 +16217,14 @@
     "stats": [
       {
         "stat": 0,
-        "level": 643
+        "level": 674
       },
       {
         "stat": 1,
-        "level": 704
+        "level": 738
       }
     ],
-    "level": 888,
+    "level": 913,
     "equip_requirements": [
       {
         "skill": 0,
@@ -16236,11 +16236,11 @@
     "material": 26,
     "sell_price": 77000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 888,
+    "craft_level": 913,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -16276,14 +16276,14 @@
     "stats": [
       {
         "stat": 2,
-        "level": 678
+        "level": 711
       },
       {
         "stat": 3,
-        "level": 678
+        "level": 711
       }
     ],
-    "level": 888,
+    "level": 913,
     "equip_requirements": [
       {
         "skill": 11,
@@ -16295,11 +16295,11 @@
     "material": 26,
     "sell_price": 77000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 888,
+    "craft_level": 913,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -16335,14 +16335,14 @@
     "stats": [
       {
         "stat": 0,
-        "level": 478
+        "level": 501
       },
       {
         "stat": 1,
-        "level": 478
+        "level": 501
       }
     ],
-    "level": 880,
+    "level": 905,
     "equip_requirements": [
       {
         "skill": 0,
@@ -16354,11 +16354,11 @@
     "material": 26,
     "sell_price": 56000,
     "buy_price": 0,
-    "enchantments": 17,
+    "enchantments": 18,
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 880,
+    "craft_level": 905,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17340,11 +17340,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 616
+        "level": 600
       },
       {
         "stat": 1,
-        "level": 771
+        "level": 751
       }
     ],
     "level": 913,
@@ -17363,7 +17363,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 913,
+    "craft_level": 888,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17395,11 +17395,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 702
+        "level": 683
       },
       {
         "stat": 1,
-        "level": 702
+        "level": 683
       }
     ],
     "level": 913,
@@ -17418,7 +17418,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 913,
+    "craft_level": 888,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17450,11 +17450,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 463
+        "level": 451
       },
       {
         "stat": 1,
-        "level": 524
+        "level": 510
       }
     ],
     "level": 909,
@@ -17473,7 +17473,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 909,
+    "craft_level": 884,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17505,7 +17505,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 299
+        "level": 291
       }
     ],
     "level": 904,
@@ -17524,7 +17524,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 904,
+    "craft_level": 879,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17556,11 +17556,11 @@
     "stats": [
       {
         "stat": 4,
-        "level": 702
+        "level": 683
       },
       {
         "stat": 5,
-        "level": 702
+        "level": 683
       }
     ],
     "level": 913,
@@ -17579,7 +17579,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 913,
+    "craft_level": 888,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17615,7 +17615,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 468
+        "level": 455
       }
     ],
     "level": 917,
@@ -17634,7 +17634,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 917,
+    "craft_level": 892,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17666,7 +17666,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 337
+        "level": 328
       }
     ],
     "level": 905,
@@ -17685,7 +17685,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 905,
+    "craft_level": 880,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17717,7 +17717,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 427
+        "level": 416
       }
     ],
     "level": 906,
@@ -17736,7 +17736,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 906,
+    "craft_level": 881,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17768,11 +17768,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 648
+        "level": 630
       },
       {
         "stat": 1,
-        "level": 753
+        "level": 733
       }
     ],
     "level": 914,
@@ -17791,7 +17791,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 914,
+    "craft_level": 889,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17823,7 +17823,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 407
+        "level": 396
       }
     ],
     "level": 915,
@@ -17842,7 +17842,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 915,
+    "craft_level": 890,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17874,7 +17874,7 @@
     "stats": [
       {
         "stat": 6,
-        "level": 407
+        "level": 396
       }
     ],
     "level": 914,
@@ -17893,7 +17893,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 914,
+    "craft_level": 889,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17925,11 +17925,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 666
+        "level": 648
       },
       {
         "stat": 1,
-        "level": 729
+        "level": 709
       }
     ],
     "level": 913,
@@ -17948,7 +17948,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 913,
+    "craft_level": 888,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -17984,11 +17984,11 @@
     "stats": [
       {
         "stat": 2,
-        "level": 702
+        "level": 683
       },
       {
         "stat": 3,
-        "level": 702
+        "level": 683
       }
     ],
     "level": 913,
@@ -18007,7 +18007,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 913,
+    "craft_level": 888,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -18043,11 +18043,11 @@
     "stats": [
       {
         "stat": 0,
-        "level": 495
+        "level": 481
       },
       {
         "stat": 1,
-        "level": 495
+        "level": 481
       }
     ],
     "level": 905,
@@ -18066,7 +18066,7 @@
     "soulbound": false,
     "modified": null,
     "craft_skill": "Crafting",
-    "craft_level": 905,
+    "craft_level": 880,
     "min_success_rate": 1,
     "max_success_rate": 1,
     "preperation_time": 0,
@@ -22689,6 +22689,42 @@
     "sell_price": 1,
     "buy_price": 1,
     "enchantments": 1,
+    "soulbound": false,
+    "modified": null,
+    "craft_skill": null,
+    "craft_level": 0,
+    "min_success_rate": 0,
+    "max_success_rate": 0,
+    "preperation_time": 0,
+    "is_fixed_success_rate": true,
+    "craft_fail_item": null,
+    "craft_ingredients": [],
+    "drop_skill": null,
+    "drop_level": 0,
+    "drop_chance": 0,
+    "drop_cooldown": 0,
+    "used_in": [],
+    "effects": [],
+    "raid_drop_month_start": 0,
+    "raid_drop_month_length": 0,
+    "raid_min_drop": 0,
+    "raid_max_drop": 0,
+    "raid_drop_tier": 0,
+    "drop_slayer_requirement": 0
+  },
+  {
+    "id": "62432569-f33c-418f-ac11-f48137884179",
+    "name": "Ferry Scroll",
+    "description": "A scroll that will temporarily increase the speed of the ferry for 15 minutes. This effect cannot  be stacked.",
+    "stats": [],
+    "level": 1,
+    "equip_requirements": [],
+    "type": 29,
+    "category": 9,
+    "material": 0,
+    "sell_price": 1,
+    "buy_price": 0,
+    "enchantments": 0,
     "soulbound": false,
     "modified": null,
     "craft_skill": null,
@@ -30727,14 +30763,14 @@
     "stats": [],
     "level": 140,
     "equip_requirements": [],
-    "type": 25,
+    "type": 35,
     "category": 7,
     "material": 0,
     "sell_price": 168,
     "buy_price": 0,
     "enchantments": 0,
     "soulbound": false,
-    "modified": "2023-08-09T18:23:17",
+    "modified": "2025-05-12T10:12:19",
     "craft_skill": "Cooking",
     "craft_level": 140,
     "min_success_rate": 1,
@@ -35258,14 +35294,14 @@
     "stats": [],
     "level": 100,
     "equip_requirements": [],
-    "type": 35,
+    "type": 33,
     "category": 7,
     "material": 0,
     "sell_price": 100,
     "buy_price": 0,
     "enchantments": 0,
     "soulbound": false,
-    "modified": null,
+    "modified": "2025-05-12T07:44:01",
     "craft_skill": null,
     "craft_level": 0,
     "min_success_rate": 0,

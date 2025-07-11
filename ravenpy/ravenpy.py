@@ -243,6 +243,7 @@ class CharacterEquipment:
 
 fighting_replacements = {
     "Atk": "Attack",
+    "Att": "Attack",
     "Heal": "Healing",
     "Def": "Defense",
     "Str": "Strength"
@@ -355,7 +356,8 @@ class Character:
         if state['island'] != "None":
             self.island: Islands = _getitem_or_none(state['island'], Islands)
         self.destination: Islands = _getitem_or_none(state['destination'], Islands)
-        self.waiting_for_ferry: bool = self.destination and self.destination == self.island
+        # self.waiting_for_ferry: bool = self.destination and self.destination == self.island
+        self.waiting_for_ferry: bool = False
         self.estimated_level_time: datetime = _call_or_none(state['estimatedTimeForLevelUp'], _parse_time)
         self.x: int = state['x']
         self.y: int = state['y']
@@ -717,7 +719,7 @@ def experience_for_level(level):
         return experience_array[len(experience_array) - 1]
     return (0 if level - 2 < 0 else experience_array[level - 2])
 
-def search_item(name: str, limit=10):
+def search_item(name: str, limit=10) -> List[Tuple[Item, int]]:
     search_result = thefuzz.process.extract(name, _items_names, limit=limit, scorer=thefuzz.fuzz.ratio)
     out_results = []
     for result, score in search_result:
