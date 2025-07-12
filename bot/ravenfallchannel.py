@@ -463,12 +463,16 @@ class RFChannel:
         event = RFChannelEvent.NONE
         sub_event = RFChannelSubEvent.NONE
         if dungeon and dungeon.get('enemies'):
+            dungeon_name = "DUNGEON"
+            if dungeon.get("name", None):
+                dungeon_name = f"DUNGEON: {dungeon['name']}"
+                
             if not dungeon['started']:
                 self.max_dungeon_hp = dungeon["boss"]["health"]
                 time_starting = format_seconds(dungeon['secondsuntilstart'])
                 if dungeon['boss']['health'] > 0:
                     event_text = (
-                        f"DUNGEON starting in {time_starting} – "
+                        f"{dungeon_name} starting in {time_starting} – "
                         f"Boss HP: {dungeon['boss']['health']:,} – "
                         f"Enemies: {dungeon['enemies']:,} – "
                         f"Players: {dungeon['players']:,}"
@@ -477,7 +481,7 @@ class RFChannel:
                     sub_event = RFChannelSubEvent.DUNGEON_READY
                 else:
                     event_text = (
-                        f"DUNGEON is being prepared... – "
+                        f"{dungeon_name} is being prepared... – "
                         f"Enemies: {dungeon['enemies']:,}"
                     )
                     event = RFChannelEvent.DUNGEON
@@ -487,7 +491,7 @@ class RFChannel:
                     self.max_dungeon_hp = dungeon["boss"]["health"]
                 boss_max_hp = min(1, self.max_dungeon_hp)
                 event_text = (
-                    f"DUNGEON – "
+                    f"{dungeon_name} – "
                     f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp:,} "
                     f"({dungeon['boss']['health']/boss_max_hp:.1%}) – "
                     f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,} – "
@@ -541,10 +545,13 @@ class RFChannel:
             if old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
                 await asyncio.sleep(2)
                 players = self.dungeon['players']
+                dungeon_name = self.dungeon['name']
+                if not dungeon_name:
+                    dungeon_name = "A dungeon"
                 if players == 0:
-                    await self.send_chat_message(f"A dungeon is available!")
+                    await self.send_chat_message(f"{dungeon_name} is available!")
                 else:
-                    await self.send_chat_message(f"A dungeon is available! {utils.pl2(players, 'player has', 'players have')} joined.")
+                    await self.send_chat_message(f"{dungeon_name} is available! {utils.pl2(players, 'player has', 'players have')} joined.")
             elif old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
                 await asyncio.sleep(2)
                 players = self.raid['players']

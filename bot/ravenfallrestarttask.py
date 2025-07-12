@@ -137,7 +137,7 @@ class RFRestartTask:
             else:
                 self.future_pause_reason = ""
 
-            if time_left > max(WARNING_MSG_TIMES[-1][0], 60):
+            if time_left > WARNING_MSG_TIMES[0][0] + 5:
                 continue
 
             if not event_type:
