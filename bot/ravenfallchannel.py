@@ -489,7 +489,7 @@ class RFChannel:
             else:
                 if dungeon['enemiesalive'] > 0 or self.max_dungeon_hp < dungeon['boss']['health']:
                     self.max_dungeon_hp = dungeon["boss"]["health"]
-                boss_max_hp = min(1, self.max_dungeon_hp)
+                boss_max_hp = max(1, self.max_dungeon_hp)
                 event_text = (
                     f"{dungeon_name} – "
                     f"Boss HP: {dungeon['boss']['health']:,}/{boss_max_hp:,} "
