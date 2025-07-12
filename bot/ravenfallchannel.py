@@ -487,7 +487,7 @@ class RFChannel:
                     event = RFChannelEvent.DUNGEON
                     sub_event = RFChannelSubEvent.DUNGEON_PREPARE
             else:
-                if dungeon['enemiesalive'] > 0:
+                if dungeon['enemiesalive'] > 0 or self.max_dungeon_hp < dungeon['boss']['health']:
                     self.max_dungeon_hp = dungeon["boss"]["health"]
                 boss_max_hp = min(1, self.max_dungeon_hp)
                 event_text = (
