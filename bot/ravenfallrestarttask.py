@@ -15,6 +15,7 @@ class RestartReason(Enum):
     AUTO = "auto_restart"
     USER = "user_restart"
     UNRESPONSIVE = "unresponsive"
+    MULTIPLIER_DESYNC = "multiplier_desync"
     
 
 class PreRestartEvent(Enum):

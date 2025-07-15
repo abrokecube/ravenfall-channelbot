@@ -13,6 +13,7 @@ from utils.routines import routine
 from utils.websocket_client import AutoReconnectingWebSocket
 from datetime import timedelta, datetime, timezone
 import time
+from .ravenfallrestarttask import RestartReason
 
 import os
 
@@ -154,20 +155,23 @@ class RFChannelManager:
             return
         if multiplier.multiplier <= 1:
             return
-        if (now - self.global_multiplier_last_change) < timedelta(minutes=2):
+        if (now - self.global_multiplier_last_change) < timedelta(minutes=1, seconds=30):
             return
         for channel in self.channels:
+            if channel.channel_restart_lock.locked():
+                continue
             if channel.multiplier['multiplier'] != self.global_multiplier:
                 logger.debug(f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}")
-                r = await send_multichat_command(
-                    text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
-                    user_id=channel.channel_id,
-                    user_name=channel.channel_name,
-                    channel_id=channel.channel_id,
-                    channel_name=channel.channel_name
-                )
-                if r['status'] != 200:
-                    await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
+                channel.queue_restart(30, label="multiplier mismatch", reason=RestartReason.MULTIPLIER_DESYNC)
+                # r = await send_multichat_command(
+                #     text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
+                #     user_id=channel.channel_id,
+                #     user_name=channel.channel_name,
+                #     channel_id=channel.channel_id,
+                #     channel_name=channel.channel_name
+                # )
+                # if r['status'] != 200:
+                #     await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
     
     @routine(delta=timedelta(seconds=120))
     async def resync_routine(self):
