@@ -205,7 +205,7 @@ class RFChannel:
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
         platform_id = message['Sender']['PlatformId']
         # sometimes "server-request" is the platform ID
-        if not platform_id.isdigit():
+        if (not platform_id) or (not platform_id.isdigit()):
             return message
         asyncio.create_task(self.record_user(
             int(platform_id),
