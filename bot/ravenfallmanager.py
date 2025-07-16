@@ -162,7 +162,7 @@ class RFChannelManager:
                 continue
             if channel.multiplier['multiplier'] != self.global_multiplier:
                 logger.debug(f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}")
-                channel.queue_restart(30, label="multiplier mismatch", reason=RestartReason.MULTIPLIER_DESYNC)
+                channel.queue_restart(120, label="multiplier mismatch", reason=RestartReason.MULTIPLIER_DESYNC)
                 r = await send_multichat_command(
                     text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
                     user_id=channel.channel_id,
