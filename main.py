@@ -100,7 +100,7 @@ async def run():
     chat.register_event(ChatEvent.READY, on_ready)
 
     async def on_message(message: ChatMessage):
-        logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
+        # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
         await commands.process_message(message)
         await rf_manager.event_twitch_message(message)
     chat.register_event(ChatEvent.MESSAGE, on_message)
