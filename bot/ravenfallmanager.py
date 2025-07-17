@@ -174,29 +174,31 @@ class RFChannelManager:
                 if r['status'] != 200:
                     await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
     
-    @routine(delta=timedelta(seconds=120))
-    async def resync_routine(self):
+    async def get_desync_info(self) -> Dict[str, float]:
+        ch_desyncs: Dict[str, float] = {}
         data = await get_desync_info()
+        if time.time() - data['data']['last_updated'] > 300:
+            return ch_desyncs
+
         if data['status'] != 200:
             logger.error(f"Failed to fetch desync info: {data['error']}")
-            return
-        if time.time() - data['data']['last_updated'] > 300:
-            return
-        if not self.ravennest_is_online:
-            return
-        ch_desync_times: Dict[str, float] = {}
+            return ch_desyncs
         for channel_id in self.channel_id_to_channel.keys():
             if channel_id in data['data']['towns']:
-                ch_desync_times[channel_id] = data['data']['towns'][channel_id]
-        # logger.debug(', '.join([
-        #     f'{self.channel_id_to_channel[channel_id].channel_name}: {round(ch_desync_times[channel_id], 3)}s'
-        #     for channel_id in ch_desync_times
-        # ]))
+                channel_name = self.channel_id_to_channel[channel_id].channel_name
+                ch_desyncs[channel_name] = data['data']['towns'][channel_id]
+        return ch_desyncs
+
+    @routine(delta=timedelta(seconds=120))
+    async def resync_routine(self):
+        if not self.ravennest_is_online:
+            return
+        data = await self.get_desync_info()
         resynced_channels = []
-        for channel_id, desync in ch_desync_times.items():
+        for channel_name, desync in data.items():
             if abs(desync) < 30:  # 30 seconds
                 continue
-            channel = self.channel_id_to_channel[channel_id]
+            channel = self.channel_name_to_channel[channel_name]
             if channel.event == RFChannelEvent.DUNGEON:
                 continue
             r = await send_multichat_command(

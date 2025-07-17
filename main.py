@@ -19,6 +19,7 @@ from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
 from utils.logging_fomatter import setup_logging
+from bot.server import SomeEndpoints
 
 load_dotenv()
 
@@ -93,10 +94,12 @@ async def run():
         global rf_manager
         rf_manager = RFChannelManager(channels, chat, rf)
         await rf_manager.start()
-
         load_cogs()
-
         logger.info("Bot is ready for work")
+
+        server = SomeEndpoints(rf_manager, os.getenv("SERVER_HOST", "0.0.0.0"), os.getenv("SERVER_PORT", 8080))
+        await server.start()
+
     chat.register_event(ChatEvent.READY, on_ready)
 
     async def on_message(message: ChatMessage):
@@ -115,6 +118,9 @@ async def run():
         chat.stop()
         await rf_manager.stop()
         await twitch.close()
+
+    server = SomeEndpoints(chat)
+    web.run_app(server.app, host=server.host, port=server.port)
 
 if __name__ == "__main__":
     asyncio.run(run())
