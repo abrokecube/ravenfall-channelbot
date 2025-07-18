@@ -95,7 +95,7 @@ if TYPE_CHECKING:
 import psutil
 import os
 import asyncio
-from ..utils.runshell import runshell
+from utils.runshell import runshell
 
 class MetricsManager:
     def __init__(self, rf_manager: 'RFChannelManager'):
