@@ -38,6 +38,7 @@ logging.getLogger('middleman').setLevel(logging.INFO)
 logging.getLogger('aiosqlite').setLevel(logging.INFO)
 logging.getLogger('new_message_processor').setLevel(logging.INFO)
 logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
+logging.getLogger('utils.runshell').setLevel(logging.WARNING)
 
 
 with open("channels.json", "r") as f:

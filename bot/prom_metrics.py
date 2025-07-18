@@ -1,5 +1,9 @@
 from enum import Enum
 from typing import Dict, NamedTuple
+import logging
+
+LOGGER = logging.getLogger(__name__)
+
 
 class UndefinedMetric(Exception):
     def __init__(self):
@@ -116,13 +120,13 @@ class MetricsManager:
                     ravenfall_pids.append(proc.info['pid'])
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
-
+                
         tasks = []
         for ch in self.rf_manager.channels:
             shellcmd = (
                 f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
             )
-        tasks.append(runshell(shellcmd))
+            tasks.append(runshell(shellcmd))
         responses: List[str | None] = await asyncio.gather(*tasks)
         pid_lists = [x.splitlines() for code, x in responses]
         box_pids = {}
@@ -132,7 +136,7 @@ class MetricsManager:
         m.add_def("rf_ext_ravenfall_info", "Information about ravenfall", MetricType.GAUGE)
         for ch in self.rf_manager.channels:
             for pid in box_pids[ch.channel_name]:
-                if pid in ravenfall_pids:
+                if int(pid) in ravenfall_pids:
                     m.add_value("rf_ext_ravenfall_info", 1, channel=ch.channel_name, process_id=pid)
 
     async def get_metrics(self) -> str:
