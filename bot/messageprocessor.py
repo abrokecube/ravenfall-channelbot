@@ -348,11 +348,11 @@ class MessageProcessor:
             
             # Only set up signal handlers if we're not in a running loop
             try:
-                loop.add_signal_handler(signal.SIGINT, lambda: asyncio.create_task(self.astop()))
-                loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(self.astop()))
-            except NotImplementedError:
-                # Windows compatibility
-                pass
+                loop.add_signal_handler(signal.SIGINT, lambda: asyncio.ensure_future(self.astop()))
+                loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.ensure_future(self.astop()))
+            except (NotImplementedError, RuntimeError) as e:
+                # Windows compatibility or signal handling not supported
+                logger.warning(f"Could not set up signal handlers: {e}")
     
     async def astop(self) -> None:
         """Asynchronously stop the WebSocket server."""
@@ -361,9 +361,6 @@ class MessageProcessor:
         
         logger.info("Stopping WebSocket server...")
         self.running = False
-        
-        # Get the current event loop
-        loop = asyncio.get_running_loop()
         
         # Close the server if it exists
         if self.server:
@@ -374,36 +371,59 @@ class MessageProcessor:
         # Close all client connections with proper error handling
         if self.clients:
             logger.info(f"Closing {len(self.clients)} client connections...")
-            client_tasks = []
             
-            for client_info in self.clients.values():
+            # Close all clients directly without creating new tasks
+            close_tasks = []
+            for client_info in list(self.clients.values()):  # Create a list to avoid modification during iteration
                 try:
                     if not client_info.websocket.closed:
-                        task = asyncio.create_task(client_info.websocket.close())
-                        client_tasks.append(task)
+                        close_tasks.append(client_info.websocket.close())
                 except Exception as e:
-                    logger.warning(f"Error closing client connection: {e}")
+                    logger.warning(f"Error preparing to close client connection: {e}")
             
             # Wait for all close operations to complete with a timeout
-            if client_tasks:
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*client_tasks, return_exceptions=True),
-                        timeout=5.0
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning("Timed out waiting for client connections to close")
-                except Exception as e:
-                    logger.error(f"Error during client connection cleanup: {e}")
+            if close_tasks:
+                done, pending = await asyncio.wait(
+                    [asyncio.create_task(t) for t in close_tasks],
+                    timeout=5.0,
+                    return_when=asyncio.ALL_COMPLETED
+                )
+                
+                # Cancel any pending tasks
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as e:
+                        logger.warning(f"Error cancelling close task: {e}")
+                
+                # Log any errors from completed tasks
+                for task in done:
+                    try:
+                        await task
+                    except Exception as e:
+                        logger.warning(f"Error during client close: {e}")
         
         self.clients.clear()
-        
         logger.info("WebSocket server stopped")
         
     def stop(self) -> None:
         """Synchronously stop the WebSocket server."""
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(self.astop())
-        else:
-            loop.run_until_complete(self.astop())
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If we're in the event loop thread, run the coroutine directly
+                loop.run_until_complete(self.astop())
+            else:
+                # If not in the event loop thread, create a new event loop
+                asyncio.run(self.astop())
+        except RuntimeError:
+            # No event loop, create a new one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.astop())
+            finally:
+                loop.close()
