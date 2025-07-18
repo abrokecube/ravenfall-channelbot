@@ -409,7 +409,7 @@ class RFChannel:
             return False
         return not self.middleman_connection_status.server_connected
 
-    @routine(delta=timedelta(hours=3), wait_first=True)
+    @routine(delta=timedelta(hours=3), wait_first=True, max_attempts=99999)
     async def update_boosts_routine(self):
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
@@ -423,7 +423,7 @@ class RFChannel:
         msg = f"{self.ravenbot_prefixes[0]}town {boost_stat.lower()}"
         await self.send_chat_message(msg)
 
-    @routine(delta=timedelta(seconds=3))
+    @routine(delta=timedelta(seconds=3), max_attempts=99999)
     async def update_mult_routine(self):
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
@@ -444,7 +444,7 @@ class RFChannel:
         
         self.current_mult = multiplier['multiplier']
 
-    @routine(delta=timedelta(seconds=1), wait_first=True)
+    @routine(delta=timedelta(seconds=1), wait_first=True, max_attempts=99999)
     async def update_events_routine(self):
         if self.channel_restart_lock.locked():
             self.event_text = "Ravenfall is restarting..."
@@ -571,14 +571,14 @@ class RFChannel:
             if sub_event == RFChannelSubEvent.RAID and self.raid['players'] > 0:
                 await middleman.ensure_connected(self.middleman_connection_id, 60)
 
-    @routine(delta=timedelta(seconds=30), wait_first=True)
+    @routine(delta=timedelta(seconds=30), wait_first=True, max_attempts=99999)
     async def dungeon_killswitch_routine(self):
         if not self.sub_event == RFChannelSubEvent.DUNGEON_BOSS:
             return
         if self.dungeon['elapsed'] > 60 * 15:  # 15 minutes
             await self.send_chat_message(f"{self.ravenbot_prefixes[0]}dungeon stop")
 
-    @routine(delta=timedelta(hours=5), wait_first=True)
+    @routine(delta=timedelta(hours=5), wait_first=True, max_attempts=99999)
     async def backup_state_data_routine(self):
         async with self.channel_restart_lock:
             async with self.channel_post_restart_lock:
@@ -599,7 +599,7 @@ class RFChannel:
                 )
                 logger.info(f"Backed up state data for {self.channel_name}")
 
-    @routine(delta=timedelta(seconds=1))
+    @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def update_middleman_connection_status_routine(self):
         conn_status = None
         if self.manager.middleman_connected:
@@ -640,7 +640,7 @@ class RFChannel:
 
     # --- [ AUTO RESTART ] ---------------------------------------
 
-    @routine(delta=timedelta(seconds=20))
+    @routine(delta=timedelta(seconds=20), max_attempts=99999)
     async def auto_restart_routine(self):
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:

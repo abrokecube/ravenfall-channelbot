@@ -123,7 +123,7 @@ class RFChannelManager:
                 return self.channel_name_to_channel[channel_name]
         return None
 
-    @routine(delta=timedelta(seconds=45))
+    @routine(delta=timedelta(seconds=45), max_attempts=99999)
     async def mult_check_routine(self):
         now = datetime.now(timezone.utc)
         old_online = self.ravennest_is_online
@@ -189,7 +189,7 @@ class RFChannelManager:
                 ch_desyncs[channel_name] = data['data']['towns'][channel_id]
         return ch_desyncs
 
-    @routine(delta=timedelta(seconds=120))
+    @routine(delta=timedelta(seconds=120), max_attempts=99999)
     async def resync_routine(self):
         if not self.ravennest_is_online:
             return
