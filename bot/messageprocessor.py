@@ -362,36 +362,59 @@ class MessageProcessor:
         logger.info("Stopping WebSocket server...")
         self.running = False
         
-        # Close the server to prevent new connections
-        if self.server:
-            self.server.close()
-            try:
-                # Use a timeout to prevent hanging during shutdown
-                await asyncio.wait_for(self.server.wait_closed(), timeout=2.0)
-            except (asyncio.TimeoutError, RuntimeError) as e:
-                logger.warning(f"Error waiting for server to close: {e}")
-            self.server = None
-            
-        # Close all client connections
+        # Create a list to store any cleanup tasks
+        cleanup_tasks = []
+        
+        # Close all client connections first
         if self.clients:
             logger.info(f"Closing {len(self.clients)} client connections...")
-            tasks = []
             for client_info in list(self.clients.values()):
                 try:
                     if not client_info.websocket.closed:
-                        tasks.append(client_info.websocket.close())
+                        # Create a task to close each client
+                        cleanup_tasks.append(self._safe_close_websocket(client_info.websocket))
                 except Exception as e:
                     logger.debug(f"Error preparing to close client {client_info.client_id}: {e}")
-            
-            if tasks:
-                try:
-                    await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.0)
-                except (asyncio.TimeoutError, RuntimeError) as e:
-                    logger.warning(f"Error waiting for client disconnections: {e}")
-            
-            self.clients.clear()
+        
+        # Close the server to prevent new connections
+        if self.server:
+            self.server.close()
+            # Add server close as a task
+            if hasattr(self.server, 'wait_closed'):
+                cleanup_tasks.append(self._safe_wait_closed(self.server))
+            else:
+                self.server = None
+        
+        # Wait for all cleanup tasks to complete with a timeout
+        if cleanup_tasks:
+            try:
+                # Use asyncio.shield only if the event loop is still running
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    await asyncio.wait_for(asyncio.gather(*cleanup_tasks, return_exceptions=True), timeout=2.0)
+            except (asyncio.TimeoutError, RuntimeError, asyncio.CancelledError) as e:
+                logger.debug(f"Cleanup completed with: {type(e).__name__}: {e}")
+        
+        # Clear remaining state
+        self.server = None
+        self.clients.clear()
             
         logger.info("WebSocket server stopped")
+    
+    async def _safe_close_websocket(self, websocket) -> None:
+        """Safely close a WebSocket connection."""
+        try:
+            if not websocket.closed:
+                await websocket.close()
+        except Exception as e:
+            logger.debug(f"Error closing WebSocket: {e}")
+    
+    async def _safe_wait_closed(self, server) -> None:
+        """Safely wait for server to close."""
+        try:
+            await server.wait_closed()
+        except Exception as e:
+            logger.debug(f"Error waiting for server to close: {e}")
         
     def stop(self) -> None:
         """Synchronously stop the WebSocket server."""
