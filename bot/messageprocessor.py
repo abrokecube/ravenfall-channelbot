@@ -362,19 +362,33 @@ class MessageProcessor:
         logger.info("Stopping WebSocket server...")
         self.running = False
         
+        # Close the server to prevent new connections
         if self.server:
             self.server.close()
-            await self.server.wait_closed()
+            try:
+                # Use a timeout to prevent hanging during shutdown
+                await asyncio.wait_for(self.server.wait_closed(), timeout=2.0)
+            except (asyncio.TimeoutError, RuntimeError) as e:
+                logger.warning(f"Error waiting for server to close: {e}")
             self.server = None
             
         # Close all client connections
         if self.clients:
             logger.info(f"Closing {len(self.clients)} client connections...")
-            tasks = [
-                client_info.websocket.close() 
-                for client_info in self.clients.values()
-            ]
-            await asyncio.gather(*tasks, return_exceptions=True)
+            tasks = []
+            for client_info in list(self.clients.values()):
+                try:
+                    if not client_info.websocket.closed:
+                        tasks.append(client_info.websocket.close())
+                except Exception as e:
+                    logger.debug(f"Error preparing to close client {client_info.client_id}: {e}")
+            
+            if tasks:
+                try:
+                    await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.0)
+                except (asyncio.TimeoutError, RuntimeError) as e:
+                    logger.warning(f"Error waiting for client disconnections: {e}")
+            
             self.clients.clear()
             
         logger.info("WebSocket server stopped")
