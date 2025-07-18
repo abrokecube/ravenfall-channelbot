@@ -72,7 +72,7 @@ class RFChannelManager:
         for channel in self.channels:
             await channel.stop()
         self.mult_check_routine.cancel()
-        self.resync_routine.stop()
+        self.resync_routine.cancel()
         if self.rf_message_processor:
             self.rf_message_processor.stop()
 

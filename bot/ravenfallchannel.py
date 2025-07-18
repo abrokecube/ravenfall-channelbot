@@ -163,8 +163,8 @@ class RFChannel:
         self.update_boosts_routine.cancel()
         self.update_mult_routine.cancel()
         self.update_events_routine.cancel()
-        self.backup_state_data_routine.stop()
-        self.auto_restart_routine.stop()
+        self.backup_state_data_routine.cancel()
+        self.auto_restart_routine.cancel()
         self.dungeon_killswitch_routine.cancel()
         self.update_middleman_connection_status_routine.cancel()
 

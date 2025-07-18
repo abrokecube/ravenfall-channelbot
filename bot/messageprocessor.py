@@ -358,46 +358,25 @@ class MessageProcessor:
         """Asynchronously stop the WebSocket server."""
         if not self.running:
             return
-        
+            
         logger.info("Stopping WebSocket server...")
         self.running = False
         
-        # Get the current event loop
-        loop = asyncio.get_running_loop()
-        
-        # Close the server if it exists
         if self.server:
             self.server.close()
             await self.server.wait_closed()
             self.server = None
-        
-        # Close all client connections with proper error handling
+            
+        # Close all client connections
         if self.clients:
             logger.info(f"Closing {len(self.clients)} client connections...")
-            client_tasks = []
+            tasks = [
+                client_info.websocket.close() 
+                for client_info in self.clients.values()
+            ]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self.clients.clear()
             
-            for client_info in self.clients.values():
-                try:
-                    if not client_info.websocket.closed:
-                        task = asyncio.create_task(client_info.websocket.close())
-                        client_tasks.append(task)
-                except Exception as e:
-                    logger.warning(f"Error closing client connection: {e}")
-            
-            # Wait for all close operations to complete with a timeout
-            if client_tasks:
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*client_tasks, return_exceptions=True),
-                        timeout=5.0
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning("Timed out waiting for client connections to close")
-                except Exception as e:
-                    logger.error(f"Error during client connection cleanup: {e}")
-        
-        self.clients.clear()
-        
         logger.info("WebSocket server stopped")
         
     def stop(self) -> None:
