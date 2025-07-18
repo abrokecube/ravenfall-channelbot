@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 import os
 import asyncio
+import signal
 import json
 from typing import List
 import logging
@@ -110,16 +111,43 @@ async def run():
         await rf_manager.event_twitch_message(message)
     chat.register_event(ChatEvent.MESSAGE, on_message)
 
+    # Start the chat connection
     chat.start()
-
+    
+    # Create an event to track when we should shut down
+    shutdown_event = asyncio.Event()
+    
+    # Set up signal handlers for graceful shutdown
+    def handle_shutdown():
+        logger.info("Shutdown signal received")
+        shutdown_event.set()
+    
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, handle_shutdown)
+        except NotImplementedError:
+            # Windows compatibility
+            pass
+    
     try:
-        while True:
-            await asyncio.sleep(9999)
-    except asyncio.CancelledError:
-        logger.info("Bot is shutting down")
+        # Wait for shutdown signal
+        await shutdown_event.wait()
+        logger.info("Bot is shutting down...")
+        
+        # Stop the chat connection
         chat.stop()
+        
+        # Stop the RF manager (which will stop all channels and the message processor)
         await rf_manager.stop()
+        
+        # Close the Twitch connection
         await twitch.close()
+        
+        logger.info("Shutdown complete")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}", exc_info=True)
+        raise
 
 if __name__ == "__main__":
     asyncio.run(run())

@@ -69,12 +69,17 @@ class RFChannelManager:
             logger.info("RF_MIDDLEMAN_PROCESSOR_HOST or RF_MIDDLEMAN_PROCESSOR_PORT not set, not starting message processor")
 
     async def stop(self):
-        for channel in self.channels:
-            await channel.stop()
+        # Cancel all background tasks first
         self.mult_check_routine.cancel()
         self.resync_routine.stop()
+        
+        # Stop all channels
+        for channel in self.channels:
+            await channel.stop()
+            
+        # Stop the message processor if it exists
         if self.rf_message_processor:
-            self.rf_message_processor.stop()
+            await self.rf_message_processor.astop()  # Use astop directly since we're already in an async context
 
     async def event_twitch_message(self, message: ChatMessage):
         for channel in self.channels:
