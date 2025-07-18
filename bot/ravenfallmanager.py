@@ -39,6 +39,8 @@ class RFChannelManager:
         self.middleman_processor_server_client_count = 0
         self.load_channels()
 
+        self.global_resync_lock = asyncio.Lock()
+
 
     def load_channels(self):
         for channel in self.config:
@@ -191,23 +193,27 @@ class RFChannelManager:
 
     @routine(delta=timedelta(seconds=120), max_attempts=99999)
     async def resync_routine(self):
-        if not self.ravennest_is_online:
-            return
         data = await self.get_desync_info()
         resynced_channels = []
         for channel_name, desync in data.items():
+            if not self.ravennest_is_online:
+                continue
             if abs(desync) < 30:  # 30 seconds
                 continue
             channel = self.channel_name_to_channel[channel_name]
             if channel.event == RFChannelEvent.DUNGEON:
                 continue
-            r = await send_multichat_command(
-                text="?resync",
-                user_id=channel.channel_id,
-                user_name=channel.channel_name,
-                channel_id=channel.channel_id,
-                channel_name=channel.channel_name
-            )
-            if r['status'] != 200:
-                await channel.send_chat_message("?resync")
-            resynced_channels.append(channel.channel_name)
+            async with channel.channel_restart_lock:
+                async with channel.channel_post_restart_lock:
+                    async with self.global_resync_lock:
+                        r = await send_multichat_command(
+                            text="?resync",
+                            user_id=channel.channel_id,
+                            user_name=channel.channel_name,
+                            channel_id=channel.channel_id,
+                            channel_name=channel.channel_name
+                        )
+                        if r['status'] != 200:
+                            await channel.send_chat_message("?resync")
+                        resynced_channels.append(channel.channel_name)
+                        await asyncio.sleep(60)
