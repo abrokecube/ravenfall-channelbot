@@ -121,8 +121,5 @@ async def run():
         await rf_manager.stop()
         await twitch.close()
 
-    server = SomeEndpoints(chat)
-    web.run_app(server.app, host=server.host, port=server.port)
-
 if __name__ == "__main__":
     asyncio.run(run())
