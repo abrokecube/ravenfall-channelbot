@@ -203,17 +203,19 @@ class RFChannelManager:
             channel = self.channel_name_to_channel[channel_name]
             if channel.event == RFChannelEvent.DUNGEON:
                 continue
-            async with channel.channel_restart_lock:
-                async with channel.channel_post_restart_lock:
-                    async with self.global_resync_lock:
-                        r = await send_multichat_command(
-                            text="?resync",
-                            user_id=channel.channel_id,
-                            user_name=channel.channel_name,
-                            channel_id=channel.channel_id,
-                            channel_name=channel.channel_name
-                        )
-                        if r['status'] != 200:
-                            await channel.send_chat_message("?resync")
-                        resynced_channels.append(channel.channel_name)
-                        await asyncio.sleep(60)
+            if channel.channel_restart_lock.locked():
+                continue
+            if channel.channel_post_restart_lock.locked():
+                continue
+            async with self.global_resync_lock:
+                r = await send_multichat_command(
+                    text="?resync",
+                    user_id=channel.channel_id,
+                    user_name=channel.channel_name,
+                    channel_id=channel.channel_id,
+                    channel_name=channel.channel_name
+                )
+                if r['status'] != 200:
+                    await channel.send_chat_message("?resync")
+                resynced_channels.append(channel.channel_name)
+                await asyncio.sleep(60)
