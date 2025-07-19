@@ -8,7 +8,8 @@
 raid_auto_joined: "{playerNames} have automatically joined the raid!"
 raid_auto_joined_count: "{playerCount} players have automatically joined the raid!"
 raid_finished_with_treasure: "Victorious!! The raid boss was slain and yielded {itemCount} item treasures!"
-raid_finished_without_treasure: Victorious!! The raid boss was slain but did not yield any treasure.
+raid_finished_without_treasure: "Victorious!! The raid boss was slain but did not yield any treasure."
+dungeon_finished_without_treasure: "Victorious!! The dungeon boss was slain but did not yield any treasure."
 raid_failed: "Oh no! The raid boss was not killed in time. No rewards will be given."
 dungeon_auto_joined_count: "{playerCount} players have automatically joined the dungeon!"
 
