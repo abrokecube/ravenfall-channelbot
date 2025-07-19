@@ -191,10 +191,24 @@ class RFChannelManager:
                 ch_desyncs[channel_name] = data['data']['towns'][channel_id]
         return ch_desyncs
 
-    @routine(delta=timedelta(seconds=120), max_attempts=99999)
+    @routine(delta=timedelta(seconds=60), max_attempts=99999)
     async def resync_routine(self):
         data = await self.get_desync_info()
-        resynced_channels = []
+        
+        async def resync_task(channel: RFChannel):
+            async with self.global_resync_lock:
+                r = await send_multichat_command(
+                    text="?resync",
+                    user_id=channel.channel_id,
+                    user_name=channel.channel_name,
+                    channel_id=channel.channel_id,
+                    channel_name=channel.channel_name
+                )
+                if r['status'] != 200:
+                    await channel.send_chat_message("?resync")
+                await asyncio.sleep(60)
+                
+        tasks = []                
         for channel_name, desync in data.items():
             if not self.ravennest_is_online:
                 continue
@@ -207,15 +221,6 @@ class RFChannelManager:
                 continue
             if channel.channel_post_restart_lock.locked():
                 continue
-            async with self.global_resync_lock:
-                r = await send_multichat_command(
-                    text="?resync",
-                    user_id=channel.channel_id,
-                    user_name=channel.channel_name,
-                    channel_id=channel.channel_id,
-                    channel_name=channel.channel_name
-                )
-                if r['status'] != 200:
-                    await channel.send_chat_message("?resync")
-                resynced_channels.append(channel.channel_name)
-                await asyncio.sleep(60)
+            tasks.append(resync_task(channel))
+        if tasks:
+            await asyncio.gather(*tasks)
