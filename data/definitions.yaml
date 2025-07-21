@@ -122,6 +122,7 @@ mult_patreon_huts: "Your current exp boost: {expMulti}x. You gain {tierMulti}x f
 mult_huts: "Your current exp boost: {expMulti}x. You gain {hutMulti}x from huts."
 mult_patreon: "Your current exp boost: {expMulti}x. You gain {tierMulti}x from sub/patreon."
 mult: "Your current exp boost: {expMulti}x."
+mult_patreon_global: "Your current exp boost: {expMulti}x. You gain {tierMulti}x from sub/patreon and {{globalMulti}}x from global exp multiplier for {{timeLeft}}."
 
 monster_fail: Player could not be turned into a monster right now :(
 
@@ -516,3 +517,4 @@ ferry_info: "The ferry is currently sailing towards {{islandName}} with {{player
 ferry_info_no_captain: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board."
 ferry_info_no_captain_island: "The ferry is currently sailing with {{playerCount:\\d+}} players on board."
 players_restored: "{{playerCount:\\d+}} players restored."
+restore_failed: "Failed to restore players. See game log files for more details."

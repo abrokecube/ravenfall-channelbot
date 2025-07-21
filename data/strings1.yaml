@@ -8,3 +8,4 @@ auto_dungeon_status_none: "You are not set to automatically join any dungeons."
 auto_raid_status_none: "You are not set to automatically join any raids."
 dungeon_countdown: null
 multiplier_ends: null
+restore_failed: "Failed to restore players. @abrokecube go fix this"

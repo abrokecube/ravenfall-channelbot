@@ -761,8 +761,14 @@ class RFChannel:
         return True
 
     async def _ravenfall_post_restart(self):
-        # Wait for the game to start rejoining players
+        # Wait for the game to start rejoining players (with 2 minute timeout)
+        start_time = time.time()
         while True:
+            if time.time() - start_time > 120:  # 2 minute timeout
+                logger.warning(f"Timed out waiting for players to join after restart in {self.channel_name}")
+                await self.send_chat_message(f"Players did not join back @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')}")
+                return
+                
             await asyncio.sleep(1)
             session: GameSession = await self.get_query("select * from session", 1)
             if session['players'] > 0:
@@ -871,7 +877,7 @@ class RFChannel:
             resp_user_retry = "Okay , try again"
             resp_user_retry_2 = "Okay , try again, surely this time it will work"
             resp_restart_ravenfall = "okie then i will restart Ravenfall, please hold..."
-            resp_giveup = "I give up, please try again later (pinging @abrokecube)"
+            resp_giveup = f"I give up, please try again later (pinging @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')})"
 
             if resend_text:
                 resp_retry = "Hmm"
@@ -879,7 +885,7 @@ class RFChannel:
                 resp_user_retry = resend_text
                 resp_user_retry_2 = resend_text
                 resp_restart_ravenfall = "Hmm ........."
-                resp_giveup = "I give up @abrokecube dinkDonk"
+                resp_giveup = f"I give up @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')} dinkDonk"
             
             if attempts_remaining > 0:
                 if attempts == 1:
