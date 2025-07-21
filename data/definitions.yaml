@@ -122,7 +122,8 @@ mult_patreon_huts: "Your current exp boost: {expMulti}x. You gain {tierMulti}x f
 mult_huts: "Your current exp boost: {expMulti}x. You gain {hutMulti}x from huts."
 mult_patreon: "Your current exp boost: {expMulti}x. You gain {tierMulti}x from sub/patreon."
 mult: "Your current exp boost: {expMulti}x."
-mult_patreon_global: "Your current exp boost: {expMulti}x. You gain {tierMulti}x from sub/patreon and {{globalMulti}}x from global exp multiplier for {{timeLeft}}."
+mult_patreon_global_rested: "Your current exp boost: {expMulti}x. You gain {tierMulti}x from sub/patreon and {{globalMulti:\\d+}}x from global exp multiplier for {{timeLeft:\\d+[hms ]( \\d+[hms ])?}} and the total is multiplied by {restedMulti}x from being rested."
+mult_patreon_global: "Your current exp boost: {expMulti}x. You gain {tierMulti}x from sub/patreon and {{globalMulti:\\d+}}x from global exp multiplier for {{timeLeft:\\d+[hms ]( \\d+[hms ])?}}."
 
 monster_fail: Player could not be turned into a monster right now :(
 
