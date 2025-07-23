@@ -176,7 +176,7 @@ class InfoCog(Cog):
             await ctx.reply("Invalid username.")
             return
         
-        query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[90s]))" % (target_user, ctx.msg.room.name)
+        query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[30s]))" % (target_user, ctx.msg.room.name)
         data = await get_prometheus_series(query, 10*60)
         if len(data) == 0:
             await ctx.reply("No data recorded. Your character may not be in this town right now.")
