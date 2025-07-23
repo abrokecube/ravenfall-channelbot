@@ -254,7 +254,7 @@ class InfoCog(Cog):
         where_island = ""
         if char.island:
             where_island = f"at {char.island.name.capitalize()}"
-        else:
+        elif not (char.in_raid or char.in_dungeon):
             where_island = "sailing the seas"
             
         rested = ""
