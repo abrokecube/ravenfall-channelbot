@@ -54,7 +54,7 @@ RETRY_WINDOW = 3 * 60  # Number of seconds to wait before resetting attempt coun
 # Command timeout values in seconds for monitored commands
 COMMAND_TIMEOUTS = {
     'coins': 5, 'count': 5, 'damage': 5, 'dmg': 5, 'dps': 5, 'effects': 5, 'ferry': 5, 'items': 5,
-    'multiplier': 5, 'online': 5, 'pubsub': 5, 'res': 5, 'resources': 5, 'rested': 5, 'status': 5, 'stats': 5,
+    'multiplier': 5, 'online': 5, 'res': 5, 'resources': 5, 'rested': 5, 'status': 5, 'stats': 5,
     'town': 5, 'townres': 5, 'training': 5, 'value': 5, 'version': 5, 'village': 5, 'villagers': 5, 'where': 5,
     
     'consume': 15, 'disenchant': 20, 'drink': 15, 'eat': 15, 'enchant': 20,
