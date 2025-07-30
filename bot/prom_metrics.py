@@ -110,7 +110,13 @@ class MetricsManager:
         m.add_def("rf_ext_desync_seconds", "Estimated desync time in seconds", MetricType.GAUGE)
         for channel_name, desync in desync_info.items():
             m.add_value("rf_ext_desync_seconds", desync, channel=channel_name)
-
+            
+    async def total_item_count(self, m: Metrics):
+        total_item_count = await self.rf_manager.get_total_item_count()
+        m.add_def("rf_ext_total_item_count", "Total item count in each channel", MetricType.GAUGE)
+        for channel_name, count in total_item_count.items():
+            m.add_value("rf_ext_total_item_count", count, channel=channel_name)
+            
     async def ravenfall_pids(self, m: Metrics):
         ravenfall_pids = []
         for proc in psutil.process_iter(['pid', 'name']):
@@ -143,6 +149,7 @@ class MetricsManager:
         m = Metrics()
         tasks = [
             self.desync_info(m),
+            self.total_item_count(m),
             self.ravenfall_pids(m)
         ]
         await asyncio.gather(*tasks, return_exceptions=True)

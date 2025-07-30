@@ -79,6 +79,16 @@ class DesyncResponse(TypedDict):
     data: DesyncInfo
     error: Optional[str]
 
+class TotalItemCountInfo(TypedDict):
+    """Structure for total item count information."""
+    towns: Dict[str, float]  # Channel ID to desync data mapping
+
+class TotalItemCountResponse(TypedDict):
+    """Response structure for total item count."""
+    status: int
+    data: TotalItemCountInfo
+    error: Optional[str]
+
 async def get_desync_info() -> DesyncResponse:
     """Fetch desync information from the server.
     
@@ -86,6 +96,28 @@ async def get_desync_info() -> DesyncResponse:
         dict: The JSON response containing desync information
     """
     url = f"{BASE_URL}/get_desync"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response_data = await response.json()
+                return {
+                    "status": response.status,
+                    "data": response_data['data']
+                }
+    except Exception as e:
+        return {
+            "status": 500,
+            "error": f"Failed to fetch desync info: {str(e)}"
+        }
+
+async def get_total_item_count() -> TotalItemCountResponse:
+    """Fetch desync information from the server.
+    
+    Returns:
+        dict: The JSON response containing desync information
+    """
+    url = f"{BASE_URL}/get_total_item_count"
     
     try:
         async with aiohttp.ClientSession() as session:

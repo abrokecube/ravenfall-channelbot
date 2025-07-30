@@ -1,7 +1,7 @@
 from typing import List, Dict
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent
-from .multichat_command import send_multichat_command, get_desync_info
+from .multichat_command import send_multichat_command, get_desync_info, get_total_item_count
 from . import middleman
 from .messageprocessor import MessageProcessor, RavenMessage, MessageMetadata, ClientInfo
 from twitchAPI.chat import Chat, ChatMessage
@@ -190,6 +190,19 @@ class RFChannelManager:
                 channel_name = self.channel_id_to_channel[channel_id].channel_name
                 ch_desyncs[channel_name] = data['data']['towns'][channel_id]
         return ch_desyncs
+
+    async def get_total_item_count(self) -> Dict[str, float]:
+        total_item_data: Dict[str, float] = {}
+        data = await get_total_item_count()
+
+        if data['status'] != 200:
+            logger.error(f"Failed to fetch desync info: {data['error']}")
+            return total_item_data
+        for channel_id in self.channel_id_to_channel.keys():
+            if channel_id in data['data']['towns']:
+                channel_name = self.channel_id_to_channel[channel_id].channel_name
+                total_item_data[channel_name] = data['data']['towns'][channel_id]
+        return total_item_data
 
     @routine(delta=timedelta(seconds=60), max_attempts=99999)
     async def resync_routine(self):
