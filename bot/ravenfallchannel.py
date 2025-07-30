@@ -574,7 +574,9 @@ class RFChannel:
     async def dungeon_killswitch_routine(self):
         if not self.sub_event == RFChannelSubEvent.DUNGEON_BOSS:
             return
-        if self.dungeon['elapsed'] > 60 * 15:  # 15 minutes
+        if not self.dungeon:
+            return
+        if self.dungeon.get('elapsed', 0) > 60 * 15:  # 15 minutes
             await self.send_chat_message(f"{self.ravenbot_prefixes[0]}dungeon stop")
 
     @routine(delta=timedelta(hours=5), wait_first=True, max_attempts=99999)
