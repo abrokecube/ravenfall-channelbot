@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Dict, NamedTuple
 import logging
+from .multichat_command import get_char_info
 
 LOGGER = logging.getLogger(__name__)
 
@@ -117,6 +118,20 @@ class MetricsManager:
         for channel_name, count in total_item_count.items():
             m.add_value("rf_ext_total_item_count", count, channel=channel_name)
             
+    async def char_data(self, m: Metrics):
+        chars = await get_char_info()
+        if chars['status'] != 200:
+            LOGGER.error(f"Failed to fetch character data: {chars.get('error', 'Unknown error')}")
+            return
+        m.add_def("rf_ext_char_total_item_count", "Character's total item count", MetricType.GAUGE)
+        for char_data in chars['data']:
+            m.add_value(
+                "rf_ext_char_total_item_count", char_data['total_item_count'], 
+                channel=char_data['channel_name'],
+                username=char_data['user_name'],
+                id=char_data['id'],
+            )
+            
     async def ravenfall_pids(self, m: Metrics):
         ravenfall_pids = []
         for proc in psutil.process_iter(['pid', 'name']):
@@ -150,7 +165,8 @@ class MetricsManager:
         tasks = [
             self.desync_info(m),
             self.total_item_count(m),
-            self.ravenfall_pids(m)
+            self.ravenfall_pids(m),
+            self.char_data(m)
         ]
         await asyncio.gather(*tasks, return_exceptions=True)
         return m.get_text()

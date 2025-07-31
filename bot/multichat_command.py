@@ -7,7 +7,7 @@ environment variables are properly set.
 """
 import aiohttp
 import os
-from typing import Dict, Any, TypedDict, Optional
+from typing import Dict, Any, List, TypedDict, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -89,6 +89,25 @@ class TotalItemCountResponse(TypedDict):
     data: TotalItemCountInfo
     error: Optional[str]
 
+class CharInfo(TypedDict):    
+    name: str
+    index: int
+    user_name: str
+    id: str
+    channel_id: str
+    channel_name: str
+    desync_s: float
+    last_update_time: float
+    recommendations: List[str]
+    total_item_count: int
+    
+class CharInfoResponse(TypedDict):
+    """Response structure for total item count."""
+    status: int
+    data: List[CharInfo]
+    error: Optional[str]
+
+
 async def get_desync_info() -> DesyncResponse:
     """Fetch desync information from the server.
     
@@ -118,6 +137,23 @@ async def get_total_item_count() -> TotalItemCountResponse:
         dict: The JSON response containing desync information
     """
     url = f"{BASE_URL}/get_total_item_count"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response_data = await response.json()
+                return {
+                    "status": response.status,
+                    "data": response_data['data']
+                }
+    except Exception as e:
+        return {
+            "status": 500,
+            "error": f"Failed to fetch desync info: {str(e)}"
+        }
+
+async def get_char_info() -> CharInfoResponse:
+    url = f"{BASE_URL}/get_char_data"
     
     try:
         async with aiohttp.ClientSession() as session:
