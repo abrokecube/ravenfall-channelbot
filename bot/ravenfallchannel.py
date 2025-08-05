@@ -572,7 +572,7 @@ class RFChannel:
 
     @routine(delta=timedelta(seconds=30), wait_first=True, max_attempts=99999)
     async def dungeon_killswitch_routine(self):
-        if not self.sub_event == RFChannelSubEvent.DUNGEON_BOSS:
+        if not self.sub_event in (RFChannelSubEvent.DUNGEON_STARTED, RFChannelSubEvent.DUNGEON_BOSS):
             return
         if not self.dungeon:
             return
