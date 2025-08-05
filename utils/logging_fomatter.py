@@ -72,11 +72,12 @@ def setup_logging(
     # Set up console handler with filter for per-logger levels
     if handler is None:
         handler = logging.StreamHandler()
+    console_handler = handler
     
     # Apply formatter to console handler
     if formatter is None:
         # Use color formatter for console if supported
-        if isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):
+        if isinstance(console_handler, logging.StreamHandler) and stream_supports_colour(console_handler.stream):
             formatter = ColourFormatter()
         else:
             formatter = logging.Formatter(
@@ -84,7 +85,7 @@ def setup_logging(
                 datefmt='%Y-%m-%d %H:%M:%S',
                 style='{'
             )
-    handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
     
     # Create a filter function for console logging based on per-logger levels
     def console_filter(record):
@@ -100,8 +101,8 @@ def setup_logging(
         # Default to root level for unconfigured loggers
         return record.levelno >= level
     
-    handler.addFilter(console_filter)
-    handler.setLevel(logging.DEBUG)  # Set to most verbose, let the filter handle the actual level
+    console_handler.addFilter(console_filter)
+    console_handler.setLevel(logging.DEBUG)  # Set to most verbose, let the filter handle the actual level
     
     # Configure the root logger to handle all messages
     root_logger = logging.getLogger()
@@ -112,7 +113,7 @@ def setup_logging(
         root_logger.removeHandler(h)
     
     # Add console handler to root logger
-    root_logger.addHandler(handler)
+    root_logger.addHandler(console_handler)
     
     # Set up file handlers for configured loggers
     for logger_name, config in log_files.items():
@@ -149,6 +150,7 @@ def setup_logging(
         
         # Add the file handler
         logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
         logger.propagate = False  # Prevent logs from propagating to root logger
     
     # Set up default file handler for all other loggers
