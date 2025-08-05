@@ -53,13 +53,13 @@ def setup_logging(
         else:
             formatter = logging.Formatter(
                 '[{asctime}] [{levelname:<8}] {name}: {message}',
-                datefmt='%Y-%m-%d %H:%M:%S'
+                datefmt='%Y-%m-%d %H:%M:%S', style="{"
             )
     
     # Always use a simple formatter for the file handler
     file_formatter = logging.Formatter(
         '[{asctime}] [{levelname:<8}] {name}: {message}',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S', style="{"
     )
     
     file_handler.setFormatter(file_formatter)
