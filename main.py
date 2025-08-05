@@ -24,18 +24,34 @@ from bot.server import SomeEndpoints
 load_dotenv()
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
-
+logger_config = {
+    'twitchAPI.chat': {
+        'filename': "twitchAPI.log",
+        'console_level': logging.INFO,
+    },
+    'middleman': {
+        'filename': "middleman.log",
+        'console_level': logging.INFO,
+    },
+    'aiosqlite': {
+        'filename': "database.log",
+        'console_level': logging.INFO,
+    },
+    'new_message_processor': {
+        'filename': "rfmsgproc.log",
+        'console_level': logging.INFO,
+    },
+    'aiohttp.access': {
+        'filename': "httpserver.log",
+        'console_level': logging.WARNING,
+    },
+    'utils.runshell': {
+        'filename': "runshell.log",
+        'console_level': logging.WARNING,
+    },
+}
 setup_logging(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-# Suppress twitchAPI.chat logs below WARNING level
-logging.getLogger('twitchAPI.chat').setLevel(logging.INFO)
-logging.getLogger('middleman').setLevel(logging.INFO)
-logging.getLogger('aiosqlite').setLevel(logging.INFO)
-logging.getLogger('new_message_processor').setLevel(logging.INFO)
-logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
-logging.getLogger('utils.runshell').setLevel(logging.WARNING)
-
 
 with open("channels.json", "r") as f:
     channels: List[Channel] = json.load(f)

@@ -10,8 +10,8 @@ def setup_logging(
     *,
     handler: logging.Handler | None = None,
     formatter: logging.Formatter | None = None,
-    level: int | None = None,
-    root: bool = True,
+    level: int = logging.INFO,  # Default console level
+    loggers_config: dict[str, str | dict] | None = None,
 ) -> None:
     """
     Set up logging with both console and rotating file handlers.
@@ -22,30 +22,57 @@ def setup_logging(
     Parameters:
         handler: Optional logging.Handler to use for console output
         formatter: Optional logging.Formatter to use for formatting log messages
-        level: Logging level for console output (default: logging.INFO)
-        root: If True, configure the root logger. If False, configure only the twitchio logger.
+        level: Default logging level for console output (default: logging.INFO)
+        loggers_config: Dictionary mapping logger names to their configuration.
+            Example: {
+                # Simple format - just specify filename
+                'module1': 'module1.log',
+                
+                # Advanced format with file and console settings
+                'module2': {
+                    'filename': 'module2.log',  # Required
+                    'level': logging.INFO,      # File log level (default: DEBUG)
+                    'console_level': logging.WARNING  # Console log level (default: use root level)
+                },
+                
+                # Multiple loggers can share the same file
+                'module3': {
+                    'filename': 'shared.log',
+                    'console_level': logging.ERROR  # Only show errors for this module in console
+                },
+                'module4': 'shared.log'  # Will share the same file as module3
+            }
     """
-    if level is None:
-        level = logging.INFO
-        
     # Create logs directory if it doesn't exist
     os.makedirs('logs', exist_ok=True)
     
-    # Set up rotating file handler
-    file_handler = logging.handlers.RotatingFileHandler(
-        'logs/ravenfall-bot.log',
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(logging.DEBUG)  # Log everything to file
+    # Process loggers config to handle both string and dict formats
+    log_files = {}
+    if loggers_config:
+        for logger_name, config in loggers_config.items():
+            if isinstance(config, str):
+                # Simple case: {'logger_name': 'filename.log'}
+                log_files[logger_name] = {
+                    'filename': config,
+                    'level': logging.DEBUG,
+                    'console_level': level  # Use root console level
+                }
+            elif isinstance(config, dict):
+                # Advanced case with custom configuration
+                log_files[logger_name] = {
+                    'filename': config.get('filename', f'{logger_name}.log'),
+                    'level': config.get('level', logging.DEBUG),
+                    'console_level': config.get('console_level', level)  # Default to root level
+                }
     
-    # Set up console handler
+    # Create a mapping of filenames to their handlers to avoid duplicate handlers
+    file_handlers = {}
+    
+    # Set up console handler with filter for per-logger levels
     if handler is None:
         handler = logging.StreamHandler()
-    handler.setLevel(level)  # Use the specified level for console
     
-    # Apply formatter to both handlers
+    # Apply formatter to console handler
     if formatter is None:
         # Use color formatter for console if supported
         if isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):
@@ -53,35 +80,92 @@ def setup_logging(
         else:
             formatter = logging.Formatter(
                 '[{asctime}] [{levelname:<8}] {name}: {message}',
-                datefmt='%Y-%m-%d %H:%M:%S', style="{"
+                datefmt='%Y-%m-%d %H:%M:%S',
+                style='{'
             )
-    
-    # Always use a simple formatter for the file handler
-    file_formatter = logging.Formatter(
-        '[{asctime}] [{levelname:<8}] {name}: {message}',
-        datefmt='%Y-%m-%d %H:%M:%S', style="{"
-    )
-    
-    file_handler.setFormatter(file_formatter)
     handler.setFormatter(formatter)
     
-    # Get the appropriate logger
-    if root:
-        logger = logging.getLogger()
-    else:
-        library, _, _ = __name__.partition(".")
-        logger = logging.getLogger(library)
+    # Create a filter function for console logging based on per-logger levels
+    def console_filter(record):
+        # Check if this record matches any configured logger
+        for name, config in log_files.items():
+            if record.name == name or record.name.startswith(f"{name}."):
+                # Check if the record's level is sufficient for this logger's console level
+                return record.levelno >= config['console_level']
+        # Default to root level for unconfigured loggers
+        return record.levelno >= level
     
-    # Remove all existing handlers
-    for h in logger.handlers[:]:
-        logger.removeHandler(h)
+    handler.addFilter(console_filter)
+    handler.setLevel(logging.DEBUG)  # Set to most verbose, let the filter handle the actual level
     
-    # Add both handlers
-    logger.addHandler(handler)
-    logger.addHandler(file_handler)
+    # Configure the root logger to handle all messages
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
     
-    # Set the logger level to the lowest level of all handlers
-    logger.setLevel(min(handler.level, file_handler.level))
+    # Remove all existing handlers from root logger
+    for h in root_logger.handlers[:]:
+        root_logger.removeHandler(h)
+    
+    # Add console handler to root logger
+    root_logger.addHandler(handler)
+    
+    # Set up file handlers for configured loggers
+    for logger_name, config in log_files.items():
+        filename = config['filename']
+        
+        # Create or get existing file handler for this filename
+        if filename not in file_handlers:
+            file_handler = logging.handlers.RotatingFileHandler(
+                f'logs/{filename}',
+                maxBytes=5*1024*1024,  # 5MB
+                backupCount=5,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(logging.DEBUG)  # Always DEBUG for files
+            
+            # Use a simple formatter for file output
+            file_formatter = logging.Formatter(
+                '[{asctime}] [{levelname:<8}] {name}: {message}',
+                datefmt='%Y-%m-%d %H:%M:%S',
+                style='{'
+            )
+            file_handler.setFormatter(file_formatter)
+            file_handlers[filename] = file_handler
+        else:
+            file_handler = file_handlers[filename]
+        
+        # Configure the specific logger
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+        
+        # Remove any existing file handlers from this logger
+        for h in logger.handlers[:]:
+            if isinstance(h, logging.FileHandler):
+                logger.removeHandler(h)
+        
+        # Add the file handler
+        logger.addHandler(file_handler)
+        logger.propagate = False  # Prevent logs from propagating to root logger
+    
+    # Set up default file handler for all other loggers
+    default_file_handler = logging.handlers.RotatingFileHandler(
+        'logs/ravenfall-bot.log',
+        maxBytes=5*1024*1024,  # 5MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    default_file_handler.setLevel(logging.DEBUG)
+    
+    # Use a simple formatter for the default file output
+    default_file_formatter = logging.Formatter(
+        '[{asctime}] [{levelname:<8}] {name}: {message}',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        style='{'
+    )
+    default_file_handler.setFormatter(default_file_formatter)
+    
+    # Add default file handler to root logger for any unconfigured loggers
+    root_logger.addHandler(default_file_handler)
 
 def stream_supports_colour(stream: Any) -> bool:
     is_a_tty = hasattr(stream, "isatty") and stream.isatty()
