@@ -123,10 +123,9 @@ def setup_logging(
                 encoding='utf-8'
             )
             file_handler.setLevel(logging.DEBUG)  # Always DEBUG for files
-            
             # Use a simple formatter for file output
             file_formatter = logging.Formatter(
-                '[{asctime}] [{levelname:<8}] {name}: {message}',
+                '[{asctime}.{msecs:03.0f}] [{levelname:<8}] {name}: {message}',
                 datefmt='%Y-%m-%d %H:%M:%S',
                 style='{'
             )
@@ -159,7 +158,7 @@ def setup_logging(
     
     # Use a simple formatter for the default file output with milliseconds
     default_file_formatter = logging.Formatter(
-        '[{asctime}.%(msecs)03d] [{levelname:<8}] {name}: {message}',
+        '[{asctime}.{msecs:03.0f}] [{levelname:<8}] {name}: {message}',
         datefmt='%Y-%m-%d %H:%M:%S',
         style='{'
     )
