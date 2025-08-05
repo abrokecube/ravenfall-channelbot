@@ -2,6 +2,7 @@
 
 from typing import Any
 import logging
+import logging.handlers
 import os
 import sys
 
@@ -12,62 +13,75 @@ def setup_logging(
     level: int | None = None,
     root: bool = True,
 ) -> None:
-    """A helper function to setup logging for your application.
-
-    Parameters
-    ----------
-    handler: :class:`logging.Handler` | None
-        An optional :class:`logging.Handler` to use. Defaults to ``None``, which creates a :class:`logging.StreamHandler`
-        by default.
-    formatter: :class:`logging.Formatter` | None
-        An optional :class:`logging.Formatter` to use. Defaults to ``None``, which uses a custom TrueColour
-        formatter by default, falling back to standard colour support and finally no colour support if no colour
-        is supported.
-    level: int | None
-        An optional int indicating the level of logging output. Defaults to ``20``, which is ``INFO``.
-    root: bool
-        An optional bool indicating whether logging should be setup on the root logger. When ``False``, logging will only be
-        setup for twitchio. Defaults to ``True``.
-
-    Examples
-    --------
-
-    .. code-block:: python3
-
-        import logging
-
-        import twitchio
-
-
-        LOGGER: logging.Logger = logging.getLogger(__name__)
-        twitchio.utils.setup_logging(level=logging.INFO)
-        ...
-
-        arg: str = "World!"
-        LOGGER.info("Hello %s", arg)
+    """
+    Set up logging with both console and rotating file handlers.
+    
+    Console handler: Shows logs at the specified level (default: INFO)
+    File handler: Rotates logs when they reach 5MB, keeping 5 backup files, logs everything at DEBUG level
+    
+    Parameters:
+        handler: Optional logging.Handler to use for console output
+        formatter: Optional logging.Formatter to use for formatting log messages
+        level: Logging level for console output (default: logging.INFO)
+        root: If True, configure the root logger. If False, configure only the twitchio logger.
     """
     if level is None:
         level = logging.INFO
-
+        
+    # Create logs directory if it doesn't exist
+    os.makedirs('logs', exist_ok=True)
+    
+    # Set up rotating file handler
+    file_handler = logging.handlers.RotatingFileHandler(
+        'logs/ravenfall-bot.log',
+        maxBytes=5*1024*1024,  # 5MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.DEBUG)  # Log everything to file
+    
+    # Set up console handler
     if handler is None:
         handler = logging.StreamHandler()
-
+    handler.setLevel(level)  # Use the specified level for console
+    
+    # Apply formatter to both handlers
     if formatter is None:
-        if isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):  # type: ignore
-            formatter = ColourFormatter()
+        # Use color formatter for console if supported
+        if isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):
+            formatter = ColourFormatter(handler=handler)
         else:
-            dt_fmt = "%Y-%m-%d %H:%M:%S"
-            formatter = logging.Formatter("[{asctime}] [{levelname:<8}] {name}: {message}", dt_fmt, style="{")
-
+            formatter = logging.Formatter(
+                '[{asctime}] [{levelname:<8}] {name}: {message}',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+    
+    # Always use a simple formatter for the file handler
+    file_formatter = logging.Formatter(
+        '[{asctime}] [{levelname:<8}] {name}: {message}',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    file_handler.setFormatter(file_formatter)
+    handler.setFormatter(formatter)
+    
+    # Get the appropriate logger
     if root:
         logger = logging.getLogger()
     else:
         library, _, _ = __name__.partition(".")
         logger = logging.getLogger(library)
-
-    handler.setFormatter(formatter)
-    logger.setLevel(level)
-    logger.addHandler(handler)  # type: ignore
+    
+    # Remove all existing handlers
+    for h in logger.handlers[:]:
+        logger.removeHandler(h)
+    
+    # Add both handlers
+    logger.addHandler(handler)
+    logger.addHandler(file_handler)
+    
+    # Set the logger level to the lowest level of all handlers
+    logger.setLevel(min(handler.level, file_handler.level))
 
 def stream_supports_colour(stream: Any) -> bool:
     is_a_tty = hasattr(stream, "isatty") and stream.isatty()

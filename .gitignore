@@ -166,3 +166,5 @@ cython_debug/
 
 user_token.json
 channels.json
+
+logs/
