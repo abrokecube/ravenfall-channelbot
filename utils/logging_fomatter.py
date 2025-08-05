@@ -92,7 +92,7 @@ def setup_logging(
         for name, config in log_files.items():
             if record.name == name or record.name.startswith(f"{name}."):
                 # Check if the record's level is sufficient for this logger's console level
-                return record.levelno >= config['console_level']
+                return record.levelno >= config['console_level'].value
         # Default to root level for unconfigured loggers
         return record.levelno >= level
     
