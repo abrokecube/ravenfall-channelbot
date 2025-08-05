@@ -88,11 +88,15 @@ def setup_logging(
     
     # Create a filter function for console logging based on per-logger levels
     def console_filter(record):
-        # Check if this record matches any configured logger
+        # First check for exact matches
+        if record.name in log_files:
+            return record.levelno >= log_files[record.name]['console_level']
+            
+        # Then check for child loggers (logger names that start with the configured name plus a dot)
         for name, config in log_files.items():
-            if record.name == name or record.name.startswith(f"{name}."):
-                # Check if the record's level is sufficient for this logger's console level
-                return record.levelno >= config['console_level'].value
+            if record.name.startswith(f"{name}."):
+                return record.levelno >= config['console_level']
+                
         # Default to root level for unconfigured loggers
         return record.levelno >= level
     
