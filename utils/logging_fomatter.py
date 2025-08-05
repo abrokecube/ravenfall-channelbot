@@ -5,6 +5,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import datetime
 
 def setup_logging(
     *,
@@ -156,9 +157,9 @@ def setup_logging(
     )
     default_file_handler.setLevel(logging.DEBUG)
     
-    # Use a simple formatter for the default file output
+    # Use a simple formatter for the default file output with milliseconds
     default_file_formatter = logging.Formatter(
-        '[{asctime}] [{levelname:<8}] {name}: {message}',
+        '[{asctime}.%(msecs)03d] [{levelname:<8}] {name}: {message}',
         datefmt='%Y-%m-%d %H:%M:%S',
         style='{'
     )
@@ -166,6 +167,18 @@ def setup_logging(
     
     # Add default file handler to root logger for any unconfigured loggers
     root_logger.addHandler(default_file_handler)
+    
+    # Log startup message for all configured loggers
+    startup_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Include milliseconds
+    startup_msg = f"\n{'='*80}\nApplication started at {startup_time}\n{'='*80}"
+    
+    # Log to all configured log files
+    for logger_name, config in log_files.items():
+        logger = logging.getLogger(logger_name)
+        logger.debug(startup_msg)
+    
+    # Also log to the default log file
+    root_logger.debug(startup_msg)
 
 def stream_supports_colour(stream: Any) -> bool:
     is_a_tty = hasattr(stream, "isatty") and stream.isatty()

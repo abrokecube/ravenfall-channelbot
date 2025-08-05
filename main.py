@@ -45,10 +45,27 @@ logger_config = {
         'filename': "httpserver.log",
         'console_level': logging.WARNING,
     },
+    'bot.server': {
+        'filename': "httpserver.log",
+        'console_level': logging.WARNING,
+    },
     'utils.runshell': {
         'filename': "runshell.log",
         'console_level': logging.WARNING,
     },
+    'bot.ravenfallloc': {
+        'filename': 'rfloc.log',
+        'console_level': logging.WARNING,
+    },
+    'bot.ravenfallchannel': {
+        'filename': 'rfchannels.log',
+        'console_level': logging.INFO,
+    },
+    'bot.ravenfallmanager': {
+        'filename': 'rfchannels.log',
+        'console_level': logging.INFO,
+    },
+
 }
 setup_logging(level=logging.DEBUG, loggers_config=logger_config)
 logger = logging.getLogger(__name__)
