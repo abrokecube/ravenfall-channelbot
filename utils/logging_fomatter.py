@@ -49,7 +49,7 @@ def setup_logging(
     if formatter is None:
         # Use color formatter for console if supported
         if isinstance(handler, logging.StreamHandler) and stream_supports_colour(handler.stream):
-            formatter = ColourFormatter(handler=handler)
+            formatter = ColourFormatter()
         else:
             formatter = logging.Formatter(
                 '[{asctime}] [{levelname:<8}] {name}: {message}',
