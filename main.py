@@ -50,7 +50,7 @@ logger_config = {
         'console_level': logging.WARNING,
     },
 }
-setup_logging(level=logging.DEBUG)
+setup_logging(level=logging.DEBUG, loggers_config=logger_config)
 logger = logging.getLogger(__name__)
 
 with open("channels.json", "r") as f:
