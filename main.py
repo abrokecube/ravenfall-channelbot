@@ -25,11 +25,7 @@ load_dotenv()
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
 
-# Configure logging
-log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
-log_level = getattr(logging, log_level, logging.INFO)  # Default to INFO if invalid level provided
-
-setup_logging(level=log_level)
+setup_logging(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Suppress twitchAPI.chat logs below WARNING level
