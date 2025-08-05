@@ -167,17 +167,26 @@ def setup_logging(
     # Add default file handler to root logger for any unconfigured loggers
     root_logger.addHandler(default_file_handler)
     
-    # Log startup message for all configured loggers
+    # Log startup message once per unique log file
     startup_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Include milliseconds
     startup_msg = f"\n{'='*80}\nApplication started at {startup_time}\n{'='*80}"
     
-    # Log to all configured log files
-    for logger_name, config in log_files.items():
-        logger = logging.getLogger(logger_name)
-        logger.debug(startup_msg)
+    # Track which log files we've already written the startup message to
+    logged_files = set()
     
-    # Also log to the default log file
-    root_logger.debug(startup_msg)
+    # Log to all configured log files, but only once per unique file
+    for logger_name, config in log_files.items():
+        filename = config['filename']
+        if filename not in logged_files:
+            logger = logging.getLogger(logger_name)
+            logger.debug(startup_msg)
+            logged_files.add(filename)
+    
+    # Also log to the default log file if we haven't already
+    default_log_file = 'logs/ravenfall-bot.log'
+    if default_log_file not in logged_files:
+        root_logger.debug(startup_msg)
+        logged_files.add(default_log_file)
 
 def stream_supports_colour(stream: Any) -> bool:
     is_a_tty = hasattr(stream, "isatty") and stream.isatty()
