@@ -25,7 +25,7 @@ load_dotenv()
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
 logger_config = {
-    'twitchAPI.chat': {
+    'twitchAPI': {
         'filename': "twitchAPI.log",
         'console_level': logging.INFO,
     },
