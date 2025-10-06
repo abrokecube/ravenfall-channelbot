@@ -17,10 +17,10 @@ async def runshell(cmd) -> str | None:
     logger.debug(f'Command {cmd!r} exited with code {proc.returncode}')
     if stdout:
         stdout_text = stdout.decode()
-        logger.debug(f'Command stdout: {stdout_text}')
+        logger.debug(f'Command stdout: {stdout_text.replace("\n", "\\n")}')
         out_text = stdout_text
     if stderr:
-        logger.error(f'Command stderr: {stderr.decode()}')
+        logger.error(f'Command stderr: {stderr.decode().replace("\n", "\\n")}')
     return proc.returncode, out_text
 
 def runshell_detached(cmd):
@@ -37,6 +37,7 @@ async def restart_process(box_name, process_name, startup_command: str):
         f"taskkill /f /im {process_name}"
     )
     code, text = await runshell(shellcmd)
+    await asyncio.sleep(5)
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"cmd /c \"{startup_command.replace("\"", "\\\"")}\""
