@@ -108,6 +108,7 @@ class RFChannel:
         self.middleman_connection_id: str = config.get('middleman_connection_id', '')
         self.ravenfall_loc_strings_path: str | None = config.get('ravenfall_loc_strings_path', None)
         self.auto_restore_raids: bool = config.get('auto_restore_raids', False)
+        self.restart_timeout: int = int(config.get('restart_timeout', 120))
 
         if isinstance(self.ravenbot_prefixes, str):
             self.ravenbot_prefixes = (self.ravenbot_prefixes,)
@@ -729,7 +730,7 @@ class RFChannel:
 
         await asyncio.sleep(5)
         start_time = time.time()
-        auth_timeout = 120
+        auth_timeout = self.restart_timeout
         authenticated = False
         
         while time.time() - start_time < auth_timeout:
@@ -763,10 +764,10 @@ class RFChannel:
         return True
 
     async def _ravenfall_post_restart(self):
-        # Wait for the game to start rejoining players (with 2 minute timeout)
+        # Wait for the game to start rejoining players
         start_time = time.time()
         while True:
-            if time.time() - start_time > 120:  # 2 minute timeout
+            if time.time() - start_time > self.restart_timeout:
                 logger.warning(f"Timed out waiting for players to join after restart in {self.channel_name}")
                 await self.send_chat_message(f"Players did not join back @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')}")
                 return
