@@ -663,7 +663,7 @@ class RFChannel:
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
                 return
-        game_session: GameSession = await self.get_query("select * from session", 1)
+        game_session: GameSession = await self.get_query("select * from session", 5)
         uptime = None
         if game_session:
             uptime = game_session['secondssincestart']
