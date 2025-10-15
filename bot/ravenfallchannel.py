@@ -812,21 +812,9 @@ class RFChannel:
             await self.restore_auto_raids()
     
     async def restart_ravenbot(self):
-        if self.channel_name != "abrokecube":
-            await restart_process(
-                self.sandboxie_box, "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
-            )
-        else:
-            ravenbot_path = os.getenv('CUSTOM_RAVENBOT_PATH').rstrip('/\\')
-            with open(f'{ravenbot_path}/pid', "r") as f:
-                pid = f.read()
-            await runshell(
-                f"taskkill /f /pid {pid}"
-            )
-            runshell_detached(
-                f"start /d \"{ravenbot_path}\" {os.getenv('CUSTOM_RAVENBOT_START_CMD')}"
-            )
-            await asyncio.sleep(3) 
+        await restart_process(
+            self.sandboxie_box, "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
+        )
 
     async def _monitor_ravenbot_response_task(self, command: str, timeout: float = 5, resend_text: str = None):
         """
