@@ -10,7 +10,7 @@ class RedeemCog(Cog):
     async def createreward(self, ctx: CommandContext):
         title = "New reward"
         if ctx.args.grouped_args:
-            title = " ".join(ctx.args.grouped_args[0])
+            title = ctx.args.grouped_args[0]
         cost_text = ctx.args.get_flag(['c', 'cost'], default="1000").value
         if cost_text and cost_text.isnumeric():
             cost = int(cost_text)
