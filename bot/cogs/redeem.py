@@ -8,6 +8,8 @@ class RedeemCog(Cog):
 
     @Cog.command(name="createreward", help="Create a custom channel point reward")
     async def createreward(self, ctx: CommandContext):
+        if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
+            return
         title = "New reward"
         if ctx.args.grouped_args:
             title = ctx.args.grouped_args[0]
