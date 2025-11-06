@@ -21,9 +21,10 @@ CommandFunc = Callable[['CommandContext'], Union[None, Awaitable[None]]]
 RedeemFunc = Callable[['RedeemContext'], Union[None, Awaitable[None]]]
 
 class Commands:
-    def __init__(self, chat: Chat):
+    def __init__(self, chat: Chat, twitches: Dict[str, Twitch] = {}):
         self.chat: Chat = chat
         self.twitch: Twitch = chat.twitch
+        self.twitches: Dict[str, Twitch] = twitches
         self.commands: Dict[str, Command] = {}
         self.redeems: Dict[str, Redeem] = {}
         self.prefix: str = "!"
@@ -171,7 +172,7 @@ class Commands:
             return
             
         # Create context and execute the redeem
-        ctx = RedeemContext(self.chat, redemption)
+        ctx = RedeemContext(self.chat, self.twitches[redemption.broadcaster_user_id], redemption)
         try:
             result = self.redeems[redeem_name].func(ctx)
             if asyncio.iscoroutine(result):
@@ -252,13 +253,14 @@ class CustomRewardRedemptionStatus(Enum):
     CANCELED = 'CANCELED'
 
 class RedeemContext:
-    def __init__(self, chat: Chat, redemption: ChannelPointsCustomRewardRedemptionData):
+    def __init__(self, chat: Chat, twitch: Twitch, redemption: ChannelPointsCustomRewardRedemptionData):
         self.chat: Chat = chat
+        self.twitch: Twitch = twitch
         self.redemption: ChannelPointsCustomRewardRedemptionData = redemption
 
     async def update_status(self, status: CustomRewardRedemptionStatus):
         if self.redemption.status == "unfulfilled":
-            await self.chat.twitch.update_redemption_status(
+            await self.twitch.update_redemption_status(
                 self.redemption.broadcaster_user_id,
                 self.redemption.reward.id,
                 self.redemption.id,
