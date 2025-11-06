@@ -100,8 +100,11 @@ class MyCommands(Commands):
         return "!"
 
 async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
+    save_new_tokens = True
     async with get_async_session() as session:
         access_token, refresh_token = await db_utils.get_tokens(session, user_id)
+        if access_token is not None:
+            save_new_tokens = False
 
     while True:
         twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
@@ -116,9 +119,11 @@ async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
 
         try:
             await twitch.set_user_authentication(access_token, USER_SCOPE, refresh_token)
-            user = await helper.first(twitch.get_users())
-            async with get_async_session() as session:
-                await db_utils.update_tokens(session, user.id, access_token, refresh_token, user.login)
+            user = None
+            if save_new_tokens:
+                user = await helper.first(twitch.get_users())
+                async with get_async_session() as session:
+                    await db_utils.update_tokens(session, user.id, access_token, refresh_token, user.login)
         except MissingScopeException:
             print("Token is missing scopes")
             access_token = None
@@ -134,15 +139,17 @@ async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
             access_token = None
             refresh_token = None
             continue
-
-        if user.id == str(user_id):
-            return access_token, refresh_token
+        
+        if user is not None:
+            if user.id == str(user_id):
+                return access_token, refresh_token
+            else:
+                print("Token does not match user, please try again")
+                access_token = None
+                refresh_token = None
+                continue
         else:
-            print("Token does not match user, please try again")
-            access_token = None
-            refresh_token = None
-            continue
-
+            return access_token, refresh_token
 async def get_twitch_auth_instance(user_id: Union[int, str], user_name: str = None) -> Twitch:
     twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
     access_token, refresh_token = await get_tokens(user_id, user_name)
