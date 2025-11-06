@@ -58,6 +58,7 @@ class AutoRaidStatus(Base):
 class SenderData(Base):
     __tablename__ = 'sender_data'
     
+    id = Column(Integer, primary_key=True, autoincrement=True)
     channel_platform = Column(String)
     channel_platform_id = Column(String)
     user_id = Column(String)  # uuid
