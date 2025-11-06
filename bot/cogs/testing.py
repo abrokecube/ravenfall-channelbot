@@ -24,7 +24,7 @@ class TestingCog(Cog):
 
     @Cog.redeem(name="Test redeem")
     async def test(self, ctx: RedeemContext):
-        await ctx.send("I am the almighty test redee!")
+        await ctx.send("I am the almighty test redeem!")
 
 def setup(commands: Commands, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

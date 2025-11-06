@@ -183,6 +183,8 @@ class CogManager:
                 self.commands.add_command(name, command.func)
                 for alias in command.aliases:
                     self.commands.add_command(alias, command.func)
+            for name, redeem in cog.redeems.items():
+                self.commands.add_redeem(name, redeem.func)
         except ValueError as e:
             # Add cog context to the error message
             raise ValueError(f"{e} (in cog '{cog.name}')")
