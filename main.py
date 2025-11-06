@@ -4,7 +4,7 @@ from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, EventData, ChatMessage, ChatCommand
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.chat.middleware import *
-from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
+from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionAddEvent
 
 from dotenv import load_dotenv
 
@@ -116,8 +116,8 @@ async def run():
 
     commands = MyCommands(chat)
 
-    async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionData):
-        await commands.process_channel_point_redemption(redemption)
+    async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionAddEvent):
+        await commands.process_channel_point_redemption(redemption.event)
 
     has_redeems = False
     for channel in channels:
