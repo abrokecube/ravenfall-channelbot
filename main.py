@@ -18,7 +18,7 @@ import logging
 
 import ravenpy
 
-from bot.commands import Commands, CommandContext, Command, Redeem, RedeemContext
+from bot.commands import Commands, CommandContext, Command, Redeem, RedeemContext, CustomRewardRedemptionStatus
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
@@ -94,7 +94,8 @@ class MyCommands(Commands):
         await ctx.send(f"❌ An error occurred")
 
     async def on_redeem_error(self, ctx: RedeemContext, redeem: Redeem, error: Exception):
-        await ctx.send(f"❌ An error occurred")
+        await ctx.send(f"❌ An error occurred. Points will be refunded.")
+        await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
 
     async def get_prefix(self, msg: ChatMessage) -> str:
         return "!"

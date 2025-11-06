@@ -23,8 +23,7 @@ class RedeemCog(Cog):
             ctx.msg.room.room_id,
             title,
             cost = cost,
-            prompt = ctx.args.get_flag(['p', 'prompt'], default=None).value,
-            is_enabled = ctx.args.get_flag(['e', 'enabled'], default=True).value is not None,
+            prompt = ctx.args.get_flag(['p', 'prompt'], default=None).value
         )
         await ctx.reply("Created reward")
     
