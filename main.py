@@ -126,6 +126,7 @@ async def run():
             break
     if has_redeems:
         eventsub.start()
+        has_subscribed = False
         for channel in channels:
             if channel.get("channel_points_redeems", False):
                 try:
@@ -134,8 +135,11 @@ async def run():
                         redemption_callback,
                     )
                     logger.info(f"Listening for redeems in {channel['channel_name']}")
+                    has_subscribed = True
                 except Exception as e:
                     logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}")
+        if not has_subscribed:
+            eventsub.stop()
 
     def load_cogs():
         from bot.cogs.info import InfoCog
