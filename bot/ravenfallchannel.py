@@ -204,14 +204,15 @@ class RFChannel:
     # Messages from ravenbot
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
         platform_id = message['Sender']['PlatformId']
-        # sometimes "server-request" is the platform ID
-        if not platform_id.isdigit():
-            return message
         if not platform_id:
             if message['Identifier'] in ('observe', 'travel'):
                 message['Sender'] = await self.get_sender_data(message['Sender']['Username'].lower())
                 if message['Sender']['PlatformId'] is not None:
                     logger.info(f"Replaced sender data for {message['Sender']['Username']}")
+            return message
+
+        # sometimes "server-request" is the platform ID
+        if not platform_id.isdigit():
             return message
 
         asyncio.create_task(self.record_user(
