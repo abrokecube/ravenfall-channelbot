@@ -168,3 +168,5 @@ user_token.json
 channels.json
 
 logs/
+
+data/
