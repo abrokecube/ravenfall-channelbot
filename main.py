@@ -169,7 +169,7 @@ async def run():
     eventsubs = []
     for channel in channels:
         if channel.get("channel_points_redeems", False):
-            channel_twitch = await get_twitch_auth_instance(channel['channel_id'])
+            channel_twitch = await get_twitch_auth_instance(channel['channel_id'], channel['channel_name'])
             eventsub = EventSubWebsocket(channel_twitch)
             await eventsub.start()
             try:
