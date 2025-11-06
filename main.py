@@ -25,6 +25,7 @@ from database.models import update_schema
 from utils.logging_fomatter import setup_logging
 from bot.server import SomeEndpoints
 import database.utils as db_utils
+from database.session import get_async_session
 
 load_dotenv()
 
@@ -99,7 +100,8 @@ class MyCommands(Commands):
         return "!"
 
 async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
-    access_token, refresh_token = db_utils.get_tokens(user_id)
+    async with get_async_session() as session:
+        access_token, refresh_token = db_utils.get_tokens(session, user_id)
 
     while True:
         twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
@@ -115,7 +117,8 @@ async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
         try:
             await twitch.set_user_authentication(access_token, USER_SCOPE, refresh_token)
             user = await helper.first(twitch.get_users())
-            db_utils.update_tokens(user.id, access_token, refresh_token)
+            async with get_async_session() as session:
+                db_utils.update_tokens(session, user.id, access_token, refresh_token)
         except MissingScopeException:
             print("Token is missing scopes")
             access_token = None
