@@ -22,7 +22,7 @@ class RedeemCog(Cog):
             title,
             cost = cost,
             prompt = ctx.args.get_flag(['p', 'prompt'], default=None).value,
-            is_enabled = ctx.args.get_flag(['e', 'enabled'], default=None).value is not None,
+            is_enabled = ctx.args.get_flag(['e', 'enabled'], default=True).value is not None,
         )
         await ctx.reply("Created reward")
     
