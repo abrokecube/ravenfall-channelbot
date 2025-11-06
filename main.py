@@ -118,7 +118,7 @@ async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
             await twitch.set_user_authentication(access_token, USER_SCOPE, refresh_token)
             user = await helper.first(twitch.get_users())
             async with get_async_session() as session:
-                await db_utils.update_tokens(session, user.id, access_token, refresh_token)
+                await db_utils.update_tokens(session, user.id, access_token, refresh_token, user.login)
         except MissingScopeException:
             print("Token is missing scopes")
             access_token = None

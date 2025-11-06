@@ -270,11 +270,12 @@ async def get_tokens(session: AsyncSession, user_id: Union[int, str]) -> TwitchA
         return a.access_token, a.refresh_token
     return None, None
 
-async def update_tokens(session: AsyncSession, user_id: Union[int, str], access_token: str, refresh_token: str) -> None:
+async def update_tokens(session: AsyncSession, user_id: Union[int, str], access_token: str, refresh_token: str, user_name: str) -> None:
     result = await get_tokens_raw(session, user_id)
     if result is None:
-        result = TwitchAuth(user_id=user_id, access_token=access_token, refresh_token=refresh_token)
+        result = TwitchAuth(user_id=user_id, access_token=access_token, refresh_token=refresh_token, user_name=user_name)
         session.add(result)
     else:
         result.access_token = access_token
         result.refresh_token = refresh_token
+        result.user_name = user_name
