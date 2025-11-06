@@ -139,7 +139,7 @@ async def run():
                 except Exception as e:
                     logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}")
         if not has_subscribed:
-            eventsub.stop()
+            await eventsub.stop()
 
     def load_cogs():
         from bot.cogs.info import InfoCog
