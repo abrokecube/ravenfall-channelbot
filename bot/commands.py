@@ -4,11 +4,11 @@ import asyncio
 import logging
 from typing import Callable, List, Dict, Awaitable, Union, Optional, TYPE_CHECKING
 from twitchAPI.twitch import Twitch
-from twitchAPI.type import CustomRewardRedemptionStatus
 from twitchAPI.chat import ChatMessage, Chat
 from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
 from dataclasses import dataclass
 import re
+from enum import Enum
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -246,18 +246,26 @@ class CommandContext:
     async def send(self, text: str):
         await self.msg.chat.send_message(self.msg.room.name, text)
 
+class CustomRewardRedemptionStatus(Enum):
+    UNFULFILLED = 'UNFULFILLED'
+    FULFILLED = 'FULFILLED'
+    CANCELED = 'CANCELED'
+
 class RedeemContext:
     def __init__(self, chat: Chat, redemption: ChannelPointsCustomRewardRedemptionData):
         self.chat: Chat = chat
         self.redemption: ChannelPointsCustomRewardRedemptionData = redemption
 
     async def update_status(self, status: CustomRewardRedemptionStatus):
-        await self.chat.twitch.update_redemption_status(
-            self.redemption.broadcaster_user_id,
-            self.redemption.reward.id,
-            self.redemption.id,
-            status
-        )
+        if self.redemption.status == "unfulfilled":
+            await self.chat.twitch.update_redemption_status(
+                self.redemption.broadcaster_user_id,
+                self.redemption.reward.id,
+                self.redemption.id,
+                status
+            )
+        else:
+            raise ValueError(f"Redemption is not in the UNFULFILLED state (current: {self.redemption.status})")
 
     async def send(self, text: str):
         await self.chat.send_message(self.redemption.broadcaster_user_login, text)
