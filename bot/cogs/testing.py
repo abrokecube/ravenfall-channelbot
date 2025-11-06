@@ -28,7 +28,7 @@ class TestingCog(Cog):
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
 
     @Cog.redeem(name="Test error redeem")
-    async def test(self, ctx: RedeemContext):
+    async def test_error(self, ctx: RedeemContext):
         raise Exception("Test error")
         await ctx.send("You shouldnt be seeing this")
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
