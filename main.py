@@ -128,16 +128,19 @@ async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
             print("Token is missing scopes")
             access_token = None
             refresh_token = None
+            save_new_tokens = True
             continue
         except InvalidTokenException:
             print("Invalid token")
             access_token = None
             refresh_token = None
+            save_new_tokens = True
             continue
         except Exception as e:
             print(f"Error setting user authentication: {e}")
             access_token = None
             refresh_token = None
+            save_new_tokens = True
             continue
         
         if user is not None:
@@ -147,6 +150,7 @@ async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
                 print("Token does not match user, please try again")
                 access_token = None
                 refresh_token = None
+                save_new_tokens = True
                 continue
         else:
             return access_token, refresh_token
