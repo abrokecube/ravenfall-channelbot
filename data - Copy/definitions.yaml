@@ -519,3 +519,5 @@ ferry_info_no_captain: "The ferry is currently sailing towards {{islandName}} wi
 ferry_info_no_captain_island: "The ferry is currently sailing with {{playerCount:\\d+}} players on board."
 players_restored: "{{playerCount:\\d+}} players restored."
 restore_failed: "Failed to restore players. See game log files for more details."
+
+permanently_suspended: "You have been permanently suspended from playing. Contact the staff for more information."

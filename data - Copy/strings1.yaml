@@ -1,0 +1,24 @@
+huts_update: null
+ferry_info: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. {{unping(ferryCaptain)}} is the captain with {captainLevel} sailing."
+ferry_info_no_captain: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board."
+ferry_info_no_captain_island: "The ferry is currently sailing with {playerCount} {{pl(playerCount, 'player', 'players')}} on board."
+huts_info: "{{unping(fill(hutsInfo))}}"
+highest_skill: "{{unping(player)}} has the highest level {skillName} with level {level}."
+auto_dungeon_status_none: "You are not set to automatically join any dungeons."
+auto_raid_status_none: "You are not set to automatically join any raids."
+dungeon_countdown: null
+multiplier_ends: null
+restore_failed: "Failed to restore players. @abrokecube go fix this"
+
+permanently_suspended: "peepoJail You have been permanently suspended from playing. Contact the staff for more information."
+
+disenchant_success: Removed enchantment from {oldItemName}
+enchant_success: "Enchanted {oldItemName} into {newItemName}. Cooldown: {cooldown}"
+enchant_replace: "Replaced {oldItemName} with {newItemName}. Cooldown: {cooldown}"
+enchant_cooldown_clear: "Cleared cooldown for {totalCost} coins"
+enchant_stats: "Stats: {enchantmentStats}"
+enchant_cooldown_active: "Cooldown: {timeLeft}. Cost to clear: {totalCost} coins ({pricePerSecond} coins/s)"
+
+village_updated: "Updated village target. Active boosts: {activeBoosts}"
+village_boost: "Current town level: {townHallLevel}. Exp left to level up: {remainingExp} xp. Active boosts: {activeBoosts}"
+village_boost_no_boost: "Current town level: {townHallLevel}. Exp left to level up: {remainingExp} xp. Active boosts: None"
