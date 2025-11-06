@@ -115,7 +115,7 @@ async def run():
     eventsub = EventSubWebsocket(twitch)
     eventsub.start()
 
-    commands = MyCommands(twitch)
+    commands = MyCommands(chat)
 
     async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionData):
         await commands.process_channel_point_redemption(redemption)
