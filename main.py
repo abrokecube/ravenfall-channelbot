@@ -179,6 +179,8 @@ async def run():
     except asyncio.CancelledError:
         logger.info("Bot is shutting down")
         chat.stop()
+        if eventsub._running:
+            await eventsub.stop()
         await rf_manager.stop()
         await twitch.close()
 
