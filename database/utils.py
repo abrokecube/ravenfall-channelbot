@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from database.models import User, Channel, Character, SenderData
+from database.models import User, Channel, Character, SenderData, TwitchAuth
 from typing import Union, Optional, Tuple
 from sqlalchemy import select
 
@@ -257,3 +257,21 @@ async def record_sender_data(
     sender_data.identifier = sender_json.get('Identifier')
 
     return sender_data
+
+async def get_tokens(session: AsyncSession, user_id: Union[int, str]) -> TwitchAuth:
+    result = await session.execute(
+        select(TwitchAuth).where(TwitchAuth.user_id == user_id)
+    )
+    a = result.scalar_one_or_none()
+    if a:
+        return a.access_token, a.refresh_token
+    return None, None
+
+async def update_tokens(session: AsyncSession, user_id: Union[int, str], access_token: str, refresh_token: str) -> None:
+    result = await get_tokens(session, user_id)
+    if result is None:
+        result = TwitchAuth(user_id=user_id, access_token=access_token, refresh_token=refresh_token)
+        session.add(result)
+    else:
+        result.access_token = access_token
+        result.refresh_token = refresh_token

@@ -76,7 +76,16 @@ class SenderData(Base):
     is_game_moderator = Column(Boolean)
     sub_tier = Column(Integer)
     identifier = Column(String)
+
+class TwitchAuth(Base):
+    __tablename__ = 'twitch_auth'
     
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer)
+    user_name = Column(String)
+    access_token = Column(String)
+    refresh_token = Column(String)
+
 
 async def create_all_tables():
     async with engine.begin() as conn:

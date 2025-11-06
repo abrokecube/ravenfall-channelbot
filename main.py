@@ -1,17 +1,19 @@
 from twitchAPI.twitch import Twitch
-from twitchAPI.oauth import UserAuthenticationStorageHelper
+from twitchAPI.oauth import UserAuthenticationStorageHelper, UserAuthenticator
 from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, EventData, ChatMessage, ChatCommand
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.chat.middleware import *
 from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionAddEvent
+from twitchAPI import helper
+from twitchAPI.type import MissingScopeException, InvalidTokenException
 
 from dotenv import load_dotenv
 
 import os
 import asyncio
 import json
-from typing import List
+from typing import List, Tuple
 import logging
 
 import ravenpy
@@ -22,6 +24,7 @@ from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
 from utils.logging_fomatter import setup_logging
 from bot.server import SomeEndpoints
+import database.utils as db_utils
 
 load_dotenv()
 
@@ -95,6 +98,54 @@ class MyCommands(Commands):
     async def get_prefix(self, msg: ChatMessage) -> str:
         return "!"
 
+async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
+    access_token, refresh_token = db_utils.get_tokens(user_id)
+
+    while True:
+        twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
+        if access_token is None:
+            auth = UserAuthenticator(twitch, USER_SCOPE, True)
+            print(f"Please authenticate with the Twitch account: {user_name or user_id}")
+            result = await auth.authenticate(use_browser=False)
+            if result is not None:
+                access_token, refresh_token = result
+            else:
+                continue
+
+        try:
+            await twitch.set_user_authentication(access_token, USER_SCOPE, refresh_token)
+            user = await helper.first(twitch.get_users())
+            db_utils.update_tokens(user.id, access_token, refresh_token)
+        except MissingScopeException:
+            print("Token is missing scopes")
+            access_token = None
+            refresh_token = None
+            continue
+        except InvalidTokenException:
+            print("Invalid token")
+            access_token = None
+            refresh_token = None
+            continue
+        except Exception as e:
+            print(f"Error setting user authentication: {e}")
+            access_token = None
+            refresh_token = None
+            continue
+
+        if user.id == str(user_id):
+            return access_token, refresh_token
+        else:
+            print("Token does not match user, please try again")
+            access_token = None
+            refresh_token = None
+            continue
+
+async def get_twitch_auth_instance(user_id: Union[int, str], user_name: str = None) -> Twitch:
+    twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
+    access_token, refresh_token = await get_tokens(user_id, user_name)
+    await twitch.set_user_authentication(access_token, USER_SCOPE, refresh_token)
+    return twitch
+
 async def run():
     def handle_loop_exception(loop, context):
         logger.error("Caught async exception: %s", context["exception"], exc_info=True)
@@ -104,42 +155,33 @@ async def run():
     
     await update_schema()
     
-    # set up twitch api instance and add user authentication with some scopes
-    twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
-    helper = UserAuthenticationStorageHelper(twitch, USER_SCOPE)
+    twitch = await get_twitch_auth_instance(os.getenv("BOT_ID"))
     rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
     asyncio.create_task(rf.login())
-    await helper.bind()
 
     chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
-    eventsub = EventSubWebsocket(twitch)
 
     commands = MyCommands(chat)
 
     async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionAddEvent):
         await commands.process_channel_point_redemption(redemption.event)
 
-    has_redeems = False
+    eventsubs = []
     for channel in channels:
         if channel.get("channel_points_redeems", False):
-            has_redeems = True
-            break
-    if has_redeems:
-        eventsub.start()
-        has_subscribed = False
-        for channel in channels:
-            if channel.get("channel_points_redeems", False):
-                try:
-                    await eventsub.listen_channel_points_custom_reward_redemption_add(
-                        channel['channel_id'],
-                        redemption_callback,
-                    )
-                    logger.info(f"Listening for redeems in {channel['channel_name']}")
-                    has_subscribed = True
-                except Exception as e:
-                    logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}")
-        if not has_subscribed:
-            await eventsub.stop()
+            channel_twitch = await get_twitch_auth_instance(channel['channel_id'])
+            eventsub = EventSubWebsocket(channel_twitch)
+            await eventsub.start()
+            try:
+                await eventsub.listen_channel_points_custom_reward_redemption_add(
+                    channel['channel_id'],
+                    redemption_callback,
+                )
+                logger.info(f"Listening for redeems in {channel['channel_name']}")
+                eventsubs.append(eventsub)
+            except Exception as e:
+                logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}")
+                eventsub.stop()
 
     def load_cogs():
         from bot.cogs.info import InfoCog
@@ -179,7 +221,7 @@ async def run():
     except asyncio.CancelledError:
         logger.info("Bot is shutting down")
         chat.stop()
-        if eventsub._running:
+        for eventsub in eventsubs:
             await eventsub.stop()
         await rf_manager.stop()
         await twitch.close()
