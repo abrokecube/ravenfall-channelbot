@@ -2,7 +2,7 @@ from typing import Dict, Type, Optional, TypeVar, Any, Callable, Awaitable, Unio
 from functools import wraps
 
 # Import the necessary types from commands.py
-from .commands import Command, CommandFunc, Commands
+from .commands import Command, CommandFunc, Commands, Redeem, RedeemFunc
 
 # Type variable for the cog class
 TCog = TypeVar('TCog', bound='Cog')
@@ -76,6 +76,32 @@ class Cog:
             return func
             
         return decorator
+
+    @classmethod
+    def redeem(cls, name: Optional[str] = None, **kwargs) -> Callable[[RedeemFunc], RedeemFunc]:
+        """Decorator to register a redeem in the cog.
+        
+        Args:
+            name: Optional redeem name. If not provided, uses the function name.
+            **kwargs: Additional keyword arguments to pass to the Redeem constructor.
+            
+        Returns:
+            A decorator that registers the redeem.
+        """
+        def decorator(func: RedeemFunc) -> RedeemFunc:
+            redeem_name = name or func.__name__.lower()
+            
+            # Store the redeem information in the function itself
+            if not hasattr(func, '_cog_redeem_info'):
+                func._cog_redeem_info = []
+            
+            # Store the redeem name and kwargs with the function
+            func._cog_redeem_info.append((redeem_name, kwargs))
+            
+            # Return the original function so it can still be accessed normally
+            return func
+            
+        return decorator
     
     @classmethod
     def create_instance(cls: Type[TCog], **kwargs) -> TCog:
@@ -104,6 +130,21 @@ class Cog:
                         **cmd_kwargs
                     )
                     instance_commands[cmd_name] = command
+            
+        # Find all methods that have redeem info
+        for attr_name in dir(instance):
+            attr = getattr(instance, attr_name)
+            if hasattr(attr, '_cog_redeem_info'):
+                for redeem_name, redeem_kwargs in attr._cog_redeem_info:
+                    # Create a bound method for the redeem
+                    bound_method = attr.__get__(instance, cls)
+                    # Create a Redeem object
+                    redeem = Redeem(
+                        name=redeem_name,
+                        func=bound_method,
+                        **redeem_kwargs
+                    )
+                    instance_commands[redeem_name] = redeem
         
         # Set the instance's commands
         instance.commands = instance_commands

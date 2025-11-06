@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from ..commands import Context, Commands
+from ..commands import CommandContext, Commands, RedeemContext
 from ..cog import Cog
 
 class TestingCog(Cog):
@@ -15,12 +15,16 @@ class TestingCog(Cog):
     #     raise Exception("Test error")
 
     @Cog.command(name="hi", help="Says hi")
-    async def hi(self, ctx: Context):
+    async def hi(self, ctx: CommandContext):
         await ctx.reply(f"hi {ctx.msg.user.name}")
 
     @Cog.command(name="ping", help="Pong!")
-    async def ping(self, ctx: Context):
+    async def ping(self, ctx: CommandContext):
         await ctx.reply("Pong!")
+
+    @Cog.redeem(name="Test redeem")
+    async def test(self, ctx: RedeemContext):
+        await ctx.send("I am the almighty test redee!")
 
 def setup(commands: Commands, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

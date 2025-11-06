@@ -14,7 +14,7 @@ from utils import (
 
 from ..prometheus import get_prometheus_instant, get_prometheus_series
 
-from ..commands import Context, Commands
+from ..commands import CommandContext, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..models import Village, GameSession
@@ -36,7 +36,7 @@ class InfoCog(Cog):
         self.rf_manager = rf_manager
     
     @Cog.command(name="towns", help="Lists all towns")
-    async def towns(self, ctx: Context):
+    async def towns(self, ctx: CommandContext):
         out_str = []
         for idx, channel in enumerate(self.rf_manager.channels):
             village: Village = await channel.get_query('select * from village')
@@ -55,7 +55,7 @@ class InfoCog(Cog):
         await ctx.reply(' ✦ '.join(out_str))
 
     @Cog.command(name="event", help="Gets the town's current event")
-    async def event(self, ctx: Context):
+    async def event(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
@@ -68,7 +68,7 @@ class InfoCog(Cog):
             )
 
     @Cog.command(name="uptime", help="Gets the town's uptime")
-    async def uptime(self, ctx: Context):
+    async def uptime(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
@@ -79,7 +79,7 @@ class InfoCog(Cog):
         await ctx.reply(f"Ravenfall uptime: {seconds_to_dhms(session['secondssincestart'])}")
     
     @Cog.command(name="system", help="System info of the computer running everything")
-    async def system(self, ctx: Context):
+    async def system(self, ctx: CommandContext):
         cpu_usage = await asyncio.to_thread(psutil.cpu_percent, 1)
         cpu_freq = psutil.cpu_freq().current
         ram = psutil.virtual_memory()
@@ -102,7 +102,7 @@ class InfoCog(Cog):
         ))
 
     @Cog.command(name="rfram", help="Ravenfall RAM usage")
-    async def rfram(self, ctx: Context):
+    async def rfram(self, ctx: CommandContext):
         processes: Dict[str, List[float]] = {}
         working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
         change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
@@ -167,7 +167,7 @@ class InfoCog(Cog):
         help="Gets a user's experience earn rate",
         aliases=["expirate"]
     )
-    async def exprate(self, ctx: Context):
+    async def exprate(self, ctx: CommandContext):
         args = ctx.parameter.split()
         target_user = ctx.msg.user.name
         if len(ctx.parameter) > 2 and len(args) > 0:
@@ -194,7 +194,7 @@ class InfoCog(Cog):
         help="Gets a user's character info",
         aliases=["char", "show"]
     )
-    async def character(self, ctx: Context):
+    async def character(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
@@ -316,7 +316,7 @@ class InfoCog(Cog):
         name="mult", 
         help="Gets the town's current multiplier",
     )
-    async def mult(self, ctx: Context):
+    async def mult(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return

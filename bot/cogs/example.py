@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from ..commands import Context, Commands
+from ..commands import CommandContext, Commands
 from ..cog import Cog
 
 class ExampleCog(Cog):
@@ -21,17 +21,17 @@ class ExampleCog(Cog):
         self.bot: Optional[Commands] = getattr(self, 'bot', None)
     
     @Cog.command(name="hello", help="Says hello to the user")
-    async def hello_command(self, ctx: Context):
+    async def hello_command(self, ctx: CommandContext):
         """A simple hello command."""
         await ctx.reply(f"Hello, {ctx.msg.user.name}!")
     
     @Cog.command(aliases=["count"], help="Shows the current counter value")
-    async def counter(self, ctx: Context):
+    async def counter(self, ctx: CommandContext):
         """Show the current counter value."""
         await ctx.reply(f"Counter: {self.counter}")
     
     @Cog.command(name="add", help="Add a number to the counter")
-    async def add_to_counter(self, ctx: Context):
+    async def add_to_counter(self, ctx: CommandContext):
         """Add a number to the counter."""
         try:
             amount = int(ctx.args.get(0, "1"))
@@ -41,7 +41,7 @@ class ExampleCog(Cog):
             await ctx.reply("Please provide a valid number to add.")
     
     @Cog.command(name="echo", help="Echoes the provided text")
-    async def echo(self, ctx: Context):
+    async def echo(self, ctx: CommandContext):
         """Echo the remaining text."""
         text = ctx.parameter
         if not text:

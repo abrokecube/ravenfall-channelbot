@@ -1,4 +1,4 @@
-from ..commands import Context, Commands
+from ..commands import CommandContext, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from utils.utils import upload_to_pastes
@@ -10,7 +10,7 @@ class TestingRFCog(Cog):
         self.rf_manager = rf_manager
     
     @Cog.command(name="debug manager", help="Get properties of the RFChannelManager")
-    async def debug_manager(self, ctx: Context):
+    async def debug_manager(self, ctx: CommandContext):
         if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
             return
         result = self.rf_manager.__dict__.get(ctx.args.args[0], "Invalid property")
@@ -22,7 +22,7 @@ class TestingRFCog(Cog):
             await ctx.reply(result_text)
 
     @Cog.command(name="debug channel", help="Get properties of a channel")
-    async def debug_channel(self, ctx: Context):
+    async def debug_channel(self, ctx: CommandContext):
         if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
             return
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
@@ -37,7 +37,7 @@ class TestingRFCog(Cog):
             await ctx.reply(result_text)
     
     @Cog.command(name="restore auto raids", help="Restore auto raids")
-    async def restore_auto_raids(self, ctx: Context):
+    async def restore_auto_raids(self, ctx: CommandContext):
         if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
             return
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
@@ -47,7 +47,7 @@ class TestingRFCog(Cog):
         await ctx.reply("Auto raids restored.")
 
     @Cog.command(name="restore sailors", help="Restore sailors")
-    async def restore_sailors(self, ctx: Context):
+    async def restore_sailors(self, ctx: CommandContext):
         if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
             return
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
@@ -57,7 +57,7 @@ class TestingRFCog(Cog):
         await ctx.reply("Sailors restored.")
 
     @Cog.command(name="fetch training", help="Fetch training")
-    async def fetch_training(self, ctx: Context):
+    async def fetch_training(self, ctx: CommandContext):
         if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
             return
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)

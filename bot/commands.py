@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Callable, List, Dict, Awaitable, Union, Optional, TYPE_CHECKING
-from twitchAPI.chat import ChatMessage
+from twitchAPI.twitch import Twitch
+from twitchAPI.type import CustomRewardRedemptionStatus
+from twitchAPI.chat import ChatMessage, Chat
+from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
 from dataclasses import dataclass
 import re
 
@@ -14,11 +17,15 @@ if TYPE_CHECKING:
     from .cog import Cog, CogManager
 
 # Type for command functions - can be either sync or async
-CommandFunc = Callable[['Context'], Union[None, Awaitable[None]]]
+CommandFunc = Callable[['CommandContext'], Union[None, Awaitable[None]]]
+RedeemFunc = Callable[['RedeemContext'], Union[None, Awaitable[None]]]
 
 class Commands:
-    def __init__(self):
+    def __init__(self, chat: Chat):
+        self.chat: Chat = chat
+        self.twitch: Twitch = chat.twitch
         self.commands: Dict[str, Command] = {}
+        self.redeems: Dict[str, Redeem] = {}
         self.prefix: str = "!"
         self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         self.cog_manager: Optional[CogManager] = None
@@ -45,6 +52,15 @@ class Commands:
         cmd = Command(cmd_name, func)
         self.commands[cmd.name] = cmd
         return cmd
+
+    def add_redeem(self, name: str, func: RedeemFunc) -> RedeemFunc:
+        redeem_name = name.lower()
+        if redeem_name in self.redeems:
+            raise ValueError(f"Redeem '{redeem_name}' already exists")
+            
+        redeem = Redeem(redeem_name, func)
+        self.redeems[redeem.name] = redeem
+        return redeem
         
     def setup_cog_manager(self) -> CogManager:
         """Set up and return the cog manager.
@@ -94,7 +110,10 @@ class Commands:
     async def get_prefix(self, msg: ChatMessage) -> str:
         return self.prefix
 
-    async def on_error(self, ctx: Context, command: Command, error: Exception):
+    async def on_command_error(self, ctx: CommandContext, command: Command, error: Exception):
+        ...
+    
+    async def on_redeem_error(self, ctx: RedeemContext, redeem: Redeem, error: Exception):
         ...
         
     def _find_command(self, text: str) -> tuple[str, str]:
@@ -106,6 +125,16 @@ class Commands:
             if text_lower == cmd or text_lower.startswith(cmd + ' '):
                 return cmd, text[len(cmd):].strip()
         return None, text
+
+    def _find_redeem(self, name: str) -> tuple[str, str]:
+        """Find the best matching redeem from the redeem text.
+        Returns a tuple of (redeem_name, remaining_text)"""
+        name_lower = name.lower()
+        # Sort redeems by length (longest first) to match the most specific redeem first
+        for redeem in sorted(self.redeems.keys(), key=len, reverse=True):
+            if name_lower == redeem or name_lower.startswith(redeem + ' '):
+                return redeem, name[len(redeem):].strip()
+        return None, name
 
     async def process_message(self, msg: ChatMessage) -> None:
         """Process an incoming message and execute the corresponding command if found.
@@ -127,14 +156,29 @@ class Commands:
             return
             
         # Create context and execute the command
-        ctx = Context(msg, command_name, remaining_text)
+        ctx = CommandContext(msg, command_name, remaining_text)
         try:
             result = self.commands[command_name].func(ctx)
             if asyncio.iscoroutine(result):
                 await result
         except Exception as e:
-            await self.on_error(ctx, self.commands[command_name], e)
+            await self.on_command_error(ctx, self.commands[command_name], e)
             logger.error(f"Error executing command '{command_name}':", exc_info=True)
+
+    async def process_channel_point_redemption(self, redemption: ChannelPointsCustomRewardRedemptionData):
+        redeem_name, remaining_text = self._find_redeem(redemption.reward.title)
+        if not redeem_name or redeem_name not in self.redeems:
+            return
+            
+        # Create context and execute the redeem
+        ctx = RedeemContext(self.chat, redemption)
+        try:
+            result = self.redeems[redeem_name].func(ctx)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as e:
+            await self.on_redeem_error(ctx, self.redeems[redeem_name], e)
+            logger.error(f"Error executing redeem '{redeem_name}':", exc_info=True)
 
 class Command:
     def __init__(self, name: str, func: CommandFunc, **kwargs):
@@ -151,7 +195,7 @@ class Command:
         self.help = kwargs.get('help', '')
         self.hidden = kwargs.get('hidden', False)
         
-    async def invoke(self, ctx: Context) -> None:
+    async def invoke(self, ctx: CommandContext) -> None:
         """Invoke the command with the given context."""
         try:
             # Get the function to call
@@ -165,13 +209,30 @@ class Command:
                 await result
                 
         except Exception as e:
-            if hasattr(ctx, 'commands') and hasattr(ctx.commands, 'on_error'):
-                await ctx.commands.on_error(ctx, self, e)
+            if hasattr(ctx, 'commands') and hasattr(ctx.commands, 'on_command_error'):
+                await ctx.commands.on_command_error(ctx, self, e)
             else:
                 # Log the error if we can't call the error handler
                 logger.error("Error in command invocation:", exc_info=True)
 
-class Context:
+class Redeem:
+    def __init__(self, name: str, func: RedeemFunc, **kwargs):
+        self.name = name
+        self.func = func
+        
+    async def invoke(self, ctx: CommandContext, redemption: ChannelPointsCustomRewardRedemptionData) -> None:
+        try:
+            func = self.func
+            result = func(ctx, redemption)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as e:
+            if hasattr(ctx, 'commands') and hasattr(ctx.commands, 'on_redeem_error'):
+                await ctx.commands.on_redeem_error(ctx, self, e)
+            else:
+                logger.error("Error in redeem invocation:", exc_info=True)
+
+class CommandContext:
     def __init__(self, msg: ChatMessage, command: str, parameter: str):
         self.msg: ChatMessage = msg
         self.command: str = command
@@ -184,6 +245,23 @@ class Context:
 
     async def send(self, text: str):
         await self.msg.chat.send_message(self.msg.room.name, text)
+
+class RedeemContext:
+    def __init__(self, chat: Chat, redemption: ChannelPointsCustomRewardRedemptionData):
+        self.chat: Chat = chat
+        self.redemption: ChannelPointsCustomRewardRedemptionData = redemption
+
+    async def update_status(self, status: CustomRewardRedemptionStatus):
+        await self.chat.twitch.update_redemption_status(
+            self.redemption.broadcaster_user_id,
+            self.redemption.reward.id,
+            self.redemption.id,
+            status
+        )
+
+    async def send(self, text: str):
+        await self.chat.send_message(self.redemption.broadcaster_user_login, text)
+        
 
 @dataclass
 class Flag:

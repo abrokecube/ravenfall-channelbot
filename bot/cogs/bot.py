@@ -1,4 +1,4 @@
-from ..commands import Context, Commands
+from ..commands import CommandContext, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 
@@ -8,7 +8,7 @@ class BotStuffCog(Cog):
         self.rf_manager = rf_manager
     
     @Cog.command(name="reloadstrings", help="Reloads localization strings")
-    async def reloadstrings(self, ctx: Context):
+    async def reloadstrings(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
         

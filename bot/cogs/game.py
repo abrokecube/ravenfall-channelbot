@@ -1,4 +1,4 @@
-from ..commands import Context, Commands
+from ..commands import CommandContext, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
@@ -10,7 +10,7 @@ class GameCog(Cog):
         self.rf_manager = rf_manager
     
     @Cog.command(name="update", help="Updates the town boost")
-    async def update(self, ctx: Context):
+    async def update(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
@@ -28,7 +28,7 @@ class GameCog(Cog):
             'rfrestart status',
         ]
     )
-    async def rfrestartstatus(self, ctx: Context):
+    async def rfrestartstatus(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
@@ -67,7 +67,7 @@ class GameCog(Cog):
             'rfrestart toggle',
         ]
     )
-    async def rfrestarttoggle(self, ctx: Context):
+    async def rfrestarttoggle(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
@@ -89,7 +89,7 @@ class GameCog(Cog):
             'rfrestart cancel',
         ]
     )
-    async def rfrestartcancel(self, ctx: Context):
+    async def rfrestartcancel(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
@@ -110,7 +110,7 @@ class GameCog(Cog):
             'rf restart postpone',
         ]
     )
-    async def rfrestartpostpone(self, ctx: Context):
+    async def rfrestartpostpone(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
@@ -134,7 +134,7 @@ class GameCog(Cog):
             'rf restart',
         ]
     )
-    async def rfrestart(self, ctx: Context):
+    async def rfrestart(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
@@ -155,7 +155,7 @@ class GameCog(Cog):
             'rfbot restart',
         ]
     )
-    async def rfbotrestart(self, ctx: Context):
+    async def rfbotrestart(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
 
@@ -173,7 +173,7 @@ class GameCog(Cog):
             'botmonitor toggle',
         ]
     )
-    async def togglebotmonitor(self, ctx: Context):
+    async def togglebotmonitor(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
         this_channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
@@ -195,7 +195,7 @@ class GameCog(Cog):
             'backup state',
         ]
     )
-    async def backupstate(self, ctx: Context):
+    async def backupstate(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
         do_all = ctx.args.get_flag(['all', 'a']) is not None

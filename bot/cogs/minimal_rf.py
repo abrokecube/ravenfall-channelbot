@@ -1,4 +1,4 @@
-from ..commands import Context, Commands
+from ..commands import CommandContext, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 
@@ -8,7 +8,7 @@ class MinimalCog(Cog):
         self.rf_manager = rf_manager
     
     @Cog.command(name="hi", help="Says hi")
-    async def hi(self, ctx: Context):
+    async def hi(self, ctx: CommandContext):
         await ctx.reply(f"hi {ctx.msg.user.name}")
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:

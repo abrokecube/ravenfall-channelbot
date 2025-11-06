@@ -2,7 +2,9 @@ from twitchAPI.twitch import Twitch
 from twitchAPI.oauth import UserAuthenticationStorageHelper
 from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, EventData, ChatMessage, ChatCommand
+from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.chat.middleware import *
+from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
 
 from dotenv import load_dotenv
 
@@ -14,7 +16,7 @@ import logging
 
 import ravenpy
 
-from bot.commands import Commands, Context, Command
+from bot.commands import Commands, CommandContext, Command, Redeem, RedeemContext
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
@@ -81,10 +83,13 @@ for channel in channels:
 rf_manager = None
 
 class MyCommands(Commands):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, twitch: Twitch):
+        super().__init__(twitch)
     
-    async def on_error(self, ctx: Context, command: Command, error: Exception):
+    async def on_command_error(self, ctx: CommandContext, command: Command, error: Exception):
+        await ctx.send(f"❌ An error occurred")
+
+    async def on_redeem_error(self, ctx: RedeemContext, redeem: Redeem, error: Exception):
         await ctx.send(f"❌ An error occurred")
 
     async def get_prefix(self, msg: ChatMessage) -> str:
@@ -107,8 +112,21 @@ async def run():
     await helper.bind()
 
     chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
-    commands = MyCommands()
-    
+    eventsub = EventSubWebsocket(twitch)
+    eventsub.start()
+
+    commands = MyCommands(twitch)
+
+    async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionData):
+        await commands.process_channel_point_redemption(redemption)
+    for channel in channels:
+        if channel.get("channel_points_redeems", False):
+            await eventsub.listen_channel_points_custom_reward_redemption_add(
+                channel['channel_id'],
+                redemption_callback,
+            )
+            logger.info(f"Listening for redeems in {channel['channel_name']}")
+
     def load_cogs():
         from bot.cogs.info import InfoCog
         commands.load_cog(InfoCog, rf_manager=rf_manager)
@@ -120,6 +138,8 @@ async def run():
         commands.load_cog(TestingRFCog, rf_manager=rf_manager)
         from bot.cogs.bot import BotStuffCog
         commands.load_cog(BotStuffCog, rf_manager=rf_manager)
+        from bot.cogs.testing import TestingCog
+        commands.load_cog(TestingCog)
 
     async def on_ready(ready_event: EventData):
         global rf_manager
