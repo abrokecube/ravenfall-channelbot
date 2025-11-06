@@ -179,7 +179,7 @@ class GameCog(Cog):
         this_channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if this_channel is None:
             return
-        do_all = ctx.args.get_flag(['all', 'a']) is not None
+        do_all = ctx.args.get_flag(['all', 'a']).value is not None
         this_channel.monitoring_paused = not this_channel.monitoring_paused
         if do_all:
             for channel in self.rf_manager.channels:
@@ -198,7 +198,7 @@ class GameCog(Cog):
     async def backupstate(self, ctx: CommandContext):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
-        do_all = ctx.args.get_flag(['all', 'a']) is not None
+        do_all = ctx.args.get_flag(['all', 'a']).value is not None
         if do_all:
             for channel in self.rf_manager.channels:
                 await channel.backup_state_data_routine()

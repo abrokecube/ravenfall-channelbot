@@ -12,7 +12,7 @@ class BotStuffCog(Cog):
         if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
             return
         
-        do_all = ctx.args.get_flag(['a', 'all']) is not None
+        do_all = ctx.args.get_flag(['a', 'all']).value is not None
         if do_all:
             for channel in self.rf_manager.channels:
                 channel.rfloc.load_definitions()

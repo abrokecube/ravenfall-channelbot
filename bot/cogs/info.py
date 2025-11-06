@@ -59,7 +59,7 @@ class InfoCog(Cog):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
-        debug = ctx.args.get_flag("d") is not None
+        debug = ctx.args.get_flag("d").value is not None
         if not debug:
             await ctx.reply(channel.event_text)
         else:

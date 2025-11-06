@@ -157,7 +157,7 @@ class Commands:
             return
             
         # Create context and execute the command
-        ctx = CommandContext(msg, command_name, remaining_text)
+        ctx = CommandContext(msg, command_name, remaining_text, self)
         try:
             result = self.commands[command_name].func(ctx)
             if asyncio.iscoroutine(result):
@@ -172,7 +172,7 @@ class Commands:
             return
             
         # Create context and execute the redeem
-        ctx = RedeemContext(self.chat, self.twitches[redemption.broadcaster_user_id], redemption)
+        ctx = RedeemContext(redemption, self)
         try:
             result = self.redeems[redeem_name].func(ctx)
             if asyncio.iscoroutine(result):
@@ -234,12 +234,13 @@ class Redeem:
                 logger.error("Error in redeem invocation:", exc_info=True)
 
 class CommandContext:
-    def __init__(self, msg: ChatMessage, command: str, parameter: str):
+    def __init__(self, msg: ChatMessage, command: str, parameter: str, bot: Commands):
         self.msg: ChatMessage = msg
         self.command: str = command
         self.parameter: str = parameter
         self.args: CommandArgs = CommandArgs(parameter)
-        self.commands: Commands = Commands()
+        self.bot: Commands = bot
+        self.twitch: Twitch = bot.twitches.get(msg.room.room_id)
 
     async def reply(self, text: str):
         await self.msg.reply(text)
@@ -253,10 +254,10 @@ class CustomRewardRedemptionStatus(Enum):
     CANCELED = 'CANCELED'
 
 class RedeemContext:
-    def __init__(self, chat: Chat, twitch: Twitch, redemption: ChannelPointsCustomRewardRedemptionData):
-        self.chat: Chat = chat
-        self.twitch: Twitch = twitch
+    def __init__(self, redemption: ChannelPointsCustomRewardRedemptionData, bot: Commands):
+        self.twitch: Twitch = bot.twitches.get(redemption.broadcaster_user_id)
         self.redemption: ChannelPointsCustomRewardRedemptionData = redemption
+        self.bot: Commands = bot
 
     async def update_status(self, status: CustomRewardRedemptionStatus):
         if self.redemption.status == "unfulfilled":
@@ -270,8 +271,7 @@ class RedeemContext:
             raise ValueError(f"Redemption is not in the UNFULFILLED state (current: {self.redemption.status})")
 
     async def send(self, text: str):
-        await self.chat.send_message(self.redemption.broadcaster_user_login, text)
-        
+        await self.bot.chat.send_message(self.redemption.broadcaster_user_login, text)
 
 @dataclass
 class Flag:
@@ -290,15 +290,16 @@ class CommandArgs:
         
         self.args: List[str | Flag] = []  # args are in order of appearance
         self.flags: List[Flag] = []  # flags are in order of appearance
+        self.grouped_args: List[str] = []  # consecutive non-flag args joined by space
         self._parse()
 
     def _parse(self):
         if not self.text.strip():
             return
-            
+        
         in_quotes = None  # None if not in quotes, otherwise the quote char (' or ")
         current = []
-        args = []
+        args: list[str] = []
         i = 0
         n = len(self.text)
         
@@ -356,11 +357,26 @@ class CommandArgs:
                     arg = arg[1:-1]
                 self.args.append(arg)
 
-    def get_flag(self, name: str | list[str], case_sensitive: bool = False) -> Flag | None:
+        # Build grouped_args by joining consecutive non-flag args with spaces,
+        # using flags as separators (flags are not included in grouped_args)
+        grouped: list[str] = []
+        current_group: list[str] = []
+        for item in self.args:
+            if isinstance(item, Flag):
+                if current_group:
+                    grouped.append(' '.join(current_group))
+                    current_group = []
+            else:
+                current_group.append(item)
+        if current_group:
+            grouped.append(' '.join(current_group))
+        self.grouped_args = grouped
+
+    def get_flag(self, name: str | list[str], case_sensitive: bool = False, default: str | None = None) -> Flag | None:
         names = name if isinstance(name, list) else [name]
         for flag in self.flags:
             if case_sensitive and flag.name in names:
                 return flag
             elif not case_sensitive and flag.name.lower() in [n.lower() for n in names]:
                 return flag
-        return None
+        return Flag(name, default)

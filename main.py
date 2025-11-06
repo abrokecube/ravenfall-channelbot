@@ -212,6 +212,8 @@ async def run():
         commands.load_cog(TestingRFCog, rf_manager=rf_manager)
         from bot.cogs.bot import BotStuffCog
         commands.load_cog(BotStuffCog, rf_manager=rf_manager)
+        from bot.cogs.redeem import RedeemCog
+        commands.load_cog(RedeemCog)
 
     async def on_ready(ready_event: EventData):
         global rf_manager
