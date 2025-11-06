@@ -128,11 +128,14 @@ async def run():
         eventsub.start()
         for channel in channels:
             if channel.get("channel_points_redeems", False):
-                await eventsub.listen_channel_points_custom_reward_redemption_add(
-                    channel['channel_id'],
-                    redemption_callback,
-                )
-                logger.info(f"Listening for redeems in {channel['channel_name']}")
+                try:
+                    await eventsub.listen_channel_points_custom_reward_redemption_add(
+                        channel['channel_id'],
+                        redemption_callback,
+                    )
+                    logger.info(f"Listening for redeems in {channel['channel_name']}")
+                except Exception as e:
+                    logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}")
 
     def load_cogs():
         from bot.cogs.info import InfoCog
