@@ -345,7 +345,7 @@ class CommandArgs:
             is_quoted = arg[0] == '"' and arg[-1] == '"'
             if RE_FLAG.match(arg):
                 flag_name: str = arg.lstrip('-')
-                flag_value: str | None = None
+                flag_value: str | None = True
                 if has_delimiter:
                     if delimiter_char in flag_name:
                         flag_name, flag_value = flag_name.split(delimiter_char, 1)
