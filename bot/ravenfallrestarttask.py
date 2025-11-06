@@ -22,6 +22,11 @@ class PreRestartEvent(Enum):
     WARNING = "warning"
     PRE_RESTART = "pre_restart"
 
+class RestartStatus(Enum):
+    WAITING = "waiting"
+    PENDING = "pending"
+    
+
 WARNING_MSG_TIMES: List[Tuple[int, PreRestartEvent]] = (
     (120, PreRestartEvent.WARNING), 
     (30, PreRestartEvent.WARNING),

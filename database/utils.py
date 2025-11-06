@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from database.models import User, Channel, Character
+from database.models import User, Channel, Character, SenderData
 from typing import Union, Optional, Tuple
 from sqlalchemy import select
 
@@ -94,6 +94,58 @@ async def get_character(
 
     return user_obj
 
+async def get_sender_data(
+    session: AsyncSession,
+    channel_id: Union[int, str],
+    user_name: str
+):
+    if isinstance(channel_id, int):
+        channel_id = str(channel_id)
+    result = await session.execute(
+        select(SenderData)
+        .where(
+            SenderData.channel_platform_id == channel_id,
+            (SenderData.username == user_name) | (SenderData.display_name == user_name)
+        )
+    )
+    sender_data = result.scalar_one_or_none()
+    if sender_data is not None:
+        return {
+            "Id": sender_data.user_id,
+            "CharacterId": sender_data.character_id,
+            "Username": sender_data.username,
+            "DisplayName": sender_data.display_name,
+            "Color": sender_data.color,
+            "Platform": sender_data.platform,
+            "PlatformId": sender_data.platform_id,
+            "IsBroadcaster": sender_data.is_broadcaster,
+            "IsModerator": sender_data.is_moderator,
+            "IsSubscriber": sender_data.is_subscriber,
+            "IsVip": sender_data.is_vip,
+            "IsGameAdministrator": sender_data.is_game_administrator,
+            "IsGameModerator": sender_data.is_game_moderator,
+            "SubTier": sender_data.sub_tier,
+            "Identifier": sender_data.identifier
+        }
+    else:
+        return {
+            "Id": "00000000-0000-0000-0000-000000000000",
+            "CharacterId": "00000000-0000-0000-0000-000000000000",
+            "Username": user_name,
+            "DisplayName": user_name,
+            "Color": "#7F7F7F",
+            "Platform": "twitch",
+            "PlatformId": None,
+            "IsBroadcaster": False,
+            "IsModerator": False,
+            "IsSubscriber": False,
+            "IsVip": False,
+            "IsGameAdministrator": False,
+            "IsGameModerator": False,
+            "SubTier": 0,
+            "Identifier": "1"
+        }
+
 async def record_character_and_user(
     session: AsyncSession,
     # Character fields
@@ -162,3 +214,33 @@ async def record_user(
     if display_name is not None:
         user.display_name = display_name
     return user
+
+async def record_sender_data(
+    session: AsyncSession,
+    channel_platform: str,
+    channel_platform_id: Union[int, str],
+    sender_json: dict,
+) -> SenderData:
+    if isinstance(channel_platform_id, int):
+        channel_platform_id = str(channel_platform_id)  
+    sender_data = SenderData(
+        channel_platform = channel_platform,
+        channel_platform_id = channel_platform_id,
+        user_id = sender_json.get('Id'),
+        character_id = sender_json.get('CharacterId'),
+        username = sender_json.get('Username', '').lower(),
+        display_name = sender_json.get('DisplayName'),
+        color = sender_json.get('Color'),
+        platform = sender_json.get('Platform'),
+        platform_id = sender_json.get('PlatformId'),
+        is_broadcaster = sender_json.get('IsBroadcaster'),
+        is_moderator = sender_json.get('IsModerator'),
+        is_subscriber = sender_json.get('IsSubscriber'),
+        is_vip = sender_json.get('IsVip'),
+        is_game_administrator = sender_json.get('IsGameAdministrator'),
+        is_game_moderator = sender_json.get('IsGameModerator'),
+        sub_tier = sender_json.get('SubTier'),
+        identifier = sender_json.get('Identifier'),
+    )
+    session.add(sender_data)
+    return sender_data

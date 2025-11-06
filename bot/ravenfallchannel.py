@@ -205,18 +205,28 @@ class RFChannel:
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
         platform_id = message['Sender']['PlatformId']
         # sometimes "server-request" is the platform ID
-        if (not platform_id) or (not platform_id.isdigit()):
+        if not platform_id.isdigit():
             return message
+        if not platform_id:
+            if message['Identifier'] in ('observe', 'travel'):
+                message['Sender'] = await self.get_sender_data(message['Sender']['Username'].lower())
+                if message['Sender']['PlatformId'] is not None:
+                    logger.info(f"Replaced sender data for {message['Sender']['Username']}")
+            return message
+
         asyncio.create_task(self.record_user(
             int(platform_id),
             message['Sender']['Username'],
             message['Sender']['Color'],
             message['Sender']['DisplayName']
         ))
+        asyncio.create_task(self.record_sender_data(message['Sender']))
+
         if message['Identifier'] == 'task':
             asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait_first=True))
         if message['Identifier'] == 'leave':
             await self.fetch_training(message['Sender']['Username'])
+            
         return message
 
     # Messages from ravenfall
@@ -333,6 +343,14 @@ class RFChannel:
                 twitch_id=twitch_id,
                 display_name=display_name
             )
+
+    async def record_sender_data(self, sender_json: dict):
+        async with get_async_session() as session:
+            await db_utils.record_sender_data(session, "twitch", self.channel_id, sender_json)
+
+    async def get_sender_data(self, user_name: str):
+        async with get_async_session() as session:
+            return await db_utils.get_sender_data(session, self.channel_id, user_name)
 
     async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
         for msg in msgs:
@@ -740,6 +758,8 @@ class RFChannel:
                 break
             await asyncio.sleep(1)
         if not authenticated:
+            await self.send_chat_message(f"Restart failed {(pinging @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')})}")
+            logger.error(f"Failed to authenticate Ravenfall for {self.channel_name}")
             self.channel_restart_future.set_result(False)
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
@@ -754,7 +774,10 @@ class RFChannel:
             await self.channel_post_restart_lock.acquire()
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
-            await self._ravenfall_post_restart()
+            try:
+                await self._ravenfall_post_restart()
+            except Exception as e:
+                logger.error(f"Failed to run post restart for {self.channel_name}: {e}")
             self.channel_post_restart_lock.release()
         else:
             self.channel_restart_lock.release()
@@ -773,14 +796,14 @@ class RFChannel:
                 return
                 
             await asyncio.sleep(1)
-            session: GameSession = await self.get_query("select * from session", 1)
+            session: GameSession = await self.get_query("select * from session", 5, suppress_timeout_error=True)
             if session['players'] > 0:
                 break
         # Wait for the game to finish rejoining players
         player_count = 0
         while True:
             await asyncio.sleep(2)
-            session: GameSession = await self.get_query("select * from session", 1)
+            session: GameSession = await self.get_query("select * from session", 5, suppress_timeout_error=True)
             new_player_count = session['players']
             if player_count > 0 and new_player_count == player_count:
                 break
@@ -912,7 +935,9 @@ class RFChannel:
     def monitor_ravenbot_response(self, command: str, timeout: float = 10.0, resend_text: str = None):
         asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))
 
-    def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None):
+    def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None, overwrite_same_reason: bool = False):
+        if self.restart_task and self.restart_task.reason == reason and not overwrite_same_reason:
+            return
         if self.restart_task:
             self.restart_task.cancel()
         self.restart_task = RFRestartTask(self, self.manager, time_to_restart, mute_countdown, label, reason)
@@ -924,6 +949,7 @@ class RFChannel:
         if self.restart_task:
             self.restart_task.postpone(seconds)
     
+
     # --- [ AUTO RAID ] ---------------------------------------
 
     async def game_event_fetch_auto_raids(self, old_sub_event: RFChannelSubEvent, sub_event: RFChannelSubEvent):

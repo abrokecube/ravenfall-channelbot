@@ -55,6 +55,27 @@ class AutoRaidStatus(Base):
     auto_raid_count = Column(Integer, default=-1)
     char = relationship("Character", back_populates='auto_raid_status')
 
+class SenderData(Base):
+    __tablename__ = 'sender_data'
+    
+    channel_platform = Column(String)
+    channel_platform_id = Column(String)
+    user_id = Column(String)  # uuid
+    character_id = Column(String)  # uuid
+    username = Column(String)
+    display_name = Column(String)
+    color = Column(String, nullable=True)
+    platform = Column(String)
+    platform_id = Column(String)
+    is_broadcaster = Column(Boolean)
+    is_moderator = Column(Boolean)
+    is_subscriber = Column(Boolean)
+    is_vip = Column(Boolean)
+    is_game_administrator = Column(Boolean)
+    is_game_moderator = Column(Boolean)
+    sub_tier = Column(Integer)
+    identifier = Column(String)
+    
 
 async def create_all_tables():
     async with engine.begin() as conn:
