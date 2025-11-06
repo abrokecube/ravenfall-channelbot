@@ -25,7 +25,7 @@ from bot.server import SomeEndpoints
 
 load_dotenv()
 
-USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT]
+USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
 logger_config = {
     'twitchAPI': {
         'filename': "twitchAPI.log",
