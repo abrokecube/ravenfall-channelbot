@@ -113,19 +113,26 @@ async def run():
 
     chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
     eventsub = EventSubWebsocket(twitch)
-    eventsub.start()
 
     commands = MyCommands(chat)
 
     async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionData):
         await commands.process_channel_point_redemption(redemption)
+
+    has_redeems = False
     for channel in channels:
         if channel.get("channel_points_redeems", False):
-            await eventsub.listen_channel_points_custom_reward_redemption_add(
-                channel['channel_id'],
-                redemption_callback,
-            )
-            logger.info(f"Listening for redeems in {channel['channel_name']}")
+            has_redeems = True
+            break
+    if has_redeems:
+        eventsub.start()
+        for channel in channels:
+            if channel.get("channel_points_redeems", False):
+                await eventsub.listen_channel_points_custom_reward_redemption_add(
+                    channel['channel_id'],
+                    redemption_callback,
+                )
+                logger.info(f"Listening for redeems in {channel['channel_name']}")
 
     def load_cogs():
         from bot.cogs.info import InfoCog
