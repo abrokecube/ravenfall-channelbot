@@ -258,17 +258,20 @@ async def record_sender_data(
 
     return sender_data
 
-async def get_tokens(session: AsyncSession, user_id: Union[int, str]) -> TwitchAuth:
+async def get_tokens_raw(session: AsyncSession, user_id: Union[int, str]) -> TwitchAuth:
     result = await session.execute(
         select(TwitchAuth).where(TwitchAuth.user_id == user_id)
     )
-    a = result.scalar_one_or_none()
+    return result.scalar_one_or_none()
+
+async def get_tokens(session: AsyncSession, user_id: Union[int, str]) -> TwitchAuth:
+    a = await get_tokens_raw(session, user_id)
     if a:
         return a.access_token, a.refresh_token
     return None, None
 
 async def update_tokens(session: AsyncSession, user_id: Union[int, str], access_token: str, refresh_token: str) -> None:
-    result = await get_tokens(session, user_id)
+    result = await get_tokens_raw(session, user_id)
     if result is None:
         result = TwitchAuth(user_id=user_id, access_token=access_token, refresh_token=refresh_token)
         session.add(result)
