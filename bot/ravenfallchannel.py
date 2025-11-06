@@ -205,18 +205,28 @@ class RFChannel:
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
         platform_id = message['Sender']['PlatformId']
         # sometimes "server-request" is the platform ID
-        if (not platform_id) or (not platform_id.isdigit()):
+        if not platform_id.isdigit():
             return message
+        if not platform_id:
+            if message['Identifier'] in ('observe', 'travel'):
+                message['Sender'] = await self.get_sender_data(message['Sender']['Username'].lower())
+                if message['Sender']['PlatformId'] is not None:
+                    logger.info(f"Replaced sender data for {message['Sender']['Username']}")
+            return message
+
         asyncio.create_task(self.record_user(
             int(platform_id),
             message['Sender']['Username'],
             message['Sender']['Color'],
             message['Sender']['DisplayName']
         ))
+        asyncio.create_task(self.record_sender_data(message['Sender']))
+
         if message['Identifier'] == 'task':
             asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait_first=True))
         if message['Identifier'] == 'leave':
             await self.fetch_training(message['Sender']['Username'])
+            
         return message
 
     # Messages from ravenfall
@@ -333,6 +343,14 @@ class RFChannel:
                 twitch_id=twitch_id,
                 display_name=display_name
             )
+
+    async def record_sender_data(self, sender_json: dict):
+        async with get_async_session() as session:
+            await db_utils.record_sender_data(session, "twitch", self.channel_id, sender_json)
+
+    async def get_sender_data(self, user_name: str):
+        async with get_async_session() as session:
+            return await db_utils.get_sender_data(session, self.channel_id, user_name)
 
     async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
         for msg in msgs:
@@ -931,6 +949,7 @@ class RFChannel:
         if self.restart_task:
             self.restart_task.postpone(seconds)
     
+
     # --- [ AUTO RAID ] ---------------------------------------
 
     async def game_event_fetch_auto_raids(self, old_sub_event: RFChannelSubEvent, sub_event: RFChannelSubEvent):
