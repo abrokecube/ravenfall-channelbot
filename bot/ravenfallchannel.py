@@ -350,7 +350,7 @@ class RFChannel:
 
     async def get_sender_data(self, user_name: str):
         async with get_async_session() as session:
-            return await db_utils.get_sender_data(session, self.channel_id, user_name)
+            return await db_utils.get_formatted_sender_data(session, self.channel_id, user_name)
 
     async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
         for msg in msgs:

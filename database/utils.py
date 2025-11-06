@@ -109,6 +109,14 @@ async def get_sender_data(
         )
     )
     sender_data = result.scalar_one_or_none()
+    return sender_data
+
+async def get_formatted_sender_data(
+    session: AsyncSession,
+    channel_id: Union[int, str],
+    user_name: str
+):
+    sender_data = await get_sender_data(session, channel_id, user_name)
     if sender_data is not None:
         return {
             "Id": sender_data.user_id,
@@ -223,24 +231,29 @@ async def record_sender_data(
 ) -> SenderData:
     if isinstance(channel_platform_id, int):
         channel_platform_id = str(channel_platform_id)  
-    sender_data = SenderData(
-        channel_platform = channel_platform,
-        channel_platform_id = channel_platform_id,
-        user_id = sender_json.get('Id'),
-        character_id = sender_json.get('CharacterId'),
-        username = sender_json.get('Username', '').lower(),
-        display_name = sender_json.get('DisplayName'),
-        color = sender_json.get('Color'),
-        platform = sender_json.get('Platform'),
-        platform_id = sender_json.get('PlatformId'),
-        is_broadcaster = sender_json.get('IsBroadcaster'),
-        is_moderator = sender_json.get('IsModerator'),
-        is_subscriber = sender_json.get('IsSubscriber'),
-        is_vip = sender_json.get('IsVip'),
-        is_game_administrator = sender_json.get('IsGameAdministrator'),
-        is_game_moderator = sender_json.get('IsGameModerator'),
-        sub_tier = sender_json.get('SubTier'),
-        identifier = sender_json.get('Identifier'),
-    )
-    session.add(sender_data)
+    result = await get_sender_data(session, channel_platform_id, sender_json.get('Username')) 
+    if result is None:
+        sender_data = SenderData()
+        session.add(sender_data)
+    else:
+        sender_data = result
+
+    sender_data.channel_platform = channel_platform
+    sender_data.channel_platform_id = channel_platform_id
+    sender_data.user_id = sender_json.get('Id')
+    sender_data.character_id = sender_json.get('CharacterId')
+    sender_data.username = sender_json.get('Username', '').lower()
+    sender_data.display_name = sender_json.get('DisplayName')
+    sender_data.color = sender_json.get('Color')
+    sender_data.platform = sender_json.get('Platform')
+    sender_data.platform_id = sender_json.get('PlatformId')
+    sender_data.is_broadcaster = sender_json.get('IsBroadcaster')
+    sender_data.is_moderator = sender_json.get('IsModerator')
+    sender_data.is_subscriber = sender_json.get('IsSubscriber')
+    sender_data.is_vip = sender_json.get('IsVip')
+    sender_data.is_game_administrator = sender_json.get('IsGameAdministrator')
+    sender_data.is_game_moderator = sender_json.get('IsGameModerator')
+    sender_data.sub_tier = sender_json.get('SubTier')
+    sender_data.identifier = sender_json.get('Identifier')
+
     return sender_data
