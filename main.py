@@ -174,7 +174,7 @@ async def run():
         if channel.get("channel_points_redeems", False):
             channel_twitch = await get_twitch_auth_instance(channel['channel_id'], channel['channel_name'])
             eventsub = EventSubWebsocket(channel_twitch)
-            await eventsub.start()
+            eventsub.start()
             try:
                 await eventsub.listen_channel_points_custom_reward_redemption_add(
                     channel['channel_id'],
@@ -184,7 +184,7 @@ async def run():
                 eventsubs.append(eventsub)
             except Exception as e:
                 logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}")
-                eventsub.stop()
+                await eventsub.stop()
 
     def load_cogs():
         from bot.cogs.info import InfoCog
