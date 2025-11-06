@@ -35,6 +35,7 @@ class Cog:
         self.name = self.__class__.__name__.lower()
         self.description = description
         self.commands = {}
+        self.redeems = {}
         self.bot = None
         self.config = config or {}
         
@@ -130,7 +131,8 @@ class Cog:
                         **cmd_kwargs
                     )
                     instance_commands[cmd_name] = command
-            
+        
+        instance_redeems = {}
         # Find all methods that have redeem info
         for attr_name in dir(instance):
             attr = getattr(instance, attr_name)
@@ -144,10 +146,11 @@ class Cog:
                         func=bound_method,
                         **redeem_kwargs
                     )
-                    instance_commands[redeem_name] = redeem
+                    instance_redeems[redeem_name] = redeem
         
         # Set the instance's commands
         instance.commands = instance_commands
+        instance.redeems = instance_redeems
         
         return instance
 
