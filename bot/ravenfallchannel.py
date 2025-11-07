@@ -169,9 +169,15 @@ class RFChannel:
         self.dungeon_killswitch_routine.cancel()
         self.update_middleman_connection_status_routine.cancel()
 
-    async def send_chat_message(self, message: str):
-        await self.chat.send_message(self.channel_name, message)
-        await self.monitor_ravenfall_command(content=message)
+    async def send_chat_message(self, message: str, ignore_error: bool = False):
+        try:
+            await self.chat.send_message(self.channel_name, message)
+            await self.monitor_ravenfall_command(content=message)
+        except Exception as e:
+            if not ignore_error:
+                raise e
+            else:
+                logger.warning(f"Failed to send chat message for {self.channel_name}: {e}")
 
     async def send_ravenbot_chat_message(self, text: str, cid: str):
         message = {
@@ -780,7 +786,7 @@ class RFChannel:
             except Exception as e:
                 logger.error(f"Failed to run post restart for {self.channel_name}: {e}")
             self.channel_post_restart_lock.release()
-            
+
         self.channel_restart_lock.release()
         self.global_restart_lock.release()
 

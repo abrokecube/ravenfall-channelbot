@@ -6,6 +6,9 @@ from utils.format_time import format_seconds, TimeSize
 from enum import Enum
 from typing import List, Tuple, TYPE_CHECKING
 from .models import RFChannelEvent, RFChannelSubEvent
+import logging
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .ravenfallchannel import RFChannel
@@ -105,10 +108,14 @@ class RFRestartTask:
                 if new_warning_idx >= 0 and new_warning_idx > warning_idx:
                     for i in range(warning_idx + 1, new_warning_idx + 1):
                         if WARNING_MSG_TIMES[i][1] == PreRestartEvent.PRE_RESTART:
-                            await self.channel._ravenfall_pre_restart()
+                            try:
+                                await self.channel._ravenfall_pre_restart()
+                            except Exception as e:
+                                logger.error(f"Failed to run pre restart for {self.channel.channel_name}: {e}")
                     if WARNING_MSG_TIMES[new_warning_idx][1] == PreRestartEvent.WARNING and time_left > 7 and not self.mute_countdown:
                         await self.channel.send_chat_message(
-                            f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
+                            f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!",
+                            ignore_error=True
                         )
                 warning_idx = new_warning_idx
         await self._execute()
@@ -159,13 +166,15 @@ class RFRestartTask:
                         self.time_to_restart += 60 - time_left
                         time_left = self.get_time_left()
                     await self.channel.send_chat_message(
-                        f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}."
+                        f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}.",
+                        ignore_error=True
                     )
             else:
                 if (not self._paused) or old_event_type != event_type:
                     self.pause(names[event_type])
                     await self.channel.send_chat_message(
-                        messages[event_type]
+                        messages[event_type],
+                        ignore_error=True
                     )
 
     async def _execute(self):
