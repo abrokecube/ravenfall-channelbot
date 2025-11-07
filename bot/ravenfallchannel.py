@@ -780,9 +780,9 @@ class RFChannel:
             except Exception as e:
                 logger.error(f"Failed to run post restart for {self.channel_name}: {e}")
             self.channel_post_restart_lock.release()
-        else:
-            self.channel_restart_lock.release()
-            self.global_restart_lock.release()
+            
+        self.channel_restart_lock.release()
+        self.global_restart_lock.release()
 
         self.channel_restart_future.set_result(True)
         return True

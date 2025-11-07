@@ -23,8 +23,11 @@ class PreRestartEvent(Enum):
     PRE_RESTART = "pre_restart"
 
 class RestartStatus(Enum):
+    IDLE = "idle"
     WAITING = "waiting"
-    PENDING = "pending"
+    RESTARTING = "restarting"
+    FINISHED = "finished"
+    PAUSED = "paused"
     
 
 WARNING_MSG_TIMES: List[Tuple[int, PreRestartEvent]] = (
@@ -59,6 +62,7 @@ class RFRestartTask:
         self.mute_countdown: bool = mute_countdown
         self.label: str = label
         self.reason: RestartReason | None = reason
+        self._status: RestartStatus = RestartStatus.IDLE
 
     def start(self):
         if not self.done:
@@ -85,6 +89,7 @@ class RFRestartTask:
 
     async def _waiting(self):
         warning_idx = -1
+        self._status = RestartStatus.WAITING
         while True:
             await asyncio.sleep(1)
             if self._paused:
@@ -165,11 +170,13 @@ class RFRestartTask:
 
     async def _execute(self):
         self.event_watch_task.cancel()
+        self._status = RestartStatus.RESTARTING
         await self.channel._restart_ravenfall(
             run_pre_restart=False,
             run_post_restart=True
         )
         self.done = True
+        self._status = RestartStatus.FINISHED
 
     def finished(self):
         return self.done
@@ -194,6 +201,13 @@ class RFRestartTask:
             self._paused = False
             self._pause_time += time.time() - self._pause_start
             self.pause_event_name = ""
+
+    def get_status(self):
+        if self._paused:
+            return RestartStatus.PAUSED
+        if self.done:
+            return RestartStatus.FINISHED
+        return self._status
 
     def postpone(self, seconds: int):
         self.time_to_restart += seconds
