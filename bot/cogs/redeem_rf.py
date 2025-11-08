@@ -427,7 +427,13 @@ class RedeemRFCog(Cog):
         await ctx.reply(f"You have been given {count:,}× {item.name}{pl(count, '', '(s)')}. (ID: {trans_id})")
 
 
-    @Cog.command(name="stock coins")
+    @Cog.command(
+        name="stock coins",
+        aliases=[
+            "credits stock coins",
+            "creditsstockcoins",
+        ]
+    )
     async def stock_coins(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
@@ -435,7 +441,13 @@ class RedeemRFCog(Cog):
         count = await get_coins_count(channel)
         await ctx.reply(f"There {pl(count, 'is', 'are')} currently {count:,} {pl(count, 'coin', 'coins')} in stock.")
 
-    @Cog.command(name="stock")
+    @Cog.command(
+        name="stock",
+        aliases=[
+            "credits stock",
+            "creditsstock",
+        ]
+    )
     async def stock_item(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
