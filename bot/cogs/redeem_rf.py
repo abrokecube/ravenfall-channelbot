@@ -8,7 +8,7 @@ from bot.message_templates import RavenBotTemplates
 from database.session import get_async_session
 from database.utils import get_formatted_sender_data
 from dataclasses import dataclass
-from messageprocessor import RavenfallMessage
+from bot.messageprocessor import RavenfallMessage
 import logging
 import json
 
