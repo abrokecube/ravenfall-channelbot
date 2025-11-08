@@ -37,6 +37,9 @@ class TimeoutError(Exception):
 class OutOfItemsError(Exception):
     pass
 
+class PartialSendError(Exception):
+    pass
+
 class ItemNotFoundError(Exception):
     pass
 
@@ -110,7 +113,11 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
     if total_coins < amount:
         raise OutOfItemsError("Not enough coins")
 
-    coins_remaining = amount
+    if amount != -1:
+        coins_remaining = amount
+    else:
+        coins_remaining = total_coins
+    one_coin_successful = False
     for user in char_coins["data"]:
         if coins_remaining <= 0:
             break
@@ -131,12 +138,17 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
         )
         if response.response_id not in ("gift_coins", "gift_coins_one"):
             logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {response.response_id}")
-            raise CouldNotSendItemsError("Failed to send coins")
-
+            if not one_coin_successful:
+                raise CouldNotSendItemsError("Failed to send coins")
+        if response.response_id == "gift_coins_one":
+            coins_to_send = 1
+        else:
+            coins_to_send = int(response.response["Args"][1])
         coins_remaining -= coins_to_send
+        one_coin_successful = True
 
-    if coins_remaining > 0:
-        raise OutOfItemsError("Ran out of coins")
+    if amount != -1 and coins_remaining > 0:
+        raise PartialSendError(f"Ran out of coins ({coins_remaining} remaining)")
 
 async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int):
     item_search_results = ravenpy.search_item(item_name, limit=1)
@@ -166,7 +178,11 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
     if total_items < amount:
         raise OutOfItemsError("Not enough items")
 
-    items_remaining = amount
+    if amount != -1:
+        items_remaining = amount
+    else:
+        items_remaining = total_items
+    one_item_successful = False
     for user_item in user_items:
         if items_remaining <= 0:
             break
@@ -181,14 +197,19 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 item_count = items_to_send,
             )
         )
-        if response.response_id != "gift":
-            logger.info(f"Failed to send coins to {target_user_name} from {user_item['user_name']}: {response.response_id}")
-            raise CouldNotSendItemsError("Failed to send items")
-
+        if response.response_id not in ("gift", "gift_item_not_owned"):
+            logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")
+            if not one_item_successful:
+                raise CouldNotSendItemsError("Failed to send items")
+        if response.response_id == "gift_item_not_owned":
+            items_to_send = 0
+        else:
+            items_to_send = int(response.response["Args"][0])
         items_remaining -= items_to_send
+        one_item_successful = True
 
-    if items_remaining > 0:
-        raise OutOfItemsError("Ran out of items")
+    if amount != -1 and items_remaining > 0:
+        raise PartialSendError(f"Ran out of items ({items_remaining} remaining)")
 
 
 class RedeemRFCog(Cog):
@@ -207,6 +228,11 @@ class RedeemRFCog(Cog):
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
             logger.error(f"Error in coin redeem: {e}")
             await ctx.send(f"❌ Error: {e}. Please try again later. You have been refunded.")
+            return
+        except PartialSendError as e:
+            await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
+            logger.error(f"Partial send error in coin redeem: {e}")
+            await ctx.send(f"❌ {e}. @{os.getenv("OWNER_TWITCH_USERNAME")} pls fix")
             return
         except Exception as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
@@ -263,6 +289,8 @@ class RedeemRFCog(Cog):
         count = 1
         if args[-1].isdigit():
             count = int(args.pop())
+        elif args[-1].lower() == "all":
+            count = -1
         recipient_name = args[0]
         item_name = " ".join(args[1:])
         
@@ -271,7 +299,7 @@ class RedeemRFCog(Cog):
                 await send_coins(recipient_name, channel, count)
             else:
                 await send_items(recipient_name, channel, item_name, count)
-        except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError, ItemNotFoundError) as e:
+        except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
             logger.error(f"Error in command: {e}")
             await ctx.send(f"❌ Error: {e}")
             return
