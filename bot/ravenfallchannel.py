@@ -109,6 +109,7 @@ class RFChannel:
         self.ravenfall_loc_strings_path: str | None = config.get('ravenfall_loc_strings_path', None)
         self.auto_restore_raids: bool = config.get('auto_restore_raids', False)
         self.restart_timeout: int = int(config.get('restart_timeout', 120))
+        self.town_level_notifications: bool = bool(config.get('town_level_notifications', True))
 
         if isinstance(self.ravenbot_prefixes, str):
             self.ravenbot_prefixes = (self.ravenbot_prefixes,)
@@ -121,6 +122,7 @@ class RFChannel:
         self.event_text: str = "No active event."
         self.event: RFChannelEvent = RFChannelEvent.NONE
         self.sub_event: RFChannelSubEvent = RFChannelSubEvent.NONE
+        self.town_level: int = 0
 
         # Message waiters
         self.twitch_message_waiter: MessageWaiter = MessageWaiter()
@@ -158,6 +160,7 @@ class RFChannel:
         self.auto_restart_routine.start()
         self.dungeon_killswitch_routine.start()
         self.update_middleman_connection_status_routine.start()
+        self.town_level_notification_routine.start()
 
     async def stop(self):
         self.update_boosts_routine.cancel()
@@ -167,6 +170,7 @@ class RFChannel:
         self.auto_restart_routine.cancel()
         self.dungeon_killswitch_routine.cancel()
         self.update_middleman_connection_status_routine.cancel()
+        self.town_level_notification_routine.cancel()
 
     async def send_chat_message(self, message: str, ignore_error: bool = False):
         try:
@@ -545,6 +549,26 @@ class RFChannel:
         asyncio.create_task(self.game_event_wake_ravenbot(sub_event))
         asyncio.create_task(self.game_event_fetch_auto_raids(old_sub_event, sub_event))
     
+    @routine(delta=timedelta(seconds=46), wait_first=True, max_attempts=99999)
+    async def town_level_notification_routine(self):
+        if not self.town_level_notifications:
+            return
+        
+        village: Village = await self.get_query("select * from village")
+
+        if village['level'] == self.town_level:
+            return
+        
+        old_town_level = self.town_level
+        self.town_level = village['level']
+
+        if old_town_level <= 1:
+            return
+            
+        await self.send_chat_message(
+            f"Town level is now {self.town_level}!"
+        )
+
     async def game_event_notification(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
         if self.event_notifications:
             if old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
