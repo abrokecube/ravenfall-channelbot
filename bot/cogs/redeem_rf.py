@@ -488,8 +488,17 @@ class RedeemRFCog(Cog):
             "Stock list for channel: " + channel.channel_name,
             ""
         ]
-        for item_name, count in item_counts.items():
-            out_str.append(f"{item_name}: {count:,}")
+        in_stock = []
+        out_of_stock = []
+        for item in ravenpy.get_all_items():
+            if item.name in item_counts:
+                in_stock.append(f"{item.name}: {item_counts[item.name]:,}")
+            else:
+                out_of_stock.append(f"{item.name}: 0")
+        out_str.append("In stock:")
+        out_str.extend(in_stock)
+        out_str.append("\nOut of stock:")
+        out_str.extend(out_of_stock)
         url = await upload_to_pastes("\n".join(out_str))
         await ctx.reply(f"Stock list: {url}")
 
