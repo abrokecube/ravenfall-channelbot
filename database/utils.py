@@ -284,11 +284,12 @@ async def get_user_credits_raw(session: AsyncSession, user_id: Union[int, str]) 
     result = await session.execute(
         select(UserCredits).where(UserCredits.user_id == user_id)
     )
-    if result.scalar_one_or_none() is None:
+    result_obj = result.scalar_one_or_none()
+    if result_obj is None:
         user_credits = UserCredits(user_id=user_id, credits=0)
         session.add(user_credits)
         return user_credits
-    return result.scalar_one_or_none()
+    return result_obj
 
 async def get_user_credits(session: AsyncSession, user_id: Union[int, str]) -> int:
     user_credits = await get_user_credits_raw(session, user_id)
