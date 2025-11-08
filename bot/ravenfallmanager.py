@@ -98,6 +98,8 @@ class RFChannelManager:
                     out_message = await channel.process_ravenbot_message(message.copy(), metadata)
                 elif metadata.source.lower() == "server":
                     out_message = await channel.process_ravenfall_message(message.copy(), metadata)
+                elif metadata.source.lower() in ("API-client", "API-server"):
+                    pass
                 else:
                     logger.error(f"Unknown source: {metadata.source}")
                 break
