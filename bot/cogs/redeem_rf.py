@@ -294,6 +294,7 @@ class RedeemRFCog(Cog):
             count = int(args.pop())
         elif args[-1].lower() == "all":
             count = -1
+            args.pop()
         recipient_name = args[0]
         item_name = " ".join(args[1:])
         
