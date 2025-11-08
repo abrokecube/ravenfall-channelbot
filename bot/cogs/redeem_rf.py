@@ -15,6 +15,7 @@ from typing import Tuple
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
 import os
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,11 @@ class RedeemRFCog(Cog):
         if channel is None:
             return
         args = ctx.parameter.split()
+
+        if len(args) < 2:
+            await ctx.reply("Usage: !giftto <user> <item> [count]")
+            return
+
         count = 1
         if args[-1].isdigit():
             count = int(args.pop())
@@ -273,6 +279,8 @@ class RedeemRFCog(Cog):
             logger.error(f"Unknown error occured in command: {e}")
             await ctx.send(f"❌ An unknown error occured. Please try again later.")
             return
+            
+        await asyncio.sleep(0.5)
         await ctx.reply("Okay")
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
