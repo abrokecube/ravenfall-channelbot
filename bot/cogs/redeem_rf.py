@@ -440,6 +440,9 @@ class RedeemRFCog(Cog):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
+        if len(ctx.parameter.strip()) == 0:
+            await ctx.reply(f"Usage: !{ctx.command} <item>")
+            return
         item, count = await get_item_count(channel, ctx.parameter)
         if item is None:
             await ctx.reply(f"Could not identify item")
