@@ -240,7 +240,7 @@ class RFChannel:
         # Make sure session data messages and other things are not processed
         if message['Identifier'] != 'message':
             return message
-        match = self.rfloc.get_match(message['Format'])
+        match = self.rfloc.identify_string(message['Format'])
         key = ""
         if match is not None:
             key = match.key
@@ -1043,7 +1043,7 @@ class RFChannel:
                 msg = RavenBotTemplates.auto_raid_status(sender)
                 response = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
                 if response['success'] and response['responses']:
-                    match = self.rfloc.get_match(response['responses'][0]['Format'])
+                    match = self.rfloc.identify_string(response['responses'][0]['Format'])
                     await self.process_auto_raid(session, response['responses'][0], match.key)
     
     async def restore_auto_raids(self):

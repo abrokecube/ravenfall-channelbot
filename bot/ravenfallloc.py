@@ -148,7 +148,7 @@ class RavenfallLocalization:
             expl_args[argname] = argvalue
         return in_str.format_map(expl_args)
     
-    def get_match(self, in_str: str):
+    def identify_string(self, in_str: str):
         if in_str in self.simple_matches:
             return self.simple_matches[in_str]
         else:
@@ -169,7 +169,7 @@ class RavenfallLocalization:
             str: The translated string
         """
         if match is None:
-            matched = self.get_match(in_str)
+            matched = self.identify_string(in_str)
             if matched:
                 logger.debug(f"Matched key {matched.key}")
                 key = matched.key

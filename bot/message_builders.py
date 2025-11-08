@@ -127,11 +127,15 @@ class RavenBotMessageBuilder:
     
     def build(self) -> str:
         """Build and return the message dictionary."""
+        return json.dumps(self.build_dict())
+
+    def build_dict(self) -> Dict[str, Any]:
+        """Build and return the message dictionary."""
         if "Content" not in self.message_data:
             raise ValueError("Message content is required")
         if "Sender" not in self.message_data:
             raise ValueError("Sender is required")
-        return json.dumps(self.message_data)
+        return self.message_data
 
 
 class RavenfallMessageBuilder:

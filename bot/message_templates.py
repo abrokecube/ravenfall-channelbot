@@ -49,6 +49,25 @@ class RavenBotTemplates:
             correlation_id=correlation_id
         ).build()
 
+    @staticmethod
+    def gift_item(
+        sender: Dict[str, Any],
+        recipient_user_name: str,
+        item_name: str,
+        item_count: Optional[int] = 1,
+        correlation_id: Optional[Union[str, UUID]] = None,
+        return_dict: bool = False
+    ) -> Union[str, Dict[str, Any]]:
+        a = RavenBotMessageBuilder(
+            sender=sender,
+            identifier="gift_item",
+            correlation_id=correlation_id,
+            content=f"{recipient_user_name} {item_name} {item_count}"
+        )
+        if return_dict:
+            return a.build_dict()
+        return a.build()
+
 class RavenfallTemplates:
     """Predefined templates for Ravenfall messages."""
     

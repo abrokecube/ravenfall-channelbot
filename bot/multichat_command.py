@@ -107,6 +107,33 @@ class CharInfoResponse(TypedDict):
     data: List[CharInfo]
     error: Optional[str]
 
+class CharCoins(TypedDict):
+    twitch_id: str
+    user_name: str
+    coins: int
+
+class CharCoinsResponse(TypedDict):
+    """Response structure for total item count."""
+    status: int
+    data: List[CharCoins]
+    error: Optional[str]
+
+class CharItem(TypedDict):
+    name: str
+    amount: int
+    soulbound: bool
+    equipped: bool
+
+class CharItems(TypedDict):
+    twitch_id: str
+    user_name: str
+    items: List[CharItem]
+
+class CharItemsResponse(TypedDict):
+    """Response structure for total item count."""
+    status: int
+    data: List[CharItems]
+    error: Optional[str]
 
 async def get_desync_info() -> DesyncResponse:
     """Fetch desync information from the server.
@@ -127,11 +154,11 @@ async def get_desync_info() -> DesyncResponse:
     except Exception as e:
         return {
             "status": 500,
-            "error": f"Failed to fetch desync info: {str(e)}"
+            "error": f"Failed to fetch: {str(e)}"
         }
 
 async def get_total_item_count() -> TotalItemCountResponse:
-    """Fetch desync information from the server.
+    """Fetch total item count from the server.
     
     Returns:
         dict: The JSON response containing desync information
@@ -149,7 +176,7 @@ async def get_total_item_count() -> TotalItemCountResponse:
     except Exception as e:
         return {
             "status": 500,
-            "error": f"Failed to fetch desync info: {str(e)}"
+            "error": f"Failed to fetch: {str(e)}"
         }
 
 async def get_char_info() -> CharInfoResponse:
@@ -166,5 +193,39 @@ async def get_char_info() -> CharInfoResponse:
     except Exception as e:
         return {
             "status": 500,
-            "error": f"Failed to fetch desync info: {str(e)}"
+            "error": f"Failed to fetch: {str(e)}"
+        }
+
+async def get_char_items(channel_id: str) -> CharItemsResponse:
+    url = f"{BASE_URL}/get_char_items/{channel_id}"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response_data = await response.json()
+                return {
+                    "status": response.status,
+                    "data": response_data['data']
+                }
+    except Exception as e:
+        return {
+            "status": 500,
+            "error": f"Failed to fetch: {str(e)}"
+        }
+
+async def get_char_coins(channel_id: str) -> CharCoinsResponse:
+    url = f"{BASE_URL}/get_char_coins/{channel_id}"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response_data = await response.json()
+                return {
+                    "status": response.status,
+                    "data": response_data['data']
+                }
+    except Exception as e:
+        return {
+            "status": 500,
+            "error": f"Failed to fetch: {str(e)}"
         }
