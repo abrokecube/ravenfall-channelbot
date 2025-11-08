@@ -297,8 +297,8 @@ class RedeemRFCog(Cog):
 
     @Cog.redeem(name="Lurking!")
     async def lurking(self, ctx: RedeemContext):
-        await self.send_item_credits_redeem(ctx, ctx.redemption.reward.cost, quiet=True)
         await ctx.send("Thanks for lurking!")
+        await self.send_item_credits_redeem(ctx, ctx.redemption.reward.cost, quiet=True)
 
     @Cog.redeem(name="Get 100 item credits")
     async def item_credits_100(self, ctx: RedeemContext):
