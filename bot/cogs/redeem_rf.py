@@ -131,7 +131,7 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
             total_coins += user["coins"]
 
         if total_coins < amount:
-            raise OutOfItemsError("Not enough coins")
+            raise OutOfItemsError("Not enough stock")
 
         if amount != -1:
             coins_remaining = amount
@@ -205,7 +205,7 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
 
         random.shuffle(user_items)
         if total_items < amount:
-            raise OutOfItemsError("Not enough items")
+            raise OutOfItemsError("Not enough stock")
 
         if amount != -1:
             items_remaining = amount
@@ -260,7 +260,12 @@ class RedeemRFCog(Cog):
         await ctx.send(f"Sending {amount:,} coins to {ctx.redemption.user_login}...")
         try:
             await send_coins(ctx.redemption.user_login, channel, amount)
-        except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError) as e:
+        except OutOfItemsError as e:
+            await ctx.cancel()
+            logger.error(f"Error in coin redeem: {e}")
+            await ctx.send(f"There are not enough coins in stock. You have been refunded.")
+            return
+        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError) as e:
             await ctx.cancel()
             logger.error(f"Error in coin redeem: {e}")
             await ctx.send(f"❌ Error: {e}. Please try again later. You have been refunded.")
@@ -402,7 +407,11 @@ class RedeemRFCog(Cog):
 
         try:
             await send_items(ctx.msg.user.name, channel, item.name, count)
-        except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
+        except OutOfItemsError as e:
+            logger.error(f"Error in item redeem: {e}")
+            await ctx.send(f"There are not enough items in stock. Your credits were not deducted.")
+            return
+        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
             logger.error(f"Error in command: {e}")
             await ctx.send(f"❌ Error: {e}. Your credits were not deducted.")
             return
@@ -413,7 +422,7 @@ class RedeemRFCog(Cog):
 
         async with get_async_session() as session:
             trans_id = await add_credits(session, ctx.msg.user.id, -price * count, f"Shop purchase: {item.name} x{count}")
-            
+
         await asyncio.sleep(0.5)
         await ctx.reply(f"You have been given {count:,}× {item.name}{pl(count, '', '(s)')}. (ID: {trans_id})")
 
@@ -465,7 +474,11 @@ class RedeemRFCog(Cog):
                 await send_coins(recipient_name, channel, count)
             else:
                 await send_items(recipient_name, channel, item_name, count)
-        except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
+        except OutOfItemsError as e:
+            logger.error(f"Error in item redeem: {e}")
+            await ctx.send(f"There are not enough items in stock.")
+            return
+        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
             logger.error(f"Error in command: {e}")
             await ctx.send(f"❌ Error: {e}")
             return
