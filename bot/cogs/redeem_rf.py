@@ -413,7 +413,9 @@ class RedeemRFCog(Cog):
 
         async with get_async_session() as session:
             trans_id = await add_credits(session, ctx.msg.user.id, -price * count, f"Shop purchase: {item.name} x{count}")
-            await ctx.reply(f"You have been given {count:,}× {item.name}{pl(count, '', '(s)')}. (ID: {trans_id})")
+            
+        await asyncio.sleep(0.5)
+        await ctx.reply(f"You have been given {count:,}× {item.name}{pl(count, '', '(s)')}. (ID: {trans_id})")
 
 
     @Cog.command(name="stock coins")
