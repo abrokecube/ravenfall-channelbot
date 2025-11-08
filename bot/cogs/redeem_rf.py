@@ -57,53 +57,53 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 10):
     )
 
 
+async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
+    char_coins = await get_char_coins(channel.channel_id)
+
+    total_coins = 0
+    for user in char_coins["data"]:
+        if user["coins"] <= 0:
+            continue
+        if user["user_name"].lower() == target_user_name.lower():
+            continue
+        total_coins += user["coins"]
+
+    if total_coins < amount:
+        raise OutOfCoinsError("Not enough coins")
+
+    coins_remaining = amount
+    for user in char_coins["data"]:
+        if coins_remaining <= 0:
+            break
+        if user["coins"] <= 0:
+            continue
+        if user["user_name"].lower() == target_user_name.lower():
+            continue
+        coins_to_send = min(coins_remaining, user["coins"])
+
+        logger.info(f"Sending {coins_to_send} coins to {target_user_name} from {user['user_name']}")
+        response = await send_ravenfall(
+            channel, RavenBotTemplates.gift_item(
+                sender = await get_sender_str(channel, user["user_name"]),
+                recipient_user_name = target_user_name,
+                item_name = "coins",
+                item_count = coins_to_send,
+            )
+        )
+        if response.response_id not in ("gift_coins", "gift_coins_one"):
+            logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {response.response_id}")
+            raise CouldNotSendCoinsError("Failed to send coins")
+
+        coins_remaining -= coins_to_send
+
+    if coins_remaining > 0:
+        raise OutOfCoinsError("Ran out of coins")
+        
+
 class RedeemRFCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
-    
-    async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
-        char_coins = await get_char_coins(channel.channel_id)
-
-        total_coins = 0
-        for user in char_coins["data"]:
-            if user["coins"] <= 0:
-                continue
-            if user["user_name"].lower() == target_user_name.lower():
-                continue
-            total_coins += user["coins"]
-
-        if total_coins < amount:
-            raise OutOfCoinsError("Not enough coins")
-
-        coins_remaining = amount
-        for user in char_coins["data"]:
-            if coins_remaining <= 0:
-                break
-            if user["coins"] <= 0:
-                continue
-            if user["user_name"].lower() == target_user_name.lower():
-                continue
-            coins_to_send = min(coins_remaining, user["coins"])
-
-            logger.info(f"Sending {coins_to_send} coins to {target_user_name} from {user['user_name']}")
-            response = await send_ravenfall(
-                channel, RavenBotTemplates.gift_item(
-                    sender = await get_sender_str(channel, user["user_name"]),
-                    recipient_user_name = target_user_name,
-                    item_name = "coins",
-                    item_count = coins_to_send,
-                )
-            )
-            if response.response_id not in ("gift_coins", "gift_coins_one"):
-                logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {response.response_id}")
-                raise CouldNotSendCoinsError("Failed to send coins")
-
-            coins_remaining -= coins_to_send
-
-        if coins_remaining > 0:
-            raise OutOfCoinsError("Ran out of coins")
-        
 
     @Cog.redeem(name="Recieve 25,000 coins")
     async def coins_25_000(self, ctx: RedeemContext):
@@ -111,7 +111,7 @@ class RedeemRFCog(Cog):
         if channel is None:
             return
         try:
-            await self.send_coins(ctx.redemption.broadcaster_user_login, channel, 25000)
+            await send_coins(ctx.redemption.broadcaster_user_login, channel, 25000)
         except (CouldNotSendMessageError, CouldNotSendCoinsError, OutOfCoinsError, TimeoutError) as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
             logger.error(f"Error in coins_25_000: {e}")
