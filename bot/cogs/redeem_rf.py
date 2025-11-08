@@ -33,7 +33,7 @@ class OutOfCoinsError(Exception):
     pass
 
 async def get_sender_str(channel: RFChannel, sender_username: str):
-    with get_async_session() as session:
+    async with get_async_session() as session:
         sender = await get_formatted_sender_data(session, channel.channel_id, sender_username)
     return sender
 
