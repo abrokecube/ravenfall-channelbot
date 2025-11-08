@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from bot.messageprocessor import RavenfallMessage
 import logging
 import json
-from typing import Tuple
+from typing import Dict, Tuple
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
 import os
@@ -100,119 +100,135 @@ async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]
                 break
     return item, total_items
 
+channel_coin_gift_locks: Dict[str, asyncio.Lock] = {}
 async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
-    char_coins = await get_char_coins(channel.channel_id)
-    total_coins = 0
-    random.shuffle(char_coins["data"])
-    for user in char_coins["data"]:
-        if user["coins"] <= 0:
-            continue
-        if user["user_name"].lower() == target_user_name.lower():
-            continue
-
-        total_coins += user["coins"]
-
-    if total_coins < amount:
-        raise OutOfItemsError("Not enough coins")
-
-    if amount != -1:
-        coins_remaining = amount
+    if channel.channel_id in channel_coin_gift_locks:
+        lock = channel_coin_gift_locks[channel.channel_id]
     else:
-        coins_remaining = total_coins
-    one_coin_successful = False
-    for user in char_coins["data"]:
-        if coins_remaining <= 0:
-            break
-        if user["coins"] <= 0:
-            continue
-        if user["user_name"].lower() == target_user_name.lower():
-            continue
-        coins_to_send = min(coins_remaining, user["coins"])
+        lock = asyncio.Lock()
+        channel_coin_gift_locks[channel.channel_id] = lock
 
-        logger.info(f"Sending {coins_to_send} coins to {target_user_name} from {user['user_name']}")
-        response = await send_ravenfall(
-            channel, RavenBotTemplates.gift_item(
-                sender = await get_sender_str(channel, user["user_name"]),
-                recipient_user_name = target_user_name,
-                item_name = "coins",
-                item_count = coins_to_send,
-            )
-        )
-        if response.response_id not in ("gift_coins", "gift_coins_one"):
-            logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {response.response_id}")
-            if not one_coin_successful:
-                raise CouldNotSendItemsError("Failed to send coins")
-        if response.response_id == "gift_coins_one":
-            coins_to_send = 1
-        else:
-            coins_to_send = int(response.response["Args"][1])
-        coins_remaining -= coins_to_send
-        one_coin_successful = True
-
-    if amount != -1 and coins_remaining > 0:
-        raise PartialSendError(f"Ran out of coins ({coins_remaining} remaining)")
-
-async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int):
-    item_search_results = ravenpy.search_item(item_name, limit=1)
-    if not item_search_results:
-        raise ItemNotFoundError("Item not found")
-    if item_search_results[0][1] < 85:
-        raise ItemNotFoundError("Item not found")
-    item = item_search_results[0][0]
-
-    char_items = await get_char_items(channel.channel_id)
-    total_items = 0
-    user_items = []
-    for user in char_items["data"]:
-        if user["user_name"].lower() == target_user_name.lower():
-            continue
-        for user_item in user["items"]:
-            if user_item['soulbound'] or user_item['equipped']:
+    async with lock:
+        char_coins = await get_char_coins(channel.channel_id)
+        total_coins = 0
+        random.shuffle(char_coins["data"])
+        for user in char_coins["data"]:
+            if user["coins"] <= 0:
                 continue
-            if user_item["id"] == item.id:
-                total_items += user_item["amount"]
-                user_items.append({
-                    "user_name": user["user_name"],
-                    "amount": user_item["amount"],
-                })
-                break
+            if user["user_name"].lower() == target_user_name.lower():
+                continue
 
-    random.shuffle(user_items)
-    if total_items < amount:
-        raise OutOfItemsError("Not enough items")
+            total_coins += user["coins"]
 
-    if amount != -1:
-        items_remaining = amount
-    else:
-        items_remaining = total_items
-    one_item_successful = False
-    for user_item in user_items:
-        if items_remaining <= 0:
-            break
-        items_to_send = min(items_remaining, user_item["amount"])
+        if total_coins < amount:
+            raise OutOfItemsError("Not enough coins")
 
-        logger.info(f"Sending {items_to_send}x {item.name} to {target_user_name} from {user_item['user_name']}")
-        response = await send_ravenfall(
-            channel, RavenBotTemplates.gift_item(
-                sender = await get_sender_str(channel, user_item["user_name"]),
-                recipient_user_name = target_user_name,
-                item_name = item.name,
-                item_count = items_to_send,
-            )
-        )
-        if response.response_id not in ("gift", "gift_item_not_owned"):
-            logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")
-            if not one_item_successful:
-                raise CouldNotSendItemsError("Failed to send items")
-        if response.response_id == "gift_item_not_owned":
-            items_to_send = 0
+        if amount != -1:
+            coins_remaining = amount
         else:
-            items_to_send = int(response.response["Args"][0])
-        items_remaining -= items_to_send
-        one_item_successful = True
+            coins_remaining = total_coins
+        one_coin_successful = False
+        for user in char_coins["data"]:
+            if coins_remaining <= 0:
+                break
+            if user["coins"] <= 0:
+                continue
+            if user["user_name"].lower() == target_user_name.lower():
+                continue
+            coins_to_send = min(coins_remaining, user["coins"])
 
-    if amount != -1 and items_remaining > 0:
-        raise PartialSendError(f"Ran out of items ({items_remaining} remaining)")
+            logger.info(f"Sending {coins_to_send} coins to {target_user_name} from {user['user_name']}")
+            response = await send_ravenfall(
+                channel, RavenBotTemplates.gift_item(
+                    sender = await get_sender_str(channel, user["user_name"]),
+                    recipient_user_name = target_user_name,
+                    item_name = "coins",
+                    item_count = coins_to_send,
+                )
+            )
+            if response.response_id not in ("gift_coins", "gift_coins_one"):
+                logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {response.response_id}")
+                if not one_coin_successful:
+                    raise CouldNotSendItemsError("Failed to send coins")
+            if response.response_id == "gift_coins_one":
+                coins_to_send = 1
+            else:
+                coins_to_send = int(response.response["Args"][1])
+            coins_remaining -= coins_to_send
+            one_coin_successful = True
+
+        if amount != -1 and coins_remaining > 0:
+            raise PartialSendError(f"Ran out of coins ({coins_remaining} remaining)")
+
+channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
+async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int):
+    if channel.channel_id in channel_coin_gift_locks:
+        lock = channel_coin_gift_locks[channel.channel_id]
+    else:
+        lock = asyncio.Lock()
+        channel_coin_gift_locks[channel.channel_id] = lock
+
+    async with lock:
+        item_search_results = ravenpy.search_item(item_name, limit=1)
+        if not item_search_results:
+            raise ItemNotFoundError("Item not found")
+        if item_search_results[0][1] < 85:
+            raise ItemNotFoundError("Item not found")
+        item = item_search_results[0][0]
+
+        char_items = await get_char_items(channel.channel_id)
+        total_items = 0
+        user_items = []
+        for user in char_items["data"]:
+            if user["user_name"].lower() == target_user_name.lower():
+                continue
+            for user_item in user["items"]:
+                if user_item['soulbound'] or user_item['equipped']:
+                    continue
+                if user_item["id"] == item.id:
+                    total_items += user_item["amount"]
+                    user_items.append({
+                        "user_name": user["user_name"],
+                        "amount": user_item["amount"],
+                    })
+                    break
+
+        random.shuffle(user_items)
+        if total_items < amount:
+            raise OutOfItemsError("Not enough items")
+
+        if amount != -1:
+            items_remaining = amount
+        else:
+            items_remaining = total_items
+        one_item_successful = False
+        for user_item in user_items:
+            if items_remaining <= 0:
+                break
+            items_to_send = min(items_remaining, user_item["amount"])
+
+            logger.info(f"Sending {items_to_send}x {item.name} to {target_user_name} from {user_item['user_name']}")
+            response = await send_ravenfall(
+                channel, RavenBotTemplates.gift_item(
+                    sender = await get_sender_str(channel, user_item["user_name"]),
+                    recipient_user_name = target_user_name,
+                    item_name = item.name,
+                    item_count = items_to_send,
+                )
+            )
+            if response.response_id not in ("gift", "gift_item_not_owned"):
+                logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")
+                if not one_item_successful:
+                    raise CouldNotSendItemsError("Failed to send items")
+            if response.response_id == "gift_item_not_owned":
+                items_to_send = 0
+            else:
+                items_to_send = int(response.response["Args"][0])
+            items_remaining -= items_to_send
+            one_item_successful = True
+
+        if amount != -1 and items_remaining > 0:
+            raise PartialSendError(f"Ran out of items ({items_remaining} remaining)")
 
 
 class RedeemRFCog(Cog):
