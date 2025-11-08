@@ -45,7 +45,7 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 10):
     if response["timeout"]:
         raise TimeoutError("Timed out waiting for response")
     response_dict = response["responses"][0]
-    print(response_dict)
+    response_dict["CorrelationId"] = None
     await send_to_client(channel.middleman_connection_id, json.dumps(response_dict))
 
     match = channel.rfloc.identify_string(response_dict['Format'])
