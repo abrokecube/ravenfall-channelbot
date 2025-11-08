@@ -180,10 +180,13 @@ class RFRestartTask:
     async def _execute(self):
         self.event_watch_task.cancel()
         self._status = RestartStatus.RESTARTING
-        await self.channel._restart_ravenfall(
-            run_pre_restart=False,
-            run_post_restart=True
-        )
+        try:
+            await self.channel._restart_ravenfall(
+                run_pre_restart=False,
+                run_post_restart=True
+            )
+        except Exception as e:
+            logger.error(f"Failed to restart Ravenfall for {self.channel.channel_name}: {e}", exc_info=True)
         self.done = True
         self._status = RestartStatus.FINISHED
 
