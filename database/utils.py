@@ -301,4 +301,5 @@ async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: i
     user_credits.credits += amount
     transaction = UserCreditTransaction(user_id=user_id, credits=amount, description=description, timestamp=datetime.now())
     session.add(transaction)
+    session.flush()
     return transaction.id
