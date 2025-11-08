@@ -20,6 +20,7 @@ import asyncio
 import random
 import json
 from twitchAPI.helper import first
+from utils.utils import upload_to_pastes
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ async def get_coins_count(channel: RFChannel):
         total_coins += user["coins"]
     return total_coins
 
-async def get_item(item_name: str) -> Item:
+def get_item(item_name: str) -> Item:
     item_search_results = ravenpy.search_item(item_name, limit=1)
     if not item_search_results:
         return None
@@ -96,7 +97,7 @@ async def get_item(item_name: str) -> Item:
     return item_search_results[0][0]
 
 async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]:
-    item = await get_item(item_name)
+    item = get_item(item_name)
     if item is None:
         return None, 0
     char_items = await get_char_items(channel.channel_id)
@@ -109,6 +110,22 @@ async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]
                 total_items += user_item["amount"]
                 break
     return item, total_items
+
+async def get_all_item_count(channel: RFChannel) -> Dict[str, int]:
+    char_items = await get_char_items(channel.channel_id)
+    total_items = {}
+    for user in char_items["data"]:
+        for user_item in user["items"]:
+            if user_item['soulbound'] or user_item['equipped']:
+                continue
+            item = ravenpy._items_id_data.get(user_item["id"])
+            if item is None:
+                continue
+            if item.name in total_items:
+                total_items[item.name] += user_item["amount"]
+            else:
+                total_items[item.name] = user_item["amount"]
+    return total_items
 
 channel_coin_gift_locks: Dict[str, asyncio.Lock] = {}
 async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
@@ -350,7 +367,7 @@ class RedeemRFCog(Cog):
         if not item_name:
             await ctx.reply(f"Usage: !{ctx.command} <item>")
             return
-        item = await get_item(item_name)
+        item = get_item(item_name)
         if item is None:
             await ctx.reply("Item not found")
             return
@@ -388,7 +405,7 @@ class RedeemRFCog(Cog):
             count = int(args.pop())
         item_name = " ".join(args)
 
-        item = await get_item(item_name)
+        item = get_item(item_name)
         if item is None:
             await ctx.reply("Item not found")
             return
@@ -461,6 +478,21 @@ class RedeemRFCog(Cog):
             return
         await ctx.reply(f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.")
     
+    @Cog.command(name="stock all")
+    async def stock_all(self, ctx: CommandContext):
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        item_counts = await get_all_item_count(channel)
+        out_str = [
+            "Stock list for channel: " + channel.channel_name,
+            ""
+        ]
+        for item_name, count in item_counts.items():
+            out_str.append(f"{item_name}: {count:,}")
+        url = await upload_to_pastes("\n".join(out_str))
+        await ctx.reply(f"Stock list: {url}")
+
     @Cog.command(name="giftto")
     async def giftto(self, ctx: CommandContext):
         if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
