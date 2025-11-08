@@ -146,7 +146,7 @@ class GameCog(Cog):
         seconds = 5*60
         if len(args) > 0 and args[0].isdigit():
             seconds = int(args[0])
-        channel.queue_restart(seconds, label="User restart", reason=RestartReason.USER)
+        channel.queue_restart(seconds, label="User restart", reason=RestartReason.USER, overwrite_same_reason=True)
         await ctx.reply(f"Restart queued. Restarting in {seconds}s.")
 
     @Cog.command(

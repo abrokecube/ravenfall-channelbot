@@ -134,7 +134,6 @@ class RFChannel:
 
         self.global_restart_lock: asyncio.Lock = manager.global_restart_lock
         self.channel_restart_lock: asyncio.Lock = asyncio.Lock()
-        self.channel_restart_future: asyncio.Future | None = None
         self.channel_post_restart_lock: asyncio.Lock = asyncio.Lock()
 
         self.restart_task: RFRestartTask | None = None
@@ -725,10 +724,6 @@ class RFChannel:
         run_post_restart: bool = True,
         silent: bool = False,
     ):
-        if self.channel_restart_future and not self.channel_restart_future.done():
-            return await self.channel_restart_future
-        self.channel_restart_future = asyncio.Future()
-
         if run_pre_restart:
             await self._ravenfall_pre_restart()
             
@@ -748,7 +743,6 @@ class RFChannel:
             logger.error(f"Failed to restart Ravenfall for {self.channel_name}: code {code}, text {text}")
             if not silent:
                 await self.send_chat_message("Failed to restart Ravenfall!")
-            self.channel_restart_future.set_result(False)
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
             return False
@@ -767,7 +761,6 @@ class RFChannel:
         if not authenticated:
             await self.send_chat_message(f"Restart failed {(pinging @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')})}")
             logger.error(f"Failed to authenticate Ravenfall for {self.channel_name}")
-            self.channel_restart_future.set_result(False)
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
             return False
@@ -790,7 +783,6 @@ class RFChannel:
         self.channel_restart_lock.release()
         self.global_restart_lock.release()
 
-        self.channel_restart_future.set_result(True)
         return True
 
     async def _ravenfall_post_restart(self):
