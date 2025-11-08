@@ -801,6 +801,9 @@ class RFChannel:
             session: GameSession = await self.get_query("select * from session", 5, suppress_timeout_error=True)
             if session['players'] > 0:
                 break
+
+        logger.info(f"{self.channel_name}: Players are being joined back")
+
         # Wait for the game to finish rejoining players
         player_count = 0
         while True:
@@ -810,7 +813,9 @@ class RFChannel:
             if player_count > 0 and new_player_count == player_count:
                 break
             player_count = new_player_count
-            
+
+        logger.info(f"{self.channel_name}: Players have returned")
+
         r = await send_multichat_command(
             text="?undorandleave",
             user_id=self.channel_id,
