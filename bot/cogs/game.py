@@ -33,17 +33,18 @@ class GameCog(Cog):
         if channel is None:
             return
         restart_task = channel.restart_task
+        ch = 'locked' if channel.channel_restart_lock.locked() else 'unlocked'
+        gl = 'locked' if channel.global_restart_lock.locked() else 'unlocked'
+
         if restart_task is None:
             await ctx.reply("No restart task found.")
             return
+        if restart_task.finished():
+            await ctx.reply(f"Last restart task finished. (status: {restart_task.get_status().value}, ch: {ch}, gl: {gl})")
+            return
         time_left = restart_task.get_time_left()
         if time_left <= 0:
-            ch = 'locked' if channel.channel_restart_lock.locked() else 'unlocked'
-            gl = 'locked' if channel.global_restart_lock.locked() else 'unlocked'
             await ctx.reply(f"A restart is currently in progress. (status: {restart_task.get_status().value}, ch: {ch}, gl: {gl})")
-            return
-        if restart_task.finished():
-            await ctx.reply("No restart task found.")
             return
         task_label = restart_task.label
         out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}."
