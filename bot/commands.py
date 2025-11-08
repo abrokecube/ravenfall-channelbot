@@ -269,6 +269,12 @@ class RedeemContext:
             )
         else:
             raise ValueError(f"Redemption is not in the UNFULFILLED state (current: {self.redemption.status})")
+    
+    async def fullfill(self):
+        await self.update_status(CustomRewardRedemptionStatus.FULFILLED)
+    
+    async def cancel(self):
+        await self.update_status(CustomRewardRedemptionStatus.CANCELED)
 
     async def send(self, text: str):
         await self.bot.chat.send_message(self.redemption.broadcaster_user_login, text)

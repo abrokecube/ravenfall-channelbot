@@ -86,6 +86,23 @@ class TwitchAuth(Base):
     access_token = Column(String)
     refresh_token = Column(String)
 
+class UserCredits(Base):
+    __tablename__ = 'user_credits'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+    credits = Column(Integer, default=0)
+
+class UserCreditTransaction(Base):
+    __tablename__ = 'user_credit_transaction'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+    credits = Column(Integer)
+    description = Column(String)
+    timestamp = Column(DateTime)
+    
+
 
 async def create_all_tables():
     async with engine.begin() as conn:

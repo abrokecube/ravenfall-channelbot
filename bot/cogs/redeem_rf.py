@@ -1,12 +1,12 @@
 from bot.ravenfallchannel import RFChannel
-from ..commands import CommandContext, Commands, RedeemContext, CustomRewardRedemptionStatus
+from ..commands import CommandContext, Commands, RedeemContext
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
 from database.session import get_async_session
-from database.utils import get_formatted_sender_data
+from database.utils import get_formatted_sender_data, add_credits, get_user_credits
 from dataclasses import dataclass
 from bot.messageprocessor import RavenfallMessage
 import logging
@@ -244,21 +244,20 @@ class RedeemRFCog(Cog):
         try:
             await send_coins(ctx.redemption.user_login, channel, amount)
         except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError) as e:
-            await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
+            await ctx.cancel()
             logger.error(f"Error in coin redeem: {e}")
             await ctx.send(f"❌ Error: {e}. Please try again later. You have been refunded.")
             return
         except PartialSendError as e:
-            await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
             logger.error(f"Partial send error in coin redeem: {e}")
-            await ctx.send(f"❌ {e}. @{os.getenv("OWNER_TWITCH_USERNAME")} pls fix")
+            await ctx.send(f"❌ {e}. pinging @{os.getenv("OWNER_TWITCH_USERNAME")}")
             return
         except Exception as e:
-            await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
+            await ctx.cancel()
             logger.error(f"Unknown error occured in coin redeem: {e}")
             await ctx.send(f"❌ An unknown error occured. Please try again later. You have been refunded.")
             return
-        await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
+        await ctx.fullfill()
     
     @Cog.redeem(name="Recieve 25,000 coins")
     async def coins_25_000(self, ctx: RedeemContext):
@@ -271,6 +270,26 @@ class RedeemRFCog(Cog):
     @Cog.redeem(name="Recieve 1,000,000 coins")
     async def coins_1_000_000(self, ctx: RedeemContext):
         await self.send_coins_redeem(ctx, 1000000)
+
+    @Cog.redeem(name="Recieve 100 item credits")
+    async def item_credits_100(self, ctx: RedeemContext):
+        async with get_async_session() as session:
+            await add_credits(session, ctx.redemption.user_id, 100, "Item credits redeem")
+
+    @Cog.redeem(name="Recieve 500 item credits")
+    async def item_credits_500(self, ctx: RedeemContext):
+        async with get_async_session() as session:
+            await add_credits(session, ctx.redemption.user_id, 500, "Item credits redeem")
+
+    @Cog.redeem(name="Recieve 3000 item credits")
+    async def item_credits_3000(self, ctx: RedeemContext):
+        async with get_async_session() as session:
+            await add_credits(session, ctx.redemption.user_id, 3000, "Item credits redeem")
+
+    @Cog.redeem(name="Recieve 15,000 item credits")
+    async def item_credits_15_000(self, ctx: RedeemContext):
+        async with get_async_session() as session:
+            await add_credits(session, ctx.redemption.user_id, 15000, "Item credits redeem")
 
     @Cog.command(name="stock coins")
     async def stock_coins(self, ctx: CommandContext):

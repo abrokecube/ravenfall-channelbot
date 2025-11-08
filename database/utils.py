@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from database.models import User, Channel, Character, SenderData, TwitchAuth
+from database.models import User, Channel, Character, SenderData, TwitchAuth, UserCredits, UserCreditTransaction
 from typing import Union, Optional, Tuple
 from sqlalchemy import select
 
@@ -279,3 +279,24 @@ async def update_tokens(session: AsyncSession, user_id: Union[int, str], access_
         result.access_token = access_token
         result.refresh_token = refresh_token
         result.user_name = user_name
+
+async def get_user_credits_raw(session: AsyncSession, user_id: Union[int, str]) -> UserCredits:
+    result = await session.execute(
+        select(UserCredits).where(UserCredits.user_id == user_id)
+    )
+    if result.scalar_one_or_none() is None:
+        user_credits = UserCredits(user_id=user_id, credits=0)
+        session.add(user_credits)
+        return user_credits
+    return result.scalar_one_or_none()
+
+async def get_user_credits(session: AsyncSession, user_id: Union[int, str]) -> int:
+    user_credits = await get_user_credits_raw(session, user_id)
+    return user_credits.credits
+
+async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: int, description: str) -> int:
+    user_credits = await get_user_credits_raw(session, user_id)
+    user_credits.credits += amount
+    transaction = UserCreditTransaction(user_id=user_id, credits=amount, description=description)
+    session.add(transaction)
+    return transaction.id
