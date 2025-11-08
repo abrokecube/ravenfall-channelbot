@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from bot.messageprocessor import RavenfallMessage
 import logging
 import json
+from typing import Tuple
+from ravenpy import ravenpy
+from ravenpy.ravenpy import Item
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +61,38 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 10):
         formatted_response = channel.rfloc.translate_string(response_dict['Format'], response_dict['Args'], match).strip()
     )
 
-
-async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
+async def get_coins_count(channel: RFChannel):
     char_coins = await get_char_coins(channel.channel_id)
-
     total_coins = 0
     for user in char_coins["data"]:
         if user["coins"] <= 0:
             continue
-        if user["user_name"].lower() == target_user_name.lower():
-            continue
         total_coins += user["coins"]
+    return total_coins
+
+
+
+async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]:
+    item_search_results = ravenpy.search_item(item_name, limit=1)
+    if not item_search_results:
+        return None, 0
+    if item_search_results[0][1] < 85:
+        return None, 0
+    item = item_search_results[0][0]
+
+    char_items = await get_char_items(channel.channel_id)
+    total_items = 0
+    for user in char_items["data"]:
+        for user_item in user["items"]:
+            if user_item['soulbound'] or user_item['equipped']:
+                continue
+            if user_item["id"] == item.id:
+                total_items += user_item["amount"]
+                break
+    return item, total_items
+
+async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
+    total_coins = await get_coins_count(channel)
 
     if total_coins < amount:
         raise OutOfCoinsError("Not enough coins")
@@ -124,8 +148,27 @@ class RedeemRFCog(Cog):
             logger.error(f"Unknown error occured in coins_25_000: {e}")
             await ctx.send(f"❌ Unknown error occured - points have been refunded")
             return
-        await ctx.send(f"Gifted 25,000 coins to {ctx.redemption.user_login}!")
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
+    
+    @Cog.command(name="stock coins")
+    async def stock_coins(self, ctx: CommandContext):
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        count = await get_coins_count(channel)
+        await ctx.reply(f"There are currently {count:,} coins in stock.")
+
+    @Cog.command(name="stock")
+    async def stock_item(self, ctx: CommandContext):
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        item, count = await get_item_count(channel, ctx.parameter)
+        if item is None:
+            await ctx.reply(f"Item not found")
+            return
+        await ctx.reply(f"There is currently {count:,}× {item.name} in stock.")
+
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

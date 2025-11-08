@@ -119,7 +119,7 @@ class CharCoinsResponse(TypedDict):
     error: Optional[str]
 
 class CharItem(TypedDict):
-    name: str
+    id: str
     amount: int
     soulbound: bool
     equipped: bool
