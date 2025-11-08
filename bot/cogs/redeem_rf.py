@@ -92,7 +92,12 @@ async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]
     return item, total_items
 
 async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
-    total_coins = await get_coins_count(channel)
+    char_coins = await get_char_coins(channel.channel_id)
+    total_coins = 0
+    for user in char_coins["data"]:
+        if user["coins"] <= 0:
+            continue
+        total_coins += user["coins"]
 
     if total_coins < amount:
         raise OutOfCoinsError("Not enough coins")
@@ -165,7 +170,7 @@ class RedeemRFCog(Cog):
             return
         item, count = await get_item_count(channel, ctx.parameter)
         if item is None:
-            await ctx.reply(f"Item not found")
+            await ctx.reply(f"Could not identify item")
             return
         await ctx.reply(f"There is currently {count:,}× {item.name} in stock.")
 
