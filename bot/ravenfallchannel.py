@@ -707,7 +707,6 @@ class RFChannel:
         self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO)
 
     async def _ravenfall_pre_restart(self):
-        logger.info(f"Running pre restart for {self.channel_name}")
         await self.fetch_all_training()
         r = await send_multichat_command(
             text="?randleave",
@@ -718,7 +717,6 @@ class RFChannel:
         )
         if r['status'] != 200:
             await self.send_chat_message("?randleave")
-        logger.info(f"Pre restart for {self.channel_name} completed.")
 
     async def _restart_ravenfall(
         self, 
@@ -781,15 +779,14 @@ class RFChannel:
             except Exception as e:
                 logger.error(f"Failed to run post restart for {self.channel_name}: {e}")
             self.channel_post_restart_lock.release()
-
-        self.channel_restart_lock.release()
-        self.global_restart_lock.release()
+        else:
+            self.channel_restart_lock.release()
+            self.global_restart_lock.release()
 
         return True
 
     async def _ravenfall_post_restart(self):
         # Wait for the game to start rejoining players
-        logger.info(f"Running post restart for {self.channel_name}")
         start_time = time.time()
         while True:
             if time.time() - start_time > self.restart_timeout:
@@ -802,8 +799,6 @@ class RFChannel:
             if session['players'] > 0:
                 break
 
-        logger.info(f"{self.channel_name}: Players are being joined back")
-
         # Wait for the game to finish rejoining players
         player_count = 0
         while True:
@@ -813,8 +808,6 @@ class RFChannel:
             if player_count > 0 and new_player_count == player_count:
                 break
             player_count = new_player_count
-
-        logger.info(f"{self.channel_name}: Players have returned")
 
         r = await send_multichat_command(
             text="?undorandleave",
@@ -840,7 +833,6 @@ class RFChannel:
             # await self.restore_auto_raids()
         if self.manager.middleman_connected and self.auto_restore_raids:
             await self.restore_auto_raids()
-        logger.info(f"Post restart for {self.channel_name} completed.")
 
     async def restart_ravenbot(self):
         await restart_process(
