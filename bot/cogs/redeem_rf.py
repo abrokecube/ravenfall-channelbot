@@ -433,7 +433,7 @@ class RedeemRFCog(Cog):
         if channel is None:
             return
         count = await get_coins_count(channel)
-        await ctx.reply(f"There are currently {count:,} {pl(count, 'coin', 'coins')} in stock.")
+        await ctx.reply(f"There {pl(count, 'is', 'are')} currently {count:,} {pl(count, 'coin', 'coins')} in stock.")
 
     @Cog.command(name="stock")
     async def stock_item(self, ctx: CommandContext):
@@ -447,7 +447,7 @@ class RedeemRFCog(Cog):
         if item is None:
             await ctx.reply(f"Could not identify item")
             return
-        await ctx.reply(f"There is currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.")
+        await ctx.reply(f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.")
     
     @Cog.command(name="giftto")
     async def giftto(self, ctx: CommandContext):
