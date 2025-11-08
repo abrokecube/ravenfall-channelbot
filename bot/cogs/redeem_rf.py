@@ -129,33 +129,43 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
 
     if coins_remaining > 0:
         raise OutOfCoinsError("Ran out of coins")
-        
 
 class RedeemRFCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
 
-    @Cog.redeem(name="Recieve 25,000 coins")
-    async def coins_25_000(self, ctx: RedeemContext):
+    async def send_coins_redeem(self, ctx: RedeemContext, amount: int):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
         if channel is None:
             return
-        await ctx.send(f"Sending coins to {ctx.redemption.user_login}...")
+        await ctx.send(f"Sending {amount:,} coins to {ctx.redemption.user_login}...")
         try:
-            await send_coins(ctx.redemption.user_login, channel, 25000)
+            await send_coins(ctx.redemption.user_login, channel, amount)
         except (CouldNotSendMessageError, CouldNotSendCoinsError, OutOfCoinsError, TimeoutError) as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
-            logger.error(f"Error in coins_25_000: {e}")
+            logger.error(f"Error in coin redeem: {e}")
             await ctx.send(f"❌ Error: {e}. Please try again later. You have been refunded.")
             return
         except Exception as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
-            logger.error(f"Unknown error occured in coins_25_000: {e}")
+            logger.error(f"Unknown error occured in coin redeem: {e}")
             await ctx.send(f"❌ An unknown error occured. Please try again later. You have been refunded.")
             return
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
     
+    @Cog.redeem(name="Recieve 25,000 coins")
+    async def coins_25_000(self, ctx: RedeemContext):
+        await self.send_coins_redeem(ctx, 25000)
+
+    @Cog.redeem(name="Recieve 250,000 coins")
+    async def coins_250_000(self, ctx: RedeemContext):
+        await self.send_coins_redeem(ctx, 250000)
+
+    @Cog.redeem(name="Recieve 1,000,000 coins")
+    async def coins_1_000_000(self, ctx: RedeemContext):
+        await self.send_coins_redeem(ctx, 1000000)
+
     @Cog.command(name="stock coins")
     async def stock_coins(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
