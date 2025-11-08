@@ -16,6 +16,7 @@ from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
 import os
 import asyncio
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]
 async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
     char_coins = await get_char_coins(channel.channel_id)
     total_coins = 0
+    random.shuffle(char_coins["data"])
     for user in char_coins["data"]:
         if user["coins"] <= 0:
             continue
@@ -175,6 +177,7 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 })
                 break
 
+    random.shuffle(user_items)
     if total_items < amount:
         raise OutOfItemsError("Not enough items")
 
