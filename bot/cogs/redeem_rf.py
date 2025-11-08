@@ -14,6 +14,7 @@ import json
 from typing import Tuple
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +27,16 @@ class RavenfallResponse:
 class CouldNotSendMessageError(Exception):
     pass
 
-class CouldNotSendCoinsError(Exception):
+class CouldNotSendItemsError(Exception):
     pass
 
 class TimeoutError(Exception):
     pass
 
-class OutOfCoinsError(Exception):
+class OutOfItemsError(Exception):
+    pass
+
+class ItemNotFoundError(Exception):
     pass
 
 async def get_sender_str(channel: RFChannel, sender_username: str):
@@ -97,10 +101,13 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
     for user in char_coins["data"]:
         if user["coins"] <= 0:
             continue
+        if user["user_name"].lower() == target_user_name.lower():
+            continue
+
         total_coins += user["coins"]
 
     if total_coins < amount:
-        raise OutOfCoinsError("Not enough coins")
+        raise OutOfItemsError("Not enough coins")
 
     coins_remaining = amount
     for user in char_coins["data"]:
@@ -123,12 +130,65 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
         )
         if response.response_id not in ("gift_coins", "gift_coins_one"):
             logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {response.response_id}")
-            raise CouldNotSendCoinsError("Failed to send coins")
+            raise CouldNotSendItemsError("Failed to send coins")
 
         coins_remaining -= coins_to_send
 
     if coins_remaining > 0:
-        raise OutOfCoinsError("Ran out of coins")
+        raise OutOfItemsError("Ran out of coins")
+
+async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int):
+    item_search_results = ravenpy.search_item(item_name, limit=1)
+    if not item_search_results:
+        raise ItemNotFoundError("Item not found")
+    if item_search_results[0][1] < 85:
+        raise ItemNotFoundError("Item not found")
+    item = item_search_results[0][0]
+
+    char_items = await get_char_items(channel.channel_id)
+    total_items = 0
+    user_items = []
+    for user in char_items["data"]:
+        if user["user_name"].lower() == target_user_name.lower():
+            continue
+        for user_item in user["items"]:
+            if user_item['soulbound'] or user_item['equipped']:
+                continue
+            if user_item["id"] == item.id:
+                total_items += user_item["amount"]
+                user_items.append({
+                    "user_name": user["user_name"],
+                    "amount": user_item["amount"],
+                })
+                break
+
+    if total_items < amount:
+        raise OutOfItemsError("Not enough items")
+
+    items_remaining = amount
+    for user_item in user_items:
+        if items_remaining <= 0:
+            break
+        items_to_send = min(items_remaining, user_item["amount"])
+
+        logger.info(f"Sending {items_to_send}x {item.name} to {target_user_name} from {user_item['user_name']}")
+        response = await send_ravenfall(
+            channel, RavenBotTemplates.gift_item(
+                sender = await get_sender_str(channel, user_item["user_name"]),
+                recipient_user_name = target_user_name,
+                item_name = item.name,
+                item_count = items_to_send,
+            )
+        )
+        if response.response_id != "gift":
+            logger.info(f"Failed to send coins to {target_user_name} from {user_item['user_name']}: {response.response_id}")
+            raise CouldNotSendItemsError("Failed to send items")
+
+        items_remaining -= items_to_send
+
+    if items_remaining > 0:
+        raise OutOfItemsError("Ran out of items")
+
 
 class RedeemRFCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
@@ -142,7 +202,7 @@ class RedeemRFCog(Cog):
         await ctx.send(f"Sending {amount:,} coins to {ctx.redemption.user_login}...")
         try:
             await send_coins(ctx.redemption.user_login, channel, amount)
-        except (CouldNotSendMessageError, CouldNotSendCoinsError, OutOfCoinsError, TimeoutError) as e:
+        except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError) as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
             logger.error(f"Error in coin redeem: {e}")
             await ctx.send(f"❌ Error: {e}. Please try again later. You have been refunded.")
@@ -184,7 +244,36 @@ class RedeemRFCog(Cog):
             await ctx.reply(f"Could not identify item")
             return
         await ctx.reply(f"There is currently {count:,}× {item.name} in stock.")
+    
+    @Cog.command(name="giftto")
+    async def giftto(self, ctx: CommandContext):
+        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+            return
 
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        args = ctx.parameter.split()
+        count = 1
+        if args[-1].isdigit():
+            count = int(args.pop())
+        recipient_name = args[0]
+        item_name = " ".join(args[1:])
+        
+        try:
+            if item_name.lower() == "coins":
+                await send_coins(recipient_name, channel, count)
+            else:
+                await send_items(recipient_name, channel, item_name, count)
+        except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError, ItemNotFoundError) as e:
+            logger.error(f"Error in command: {e}")
+            await ctx.send(f"❌ Error: {e}")
+            return
+        except Exception as e:
+            logger.error(f"Unknown error occured in command: {e}")
+            await ctx.send(f"❌ An unknown error occured. Please try again later.")
+            return
+        await ctx.reply("Okay")
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.
