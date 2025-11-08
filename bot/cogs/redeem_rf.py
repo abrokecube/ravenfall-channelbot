@@ -3,6 +3,7 @@ from ..commands import CommandContext, Commands, RedeemContext
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client
+from ..ravenfallloc import pl
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
 from database.session import get_async_session
@@ -291,13 +292,29 @@ class RedeemRFCog(Cog):
         async with get_async_session() as session:
             await add_credits(session, ctx.redemption.user_id, 15000, "Item credits redeem")
 
+    @Cog.command(
+        name="credits balance",
+        aliases=[
+            "credits bal",
+            "credits b",
+            "creditsbal",
+            "creditsb",
+            "credits"
+        ]
+    )
+    async def credits_balance(self, ctx: CommandContext):
+        async with get_async_session() as session:
+            credits = await get_user_credits(session, ctx.msg.user.id)
+            await ctx.reply(f"You have {credits:,} item {pl(credits, 'credit', 'credits')}.")
+    
+
     @Cog.command(name="stock coins")
     async def stock_coins(self, ctx: CommandContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
         count = await get_coins_count(channel)
-        await ctx.reply(f"There are currently {count:,} coins in stock.")
+        await ctx.reply(f"There are currently {count:,} {pl(count, 'coin', 'coins')} in stock.")
 
     @Cog.command(name="stock")
     async def stock_item(self, ctx: CommandContext):
@@ -308,7 +325,7 @@ class RedeemRFCog(Cog):
         if item is None:
             await ctx.reply(f"Could not identify item")
             return
-        await ctx.reply(f"There is currently {count:,}× {item.name} in stock.")
+        await ctx.reply(f"There is currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.")
     
     @Cog.command(name="giftto")
     async def giftto(self, ctx: CommandContext):
