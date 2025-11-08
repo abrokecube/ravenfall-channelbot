@@ -361,10 +361,11 @@ class RedeemRFCog(Cog):
     @Cog.command(
         name="credits buy",
         aliases=[
-            "credits b",
             "creditsbuy",
             "credits redeem",
             "creditsredeem",
+            "credits purchase",
+            "creditspurchase",
         ]
     )
     async def credits_buy(self, ctx: CommandContext):
