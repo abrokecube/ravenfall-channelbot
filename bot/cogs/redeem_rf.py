@@ -40,7 +40,7 @@ async def get_sender_str(channel: RFChannel, sender_username: str):
         sender = await get_formatted_sender_data(session, channel.channel_id, sender_username)
     return sender
 
-async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 10):
+async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 20):
     response = await send_to_server_and_wait_response(channel.middleman_connection_id, message, timeout=timeout)
     if not response["success"]:
         logger.error(f"Could not talk to Ravenfall: {response}")
@@ -141,17 +141,18 @@ class RedeemRFCog(Cog):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
         if channel is None:
             return
+        await ctx.send(f"Sending coins to {ctx.redemption.user_login}...")
         try:
-            await send_coins(ctx.redemption.broadcaster_user_login, channel, 25000)
+            await send_coins(ctx.redemption.user_login, channel, 25000)
         except (CouldNotSendMessageError, CouldNotSendCoinsError, OutOfCoinsError, TimeoutError) as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
             logger.error(f"Error in coins_25_000: {e}")
-            await ctx.send(f"❌ Error: {e} - points have been refunded")
+            await ctx.send(f"❌ Error: {e}. Please try again later. You have been refunded.")
             return
         except Exception as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
             logger.error(f"Unknown error occured in coins_25_000: {e}")
-            await ctx.send(f"❌ Unknown error occured - points have been refunded")
+            await ctx.send(f"❌ An unknown error occured. Please try again later. You have been refunded.")
             return
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
     
