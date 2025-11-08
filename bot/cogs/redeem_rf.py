@@ -18,6 +18,8 @@ from ravenpy.ravenpy import Item
 import os
 import asyncio
 import random
+import json
+from twitchAPI.helper import first
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +60,22 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 20):
     if response["timeout"]:
         raise TimeoutError("Timed out waiting for response")
     response_dict = response["responses"][0]
-    response_dict["CorrelationId"] = None
-    await send_to_client(channel.middleman_connection_id, json.dumps(response_dict))
 
     match = channel.rfloc.identify_string(response_dict['Format'])
+    formatted_response = channel.rfloc.translate_string(response_dict['Format'], response_dict['Args'], match).strip()
+    edited_response = response_dict.copy()
+    edited_response["CorrelationId"] = None
+    edited_response["Format"] = formatted_response
+    edited_response["Args"] = []
+    await send_to_client(channel.middleman_connection_id, json.dumps(edited_response))
+
     response_id = None
     if match is not None:
         response_id = match.key
     return RavenfallResponse(
         response = response_dict,
         response_id = response_id,
-        formatted_response = channel.rfloc.translate_string(response_dict['Format'], response_dict['Args'], match).strip()
+        formatted_response = formatted_response
     )
 
 async def get_coins_count(channel: RFChannel):
@@ -80,16 +87,18 @@ async def get_coins_count(channel: RFChannel):
         total_coins += user["coins"]
     return total_coins
 
-
-
-async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]:
+async def get_item(item_name: str) -> Item:
     item_search_results = ravenpy.search_item(item_name, limit=1)
     if not item_search_results:
-        return None, 0
+        return None
     if item_search_results[0][1] < 85:
-        return None, 0
-    item = item_search_results[0][0]
+        return None
+    return item_search_results[0][0]
 
+async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]:
+    item = await get_item(item_name)
+    if item is None:
+        return None, 0
     char_items = await get_char_items(channel.channel_id)
     total_items = 0
     for user in char_items["data"]:
@@ -236,6 +245,13 @@ class RedeemRFCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
+        self.item_price_dict = {}
+        item_values_path = os.getenv("ITEM_VALUES_PATH", "data/item_values.json")
+        if os.path.exists(item_values_path):
+            item_price_json = json.load(open(item_values_path))
+            self.item_price_dict = {item_name.lower(): price for item_name, price in item_price_json.items()}
+        else:
+            logger.error("item_values.json not found")
 
     async def send_coins_redeem(self, ctx: RedeemContext, amount: int):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
@@ -272,25 +288,33 @@ class RedeemRFCog(Cog):
     async def coins_1_000_000(self, ctx: RedeemContext):
         await self.send_coins_redeem(ctx, 1000000)
 
-    @Cog.redeem(name="Recieve 100 item credits")
+    async def send_item_credits_redeem(self, ctx: RedeemContext, amount: int, quiet: bool = False):
+        async with get_async_session() as session:
+            trans_id = await add_credits(session, ctx.redemption.user_id, amount, "Item credits redeem")
+            if not quiet:
+                await ctx.send(f"You have been given {amount:,} item credits. (ID: {trans_id})")
+        await ctx.fullfill()
+
+    @Cog.redeem(name="Lurking!")
+    async def lurking(self, ctx: RedeemContext):
+        await self.send_item_credits_redeem(ctx, ctx.redemption.reward.cost, quiet=True)
+        await ctx.send("Thanks for lurking!")
+
+    @Cog.redeem(name="Get 100 item credits")
     async def item_credits_100(self, ctx: RedeemContext):
-        async with get_async_session() as session:
-            await add_credits(session, ctx.redemption.user_id, 100, "Item credits redeem")
+        await self.send_item_credits_redeem(ctx, 100)
 
-    @Cog.redeem(name="Recieve 500 item credits")
+    @Cog.redeem(name="Get 500 item credits")
     async def item_credits_500(self, ctx: RedeemContext):
-        async with get_async_session() as session:
-            await add_credits(session, ctx.redemption.user_id, 500, "Item credits redeem")
+        await self.send_item_credits_redeem(ctx, 500)
 
-    @Cog.redeem(name="Recieve 3000 item credits")
+    @Cog.redeem(name="Get 3,000 item credits")
     async def item_credits_3000(self, ctx: RedeemContext):
-        async with get_async_session() as session:
-            await add_credits(session, ctx.redemption.user_id, 3000, "Item credits redeem")
+        await self.send_item_credits_redeem(ctx, 3000)
 
-    @Cog.redeem(name="Recieve 15,000 item credits")
+    @Cog.redeem(name="Get 15,000 item credits")
     async def item_credits_15_000(self, ctx: RedeemContext):
-        async with get_async_session() as session:
-            await add_credits(session, ctx.redemption.user_id, 15000, "Item credits redeem")
+        await self.send_item_credits_redeem(ctx, 15000)
 
     @Cog.command(
         name="credits balance",
@@ -306,7 +330,90 @@ class RedeemRFCog(Cog):
         async with get_async_session() as session:
             credits = await get_user_credits(session, ctx.msg.user.id)
             await ctx.reply(f"You have {credits:,} item {pl(credits, 'credit', 'credits')}.")
-    
+
+    @Cog.command(
+        name="credits value",
+        aliases=[
+            "credits val",
+            "credits v",
+            "creditsval",
+            "creditsv",
+        ]
+    )
+    async def credits_value(self, ctx: CommandContext):
+        item_name = ctx.parameter
+        if not item_name:
+            await ctx.reply(f"Usage: !{ctx.command} <item>")
+            return
+        item = await get_item(item_name)
+        if item is None:
+            await ctx.reply("Item not found")
+            return
+        if item.soulbound:
+            await ctx.reply("This item is soulbound and cannot be redeemed.")
+            return
+        price = self.item_price_dict.get(item_name.lower(), 0)
+        if price == 0:
+            await ctx.reply("This item is not redeemable.")
+            return
+        await ctx.reply(f"{item.name} is worth {price:,} item {pl(price, 'credit', 'credits')}.")
+
+    @Cog.command(
+        name="credits buy",
+        aliases=[
+            "credits b",
+            "creditsbuy",
+            "credits redeem",
+            "creditsredeem",
+        ]
+    )
+    async def credits_buy(self, ctx: CommandContext):
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        args = ctx.parameter.split()
+
+        if len(args) < 1:
+            await ctx.reply(f"Usage: !{ctx.command} <item> [count]")
+            return
+
+        count = 1
+        if args[-1].isdigit():
+            count = int(args.pop())
+        item_name = " ".join(args)
+
+        item = await get_item(item_name)
+        if item is None:
+            await ctx.reply("Item not found")
+            return
+        if item.soulbound:
+            await ctx.reply("This item is soulbound and cannot be redeemed.")
+            return
+        price = self.item_price_dict.get(item_name.lower(), 0)
+        if price == 0:
+            await ctx.reply("This item is not redeemable.")
+            return
+        async with get_async_session() as session:
+            balance = await get_user_credits(session, ctx.msg.user.id)
+            if balance < price * count:
+                await ctx.reply(f"You do not have enough credits. You have {balance:,} {pl(balance, 'credit', 'credits')}. You need {price * count:,} {pl(price * count, 'credit', 'credits')}.")
+                return
+
+        try:
+            await send_items(ctx.msg.user.name, channel, item.name, count)
+        except (CouldNotSendMessageError, CouldNotSendItemsError, OutOfItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
+            logger.error(f"Error in command: {e}")
+            await ctx.send(f"❌ Error: {e}. Your credits were not deducted.")
+            return
+        except Exception as e:
+            logger.error(f"Unknown error occured in command: {e}")
+            await ctx.send(f"❌ An unknown error occured. Please try again later. Your credits were not deducted.")
+            return
+
+        async with get_async_session() as session:
+            trans_id = await add_credits(session, ctx.msg.user.id, -price * count, f"Shop purchase: {item.name} x{count}")
+            await ctx.reply(f"You have been given {count:,}× {item.name}{pl(count, '', '(s)')}. (ID: {trans_id})")
+
 
     @Cog.command(name="stock coins")
     async def stock_coins(self, ctx: CommandContext):
@@ -338,7 +445,7 @@ class RedeemRFCog(Cog):
         args = ctx.parameter.split()
 
         if len(args) < 2:
-            await ctx.reply("Usage: !giftto <user> <item> [count]")
+            await ctx.reply(f"Usage: !{ctx.command} <user> <item> [count]")
             return
 
         count = 1
@@ -366,6 +473,33 @@ class RedeemRFCog(Cog):
             
         await asyncio.sleep(0.5)
         await ctx.reply("Okay")
+
+
+    @Cog.command(name="addcredits")
+    async def addcredits(self, ctx: CommandContext):
+        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+            return
+
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        args = ctx.parameter.split()
+
+        if len(args) < 2 or not args[-1].isdigit():
+            await ctx.reply(f"Usage: !{ctx.command} <user> <amount>")
+            return
+
+        amount = int(args.pop())
+        recipient_name = args[0]
+        user = await first(self.rf_manager.chat.twitch.get_users(logins=[recipient_name]))
+        if user is None:
+            await ctx.reply(f"User {recipient_name} not found")
+            return
+        
+        async with get_async_session() as session:
+            trans_id = await add_credits(session, user.id, amount, f"Added by {ctx.msg.user.name}")
+            await ctx.reply(f"Gave {amount:,} {pl(amount, 'credit', 'credits')} to {recipient_name}. (ID: {trans_id})")
+
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

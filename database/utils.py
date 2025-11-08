@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from database.models import User, Channel, Character, SenderData, TwitchAuth, UserCredits, UserCreditTransaction
 from typing import Union, Optional, Tuple
 from sqlalchemy import select
+from datetime import datetime
 
 
 async def get_user(
@@ -298,6 +299,6 @@ async def get_user_credits(session: AsyncSession, user_id: Union[int, str]) -> i
 async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: int, description: str) -> int:
     user_credits = await get_user_credits_raw(session, user_id)
     user_credits.credits += amount
-    transaction = UserCreditTransaction(user_id=user_id, credits=amount, description=description)
+    transaction = UserCreditTransaction(user_id=user_id, credits=amount, description=description, timestamp=datetime.now())
     session.add(transaction)
     return transaction.id

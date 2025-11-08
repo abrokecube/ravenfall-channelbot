@@ -268,7 +268,7 @@ class RedeemContext:
                 status
             )
         else:
-            raise ValueError(f"Redemption is not in the UNFULFILLED state (current: {self.redemption.status})")
+            logger.warning(f"Redemption is not in the UNFULFILLED state (current: {self.redemption.status})", stack_info=True)
     
     async def fullfill(self):
         await self.update_status(CustomRewardRedemptionStatus.FULFILLED)
