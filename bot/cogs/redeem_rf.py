@@ -114,10 +114,12 @@ class RedeemRFCog(Cog):
             await self.send_coins(ctx.redemption.broadcaster_user_login, channel, 25000)
         except (CouldNotSendMessageError, CouldNotSendCoinsError, OutOfCoinsError, TimeoutError) as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
+            logger.error(f"Error in coins_25_000: {e}")
             await ctx.send(f"❌ Error: {e} - points have been refunded")
             return
         except Exception as e:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
+            logger.error(f"Unknown error occured in coins_25_000: {e}")
             await ctx.send(f"❌ Unknown error occured - points have been refunded")
             return
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
