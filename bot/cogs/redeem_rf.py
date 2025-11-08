@@ -486,11 +486,17 @@ class RedeemRFCog(Cog):
             return
         args = ctx.parameter.split()
 
-        if len(args) < 2 or not args[-1].isdigit():
+        if len(args) < 2:
             await ctx.reply(f"Usage: !{ctx.command} <user> <amount>")
             return
 
-        amount = int(args.pop())
+        amount = None
+        try:
+            amount = int(args.pop())
+        except ValueError:
+            await ctx.reply(f"Usage: !{ctx.command} <user> <amount>")
+            return
+
         recipient_name = args[0]
         user = await first(self.rf_manager.chat.twitch.get_users(logins=[recipient_name]))
         if user is None:
