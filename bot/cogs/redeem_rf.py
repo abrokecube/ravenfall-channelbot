@@ -38,7 +38,7 @@ async def get_sender_str(channel: RFChannel, sender_username: str):
     return sender
 
 async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 10):
-    response = await send_to_server_and_wait_response(channel.channel_id, message, timeout=timeout)
+    response = await send_to_server_and_wait_response(channel.middleman_connection_id, message, timeout=timeout)
     if not response["success"]:
         logger.error(f"Could not talk to Ravenfall: {response}")
         raise CouldNotSendMessageError("Could not talk to Ravenfall")
