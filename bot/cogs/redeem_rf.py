@@ -45,11 +45,13 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 10):
     if response["timeout"]:
         raise TimeoutError("Timed out waiting for response")
     response_dict = response["responses"][0]
+    print(response_dict)
+    await send_to_client(channel.middleman_connection_id, json.dumps(response_dict))
+
     match = channel.rfloc.identify_string(response_dict['Format'])
     response_id = None
     if match is not None:
         response_id = match.key
-    await send_to_client(channel.middleman_connection_id, json.dumps(response_dict))
     return RavenfallResponse(
         response = response_dict,
         response_id = response_id,
@@ -122,6 +124,7 @@ class RedeemRFCog(Cog):
             logger.error(f"Unknown error occured in coins_25_000: {e}")
             await ctx.send(f"❌ Unknown error occured - points have been refunded")
             return
+        await ctx.send(f"Gifted 25,000 coins to {ctx.redemption.user_login}!")
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:

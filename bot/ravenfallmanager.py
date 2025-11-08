@@ -90,6 +90,8 @@ class RFChannelManager:
                         asyncio.create_task(channel.event_ravenbot_message(message))
                     elif metadata.source.lower() == "server":
                         asyncio.create_task(channel.event_ravenfall_message(message))
+                    elif metadata.source.lower() in ("API-client", "API-server"):
+                        pass
                     else:
                         logger.error(f"Unknown source: {metadata.source}")
                 if metadata.source.lower() == "client":
