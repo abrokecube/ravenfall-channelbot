@@ -489,14 +489,23 @@ class RedeemRFCog(Cog):
             ""
         ]
         in_stock = []
+        low_stock = []
         out_of_stock = []
         for item in ravenpy.get_all_items():
+            count = 0
             if item.name in item_counts:
-                in_stock.append(f"{item.name}: {item_counts[item.name]:,}")
+                count = item_counts[item.name]
+            if count > 0:
+                if count < 15:
+                    low_stock.append(f"{item.name}: {count:,}")
+                else:
+                    in_stock.append(f"{item.name}: {count:,}")
             else:
                 out_of_stock.append(f"{item.name}: 0")
         out_str.append("In stock:")
         out_str.extend(in_stock)
+        out_str.append("\nLow stock:")
+        out_str.extend(low_stock)
         out_str.append("\nOut of stock:")
         out_str.extend(out_of_stock)
         url = await upload_to_pastes("\n".join(out_str))
