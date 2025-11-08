@@ -549,11 +549,14 @@ class RFChannel:
         asyncio.create_task(self.game_event_wake_ravenbot(sub_event))
         asyncio.create_task(self.game_event_fetch_auto_raids(old_sub_event, sub_event))
     
-    @routine(delta=timedelta(seconds=46), wait_first=True, max_attempts=99999)
+    @routine(delta=timedelta(seconds=46), max_attempts=99999)
     async def town_level_notification_routine(self):
         if not self.town_level_notifications:
             return
-        
+        if self.channel_restart_lock.locked():
+            async with self.channel_restart_lock:
+                return
+
         village: Village = await self.get_query("select * from village")
 
         if village['level'] == self.town_level:
@@ -562,9 +565,9 @@ class RFChannel:
         old_town_level = self.town_level
         self.town_level = village['level']
 
-        if old_town_level <= 1:
+        if old_town_level <= 1 or self.town_level <= old_town_level:
             return
-            
+
         await self.send_chat_message(
             f"Town level is now {self.town_level}!"
         )
