@@ -731,7 +731,7 @@ class RFChannel:
             return
         period = max(20*60,self.restart_period)
         seconds_to_restart = max(60, period - uptime)
-        self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO)
+        self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO, overwrite_same_reason=True)
 
     async def _ravenfall_pre_restart(self):
         await self.fetch_all_training()
@@ -963,7 +963,13 @@ class RFChannel:
         asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))
 
     def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None, overwrite_same_reason: bool = False):
-        if self.restart_task and self.restart_task.reason == reason and not overwrite_same_reason:
+        allow_overwrite = True
+        if self.restart_task:
+            if self.restart_task.reason == reason:
+                allow_overwrite = overwrite_same_reason
+            if self.restart_task.finished():
+                allow_overwrite = True
+        if not allow_overwrite:
             return
         if self.restart_task:
             self.restart_task.cancel()
