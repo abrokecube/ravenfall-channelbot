@@ -3,6 +3,7 @@ from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from utils.utils import upload_to_pastes
 import os
+import inspect
 
 class TestingRFCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
@@ -65,6 +66,38 @@ class TestingRFCog(Cog):
             return
         await channel.fetch_all_training()
         await ctx.reply("Training fetched.")
+
+    @Cog.command(name="eval", help="Eval a Python expression with access to rf_manager, channel, and ctx")
+    async def eval_rf(self, ctx: CommandContext):
+        # Owner-only safeguard
+        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+            return
+        # Join the args into a single expression string
+        expr = " ".join(ctx.args.args).strip()
+        if not expr:
+            await ctx.reply("Usage: eval <python expression>")
+            return
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        # Provide a minimal, explicit local context
+        local_ctx = {
+            "rf_manager": self.rf_manager,
+            "manager": self.rf_manager,
+            "channel": channel,
+            "ctx": ctx,
+        }
+        try:
+            result = eval(expr, {}, local_ctx)
+            if inspect.isawaitable(result):
+                result = await result
+            result_text = repr(result)
+        except Exception as e:
+            result_text = f"Error: {e!r}"
+        # Upload long responses
+        if len(result_text) > 480:
+            url = await upload_to_pastes(result_text)
+            await ctx.reply(f"Result too long. {url}")
+        else:
+            await ctx.reply(result_text)
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.
