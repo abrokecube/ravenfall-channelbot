@@ -39,6 +39,9 @@ class Ingredient:
     def __init__(self, **kwargs):
         self.item: Item = kwargs.get('item')
         self.amount: int = kwargs.get('amount')
+    
+    def __repr__(self):
+        return f"Ingredient({self.item.name} x{self.amount})"
 
 class Item:
     def __init__(self, data):
@@ -104,6 +107,9 @@ class Item:
     
     def __eq__(self, value: 'Item'):
         return self.id == value.id
+    
+    def __repr__(self):
+        return f"Item({self.name} ({self.id}))"
 
 class CharacterStat:
     def __init__(self, skill: Skills, exp: float, level: int):

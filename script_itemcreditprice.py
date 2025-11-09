@@ -43,12 +43,13 @@ def create_curve(points: List[Tuple[float, float]]) -> callable:
 INGREDIENT_CURVE = create_curve([
     (0, 0),
     (1,  1  * 1    ),
-    (2,  2  * 0.8 ),
-    (4,  4  * 0.7  ),
-    (8,  8  * 0.6  ),
-    (16, 16 * 0.5  ),
-    (32, 32 * 0.4  ),
-    (64, 64 * 0.3  ),
+    (2,  2  * 0.7 ),
+    (4,  4  * 0.6  ),
+    (8,  8  * 0.5  ),
+    (16, 16 * 0.4  ),
+    (32, 32 * 0.3  ),
+    (64, 64 * 0.25  ),
+    (128, 128 * 0.2  ),
 ])
 
 VALUE_CURVE = create_curve([
@@ -57,15 +58,36 @@ VALUE_CURVE = create_curve([
     (15,      8),           
     (100,     30),        
     (1000,    200),      
-    (10000,   1000),    
-    (50000,   2000),    
-    (100000,  4000),    
-    (1000000, 25000),    
-    (100000000, 2500000),    
-    (float('inf'), 2500000) 
+    (10000,   800),    
+    (50000,   1500),    
+    (100000,  3000),    
+    (1000000, 20000),    
+    (100000000, 2000000),    
+    (float('inf'), 2000000) 
 ])
 
+def get_fundamental_ingredients(item: ravenpy.Item) -> List[ravenpy.Ingredient]:
+    # Recurse ingredients until the ingredient is not craftable
+    ingredients_count = {}
+    def recurse_ingredients(item: ravenpy.Item, amount: int = 1):
+        for ing in item.craft_ingredients:
+            if not ing.item.craft_ingredients:
+                if ing.item.id not in ingredients_count:
+                    ingredients_count[ing.item.id] = 0
+                ingredients_count[ing.item.id] += ing.amount * amount
+            recurse_ingredients(ing.item, amount * ing.amount)
+    recurse_ingredients(item)
+    
+    ingredients = []
+    for ingredient_id, amount in ingredients_count.items():
+        ingredients.append(ravenpy.Ingredient(item=ravenpy.ravenpy._items_id_data[ingredient_id], amount=amount))
+    return ingredients
+
 load_dotenv()
+
+base_item_values: dict[str, int] = {}
+with open("data/base_item_values.json", "r", encoding="utf-8") as f:
+    base_item_values = json.load(f)
 
 async def main():
     rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
@@ -75,20 +97,22 @@ async def main():
     item_values: dict[str, int] = {}
     for item in ravenpy.get_all_items():
         # Only consider items that have crafting ingredients
-        item_values[item.name] = item.sell_price
+        sell_price = base_item_values.get(item.name, item.sell_price)
+        item_values[item.name] = sell_price
         if not getattr(item, "craft_ingredients", None):
             continue
         if not item.craft_ingredients:
             continue
+        fundamental_ingredients = get_fundamental_ingredients(item)
 
         total_ingredient_value = 0
-        for ing in item.craft_ingredients:
-            sell_price = ing.item.sell_price
+        for ing in fundamental_ingredients:
+            sell_price = base_item_values.get(ing.item.name, ing.item.sell_price)
             amount = ing.amount
             
             total_ingredient_value += sell_price * INGREDIENT_CURVE(amount)
 
-        if total_ingredient_value > 0 and total_ingredient_value < item.sell_price:
+        if total_ingredient_value > 0 and total_ingredient_value < sell_price:
             item_values[item.name] = total_ingredient_value
 
     # Apply the value curve to all items
