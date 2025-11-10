@@ -786,7 +786,7 @@ class RFChannel:
                 break
             await asyncio.sleep(1)
         if not authenticated:
-            await self.send_chat_message(f"Restart failed {(pinging @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')})}")
+            await self.send_chat_message(f"Restart failed (pinging @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')})")
             logger.error(f"Failed to authenticate Ravenfall for {self.channel_name}")
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
