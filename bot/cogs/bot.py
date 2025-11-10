@@ -36,6 +36,9 @@ class BotStuffCog(Cog):
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
             return
+        if channel.monitoring_paused:
+            await ctx.reply("Channel monitoring is already paused.")
+            return
         channel.monitoring_paused = True
         await channel.stop()
         await ctx.reply("Channel monitoring paused.")
@@ -47,6 +50,9 @@ class BotStuffCog(Cog):
 
         channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
         if channel is None:
+            return
+        if not channel.monitoring_paused:
+            await ctx.reply("Channel monitoring is not paused.")
             return
         channel.monitoring_paused = False
         await channel.start()

@@ -217,6 +217,11 @@ async def run():
         commands.load_cog(RedeemCog)
         from bot.cogs.redeem_rf import RedeemRFCog
         commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
+        
+    async def on_message(message: ChatMessage):
+        # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
+        await commands.process_message(message)
+        await rf_manager.event_twitch_message(message)
 
     async def on_ready(ready_event: EventData):
         global rf_manager
@@ -224,17 +229,12 @@ async def run():
         await rf_manager.start()
         load_cogs()
         logger.info("Bot is ready for work")
-
+        chat.register_event(ChatEvent.MESSAGE, on_message)
+        
         server = SomeEndpoints(rf_manager, os.getenv("SERVER_HOST", "0.0.0.0"), os.getenv("SERVER_PORT", 8080))
         await server.start()
 
     chat.register_event(ChatEvent.READY, on_ready)
-
-    async def on_message(message: ChatMessage):
-        # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
-        await commands.process_message(message)
-        await rf_manager.event_twitch_message(message)
-    chat.register_event(ChatEvent.MESSAGE, on_message)
 
     chat.start()
 

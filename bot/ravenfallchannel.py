@@ -142,7 +142,7 @@ class RFChannel:
         self.restart_task: RFRestartTask | None = None
         
         # Monitoring state
-        self.monitoring_paused = False
+        self.monitoring_paused = config.get('pause_monitoring', False)
         self.is_monitoring = False  # Whether we're currently monitoring a command
         self.current_monitor = None  # Current monitor info if monitoring
         self.restart_attempts = {'count': 0, 'last_attempt': 0}  # Track restart attempts
@@ -153,6 +153,8 @@ class RFChannel:
         self.middleman_connection_status: middleman.ConnectionStatus = middleman.ConnectionStatus()
         
     async def start(self):
+        if self.monitoring_paused:
+            return
         await self.chat.join_room(self.channel_name)
         self.update_boosts_routine.start()
         self.update_mult_routine.start()
