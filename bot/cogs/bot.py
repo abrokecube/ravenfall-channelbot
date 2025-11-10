@@ -1,6 +1,7 @@
 from ..commands import CommandContext, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
+import os
 
 class BotStuffCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
@@ -26,7 +27,31 @@ class BotStuffCog(Cog):
         channel.rfloc.load_definitions()
         channel.rfloc.load_translations()
         await ctx.reply("Strings reloaded!")
+    
+    @Cog.command(name="pausemonitoring", help="Pause channel monitoring")
+    async def pause_monitoring(self, ctx: CommandContext):
+        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+            return
 
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        channel.monitoring_paused = True
+        await channel.stop()
+        await ctx.reply("Channel monitoring paused.")
+        
+    @Cog.command(name="resumemonitoring", help="Resume channel monitoring")
+    async def resume_monitoring(self, ctx: CommandContext):
+        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+            return
+
+        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if channel is None:
+            return
+        channel.monitoring_paused = False
+        await channel.start()
+        await ctx.reply("Channel monitoring resumed.")
+        
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.
     

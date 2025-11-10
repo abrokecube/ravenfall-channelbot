@@ -21,6 +21,7 @@ import random
 import json
 from twitchAPI.helper import first
 from utils.utils import upload_to_pastes
+from bot.ravenfallrestarttask import RestartReason
 
 logger = logging.getLogger(__name__)
 
@@ -319,7 +320,7 @@ class RedeemRFCog(Cog):
             logger.error(f"Unknown error occured in coin redeem: {e}")
             await ctx.send(f"❌ An unknown error occured. Please try again later. You have been refunded.")
             return
-        await ctx.fullfill()
+        await ctx.fulfill()
     
     @Cog.redeem(name="Recieve 25,000 coins")
     async def coins_25_000(self, ctx: RedeemContext):
@@ -338,7 +339,7 @@ class RedeemRFCog(Cog):
             trans_id = await add_credits(session, ctx.redemption.user_id, amount, "Item credits redeem")
             if not quiet:
                 await ctx.send(f"You have been given {amount:,} item credits. (ID: {trans_id})")
-        await ctx.fullfill()
+        await ctx.fulfill()
 
     @Cog.redeem(name="Lurking!")
     async def lurking(self, ctx: RedeemContext):
@@ -669,6 +670,17 @@ class RedeemRFCog(Cog):
         async with get_async_session() as session:
             trans_id = await add_credits(session, user.id, amount, f"Added by {ctx.msg.user.name}")
             await ctx.reply(f"Gave {amount:,} {pl(amount, 'credit', 'credits')} to {recipient_name}. (ID: {trans_id})")
+
+
+    @Cog.redeem(name="Restart Ravenfall")
+    async def restart_ravenfall(self, ctx: RedeemContext):
+        channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
+        if channel is None:
+            return
+
+        channel.queue_restart(20, reason=RestartReason.USER)
+        await ctx.send("Ravenfall will restart in 20 seconds!") 
+        await ctx.fulfill()
 
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:

@@ -137,6 +137,7 @@ class RFChannel:
         self.global_restart_lock: asyncio.Lock = manager.global_restart_lock
         self.channel_restart_lock: asyncio.Lock = asyncio.Lock()
         self.channel_post_restart_lock: asyncio.Lock = asyncio.Lock()
+        self.monitoring_paused = False
 
         self.restart_task: RFRestartTask | None = None
         

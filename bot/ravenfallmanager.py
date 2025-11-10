@@ -232,6 +232,8 @@ class RFChannelManager:
             if abs(desync) < 30:  # 30 seconds
                 continue
             channel = self.channel_name_to_channel[channel_name]
+            if channel.monitoring_paused:
+                continue
             if channel.event == RFChannelEvent.DUNGEON:
                 continue
             if channel.channel_restart_lock.locked():
