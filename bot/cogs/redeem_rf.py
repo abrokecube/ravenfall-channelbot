@@ -678,9 +678,23 @@ class RedeemRFCog(Cog):
         if channel is None:
             return
 
-        channel.queue_restart(20, reason=RestartReason.USER)
-        await ctx.send("Ravenfall will restart in 20 seconds!") 
-        await ctx.fulfill()
+        task = channel.queue_restart(30, reason=RestartReason.USER)
+        if task:
+            await ctx.send("Ravenfall will restart in 30 seconds!") 
+            await ctx.fulfill()
+        else:
+            await ctx.send("A restart is already scheduled!")
+            await ctx.cancel()
+            
+    @Cog.redeem(name="Restart RavenBot")
+    async def restart_ravenbot(self, ctx: RedeemContext):
+        channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
+        if channel is None:
+            return
+
+        await ctx.send("Restarting RavenBot...")
+        await channel.restart_ravenbot()
+        await ctx.send("Done!")
 
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
