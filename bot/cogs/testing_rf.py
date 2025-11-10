@@ -4,6 +4,9 @@ from ..ravenfallmanager import RFChannelManager
 from utils.utils import upload_to_pastes
 import os
 import inspect
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TestingRFCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
@@ -85,11 +88,14 @@ class TestingRFCog(Cog):
             "channel": channel,
             "ctx": ctx,
         }
+        
         try:
+            logger.info(f"Evaluating expression: {expr} in channel {channel.channel_name if channel else 'N/A'}")
             result = eval(expr, {}, local_ctx)
             if inspect.isawaitable(result):
                 result = await result
             result_text = repr(result)
+            logger.info(f"Eval result: {result_text}")
         except Exception as e:
             result_text = f"Error: {e!r}"
         # Upload long responses
