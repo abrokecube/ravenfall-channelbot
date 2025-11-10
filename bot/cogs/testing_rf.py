@@ -96,6 +96,8 @@ class TestingRFCog(Cog):
         if len(result_text) > 480:
             url = await upload_to_pastes(result_text)
             await ctx.reply(f"Result too long. {url}")
+        elif len(result_text) == 0:
+            await ctx.reply("No result.")
         else:
             await ctx.reply(result_text)
 
