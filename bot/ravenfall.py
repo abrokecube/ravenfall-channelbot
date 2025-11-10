@@ -136,6 +136,9 @@ async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | N
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
         try:
             r = await session.get(f"{url}/{query}")
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Error fetching Ravenfall query from {url}: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error fetching Ravenfall query from {url}: {e}", exc_info=True)
             return None

@@ -428,6 +428,9 @@ class RFChannel:
                 if not suppress_timeout_error:
                     logger.error(f"Timeout fetching Ravenfall query from {self.rf_query_url}")
                 return None
+            except aiohttp.ClientConnectorError as e:
+                logger.error(f"Error fetching Ravenfall query from {self.rf_query_url}: {e}")
+                return None
             except Exception as e:
                 logger.error(f"Error fetching Ravenfall query from {self.rf_query_url}: {e}", exc_info=True)
                 return None
