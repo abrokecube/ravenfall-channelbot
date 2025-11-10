@@ -257,7 +257,7 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 send_exception = e
 
             if send_exception is not None:
-                logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {e}")
+                logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {send_exception}")
                 if not one_item_successful:
                     raise send_exception
 
