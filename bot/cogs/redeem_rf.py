@@ -30,22 +30,28 @@ class RavenfallResponse:
     response_id: str
     formatted_response: str
 
-class CouldNotSendMessageError(Exception):
+class BaseItemSendException(Exception):
+    def __init__(self, message: str, items_sent: int = 0):
+        super().__init__(message)
+        self.message = message
+        self.items_sent = items_sent
+
+class CouldNotSendMessageError(BaseItemSendException):
     pass
 
-class CouldNotSendItemsError(Exception):
+class CouldNotSendItemsError(BaseItemSendException):
     pass
 
-class TimeoutError(Exception):
+class TimeoutError(BaseItemSendException):
     pass
 
-class OutOfItemsError(Exception):
+class OutOfItemsError(BaseItemSendException):
     pass
 
-class PartialSendError(Exception):
+class PartialSendError(BaseItemSendException):
     pass
 
-class ItemNotFoundError(Exception):
+class ItemNotFoundError(BaseItemSendException):
     pass
 
 async def get_sender_str(channel: RFChannel, sender_username: str):
@@ -53,7 +59,7 @@ async def get_sender_str(channel: RFChannel, sender_username: str):
         sender = await get_formatted_sender_data(session, channel.channel_id, sender_username)
     return sender
 
-async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 20):
+async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15):
     response = await send_to_server_and_wait_response(channel.middleman_connection_id, message, timeout=timeout)
     if not response["success"]:
         logger.error(f"Could not talk to Ravenfall: {response}")
@@ -185,7 +191,7 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
             one_coin_successful = True
 
         if amount != -1 and coins_remaining > 0:
-            raise PartialSendError(f"Ran out of coins ({coins_remaining} remaining)")
+            raise PartialSendError(f"Ran out of coins ({coins_remaining} remaining)", total_coins - coins_remaining)
 
 channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
 async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int):
@@ -235,27 +241,44 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
             items_to_send = min(items_remaining, user_item["amount"])
 
             logger.info(f"Sending {items_to_send}x {item.name} to {target_user_name} from {user_item['user_name']}")
-            response = await send_ravenfall(
-                channel, RavenBotTemplates.gift_item(
-                    sender = await get_sender_str(channel, user_item["user_name"]),
-                    recipient_user_name = target_user_name,
-                    item_name = item.name,
-                    item_count = items_to_send,
+            
+            send_exception = None
+            try:
+                response = await send_ravenfall(
+                    channel, RavenBotTemplates.gift_item(
+                        sender = await get_sender_str(channel, user_item["user_name"]),
+                        recipient_user_name = target_user_name,
+                        item_name = item.name,
+                        item_count = items_to_send,
+                    )
                 )
-            )
+            except Exception as e:
+                response = None
+                send_exception = e
+
+            if send_exception is not None:
+                logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {e}")
+                if not one_item_successful:
+                    raise send_exception
+
             if response.response_id not in ("gift", "gift_item_not_owned"):
                 logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")
                 if not one_item_successful:
                     raise CouldNotSendItemsError("Failed to send items")
-            if response.response_id == "gift_item_not_owned":
-                items_to_send = 0
-            else:
-                items_to_send = int(response.response["Args"][0])
-            items_remaining -= items_to_send
+
+            items_sent = 0
+            if response is not None:
+                if response.response_id == "gift_item_not_owned":
+                    items_sent = 0
+                elif response.response_id == "gift":
+                    items_sent = int(response.response["Args"][0])
+                else:
+                    items_sent = 0
+            items_remaining -= items_sent
             one_item_successful = True
 
         if amount != -1 and items_remaining > 0:
-            raise PartialSendError(f"Ran out of items ({items_remaining} remaining)")
+            raise PartialSendError(f"Ran out of items ({items_remaining} remaining)", total_items - items_remaining)
 
 
 class RedeemRFCog(Cog):
@@ -345,7 +368,12 @@ class RedeemRFCog(Cog):
             "credits b",
             "creditsbal",
             "creditsb",
-            "credits"
+            "credits",
+            "credit bal",
+            "credit b",
+            "creditbal",
+            "creditb",
+            "credit",
         ]
     )
     async def credits_balance(self, ctx: CommandContext):
@@ -360,6 +388,11 @@ class RedeemRFCog(Cog):
             "credits v",
             "creditsval",
             "creditsv",
+            "credit value",
+            "credit val",
+            "credit v",
+            "creditval",
+            "creditv",
         ]
     )
     async def credits_value(self, ctx: CommandContext):
@@ -372,11 +405,11 @@ class RedeemRFCog(Cog):
             await ctx.reply("Item not found")
             return
         if item.soulbound:
-            await ctx.reply("This item is soulbound and cannot be redeemed.")
+            await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
             return
         price = self.item_price_dict.get(item_name.lower(), 0)
         if price == 0:
-            await ctx.reply("This item is not redeemable.")
+            await ctx.reply(f"{item.name} is not redeemable.")
             return
         await ctx.reply(f"{item.name} is worth {price:,} item {pl(price, 'credit', 'credits')}.")
 
@@ -388,6 +421,12 @@ class RedeemRFCog(Cog):
             "creditsredeem",
             "credits purchase",
             "creditspurchase",
+            "credit buy",
+            "creditbuy",
+            "credit redeem",
+            "creditredeem",
+            "credit purchase",
+            "creditpurchase",
         ]
     )
     async def credits_buy(self, ctx: CommandContext):
@@ -407,28 +446,43 @@ class RedeemRFCog(Cog):
 
         item = get_item(item_name)
         if item is None:
-            await ctx.reply("Item not found")
+            await ctx.reply(f"Could not identify item. Please check your spelling.")
             return
         if item.soulbound:
-            await ctx.reply("This item is soulbound and cannot be redeemed.")
+            await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
             return
         price = self.item_price_dict.get(item_name.lower(), 0)
         if price == 0:
-            await ctx.reply("This item is not redeemable.")
+            await ctx.reply(f"{item.name} is not redeemable.")
             return
         async with get_async_session() as session:
             balance = await get_user_credits(session, ctx.msg.user.id)
             if balance < price * count:
-                await ctx.reply(f"You do not have enough credits. You have {balance:,} {pl(balance, 'credit', 'credits')}. You need {price * count:,} {pl(price * count, 'credit', 'credits')}.")
+                await ctx.reply(
+                    f"You do not have enough credits to purchase {count:,}× {item.name}{pl(count, '', '(s)')}. "
+                    f"You have {balance:,} {pl(balance, 'credit', 'credits')}. "
+                    f"You need {price * count:,} {pl(price * count, 'credit', 'credits')}.")
                 return
 
         try:
             await send_items(ctx.msg.user.name, channel, item.name, count)
         except OutOfItemsError as e:
             logger.error(f"Error in item redeem: {e}")
-            await ctx.send(f"There are not enough items in stock. Your credits were not deducted.")
+            await ctx.send(
+                f"There are not enough {count:,}× {item.name}{pl(count, '', '(s)')} in stock. "
+                "Your credits were not deducted."
+            )
             return
-        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
+        except PartialSendError as e:
+            async with get_async_session() as session:
+                trans_id = await add_credits(session, ctx.msg.user.id, -price * e.items_sent, f"Shop purchase: {item.name} x{count}")
+            await ctx.send(
+                f"There were not enough {count:,}× {item.name}{pl(count, '', '(s)')} in stock. "
+                f"You received {e.items_sent:,}× {item.name}{pl(e.items_sent, '', '(s)')}. "
+                f"(ID: {trans_id})"
+            )
+            return
+        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError) as e:
             logger.error(f"Error in command: {e}")
             await ctx.send(f"❌ Error: {e}. Your credits were not deducted.")
             return
@@ -439,16 +493,29 @@ class RedeemRFCog(Cog):
 
         async with get_async_session() as session:
             trans_id = await add_credits(session, ctx.msg.user.id, -price * count, f"Shop purchase: {item.name} x{count}")
+            balance -= price * count
 
         await asyncio.sleep(0.5)
-        await ctx.reply(f"You have been given {count:,}× {item.name}{pl(count, '', '(s)')}. (ID: {trans_id})")
+        await ctx.reply(
+            f"You have been given {count:,}× {item.name}{pl(count, '', '(s)')}. "
+            f"(ID: {trans_id})"
+        )
 
 
     @Cog.command(
         name="stock coins",
         aliases=[
+            "stockcoins",
+            "stock coin",
+            "stockcoin",
             "credits stock coins",
+            "credits stock coin",
             "creditsstockcoins",
+            "creditsstockcoin",
+            "credit stock coins",
+            "credit stock coin",
+            "creditstockcoins",
+            "creditstockcoin",
         ]
     )
     async def stock_coins(self, ctx: CommandContext):
@@ -456,13 +523,17 @@ class RedeemRFCog(Cog):
         if channel is None:
             return
         count = await get_coins_count(channel)
-        await ctx.reply(f"There {pl(count, 'is', 'are')} currently {count:,} {pl(count, 'coin', 'coins')} in stock.")
+        await ctx.reply(
+            f"There {pl(count, 'is', 'are')} currently {count:,} {pl(count, 'coin', 'coins')} in stock."
+        )
 
     @Cog.command(
         name="stock",
         aliases=[
             "credits stock",
             "creditsstock",
+            "credit stock",
+            "creditstock",
         ]
     )
     async def stock_item(self, ctx: CommandContext):
@@ -474,9 +545,14 @@ class RedeemRFCog(Cog):
             return
         item, count = await get_item_count(channel, ctx.parameter)
         if item is None:
-            await ctx.reply(f"Could not identify item")
+            await ctx.reply(f"Could not identify item.")
             return
-        await ctx.reply(f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.")
+        if item.soulbound:
+            await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
+            return
+        await ctx.reply(
+            f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock."
+        )
     
     @Cog.command(name="stock all")
     async def stock_all(self, ctx: CommandContext):
@@ -556,7 +632,14 @@ class RedeemRFCog(Cog):
         await ctx.reply("Okay")
 
 
-    @Cog.command(name="addcredits")
+    @Cog.command(
+        name="addcredits",
+        aliases=[
+            "addcredit",
+            "add credit",
+            "add credits",
+        ]
+    )
     async def addcredits(self, ctx: CommandContext):
         if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
             return
