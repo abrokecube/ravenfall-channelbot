@@ -375,6 +375,8 @@ class RFChannel:
 
     async def get_town_boost(self) -> List[TownBoost] | None:
         village: Village = await self.get_query("select * from village")
+        if not village:
+            return []
         split = village['boost'].split()
         if len(split) < 2:
             return []
@@ -449,7 +451,11 @@ class RFChannel:
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
                 return
-        village: Village = await self.get_query("select * from village")
+        while True:
+            village: Village = await self.get_query("select * from village")
+            if village is not None:
+                break
+            await asyncio.sleep(30)
         if len(village['boost'].strip()) <= 0:
             return
         split = village['boost'].split()
@@ -565,6 +571,8 @@ class RFChannel:
                 return
 
         village: Village = await self.get_query("select * from village")
+        if not village:
+            return
 
         if village['level'] == self.town_level:
             return
@@ -741,7 +749,11 @@ class RFChannel:
         self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO, overwrite_same_reason=True)
 
     async def _ravenfall_pre_restart(self):
-        await self.fetch_all_training()
+        try:
+            await self.fetch_all_training()
+        except TypeError:  # Expected error: 'NoneType' object is not iterable
+            logger.warning("Pre-restart: Ravenfall is offline, skipping")
+            return
         r = await send_multichat_command(
             text="?randleave",
             user_id=self.channel_id,
