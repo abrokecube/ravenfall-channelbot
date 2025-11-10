@@ -201,9 +201,10 @@ class RFChannel:
 
     async def event_twitch_message(self, message: ChatMessage):
         await self.twitch_message_waiter.process_message(message)
-        await self.monitor_ravenfall_command(message=message)
-        if message.first and any(message.text.lower().startswith(f"{prefix}join") for prefix in self.ravenbot_prefixes):
-            await self.first_time_joiner(message)
+        if not self.monitoring_paused:
+            await self.monitor_ravenfall_command(message=message)
+            if message.first and any(message.text.lower().startswith(f"{prefix}join") for prefix in self.ravenbot_prefixes):
+                await self.first_time_joiner(message)
     
     async def event_ravenbot_message(self, message: RavenBotMessage):
         await self.ravenbot_waiter.process_message(message)

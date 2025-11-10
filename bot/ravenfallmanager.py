@@ -166,6 +166,8 @@ class RFChannelManager:
         for channel in self.channels:
             if channel.channel_restart_lock.locked():
                 continue
+            if channel.monitoring_paused:
+                continue
             if channel.multiplier['multiplier'] != self.global_multiplier:
                 logger.debug(f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}")
                 if channel.restart_task and channel.restart_task.get_time_left() > 120:
