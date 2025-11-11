@@ -17,6 +17,7 @@ sqlalchemy = "*"
 aiohttp = "*"
 enum-tools = "*"
 python-dateutil = "*"
+tqdm = "*"
 
 [dev-packages]
 

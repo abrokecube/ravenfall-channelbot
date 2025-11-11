@@ -45,10 +45,10 @@ class Ingredient:
 
 class Item:
     def __init__(self, data):
-        self.id = data.get('id')
-        self.name = data.get('name')
-        self.description = data.get('description')
-        self.level = data.get('level')
+        self.id: str = data.get('id')
+        self.name: str = data.get('name')
+        self.description: str = data.get('description')
+        self.level: int = data.get('level')
         self.type: ItemTypes | None = ItemTypes(data.get("type")) if data.get('type') else None
         self.category: ItemCategory | None = ItemCategory(data.get("category")) if data.get('category') is not None else None
         self.material: ItemMaterials | None = ItemMaterials(data.get("material")) if data.get('material') else None

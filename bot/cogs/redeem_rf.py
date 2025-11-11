@@ -565,26 +565,50 @@ class RedeemRFCog(Cog):
             "Stock list for channel: " + channel.channel_name,
             ""
         ]
-        in_stock = []
-        low_stock = []
-        out_of_stock = []
+        categories = {
+            "Raw Materials": [],
+            "Materials": [],
+            "Armor": [],
+            "Weapons": [],
+            "Accessories": [],
+            "Pets": [],
+            "Food": [],
+            "Potions": [],
+            "Cosmetics": [],
+            "Other": [],
+        }
         for item in ravenpy.get_all_items():
             count = 0
             if item.name in item_counts:
                 count = item_counts[item.name]
-            if count > 0:
-                if count < 15:
-                    low_stock.append(f"{item.name}: {count:,}")
-                else:
-                    in_stock.append(f"{item.name}: {count:,}")
-            else:
-                out_of_stock.append(f"{item.name}: 0")
-        out_str.append("In stock:")
-        out_str.extend(in_stock)
-        out_str.append("\nLow stock:")
-        out_str.extend(low_stock)
-        out_str.append("\nOut of stock:")
-        out_str.extend(out_of_stock)
+            item_str = f"    {item.name.ljust(30)} {str(count).rjust(6)}"
+            if (not item.craft_ingredients) and (item.category == ravenpy.ItemCategory.Resource):
+                categories["Raw Materials"].append(item_str)
+            match item.category:
+                case ravenpy.ItemCategory.Resource:
+                    categories["Materials"].append(item_str)
+                case ravenpy.ItemCategory.Armor:
+                    categories["Armor"].append(item_str)
+                case ravenpy.ItemCategory.Weapon:
+                    categories["Weapons"].append(item_str)
+                case ravenpy.ItemCategory.Ring | ravenpy.ItemCategory.Amulet:
+                    categories["Accessories"].append(item_str)
+                case ravenpy.ItemCategory.Pet:
+                    categories["Pets"].append(item_str)
+                case ravenpy.ItemCategory.Food:
+                    categories["Food"].append(item_str)
+                case ravenpy.ItemCategory.Potion:
+                    categories["Potions"].append(item_str)
+                case ravenpy.ItemCategory.Cosmetic | ravenpy.ItemCategory.Skin:
+                    categories["Cosmetics"].append(item_str)
+                case _:
+                    categories["Other"].append(item_str)
+        for category_name, items in categories.items():
+            if not items:
+                continue
+            out_str.append(f"--- [{category_name}] ---")
+            out_str.extend(items)
+            out_str.append("")        
         url = await upload_to_pastes("\n".join(out_str))
         await ctx.reply(f"Stock list: {url}")
 
