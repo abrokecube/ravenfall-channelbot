@@ -22,6 +22,7 @@ import json
 from twitchAPI.helper import first
 from utils.utils import upload_to_pastes
 from bot.ravenfallrestarttask import RestartReason
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,28 @@ class PartialSendError(BaseItemSendException):
 class ItemNotFoundError(BaseItemSendException):
     pass
 
+def fill_whitespace(text: str, pattern: str = ". "):
+    """
+    Replace whitespace runs with a repeated pattern, keeping a single real space
+    at each edge of the run. The total length of the run is preserved.
+
+    Example:
+        "a          b" -> "a . . . .  b"
+    """
+    def repl(m):
+        run = m.group(0)
+        run_len = len(run)
+        if run_len <= 2:
+            # Too short to fit pattern inside — leave as-is
+            return run
+
+        # Keep 1 space at each end
+        inner_len = run_len - 2
+        repeated = (pattern * ((inner_len // len(pattern)) + 1))[:inner_len]
+
+        return " " + repeated + " "
+
+    return re.sub(r' +', repl, text)
 async def get_sender_str(channel: RFChannel, sender_username: str):
     async with get_async_session() as session:
         sender = await get_formatted_sender_data(session, channel.channel_id, sender_username)
@@ -581,7 +604,9 @@ class RedeemRFCog(Cog):
             count = 0
             if item.name in item_counts:
                 count = item_counts[item.name]
-            item_str = f"    {item.name.ljust(30)} {str(count).rjust(6)}"
+            item_str = f"{item.name.ljust(25)} {str(count).rjust(6)}"
+            item_str = fill_whitespace(item_str, ". ")
+            item_str = f"  {item_str}"
             if (not item.craft_ingredients) and (item.category == ravenpy.ItemCategory.Resource):
                 categories["Raw Materials"].append(item_str)
             match item.category:
@@ -606,7 +631,7 @@ class RedeemRFCog(Cog):
         for category_name, items in categories.items():
             if not items:
                 continue
-            out_str.append(f"--- [{category_name}] ---")
+            out_str.append(f"{category_name}")
             out_str.extend(items)
             out_str.append("")        
         url = await upload_to_pastes("\n".join(out_str))
