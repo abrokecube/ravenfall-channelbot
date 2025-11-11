@@ -598,41 +598,54 @@ class RedeemRFCog(Cog):
             "Food": [],
             "Potions": [],
             "Cosmetics": [],
+            "Scrolls": [],
             "Other": [],
         }
         for item in ravenpy.get_all_items():
+            if item.name not in item_counts:
+                item_counts[item.name] = 0
+        item_counts_list = sorted(list(item_counts.items()), key=lambda x: x[0])
+        item_counts_list = sorted(item_counts_list, key=lambda x: getattr(ravenpy._items_name_data[x[0]].material, 'value', 0))
+        item_counts_list = sorted(item_counts_list, key=lambda x: x[1] > 0, reverse=True)
+        item_cols = 27
+        num_cols = 6
+        for item_name, count in item_counts_list:
+            item = ravenpy._items_name_data[item_name]
             count = 0
             if item.name in item_counts:
                 count = item_counts[item.name]
-            item_str = f"{item.name.ljust(25)} {str(count).rjust(6)}"
+            item_str = f"{item.name.ljust(item_cols)} {str(count).rjust(max(0, min(num_cols, (item_cols+6) - len(item.name) )))}"
             item_str = fill_whitespace(item_str, ".")
             item_str = f"  {item_str}"
-            if item.category == ravenpy.ItemCategory.Resource and item.used_in:
+            if item.category == ravenpy.ItemCategory.Resource and len(item.used_in) > 0:
                 if not item.craft_ingredients:
                     categories["Raw Materials"].append(item_str)
                 else:
                     categories["Materials"].append(item_str)
-            match item.category:
-                case ravenpy.ItemCategory.Armor:
-                    categories["Armor"].append(item_str)
-                case ravenpy.ItemCategory.Weapon:
-                    categories["Weapons"].append(item_str)
-                case ravenpy.ItemCategory.Ring | ravenpy.ItemCategory.Amulet:
-                    categories["Accessories"].append(item_str)
-                case ravenpy.ItemCategory.Pet:
-                    categories["Pets"].append(item_str)
-                case ravenpy.ItemCategory.Food:
-                    categories["Food"].append(item_str)
-                case ravenpy.ItemCategory.Potion:
-                    categories["Potions"].append(item_str)
-                case ravenpy.ItemCategory.Cosmetic | ravenpy.ItemCategory.Skin:
-                    categories["Cosmetics"].append(item_str)
-                case _:
-                    categories["Other"].append(item_str)
+            else:
+                match item.category:
+                    case ravenpy.ItemCategory.Armor:
+                        categories["Armor"].append(item_str)
+                    case ravenpy.ItemCategory.Weapon:
+                        categories["Weapons"].append(item_str)
+                    case ravenpy.ItemCategory.Ring | ravenpy.ItemCategory.Amulet:
+                        categories["Accessories"].append(item_str)
+                    case ravenpy.ItemCategory.Pet:
+                        categories["Pets"].append(item_str)
+                    case ravenpy.ItemCategory.Food:
+                        categories["Food"].append(item_str)
+                    case ravenpy.ItemCategory.Potion:
+                        categories["Potions"].append(item_str)
+                    case ravenpy.ItemCategory.Cosmetic | ravenpy.ItemCategory.Skin:
+                        categories["Cosmetics"].append(item_str)
+                    case ravenpy.ItemCategory.Scroll:
+                        categories["Scrolls"].append(item_str)
+                    case _:
+                        categories["Other"].append(item_str)
         for category_name, items in categories.items():
             if not items:
                 continue
-            out_str.append(f"{category_name}")
+            out_str.append(f"{category_name} --- -- -- - -")
             out_str.extend(items)
             out_str.append("")        
         url = await upload_to_pastes("\n".join(out_str))
