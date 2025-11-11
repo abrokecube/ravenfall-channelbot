@@ -37,4 +37,4 @@ s = """
     Atlarus Light                       0
 
 """
-print(fill_whitespace(s, pattern=". "))
+print(fill_whitespace(s, pattern="."))

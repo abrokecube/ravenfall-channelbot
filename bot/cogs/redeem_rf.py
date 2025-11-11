@@ -605,7 +605,7 @@ class RedeemRFCog(Cog):
             if item.name in item_counts:
                 count = item_counts[item.name]
             item_str = f"{item.name.ljust(25)} {str(count).rjust(6)}"
-            item_str = fill_whitespace(item_str, ". ")
+            item_str = fill_whitespace(item_str, ".")
             item_str = f"  {item_str}"
             if (not item.craft_ingredients) and (item.category == ravenpy.ItemCategory.Resource):
                 categories["Raw Materials"].append(item_str)
