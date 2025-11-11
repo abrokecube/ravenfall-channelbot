@@ -134,7 +134,7 @@ async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]
     total_items = 0
     for user in char_items["data"]:
         for user_item in user["items"]:
-            if user_item['soulbound'] or user_item['equipped']:
+            if user_item['equipped']:
                 continue
             if user_item["id"] == item.id:
                 total_items += user_item["amount"]
@@ -146,7 +146,7 @@ async def get_all_item_count(channel: RFChannel) -> Dict[str, int]:
     total_items = {}
     for user in char_items["data"]:
         for user_item in user["items"]:
-            if user_item['soulbound'] or user_item['equipped']:
+            if user_item['equipped']:
                 continue
             item = ravenpy._items_id_data.get(user_item["id"])
             if item is None:
@@ -571,11 +571,11 @@ class RedeemRFCog(Cog):
         if item is None:
             await ctx.reply(f"Could not identify item.")
             return
+        warning = ""
         if item.soulbound:
-            await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
-            return
+            warning = " (This item cannot be redeemed.)"
         await ctx.reply(
-            f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock."
+            f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.{warning}"
         )
     
     @Cog.command(name="stock all")
@@ -614,9 +614,12 @@ class RedeemRFCog(Cog):
             count = 0
             if item.name in item_counts:
                 count = item_counts[item.name]
+            warning = ""
+            if item.soulbound:
+                warning = " (Cannot be redeemed.)"
             item_str = f"{item.name.ljust(item_cols)} {str(count).rjust(max(0, min(num_cols, (item_cols+6) - len(item.name) )))}"
             item_str = fill_whitespace(item_str, ".")
-            item_str = f"  {item_str}"
+            item_str = f"  {item_str}{warning}"
             if item.category == ravenpy.ItemCategory.Resource and len(item.used_in) > 0:
                 if not item.craft_ingredients:
                     categories["Raw Materials"].append(item_str)
