@@ -377,7 +377,7 @@ class RedeemRFCog(Cog):
                     else:
                         prev_total = float(record.total_time or 0)
                         last_seen: datetime = record.last_seen_timestamp
-                        last_seen.replace(tzinfo=timezone.utc)
+                        last_seen = last_seen.replace(tzinfo=timezone.utc)
 
                     elapsed = 0.0
                     if last_seen is not None:
