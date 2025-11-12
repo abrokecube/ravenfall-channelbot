@@ -323,7 +323,7 @@ class RedeemRFCog(Cog):
             logger.error("item_values.json not found")
         self.idle_points.start()
 
-    @routine(delta=timedelta(seconds=15), wait_remainder=True)
+    @routine(delta=timedelta(seconds=15), wait_remainder=True, max_attempts=99999)
     async def idle_points(self):
         for ch in self.rf_manager.channels:
             chars: List[Player] = await ch.get_query("select * from players")
@@ -376,7 +376,8 @@ class RedeemRFCog(Cog):
                         last_seen = None
                     else:
                         prev_total = float(record.total_time or 0)
-                        last_seen = record.last_seen_timestamp
+                        last_seen: datetime = record.last_seen_timestamp
+                        last_seen.replace(tzinfo=timezone.utc)
 
                     elapsed = 0.0
                     if last_seen is not None:
