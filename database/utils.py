@@ -33,6 +33,7 @@ async def get_user(
             display_name=name
         )
         session.add(user_obj)
+        await session.flush()
     if name:
         user_obj.name = name
     return user_obj
@@ -64,6 +65,7 @@ async def get_channel(
             name=name
         )
         session.add(user_obj)
+        await session.flush()
     if user_obj.name is None:
         user_obj.name = name
     return user_obj
@@ -89,6 +91,7 @@ async def get_character(
             twitch_id=twitch_id
         )
         session.add(user_obj)
+        await session.flush()
     await get_user(session, id=twitch_id, name=name)
     if name:
         user_obj.name = name  # update name if it was changed
