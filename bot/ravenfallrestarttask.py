@@ -127,12 +127,14 @@ class RFRestartTask:
             "dungeon": "Restart postponed due to dungeon.",
             "dungeon_prep": "Restart postponed due to dungeon being prepared.",
             "raid": "Restart postponed due to raid.",
+            "error": "Restart postponed due to an error while checking Ravenfall status.",
         }
         names = {
             "server_down": "server offline",
             "dungeon": "dungeon",
             "dungeon_prep": "dungeon being prepared",
             "raid": "raid",
+            "error": "error checking status",
         }
         while True:
             old_event_type = event_type
@@ -140,20 +142,25 @@ class RFRestartTask:
             await asyncio.sleep(2)
             if self.done:
                 return
-            time_left = self.get_time_left()
-            if self.channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
-                event_type = "dungeon_prep"
-            if self.channel.event == RFChannelEvent.DUNGEON and self.channel.dungeon['players'] > 0:
-                event_type = "dungeon"
-            elif self.channel.event == RFChannelEvent.RAID and self.channel.raid["players"] > 0:
-                event_type = "raid"
-            if not self.manager.ravennest_is_online:
-                event_type = "server_down"
             
-            if event_type:
-                self.future_pause_reason = names[event_type]
-            else:
-                self.future_pause_reason = ""
+            time_left = self.get_time_left()
+            try:
+                if self.channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
+                    event_type = "dungeon_prep"
+                if self.channel.event == RFChannelEvent.DUNGEON and self.channel.dungeon['players'] > 0:
+                    event_type = "dungeon"
+                elif self.channel.event == RFChannelEvent.RAID and self.channel.raid["players"] > 0:
+                    event_type = "raid"
+                if not self.manager.ravennest_is_online:
+                    event_type = "server_down"
+                
+                if event_type:
+                    self.future_pause_reason = names[event_type]
+                else:
+                    self.future_pause_reason = ""
+            except Exception as e:
+                logger.error(f"Error checking restart pause events for {self.channel.channel_name}: {e}", exc_info=True)
+                event_type = "error"
 
             if (time_left > WARNING_MSG_TIMES[0][0] + 5) and not self._paused:
                 continue
