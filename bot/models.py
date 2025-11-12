@@ -90,7 +90,6 @@ class Player(TypedDict):
         "fishing", "mining", "crafting", "cooking", "farming", "slayer", "magic", "ranged",
         "sailing", "healing", "gathering", "alchemy"
     ], Union[int, PlayerStat]]
-    town: str
 
 class Village(TypedDict):
     name: str

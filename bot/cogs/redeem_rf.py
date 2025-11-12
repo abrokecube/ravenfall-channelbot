@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from bot.messageprocessor import RavenfallMessage
 import logging
 import json
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
 import os
@@ -23,6 +23,11 @@ from twitchAPI.helper import first
 from utils.utils import upload_to_pastes
 from bot.ravenfallrestarttask import RestartReason
 import re
+from utils.routines import routine
+from datetime import timedelta, datetime, timezone
+from bot.models import Player
+from database.models import UserCreditIdleEarn, Character, Channel
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -316,6 +321,84 @@ class RedeemRFCog(Cog):
             self.item_price_dict = {item_name.lower(): price for item_name, price in item_price_json.items()}
         else:
             logger.error("item_values.json not found")
+        self.idle_points.start()
+
+    @routine(delta=timedelta(seconds=15), wait_remainder=True)
+    async def idle_points(self):
+        for ch in self.rf_manager.channels:
+            chars: List[Player] = await ch.get_query("select * from players")
+            if not chars:
+                continue
+
+            now = datetime.now(timezone.utc)
+            char_ids = [player.get("id") for player in chars if player.get("id")]
+            if not char_ids:
+                continue
+
+            async with get_async_session() as session:
+                char_rows = await session.execute(
+                    select(Character).where(Character.id.in_(char_ids))
+                )
+                characters = {char.id: char for char in char_rows.scalars()}
+
+                idle_rows = await session.execute(
+                    select(UserCreditIdleEarn).where(UserCreditIdleEarn.char_id.in_(char_ids))
+                )
+                channel_db = (await session.execute(
+                    select(Channel).where(Channel.id == ch.channel_id)
+                )).scalar_one_or_none()
+                earn_rate = 10 if not channel_db else channel_db.idle_earn_rate
+
+                idle_records = {rec.char_id: rec for rec in idle_rows.scalars()}
+
+                present_ids = set()
+
+                for player in chars:
+                    char_id = player.get("id")
+                    if not char_id:
+                        continue
+                    present_ids.add(char_id)
+
+                    character = characters.get(char_id)
+                    if character is None:
+                        continue
+
+                    record = idle_records.get(char_id)
+                    if record is None:
+                        record = UserCreditIdleEarn(
+                            char_id=char_id,
+                            total_time=0,
+                            last_seen_timestamp=now,
+                        )
+                        session.add(record)
+                        idle_records[char_id] = record
+                        prev_total = 0.0
+                        last_seen = None
+                    else:
+                        prev_total = float(record.total_time or 0)
+                        last_seen = record.last_seen_timestamp
+
+                    elapsed = 0.0
+                    if last_seen is not None:
+                        elapsed = (now - last_seen).total_seconds()
+                        if elapsed < 0:
+                            elapsed = 0.0
+                        if elapsed > 60:  # treat as a fresh re-entry
+                            elapsed = 0.0
+
+                    record.total_time = prev_total + elapsed
+                    record.last_seen_timestamp = now
+
+                    earned_minutes = int(record.total_time // 60) - int(prev_total // 60)
+                    if earned_minutes > 0 and character.twitch_id is not None:
+                        credits = earned_minutes * earn_rate
+                        await add_credits(
+                            session,
+                            character.twitch_id,
+                            credits,
+                            f"Idle town earnings ({character.id})",
+                        )
+
 
     async def send_coins_redeem(self, ctx: RedeemContext, amount: int):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)

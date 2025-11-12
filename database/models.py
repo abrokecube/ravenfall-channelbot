@@ -32,6 +32,7 @@ class Channel(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
+    idle_earn_rate = Column(Integer, default=10)  # credits per minute
     prefix = Column(JSON, nullable=False, default=["?"])
 
 
@@ -45,6 +46,7 @@ class Character(Base):
     user = relationship("User", back_populates='characters')
 
     auto_raid_status = relationship("AutoRaidStatus", back_populates='char', uselist=False)
+    user_credit_idle_earn = relationship("UserCreditIdleEarn", back_populates='char', uselist=False)
 
 
 class AutoRaidStatus(Base):
@@ -93,6 +95,16 @@ class UserCredits(Base):
     user_id = Column(Integer)
     credits = Column(Integer, default=0)
 
+class UserCreditIdleEarn(Base):
+    __tablename__ = 'user_credit_idle_earn'
+    
+    id = Column(Integer, primary_key=True)
+    char_id = Column(String, ForeignKey('characters.id'), unique=True)
+    total_time = Column(Float, default=0)  # in seconds
+    last_seen_timestamp = Column(DateTime)
+    
+    char = relationship('Character', back_populates='user_credit_idle_earn')
+
 class UserCreditTransaction(Base):
     __tablename__ = 'user_credit_transaction'
     
@@ -102,7 +114,6 @@ class UserCreditTransaction(Base):
     description = Column(String)
     timestamp = Column(DateTime)
     
-
 
 async def create_all_tables():
     async with engine.begin() as conn:
