@@ -32,7 +32,8 @@ class Channel(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    idle_earn_rate = Column(Integer, default=10)  # credits per minute
+    idle_earn_rate = Column(Integer, default=5)
+    idle_earn_interval = Column(Integer, default=5*60)  # add credits every 5 minutes
     prefix = Column(JSON, nullable=False, default=["?"])
 
 

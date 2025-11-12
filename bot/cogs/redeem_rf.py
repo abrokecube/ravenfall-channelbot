@@ -7,7 +7,7 @@ from ..ravenfallloc import pl
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
 from database.session import get_async_session
-from database.utils import get_formatted_sender_data, add_credits, get_user_credits
+from database.utils import get_formatted_sender_data, add_credits, get_user_credits, get_channel
 from dataclasses import dataclass
 from bot.messageprocessor import RavenfallMessage
 import logging
@@ -344,10 +344,8 @@ class RedeemRFCog(Cog):
                 idle_rows = await session.execute(
                     select(UserCreditIdleEarn).where(UserCreditIdleEarn.char_id.in_(char_ids))
                 )
-                channel_db = (await session.execute(
-                    select(Channel).where(Channel.id == ch.channel_id)
-                )).scalar_one_or_none()
-                earn_rate = 10 if not channel_db else channel_db.idle_earn_rate
+                channel_db = await get_channel(session, id=ch.channel_id, name=ch.channel_name)
+                earn_rate = 3 if not channel_db else channel_db.idle_earn_rate
 
                 idle_records = {rec.char_id: rec for rec in idle_rows.scalars()}
 
@@ -377,7 +375,8 @@ class RedeemRFCog(Cog):
                     else:
                         prev_total = float(record.total_time or 0)
                         last_seen: datetime = record.last_seen_timestamp
-                        last_seen = last_seen.replace(tzinfo=timezone.utc)
+                        if last_seen is not None and last_seen.tzinfo is None:
+                            last_seen = last_seen.replace(tzinfo=timezone.utc)
 
                     elapsed = 0.0
                     if last_seen is not None:
@@ -390,16 +389,20 @@ class RedeemRFCog(Cog):
                     record.total_time = prev_total + elapsed
                     record.last_seen_timestamp = now
 
-                    earned_minutes = int(record.total_time // 60) - int(prev_total // 60)
-                    if earned_minutes > 0 and character.twitch_id is not None:
-                        credits = earned_minutes * earn_rate
+                    interval_seconds = channel_db.idle_earn_interval
+
+                    earned_chunks = (
+                        int(record.total_time // interval_seconds)
+                        - int(prev_total // interval_seconds)
+                    )
+                    if earned_chunks > 0 and character.twitch_id is not None:
+                        credits = earned_chunks * earn_rate
                         await add_credits(
                             session,
                             character.twitch_id,
                             credits,
                             f"Idle town earnings ({character.id})",
                         )
-
 
     async def send_coins_redeem(self, ctx: RedeemContext, amount: int):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
