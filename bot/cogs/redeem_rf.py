@@ -383,7 +383,7 @@ class RedeemRFCog(Cog):
                         elapsed = (now - last_seen).total_seconds()
                         if elapsed < 0:
                             elapsed = 0.0
-                        if elapsed > 60:  # treat as a fresh re-entry
+                        if elapsed > 40:  # treat as a fresh re-entry
                             elapsed = 0.0
 
                     record.total_time = prev_total + elapsed
