@@ -313,7 +313,11 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
             
             send_exception = None
             def no_recipient_check(msg: RavenfallMessage):
-                format_match = msg['Format'] == "Could not find an item or player matching the query '{query}'"
+                bad_messages = (
+                    "You do not have any {itemName} to gift.",
+                    "Could not find an item or player matching the query '{query}'"
+                )
+                format_match = msg['Format'] in bad_messages
                 username_match = msg["Args"][0] == f"{target_user_name} {item.name} {items_to_send}"
                 return format_match and username_match
             task1 = asyncio.create_task(wait_for_message(channel, no_recipient_check, timeout=10))
