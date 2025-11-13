@@ -137,7 +137,7 @@ class RFChannelManager:
         multiplier: ExpMult | None = None
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
             try:
-                async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier") as response:
+                async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False) as response:
                     data: GameMultiplier = await response.json()
                     if data:
                         is_online = True
