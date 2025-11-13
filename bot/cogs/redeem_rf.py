@@ -2,7 +2,7 @@ from bot.ravenfallchannel import RFChannel
 from ..commands import CommandContext, Commands, RedeemContext
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
-from ..middleman import send_to_server_and_wait_response, send_to_client
+from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
@@ -61,6 +61,9 @@ class PartialSendError(BaseItemSendException):
 class ItemNotFoundError(BaseItemSendException):
     pass
 
+class RecipientNotFoundError(BaseItemSendException):
+    pass
+
 def fill_whitespace(text: str, pattern: str = ". "):
     """
     Replace whitespace runs with a repeated pattern, keeping a single real space
@@ -97,6 +100,28 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15):
         raise TimeoutError("Timed out waiting for response")
     response_dict = response["responses"][0]
 
+    match = channel.rfloc.identify_string(response_dict['Format'])
+    formatted_response = channel.rfloc.translate_string(response_dict['Format'], response_dict['Args'], match).strip()
+    edited_response = response_dict.copy()
+    edited_response["CorrelationId"] = None
+    edited_response["Format"] = formatted_response
+    edited_response["Args"] = []
+    await send_to_client(channel.middleman_connection_id, json.dumps(edited_response))
+
+    response_id = None
+    if match is not None:
+        response_id = match.key
+    return RavenfallResponse(
+        response = response_dict,
+        response_id = response_id,
+        formatted_response = formatted_response
+    )
+
+async def wait_for_message(channel: RFChannel, check, timeout: int = 15):
+    response = await channel.ravenfall_waiter.wait_for_message(check, timeout=timeout)
+    if response is None:
+        raise TimeoutError("Timed out waiting for response")
+    response_dict = response
     match = channel.rfloc.identify_string(response_dict['Format'])
     formatted_response = channel.rfloc.translate_string(response_dict['Format'], response_dict['Args'], match).strip()
     edited_response = response_dict.copy()
@@ -272,15 +297,28 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
             logger.info(f"Sending {items_to_send}x {item.name} to {target_user_name} from {user_item['user_name']}")
             
             send_exception = None
-            try:
-                response = await send_ravenfall(
-                    channel, RavenBotTemplates.gift_item(
-                        sender = await get_sender_str(channel, user_item["user_name"]),
-                        recipient_user_name = target_user_name,
-                        item_name = item.name,
-                        item_count = items_to_send,
-                    )
+            def no_recipient_check(msg: RavenfallMessage):
+                format_match = msg['Format'] == "Could not find an item or player matching the query '{query}'"
+                username_match = msg["Args"][0] == f"{target_user_name} {item.name} {items_to_send}"
+                return format_match and username_match
+            task1 = asyncio.create_task(wait_for_message(channel, no_recipient_check, timeout=10))
+            task2 = asyncio.create_task(send_ravenfall(
+                channel, RavenBotTemplates.gift_item(
+                    sender = await get_sender_str(channel, user_item["user_name"]),
+                    recipient_user_name = target_user_name,
+                    item_name = item.name,
+                    item_count = items_to_send,
                 )
+            ))
+            try:
+                done, pending = await asyncio.wait(
+                    [task1, task2],
+                    return_when=asyncio.FIRST_COMPLETED,
+                    timeout=15
+                )
+                response = done.pop().result()
+                for p in pending:
+                    p.cancel()
             except Exception as e:
                 response = None
                 send_exception = e
@@ -292,6 +330,8 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
 
             if response.response_id not in ("gift", "gift_item_not_owned"):
                 logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")
+                if response.response_id == "gift_player_not_found":
+                    raise RecipientNotFoundError("Recipient is not in the game")
                 if not one_item_successful:
                     raise CouldNotSendItemsError("Failed to send items")
 
@@ -593,7 +633,7 @@ class RedeemRFCog(Cog):
                 f"(ID: {trans_id})"
             )
             return
-        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError) as e:
+        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, RecipientNotFoundError) as e:
             logger.error(f"Error in command: {e}")
             await ctx.send(f"❌ Error: {e}. Your credits were not deducted.")
             return
@@ -773,7 +813,7 @@ class RedeemRFCog(Cog):
             logger.error(f"Error in item redeem: {e}")
             await ctx.send(f"There are not enough items in stock.")
             return
-        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
+        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, PartialSendError, RecipientNotFoundError) as e:
             logger.error(f"Error in command: {e}")
             await ctx.send(f"❌ Error: {e}")
             return
