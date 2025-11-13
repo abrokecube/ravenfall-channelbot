@@ -225,14 +225,26 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
 
             logger.info(f"Sending {coins_to_send} coins to {target_user_name} from {user['user_name']}")
             
-            response = await send_ravenfall(
-                channel, RavenBotTemplates.gift_item(
-                    sender = await get_sender_str(channel, user["user_name"]),
-                    recipient_user_name = target_user_name,
-                    item_name = "coins",
-                    item_count = coins_to_send,
+            send_exception = None
+            try:
+                response = await send_ravenfall(
+                    channel, RavenBotTemplates.gift_item(
+                        sender = await get_sender_str(channel, user["user_name"]),
+                        recipient_user_name = target_user_name,
+                        item_name = "coins",
+                        item_count = coins_to_send,
+                    )
                 )
-            )
+            except Exception as e:
+                logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {send_exception}", exc_info=True)
+                response = None
+                send_exception = e
+
+            if send_exception is not None:
+                if not one_coin_successful:
+                    raise send_exception
+                else:
+                    continue
 
             if response.response_id not in ("gift_coins", "gift_coins_one"):
                 logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {response.response_id}")
@@ -323,13 +335,15 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 for p in pending:
                     p.cancel()
             except Exception as e:
+                logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {send_exception}", exc_info=True)
                 response = None
                 send_exception = e
 
             if send_exception is not None:
-                logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {send_exception}")
                 if not one_item_successful:
                     raise send_exception
+                else:
+                    continue
 
             if response.response_id not in ("gift", "gift_item_not_owned"):
                 logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")

@@ -254,6 +254,7 @@ async def main():
         print(f"  {item_name}: {command_counts[item_name]}")
 
     base_materials: List[str] = []
+    base_mats_json = {}
     commands: List[str] = []
     for item_name in ordered_items:
         crafted = command_counts[item_name]
@@ -262,6 +263,7 @@ async def main():
             continue
         if not item.craft_ingredients:
             base_materials.append(f"{str(crafted).rjust(6)} {item_name}")
+            base_mats_json[item_name] = crafted
             continue
         skill = getattr(item, "craft_skill", None)
         if skill == ravenpy.Skills.Crafting:
@@ -284,6 +286,11 @@ async def main():
     commands_path.write_text("\n".join(out_text), encoding="utf-8")
 
     print(f"\nCraft commands written to {commands_path.resolve()}")
+    
+    items_json_path = Path("./output/required_items.json")
+    items_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with items_json_path.open("w", encoding="utf-8") as f:
+        json.dump(base_mats_json, f, indent=4)
 
     # print("Remaining resources:")
     # for resource_name, amount in sorted(remaining_resources.items()):
