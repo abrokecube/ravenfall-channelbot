@@ -317,10 +317,14 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                     "You do not have any {itemName} to gift.",
                     "Could not find an item or player matching the query '{query}'"
                 )
+                bad_args = (
+                    item.name,
+                    f"{target_user_name} {item.name} {items_to_send}"
+                )
                 format_match = msg['Format'] in bad_messages
-                username_match = msg["Args"][0] == f"{target_user_name} {item.name} {items_to_send}"
+                username_match = msg["Args"][0] in bad_args
                 return format_match and username_match
-            task1 = asyncio.create_task(wait_for_message(channel, no_recipient_check, timeout=10))
+            task1 = asyncio.create_task(wait_for_message(channel, no_recipient_check, timeout=15))
             task2 = asyncio.create_task(send_ravenfall(
                 channel, RavenBotTemplates.gift_item(
                     sender = await get_sender_str(channel, user_item["user_name"]),
