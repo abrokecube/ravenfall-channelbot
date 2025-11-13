@@ -329,19 +329,19 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                     item_count = items_to_send,
                 )
             ))
+            done, pending = await asyncio.wait(
+                [task1, task2],
+                return_when=asyncio.FIRST_COMPLETED,
+                timeout=15
+            )
             try:
-                done, pending = await asyncio.wait(
-                    [task1, task2],
-                    return_when=asyncio.FIRST_COMPLETED,
-                    timeout=15
-                )
                 response = done.pop().result()
-                for p in pending:
-                    p.cancel()
             except Exception as e:
                 logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {send_exception}", exc_info=True)
                 response = None
                 send_exception = e
+            for p in pending:
+                p.cancel()
 
             if send_exception is not None:
                 if not one_item_successful:
