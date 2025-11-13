@@ -91,14 +91,18 @@ async def get_sender_str(channel: RFChannel, sender_username: str):
         sender = await get_formatted_sender_data(session, channel.channel_id, sender_username)
     return sender
 
-async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15):
-    response = await send_to_server_and_wait_response(channel.middleman_connection_id, message, timeout=timeout)
-    if not response["success"]:
-        logger.error(f"Could not talk to Ravenfall: {response}")
+async def send_ravenfall(channel: RFChannel, message: dict, timeout: int = 15):
+    def check(msg: RavenfallMessage):
+        return msg.CorrelationId == message['CorrelationId']
+    task1 = asyncio.create_task(channel.ravenfall_waiter.wait_for_message(channel, check, timeout=timeout))
+    req_response = await send_to_server(channel.middleman_connection_id, json.dumps(message))
+    if not req_response["success"]:
+        logger.error(f"Could not talk to Ravenfall: {req_response}")
         raise CouldNotSendMessageError("Could not talk to Ravenfall")
-    if response["timeout"]:
+    result = await task1
+    if result is None:
         raise TimeoutError("Timed out waiting for response")
-    response_dict = response["responses"][0]
+    response_dict = result
 
     match = channel.rfloc.identify_string(response_dict['Format'])
     formatted_response = channel.rfloc.translate_string(response_dict['Format'], response_dict['Args'], match).strip()
@@ -106,7 +110,6 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15):
     edited_response["CorrelationId"] = None
     edited_response["Format"] = formatted_response
     edited_response["Args"] = []
-    await send_to_client(channel.middleman_connection_id, json.dumps(edited_response))
 
     response_id = None
     if match is not None:
@@ -128,7 +131,6 @@ async def wait_for_message(channel: RFChannel, check, timeout: int = 15):
     edited_response["CorrelationId"] = None
     edited_response["Format"] = formatted_response
     edited_response["Args"] = []
-    await send_to_client(channel.middleman_connection_id, json.dumps(edited_response))
 
     response_id = None
     if match is not None:
@@ -231,6 +233,7 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
                     recipient_user_name = target_user_name,
                     item_name = "coins",
                     item_count = coins_to_send,
+                    return_dict = True,
                 )
             )
             if response.response_id not in ("gift_coins", "gift_coins_one"):
@@ -308,6 +311,7 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                     recipient_user_name = target_user_name,
                     item_name = item.name,
                     item_count = items_to_send,
+                    return_dict = True,
                 )
             ))
             try:
