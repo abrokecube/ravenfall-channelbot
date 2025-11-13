@@ -299,10 +299,12 @@ async def get_user_credits(session: AsyncSession, user_id: Union[int, str]) -> i
     user_credits = await get_user_credits_raw(session, user_id)
     return user_credits.credits
 
-async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: int, description: str) -> int:
+async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: int, description: str = "", record_transaction: bool=True) -> int:
     user_credits = await get_user_credits_raw(session, user_id)
     user_credits.credits += amount
-    transaction = UserCreditTransaction(user_id=user_id, credits=amount, description=description, timestamp=datetime.now())
-    session.add(transaction)
-    await session.flush()
-    return transaction.id
+    if record_transaction:
+        transaction = UserCreditTransaction(user_id=user_id, credits=amount, description=description, timestamp=datetime.now())
+        session.add(transaction)
+        await session.flush()
+        return transaction.id
+    return -1

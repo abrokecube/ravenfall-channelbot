@@ -467,6 +467,7 @@ class RedeemRFCog(Cog):
                             character.twitch_id,
                             credits,
                             f"Idle town earnings ({character.id})",
+                            record_transaction=False
                         )
 
     async def send_coins_redeem(self, ctx: RedeemContext, amount: int):
