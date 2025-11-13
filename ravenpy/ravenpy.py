@@ -542,7 +542,8 @@ class RavenNest:
                 json={
                     "username": self._user,
                     "password": self._pass
-                }
+                },
+                ssl=False
             )
             response = await r.text()
         if '"token"' in response:
@@ -565,7 +566,8 @@ class RavenNest:
                 headers={
                     "auth-token": self._auth,
                     "Accept": "application/json"
-                }
+                },
+                ssl=False
             )
             if r.status == 204:
                 return None
