@@ -475,20 +475,20 @@ class RedeemRFCog(Cog):
             return
         except Exception as e:
             await ctx.cancel()
-            logger.error(f"Unknown error occured in coin redeem: {e}")
-            await ctx.send(f"❌ An unknown error occured. Please try again later. You have been refunded.")
+            logger.error(f"Unknown error occurred in coin redeem: {e}")
+            await ctx.send(f"❌ An unknown error occurred. Please try again later. You have been refunded.")
             return
         await ctx.fulfill()
     
-    @Cog.redeem(name="Recieve 25,000 coins")
+    @Cog.redeem(name="Receive 25,000 coins")
     async def coins_25_000(self, ctx: RedeemContext):
         await self.send_coins_redeem(ctx, 25000)
 
-    @Cog.redeem(name="Recieve 250,000 coins")
+    @Cog.redeem(name="Receive 250,000 coins")
     async def coins_250_000(self, ctx: RedeemContext):
         await self.send_coins_redeem(ctx, 250000)
 
-    @Cog.redeem(name="Recieve 1,000,000 coins")
+    @Cog.redeem(name="Receive 1,000,000 coins")
     async def coins_1_000_000(self, ctx: RedeemContext):
         await self.send_coins_redeem(ctx, 1000000)
 
@@ -836,8 +836,8 @@ class RedeemRFCog(Cog):
             await ctx.send(f"❌ Error: {e}")
             return
         except Exception as e:
-            logger.error(f"Unknown error occured in command: {e}")
-            await ctx.send(f"❌ An unknown error occured. Please try again later.")
+            logger.error(f"Unknown error occurred in command: {e}")
+            await ctx.send(f"❌ An unknown error occurred. Please try again later.")
             return
             
         await asyncio.sleep(0.5)

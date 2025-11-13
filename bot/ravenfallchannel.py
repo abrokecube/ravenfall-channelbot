@@ -971,7 +971,7 @@ class RFChannel:
             else:
                 await self.send_chat_message(resp_giveup)
         else:
-            logger.debug(f"Recieved a response to command: {command} in {self.channel_name}")
+            logger.debug(f"Received a response to command: {command} in {self.channel_name}")
 
         self.is_monitoring = False
         self.current_monitor = None

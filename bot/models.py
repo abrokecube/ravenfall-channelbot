@@ -13,7 +13,7 @@ class Channel(TypedDict):
     custom_town_msg: str
     ravenbot_prefix: str | list | tuple
     welcome_message: str
-    recieve_global_alerts: bool
+    receive_global_alerts: bool
     sandboxie_box: str
     ravenfall_start_script: str
     auto_restart: bool

@@ -278,7 +278,7 @@ def _call_or_none(_obj: Any, _callable: Callable):
 class Character:
     def __init__(self, data):
         self._raw: Dict = data
-        self.time_recieved = datetime.now(timezone.utc)
+        self.time_received = datetime.now(timezone.utc)
         self.id: str = data['id']
         self.char_id: str = self.id
         self.user_id: str = data['userId']
