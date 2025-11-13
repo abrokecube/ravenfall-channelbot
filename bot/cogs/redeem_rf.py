@@ -186,13 +186,13 @@ async def get_all_item_count(channel: RFChannel) -> Dict[str, int]:
                 total_items[item.name] = user_item["amount"]
     return total_items
 
-channel_coin_gift_locks: Dict[str, asyncio.Lock] = {}
+channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
 async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
-    if channel.channel_id in channel_coin_gift_locks:
-        lock = channel_coin_gift_locks[channel.channel_id]
+    if channel.channel_id in channel_item_gift_locks:
+        lock = channel_item_gift_locks[channel.channel_id]
     else:
         lock = asyncio.Lock()
-        channel_coin_gift_locks[channel.channel_id] = lock
+        channel_item_gift_locks[channel.channel_id] = lock
 
     async with lock:
         char_coins = await get_char_coins(channel.channel_id)
@@ -224,6 +224,7 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
             coins_to_send = min(coins_remaining, user["coins"])
 
             logger.info(f"Sending {coins_to_send} coins to {target_user_name} from {user['user_name']}")
+            
             response = await send_ravenfall(
                 channel, RavenBotTemplates.gift_item(
                     sender = await get_sender_str(channel, user["user_name"]),
@@ -232,8 +233,11 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
                     item_count = coins_to_send,
                 )
             )
+
             if response.response_id not in ("gift_coins", "gift_coins_one"):
                 logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {response.response_id}")
+                if response.response_id in ("gift_player_not_found", "send_player_not_found", "gift_fail_target_missing"):
+                    raise RecipientNotFoundError("Recipient is not in the game")
                 if not one_coin_successful:
                     raise CouldNotSendItemsError("Failed to send coins")
             if response.response_id == "gift_coins_one":
@@ -248,11 +252,11 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
 
 channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
 async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int):
-    if channel.channel_id in channel_coin_gift_locks:
-        lock = channel_coin_gift_locks[channel.channel_id]
+    if channel.channel_id in channel_item_gift_locks:
+        lock = channel_item_gift_locks[channel.channel_id]
     else:
         lock = asyncio.Lock()
-        channel_coin_gift_locks[channel.channel_id] = lock
+        channel_item_gift_locks[channel.channel_id] = lock
 
     async with lock:
         item_search_results = ravenpy.search_item(item_name, limit=1)
@@ -329,7 +333,7 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
 
             if response.response_id not in ("gift", "gift_item_not_owned"):
                 logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")
-                if response.response_id == "gift_player_not_found":
+                if response.response_id in ("gift_player_not_found", "send_player_not_found", "gift_fail_target_missing"):
                     raise RecipientNotFoundError("Recipient is not in the game")
                 if not one_item_successful:
                     raise CouldNotSendItemsError("Failed to send items")
@@ -454,6 +458,11 @@ class RedeemRFCog(Cog):
             await ctx.cancel()
             logger.error(f"Error in coin redeem: {e}")
             await ctx.send(f"There are not enough coins in stock. You have been refunded.")
+            return
+        except RecipientNotFoundError as e:
+            logger.error(f"Error in command: {e}")
+            await asyncio.sleep(0.5)
+            await ctx.send(f"❌ Error: You are not in the game. You have been refunded.")
             return
         except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError) as e:
             await ctx.cancel()
@@ -632,13 +641,18 @@ class RedeemRFCog(Cog):
                 f"(ID: {trans_id})"
             )
             return
-        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, RecipientNotFoundError) as e:
+        except RecipientNotFoundError as e:
+            logger.error(f"Error in command: {e}")
+            await asyncio.sleep(0.5)
+            await ctx.send(f"❌ Error: You are not in the game. Your credits were not deducted.")
+            return
+        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError) as e:
             logger.error(f"Error in command: {e}")
             await ctx.send(f"❌ Error: {e}. Your credits were not deducted.")
             return
         except Exception as e:
-            logger.error(f"Unknown error occured in command: {e}")
-            await ctx.send(f"❌ An unknown error occured. Please try again later. Your credits were not deducted.")
+            logger.error(f"Unknown error occurred in command: {e}")
+            await ctx.send(f"❌ An unknown error occurred. Please try again later. Your credits were not deducted.")
             return
 
         async with get_async_session() as session:
@@ -812,7 +826,12 @@ class RedeemRFCog(Cog):
             logger.error(f"Error in item redeem: {e}")
             await ctx.send(f"There are not enough items in stock.")
             return
-        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, PartialSendError, RecipientNotFoundError) as e:
+        except RecipientNotFoundError as e:
+            logger.error(f"Error in command: {e}")
+            await asyncio.sleep(0.5)
+            await ctx.send(f"❌ Error: You are not in the game. Your credits were not deducted.")
+            return
+        except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError, ItemNotFoundError, PartialSendError) as e:
             logger.error(f"Error in command: {e}")
             await ctx.send(f"❌ Error: {e}")
             return
