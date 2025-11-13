@@ -24,27 +24,36 @@ class ItemEffect:
         self.duration: float = kwargs.get('duration')
         self.percentage: float = kwargs.get('percentage')
         self.min_amount: float = kwargs.get('min_amount')
+        
+    def __repr__(self):
+        return f"ItemEffect({self.effect.name}, {self.duration}s, {self.percentage}, {self.min_amount})"
 
 class ItemRequirement:
     def __init__(self, **kwargs):
         self.skill: Skills = kwargs.get('skill')
         self.level: int = kwargs.get('level')
+    
+    def __repr__(self):
+        return f"ItemRequirement({self.skill.name}, {self.level})"
 
 class ItemStat:
     def __init__(self, **kwargs):
         self.stat: Stat = kwargs.get('stat')
         self.level: int = kwargs.get('level')
+    
+    def __repr__(self):
+        return f"ItemStat({self.stat.name}, {self.level})"
 
 class Ingredient:
     def __init__(self, **kwargs):
         self.item: Item = kwargs.get('item')
         self.amount: int = kwargs.get('amount')
-    
+        
     def __repr__(self):
-        return f"Ingredient({self.item.name} x{self.amount})"
+        return f"Ingredient({self.item.name}, {self.amount})"
 
 class Item:
-    def __init__(self, data):
+    def __init__(self, data: dict):
         self.id: str = data.get('id')
         self.name: str = data.get('name')
         self.description: str = data.get('description')
@@ -52,26 +61,26 @@ class Item:
         self.type: ItemTypes | None = ItemTypes(data.get("type")) if data.get('type') else None
         self.category: ItemCategory | None = ItemCategory(data.get("category")) if data.get('category') is not None else None
         self.material: ItemMaterials | None = ItemMaterials(data.get("material")) if data.get('material') else None
-        self.sell_price = data.get("sell_price")
-        self.buy_price = data.get("buy_price")
-        self.enchantments = data.get("enchantments")
-        self.soulbound = data.get("soulbound")
-        self.craft_skill = Skills[data.get("craft_skill")] if data.get("craft_skill") else None
-        self.craft_level = data.get("craft_level")
-        self.min_success_rate = data.get("min_success_rate")
-        self.max_success_rate = data.get("max_success_rate")
-        self.preparation_time = data.get("preperation_time")
+        self.sell_price: int = data.get("sell_price")
+        self.buy_price: int = data.get("buy_price")
+        self.enchantments: int = data.get("enchantments")
+        self.soulbound: bool = data.get("soulbound")
+        self.craft_skill: Skills | None = Skills[data.get("craft_skill")] if data.get("craft_skill") else None
+        self.craft_level: int = data.get("craft_level")
+        self.min_success_rate: float = data.get("min_success_rate")
+        self.max_success_rate: float = data.get("max_success_rate")
+        self.preparation_time: int = data.get("preperation_time")
         self.is_fixed_success_rate = data.get("is_fixed_success_rate")
-        self.drop_skill = Skills[data.get("drop_skill")] if data.get("drop_skill") else None
-        self.drop_level = data.get("drop_level")
-        self.drop_chance = data.get("drop_chance")
-        self.drop_cooldown = data.get("drop_cooldown")
-        self.raid_drop_month_start = data.get("raid_drop_month_start")
-        self.raid_drop_month_length = data.get("raid_drop_month_length")
-        self.raid_min_drop = data.get("raid_min_drop")
-        self.raid_max_drop = data.get("raid_max_drop")
-        self.raid_drop_tier = data.get("raid_drop_tier")
-        self.drop_slayer_requirement = data.get("drop_slayer_requirement")
+        self.drop_skill: Skills | None = Skills[data.get("drop_skill")] if data.get("drop_skill") else None
+        self.drop_level: int = data.get("drop_level")
+        self.drop_chance: float = data.get("drop_chance")
+        self.drop_cooldown: int = data.get("drop_cooldown")
+        self.raid_drop_month_start: int = data.get("raid_drop_month_start")
+        self.raid_drop_month_length: int = data.get("raid_drop_month_length")
+        self.raid_min_drop: int = data.get("raid_min_drop")
+        self.raid_max_drop: int = data.get("raid_max_drop")
+        self.raid_drop_tier: int = data.get("raid_drop_tier")
+        self.drop_slayer_requirement: int = data.get("drop_slayer_requirement")
 
         self._craft_fail_item = data.get("craft_fail_item")
         self._craft_ingredients = data.get("craft_ingredients")
@@ -109,78 +118,99 @@ class Item:
         return self.id == value.id
     
     def __repr__(self):
-        return f"Item({self.name} ({self.id}))"
+        return f"Item({self.name}, {self.id})"
 
 class CharacterStat:
     def __init__(self, skill: Skills, exp: float, level: int):
-        self.skill = skill
-        self.level = level
-        self.level_exp = exp
-        self.total_exp_for_level = experience_for_level(level+1)
-        self.enchant_percent = 0
-        self.enchant_levels = 0
+        self.skill: Skills = skill
+        self.level: int = level
+        self.level_exp: int = exp
+        self.total_exp_for_level: float = experience_for_level(level+1)
+        self.enchant_percent: float = 0
+        self.enchant_levels: int = 0
 
     def _add_enchant(self, percent):
         self.enchant_percent += percent
         self.enchant_levels = round(self.level * self.enchant_percent)
+    
+    def __repr__(self):
+        return f"CharacterStat({self.skill.name}, {self.level}, {self.level_exp}xp, {self.enchant_percent}%, {self.enchant_levels})"
 
 class ClanStat:
     def __init__(self, **kwargs):
-        self.skill = ClanSkill[kwargs.get('name').capitalize()]
-        self.level = kwargs.get('level')
-        self.experience = kwargs.get('experience')
-        self.max_level = kwargs.get('maxLevel')
+        self.skill: ClanSkill = ClanSkill[kwargs.get('name').capitalize()]
+        self.level: int = kwargs.get('level')
+        self.experience: int = kwargs.get('experience')
+        self.max_level: int = kwargs.get('maxLevel')
+    
+    def __repr__(self):
+        return f"ClanStat({self.skill.name}, {self.level}, {self.experience}xp)"
 
 class CharacterClanRole:
     def __init__(self, **kwargs):
-        self.role = ClanRole(kwargs.get('level'))
-        self.joined = _parse_time(kwargs.get('joined'))
+        self.role: ClanRole = ClanRole(kwargs.get('level'))
+        self.joined: datetime = _parse_time(kwargs.get('joined'))
+    
+    def __repr__(self):
+        return f"CharacterClanRole({self.role.name}, joined {self.joined.isoformat()})"
 
 class CharacterClan:
     def __init__(self, **kwargs):
-        self.id = kwargs.get('id')
-        self.owner_twitch_id = kwargs.get('owner')
-        self.owner_id = kwargs.get('ownerUserId')
-        self.level = kwargs.get('level')
-        self.experience = kwargs.get('experience')
-        self.name = kwargs.get('name')
-        self.logo = kwargs.get('logo')
-        self.skills = []
+        self.id: str = kwargs.get('id')
+        self.owner_twitch_id: str = kwargs.get('owner')
+        self.owner_id: str = kwargs.get('ownerUserId')
+        self.level: int = kwargs.get('level')
+        self.experience: int = kwargs.get('experience')
+        self.name: str = kwargs.get('name')
+        self.logo: str = kwargs.get('logo')
+        self.skills: List[ClanStat] = []
         skills = kwargs.get('clanSkills')
         if skills:
             for skill in skills:
                 self.skills.append(ClanStat(**skill))
+    
+    def __repr__(self):
+        return f"CharacterClan({self.name}, level {self.level}, {self.experience}xp)"
 
 class ItemEnchantment:
     def __init__(self, enchant_string: str):
         stat, percentage = enchant_string.split(":")
-        self.percentage = float(percentage.rstrip('%'))/100
-        self.stat = Enchantments[stat.capitalize()]
+        self.percentage: float = float(percentage.rstrip('%'))/100
+        self.stat: Enchantments = Enchantments[stat.capitalize()]
+    
+    def __repr__(self):
+        return f"ItemEnchantment({self.stat.name}, {self.percentage*100}%)"
 
 class CharacterItem:
     def __init__(self, **kwargs):
         self.item: Item = _items_id_data[kwargs.get('itemId')]
-        self.amount = kwargs.get('amount')
-        self.equipped = kwargs.get('equipped')
-        self.soulbound = kwargs.get('soulbound')
+        self.amount: int = kwargs.get('amount')
+        self.equipped: bool = kwargs.get('equipped')
+        self.soulbound: bool = kwargs.get('soulbound')
         enchantment: str = kwargs.get('enchantment')
         self.enchantments: List[ItemEnchantment] = []
-        self.active = False
+        self.active: bool = False
         if enchantment:
             for item in enchantment.split(";"):
                 self.enchantments.append(ItemEnchantment(item))
 
     def _set_active(self, value):
         self.active = value
+        
+    def __repr__(self):
+        return f"CharacterItem({self.item.name}, x{self.amount}, equipped={self.equipped}, soulbound={self.soulbound}, enchantments={self.enchantments}, active={self.active})"
 
 class CharacterStatusEffect:
     def __init__(self, **kwargs):
         self.effect = Effects(kwargs.get('type'))
-        self.amount = kwargs.get('amount')
-        self.duration = kwargs.get('duration')
-        self.time_left = kwargs.get('timeLeft')
-        self.start_time = _parse_time(kwargs.get('startUtc'))
-        self.expires = _parse_time(kwargs.get('expiresUtc'))
+        self.amount: float = kwargs.get('amount')
+        self.duration: float = kwargs.get('duration')
+        self.time_left: float = kwargs.get('timeLeft')
+        self.start_time: datetime = _parse_time(kwargs.get('startUtc'))
+        self.expires: datetime = _parse_time(kwargs.get('expiresUtc'))
+        
+    def __repr__(self):
+        return f"CharacterStatusEffect({self.effect.name}, {self.amount}, {self.duration}s, {self.time_left}s left)"
 
 class CharacterEquipment:
     def __init__(self, equipment: List[CharacterItem]):
@@ -247,6 +277,9 @@ class CharacterEquipment:
         ]
         return [x for x in out if x].__iter__()
 
+    def __repr__(self):
+        return f"CharacterEquipment"
+
 fighting_replacements = {
     "Atk": "Attack",
     "Att": "Attack",
@@ -278,7 +311,7 @@ def _call_or_none(_obj: Any, _callable: Callable):
 class Character:
     def __init__(self, data):
         self._raw: Dict = data
-        self.time_received = datetime.now(timezone.utc)
+        self.time_recieved = datetime.now(timezone.utc)
         self.id: str = data['id']
         self.char_id: str = self.id
         self.user_id: str = data['userId']
@@ -484,6 +517,9 @@ class Character:
 
     def get_skill(self, skill: Skills):
         return self._skill_dict[skill]
+    
+    def __repr__(self):
+        return f"Character({self.name}, {self.id}, char_index={self.character_index})"
 
 
 class ExpMult:
@@ -492,23 +528,29 @@ class ExpMult:
         self.end_time = _parse_time(kwargs.get('endTime'))
         self.multiplier = kwargs.get('multiplier')
         self.event_name = kwargs.get("eventName")
+        
+    def __repr__(self):
+        return f"ExpMult({self.multiplier}x from {self.start_time.isoformat()} to {self.end_time.isoformat()})"
 
 
 class MarketplaceItem:
     def __init__(self, **kwargs):
         self._rf_api: RavenNest = kwargs.get('rfapi')
-        self.seller_char_id = kwargs.get('sellerCharacterId')
+        self.seller_char_id: str = kwargs.get('sellerCharacterId')
         self._seller_user_id = kwargs.get('sellerUserId')
         self.item: Item = _items_id_data[kwargs.get('itemId')]
         self.amount: int = kwargs.get('amount')
         self.price_per_item: int = kwargs.get('pricePerItem')
-        self.expires = _parse_time(kwargs.get('expires'))
-        self.created = _parse_time(kwargs.get('created'))
+        self.expires: datetime = _parse_time(kwargs.get('expires'))
+        self.created: datetime = _parse_time(kwargs.get('created'))
         self.enchantment: ItemEnchantment | None = _class_or_none(kwargs.get('enchantment'), ItemEnchantment)
         
     async def get_seller(self):
         result = self._rf_api._get_character(self.seller_char_id)
         return Character(result)
+    
+    def __repr__(self):
+        return f"MarketplaceItem({self.item.name}, x{self.amount}, {self.price_per_item} coins each, listed by {self.seller_char_id})"
 
 class RavenNest:
     def __init__(self, username: str, password: str):
@@ -734,8 +776,18 @@ def search_item(name: str, limit=10) -> List[Tuple[Item, int]]:
         out_results.append((_items_name_data[result], score))
     return out_results
 
-def get_item(name: str):
-    return _items_name_data.get(name)
+def get_item(item: str | Item | itemdefs.Items):
+    if isinstance(item, Item):
+        return item
+    elif isinstance(item, str):
+        if item.count('-') == 4:
+            return _items_id_data.get(item)
+        else:
+            return _items_name_data.get(item)
+    elif isinstance(item, itemdefs.Items):
+        return _items_id_data.get(item.value)
+    else:
+        raise ValueError("bro...")
 
 def get_all_items():
     return _items_list

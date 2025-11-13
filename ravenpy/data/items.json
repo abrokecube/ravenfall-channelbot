@@ -9749,12 +9749,12 @@
     "craft_fail_item": null,
     "craft_ingredients": [
       {
-        "item_id": "7c634ce8-7d20-4036-b5a0-52d378095c23",
-        "amount": 2
-      },
-      {
         "item_id": "771e6a95-36b2-4da6-b5d8-3f1ebeba5bef",
         "amount": 4
+      },
+      {
+        "item_id": "7c634ce8-7d20-4036-b5a0-52d378095c23",
+        "amount": 2
       }
     ],
     "drop_skill": null,
@@ -10763,12 +10763,12 @@
     "craft_fail_item": null,
     "craft_ingredients": [
       {
-        "item_id": "44b7eba4-3539-44f8-9c70-1fefdc86b09a",
-        "amount": 4
-      },
-      {
         "item_id": "fad91caf-3a83-4e8f-a8e2-11ecaebfc47e",
         "amount": 2
+      },
+      {
+        "item_id": "44b7eba4-3539-44f8-9c70-1fefdc86b09a",
+        "amount": 4
       }
     ],
     "drop_skill": null,
@@ -25697,23 +25697,7 @@
         "amount": 1
       },
       {
-        "item_id": "c46e9bf4-4615-4bda-a1de-c8cd114b1114",
-        "amount": 1
-      },
-      {
-        "item_id": "f0b52c90-088c-4aa9-baa9-512f0c272790",
-        "amount": 1
-      },
-      {
-        "item_id": "478240a3-2bac-48f6-8aa9-ec518bd0a447",
-        "amount": 1
-      },
-      {
-        "item_id": "b373c5b0-0c00-4ea8-a8f3-b322a0f140ea",
-        "amount": 1
-      },
-      {
-        "item_id": "94a5e896-8713-4d2d-a7be-313a6c8ebc5a",
+        "item_id": "a79f7af0-3b5e-4c83-984d-aa18a1eefd2f",
         "amount": 1
       },
       {
@@ -25721,11 +25705,27 @@
         "amount": 1
       },
       {
-        "item_id": "a79f7af0-3b5e-4c83-984d-aa18a1eefd2f",
+        "item_id": "b373c5b0-0c00-4ea8-a8f3-b322a0f140ea",
+        "amount": 1
+      },
+      {
+        "item_id": "c46e9bf4-4615-4bda-a1de-c8cd114b1114",
+        "amount": 1
+      },
+      {
+        "item_id": "478240a3-2bac-48f6-8aa9-ec518bd0a447",
         "amount": 1
       },
       {
         "item_id": "098abc6a-dffd-4c40-9c38-a2e9030fc089",
+        "amount": 1
+      },
+      {
+        "item_id": "94a5e896-8713-4d2d-a7be-313a6c8ebc5a",
+        "amount": 1
+      },
+      {
+        "item_id": "f0b52c90-088c-4aa9-baa9-512f0c272790",
         "amount": 1
       },
       {
@@ -30205,11 +30205,11 @@
     "craft_fail_item": null,
     "craft_ingredients": [
       {
-        "item_id": "1c3889c3-d36d-4ca5-a473-1e676bac1895",
+        "item_id": "46be70f5-6618-4e06-b96f-87e32e0752a8",
         "amount": 1
       },
       {
-        "item_id": "46be70f5-6618-4e06-b96f-87e32e0752a8",
+        "item_id": "1c3889c3-d36d-4ca5-a473-1e676bac1895",
         "amount": 1
       },
       {
@@ -35482,11 +35482,11 @@
     "craft_fail_item": null,
     "craft_ingredients": [
       {
-        "item_id": "2e4b81dc-96fc-462e-b617-f3c9ae11b9bb",
+        "item_id": "1cef05ef-82ac-4f09-98ba-f0d82f1e830a",
         "amount": 1
       },
       {
-        "item_id": "1cef05ef-82ac-4f09-98ba-f0d82f1e830a",
+        "item_id": "2e4b81dc-96fc-462e-b617-f3c9ae11b9bb",
         "amount": 1
       },
       {
