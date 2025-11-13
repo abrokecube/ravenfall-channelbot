@@ -93,7 +93,7 @@ async def get_sender_str(channel: RFChannel, sender_username: str):
 
 async def send_ravenfall(channel: RFChannel, message: dict, timeout: int = 15):
     def check(msg: RavenfallMessage):
-        return msg.CorrelationId == message['CorrelationId']
+        return msg.CorrelationId == message.get('CorrelationId', None)
     task1 = asyncio.create_task(channel.ravenfall_waiter.wait_for_message(check, timeout))
     req_response = await send_to_server(channel.middleman_connection_id, json.dumps(message))
     if not req_response["success"]:
