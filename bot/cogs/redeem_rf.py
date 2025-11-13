@@ -93,7 +93,7 @@ async def get_sender_str(channel: RFChannel, sender_username: str):
 
 async def send_ravenfall(channel: RFChannel, message: dict, timeout: int = 15):
     def check(msg: RavenfallMessage):
-        return msg.CorrelationId == message.get('CorrelationId', None)
+        return msg['CorrelationId'] == message['CorrelationId']
     task1 = asyncio.create_task(channel.ravenfall_waiter.wait_for_message(check, timeout))
     req_response = await send_to_server(channel.middleman_connection_id, json.dumps(message))
     if not req_response["success"]:
@@ -304,7 +304,7 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 format_match = msg['Format'] == "Could not find an item or player matching the query '{query}'"
                 username_match = msg["Args"][0] == f"{target_user_name} {item.name} {items_to_send}"
                 return format_match and username_match
-            task1 = asyncio.create_task(wait_for_message(channel, no_recipient_check, timeout=10))
+            task1 = asyncio.create_task(wait_for_message(channel, no_recipient_check, timeout=15))
             task2 = asyncio.create_task(send_ravenfall(
                 channel, RavenBotTemplates.gift_item(
                     sender = await get_sender_str(channel, user_item["user_name"]),
