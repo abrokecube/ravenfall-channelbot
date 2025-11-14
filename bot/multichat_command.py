@@ -69,22 +69,18 @@ async def send_multichat_command(
         }
 
 class DesyncInfo(TypedDict):
-    """Structure for desync information."""
     towns: Dict[str, float]  # Channel ID to desync data mapping
     last_updated: float  # Time since epoch
 
 class DesyncResponse(TypedDict):
-    """Response structure for desync information."""
     status: int
     data: DesyncInfo
     error: Optional[str]
 
 class TotalItemCountInfo(TypedDict):
-    """Structure for total item count information."""
     towns: Dict[str, float]  # Channel ID to desync data mapping
 
 class TotalItemCountResponse(TypedDict):
-    """Response structure for total item count."""
     status: int
     data: TotalItemCountInfo
     error: Optional[str]
@@ -102,7 +98,6 @@ class CharInfo(TypedDict):
     total_item_count: int
     
 class CharInfoResponse(TypedDict):
-    """Response structure for total item count."""
     status: int
     data: List[CharInfo]
     error: Optional[str]
@@ -113,7 +108,6 @@ class CharCoins(TypedDict):
     coins: int
 
 class CharCoinsResponse(TypedDict):
-    """Response structure for total item count."""
     status: int
     data: List[CharCoins]
     error: Optional[str]
@@ -130,7 +124,6 @@ class CharItems(TypedDict):
     items: List[CharItem]
 
 class CharItemsResponse(TypedDict):
-    """Response structure for total item count."""
     status: int
     data: List[CharItems]
     error: Optional[str]

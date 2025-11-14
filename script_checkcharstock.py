@@ -13,9 +13,9 @@ load_dotenv()
 import bot.multichat_command as mc
 
 CHANNEL_ID = "756734432"
-CHAR_ID = "1315760061"
-CHAR_NAME = "cleanedcube"
-IN_ITEM_LIST = "./output/required_items.json"
+CHAR_ID = "1253884011"
+CHAR_NAME = "borkedcube"
+IN_ITEM_LIST = "./output/root_ingredients.json"
 
 async def main():
     item_list = json.loads(Path(IN_ITEM_LIST).read_text(encoding="utf-8"))
@@ -48,6 +48,9 @@ async def main():
                 out_commands.append(
                     f"!giftto {CHAR_NAME} {item_name} {needed_amount - current_amount}"
                 )
+    if len(out_commands) == 0:
+        print("All items are sufficiently stocked.")
+        return
     commands_path = Path("./output/char_stock_commands.txt")
     commands_path.parent.mkdir(parents=True, exist_ok=True)
     commands_path.write_text("\n".join(out_commands), encoding="utf-8")
