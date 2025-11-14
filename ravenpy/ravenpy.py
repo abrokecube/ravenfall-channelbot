@@ -562,10 +562,8 @@ class RavenNest:
 
     async def login(self):
         await self._authenticate()
-        if self._auth and not _items:
+        if self._auth:
             await self.refresh_items()
-        else:
-            load_local_item_data()
     
     async def refresh_items(self):
         item_data = await _fetch_raw_item_data(self)
@@ -807,6 +805,8 @@ def get_material_for_level(level: int):
     for material, m_level in reversed(equipment_levels.items()):
         if m_level <= level:
             return material
+        
+load_local_item_data()
 
 fighting_skills = (
     Skills.Attack, Skills.Defense, Skills.Strength, Skills.Health,
