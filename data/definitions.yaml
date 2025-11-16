@@ -12,6 +12,8 @@ raid_finished_without_treasure: "Victorious!! The raid boss was slain but did no
 dungeon_finished_without_treasure: "Victorious!! The dungeon boss was slain but did not yield any treasure."
 raid_failed: "Oh no! The raid boss was not killed in time. No rewards will be given."
 dungeon_auto_joined_count: "{playerCount} players have automatically joined the dungeon!"
+raid_finished_disconnected: "Victorious!! Raid boss was slain but unfortunately the connection to the server has been broken, rewards will be distributed later."
+
 
 dungeon_disabled: "Dungeons has been disabled in this stream by the broadcaster."
 dungeon_scroll_overlap: "Someone just used a dungeon scroll."
@@ -36,6 +38,7 @@ dungeon_fail_wrong_code: "You have used incorrect command for joining the dungeo
 dungeon_force_stopped: "Dungeon has been forcibly stopped."
 dungeon_start_failed_war: "Unable to start a dungeon during a war. Please wait for it to be over."
 dungeon_start_failed_raid: "Unable to start a dungeon during a raid. Please wait for it to be over."
+dungeon_finished_disconnected: "Victorious!! Dungeon boss was slain but unfortunately the connection to the server has been broken, rewards will be distributed later."
 
 raid_disabled: "Raids has been disabled in this stream by the broadcaster."
 raid_scroll_overlap: "Someone just used a raid scroll."
@@ -492,6 +495,7 @@ market_item_unavailable: "{itemName} is not available on the marketplace."
 market_value_count: "There are currently {available} {itemName} sold on the marketplace. Cheapest can be bought for {minPrice}, max price is {maxPrice}, average price is {avgPrice}, to buy {amount} it would cost roughly {cost} coins"
 market_value: "There are currently {available} {itemName} sold on the marketplace. Cheapest can be bought for {minPrice}, max price is {maxPrice}, average price is {avgPrice}"
 huts_fail_invalid_skill: "{targetName} is not a valid skill name for the huts. Make sure you use the full and proper names. Ex. Healing and not heal."
+huts_fail: "Failed to update the huts right now. Please try again later."
 huts_update: "Updating village to target {targetName}. Please wait.."
 teleport_fail_dungeon: "You cannot teleport to an while in a dungeon."
 teleport_fail_war: "You cannot teleport while in a raid war."
