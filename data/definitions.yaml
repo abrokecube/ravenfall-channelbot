@@ -519,3 +519,4 @@ ferry_info_no_captain: "The ferry is currently sailing towards {{islandName}} wi
 ferry_info_no_captain_island: "The ferry is currently sailing with {{playerCount:\\d+}} players on board."
 players_restored: "{{playerCount:\\d+}} players restored."
 restore_failed: "Failed to restore players. See game log files for more details."
+twitch_subscription: "Welcome to the {streamerDisplayName} crew! You will now gain {tierMultiplier}x more exp on this stream!"
