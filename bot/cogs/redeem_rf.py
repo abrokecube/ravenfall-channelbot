@@ -512,7 +512,7 @@ class RedeemRFCog(Cog):
         except (CouldNotSendMessageError, CouldNotSendItemsError, TimeoutError) as e:
             await ctx.cancel()
             logger.error(f"Error in coin redeem: {e}")
-            await ctx.send(f"❌ Error: {e}. Please try again later. You have been refunded.")
+            await ctx.send(f"❌ Error: {e}. Please try again. You have been refunded.")
             return
         except PartialSendError as e:
             logger.error(f"Partial send error in coin redeem: {e}")
