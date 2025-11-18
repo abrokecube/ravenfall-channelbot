@@ -67,6 +67,40 @@ class RavenBotTemplates:
         if return_dict:
             return a.build_dict()
         return a.build()
+    
+    @staticmethod
+    def query_item_count(
+        sender: Dict[str, Any],
+        item_name: str,
+        correlation_id: Optional[Union[str, UUID]] = None,
+        return_dict: bool = False
+    ):
+        a = RavenBotMessageBuilder(
+            sender=sender,
+            identifier="get_item_count",
+            correlation_id=correlation_id,
+            content=f"{item_name}"
+        )
+        if return_dict:
+            return a.build_dict()
+        return a.build()
+    
+    @staticmethod
+    def query_resources(
+        sender: Dict[str, Any],
+        correlation_id: Optional[Union[str, UUID]] = None,
+        return_dict: bool = False
+    ):
+        a = RavenBotMessageBuilder(
+            sender=sender,
+            identifier="player_resources",
+            correlation_id=correlation_id,
+        )
+        if return_dict:
+            return a.build_dict()
+        return a.build()
+    
+
 
 class RavenfallTemplates:
     """Predefined templates for Ravenfall messages."""

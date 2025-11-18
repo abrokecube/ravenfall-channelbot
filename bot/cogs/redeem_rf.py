@@ -225,6 +225,17 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
 
             logger.info(f"Sending {coins_to_send} coins to {target_user_name} from {user['user_name']}")
             
+            if not one_coin_successful:
+                try:
+                    await send_ravenfall(
+                        channel, RavenBotTemplates.query_resources(
+                            sender = await get_sender_str(channel, user["user_name"]),
+                        ),
+                        timeout=2
+                    )
+                except Exception as e:
+                    logger.info(f"Warmup failed: {e}")
+
             send_exception = None
             try:
                 response = await send_ravenfall(
@@ -324,6 +335,17 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 format_match = msg['Format'] in bad_messages
                 username_match = msg["Args"][0] in bad_args
                 return format_match and username_match
+            if not one_item_successful:
+                try:
+                    await send_ravenfall(
+                        channel, RavenBotTemplates.query_item_count(
+                            sender = await get_sender_str(channel, user_item["user_name"]),
+                            item_name=item.name
+                        ),
+                        timeout=2
+                    )
+                except Exception as e:
+                    logger.info(f"Warmup failed: {e}")
             task1 = asyncio.create_task(wait_for_message(channel, no_recipient_check, timeout=15))
             task2 = asyncio.create_task(send_ravenfall(
                 channel, RavenBotTemplates.gift_item(
@@ -589,7 +611,7 @@ class RedeemRFCog(Cog):
         if item.soulbound:
             await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
             return
-        price = self.item_price_dict.get(item_name.lower(), 0)
+        price = self.item_price_dict.get(item.name.lower(), 0)
         if price == 0:
             await ctx.reply(f"{item.name} is not redeemable.")
             return
@@ -633,7 +655,7 @@ class RedeemRFCog(Cog):
         if item.soulbound:
             await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
             return
-        price = self.item_price_dict.get(item_name.lower(), 0)
+        price = self.item_price_dict.get(item.name.lower(), 0)
         if price == 0:
             await ctx.reply(f"{item.name} is not redeemable.")
             return
@@ -646,6 +668,7 @@ class RedeemRFCog(Cog):
                     f"You need {price * count:,} {pl(price * count, 'credit', 'credits')}.")
                 return
 
+        await ctx.reply(f"Sending you {count}× {item.name}{pl(count, "", "(s)")}...")
         try:
             await send_items(ctx.msg.user.name, channel, item.name, count)
         except OutOfItemsError as e:
