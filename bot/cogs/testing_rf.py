@@ -95,9 +95,9 @@ class TestingRFCog(Cog):
             if inspect.isawaitable(result):
                 result = await result
             result_text = repr(result)
-            logger.info(f"Eval result: {result_text}")
         except Exception as e:
             result_text = f"Error: {e!r}"
+        logger.info(f"Eval result: {result_text}")
         # Upload long responses
         if len(result_text) > 480:
             url = await upload_to_pastes(result_text)

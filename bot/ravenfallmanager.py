@@ -258,7 +258,7 @@ class ItemAlertMonitor(BatchAlertMonitor):
         items = await self.rfmanager.get_total_item_count()
         alerts = {}
         for channel_name, item_count in items.items():
-            last_count = self.last_counts.get(channel_name, item_count)
+            last_count = self.last_counts.get(channel_name, item_count-1)
             self.last_counts[channel_name] = item_count
             is_alerting = (item_count == last_count)
             if is_alerting:
