@@ -261,7 +261,7 @@ class ItemAlertMonitor(BatchAlertMonitor):
             last_count = self.last_counts.get(channel_name, item_count-1)
             self.last_counts[channel_name] = item_count
             is_alerting = (item_count == last_count)
-            if is_alerting:
+            if is_alerting and self.rfmanager.ravennest_is_online:
                 alerts[channel_name] = "No item gain"
             else:
                 alerts[channel_name] = True
