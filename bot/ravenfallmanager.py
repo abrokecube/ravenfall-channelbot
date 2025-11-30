@@ -250,7 +250,7 @@ class RFChannelManager:
 
 class ItemAlertMonitor(BatchAlertMonitor):
     def __init__(self, rfmanager: RFChannelManager):
-        super().__init__(interval=30, timeout=10*60, alert_interval=60*60)
+        super().__init__(interval=30, timeout=10*60, alert_interval=60*60, name='ItemAlertMonitor')
         self.rfmanager = rfmanager
         self.last_counts = {}
         
@@ -264,7 +264,7 @@ class ItemAlertMonitor(BatchAlertMonitor):
             if is_alerting:
                 alerts[channel_name] = "No item gain"
             else:
-                alerts[channel_name] = False
+                alerts[channel_name] = True
         return alerts
         
     async def trigger_alert(self, name: str, reason: str):

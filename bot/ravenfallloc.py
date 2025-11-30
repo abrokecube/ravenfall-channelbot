@@ -343,7 +343,13 @@ class Match:
                         string_build.append(value)
                     case "given":
                         if value in mapped_args:
-                            string_build.append(str(mapped_args[value]))
+                            a = mapped_args[value]
+                            if isinstance(a, float):
+                                if a.is_integer():
+                                    a = str(int(a))
+                            else:
+                                a = str(a)
+                            string_build.append(a)
                         else:
                             string_build.append("{%s}" % value)
                     case "eval":

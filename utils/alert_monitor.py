@@ -25,7 +25,7 @@ class AlertMonitor(ABC):
     remains in a 'bad' state (returns False) for a specified duration.
     """
 
-    def __init__(self, interval: float, timeout: float, alert_interval: Optional[float] = None):
+    def __init__(self, interval: float, timeout: float, alert_interval: Optional[float] = None, name: str = "AlertMonitor"):
         """
         Initialize the AlertMonitor.
 
@@ -35,7 +35,9 @@ class AlertMonitor(ABC):
                              before alerting starts.
             alert_interval (float, optional): The interval in seconds between alerts
                                               once in the alerting state. Defaults to interval.
+            name (str, optional): The name of this monitor for logging. Defaults to "AlertMonitor".
         """
+        self.name = name
         self.interval = interval
         self.timeout = timeout
         self.alert_interval = alert_interval if alert_interval is not None else interval
@@ -103,12 +105,12 @@ class AlertMonitor(ABC):
     async def start(self):
         """Start the monitoring loop."""
         if self._running:
-            logger.warning("AlertMonitor is already running.")
+            logger.warning(f"[{self.name}] AlertMonitor is already running.")
             return
 
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
-        logger.info("AlertMonitor started.")
+        logger.info(f"[{self.name}] AlertMonitor started.")
 
     async def stop(self):
         """Stop the monitoring loop."""
@@ -123,7 +125,7 @@ class AlertMonitor(ABC):
             except asyncio.CancelledError:
                 pass
             self._task = None
-        logger.info("AlertMonitor stopped.")
+        logger.info(f"[{self.name}] AlertMonitor stopped.")
 
     async def _run_loop(self):
         """The main monitoring loop."""
@@ -138,7 +140,7 @@ class AlertMonitor(ABC):
                         reason = is_good
                         is_good = False
                 except Exception as e:
-                    logger.error(f"Error in check_condition: {e}", exc_info=True)
+                    logger.error(f"[{self.name}] Error in check_condition: {e}", exc_info=True)
                     # Assume bad state on error
                     is_good = False
                     reason = f"Check failed with error: {e}"
@@ -146,13 +148,13 @@ class AlertMonitor(ABC):
                 if is_good:
                     # Condition is good (True)
                     if self._is_alerting:
-                        logger.info("Condition returned to normal. Resolving alert.")
+                        logger.info(f"[{self.name}] Condition returned to normal. Resolving alert.")
                         try:
                             await self.resolve_alert()
                         except Exception as e:
-                            logger.error(f"Error in resolve_alert: {e}", exc_info=True)
+                            logger.error(f"[{self.name}] Error in resolve_alert: {e}", exc_info=True)
                     elif self._first_failure_time is not None:
-                        logger.info("Condition returned to normal before alert triggered.")
+                        logger.info(f"[{self.name}] Condition returned to normal before alert triggered.")
                     
                     self._first_failure_time = None
                     self._last_alert_time = None
@@ -169,23 +171,24 @@ class AlertMonitor(ABC):
                         if elapsed >= self.timeout:
                             # Timer ran out, trigger alert
                             if not self._is_alerting:
-                                logger.warning("Alert timer expired. Starting alerts.")
+                                logger.warning(f"[{self.name}] Alert timer expired. Starting alerts.")
                                 self._is_alerting = True
                             
                             if self._last_alert_time is None or (now - self._last_alert_time) >= self.alert_interval:
                                 try:
+                                    logger.info(f"[{self.name}] Triggering alert: {reason}")
                                     await self.trigger_alert(reason)
                                     self._last_alert_time = now
                                 except Exception as e:
-                                    logger.error(f"Error in trigger_alert: {e}", exc_info=True)
+                                    logger.error(f"[{self.name}] Error in trigger_alert: {e}", exc_info=True)
 
                 await asyncio.sleep(self.interval)
 
         except asyncio.CancelledError:
-            logger.info("AlertMonitor loop cancelled.")
+            logger.info(f"[{self.name}] AlertMonitor loop cancelled.")
             raise
         except Exception as e:
-            logger.critical(f"AlertMonitor loop crashed: {e}", exc_info=True)
+            logger.critical(f"[{self.name}] AlertMonitor loop crashed: {e}", exc_info=True)
             self._running = False
 
 
@@ -201,7 +204,7 @@ class BatchAlertMonitor(ABC):
     independently for each condition.
     """
 
-    def __init__(self, interval: float, timeout: float, alert_interval: Optional[float] = None):
+    def __init__(self, interval: float, timeout: float, alert_interval: Optional[float] = None, name: str = "BatchAlertMonitor"):
         """
         Initialize the BatchAlertMonitor.
 
@@ -211,7 +214,9 @@ class BatchAlertMonitor(ABC):
                              before alerting starts.
             alert_interval (float, optional): The interval in seconds between alerts
                                               once in the alerting state. Defaults to interval.
+            name (str, optional): The name of this monitor for logging. Defaults to "BatchAlertMonitor".
         """
+        self.name = name
         self.interval = interval
         self.timeout = timeout
         self.alert_interval = alert_interval if alert_interval is not None else interval
@@ -288,12 +293,12 @@ class BatchAlertMonitor(ABC):
     async def start(self):
         """Start the monitoring loop."""
         if self._running:
-            logger.warning("BatchAlertMonitor is already running.")
+            logger.warning(f"[{self.name}] BatchAlertMonitor is already running.")
             return
 
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
-        logger.info("BatchAlertMonitor started.")
+        logger.info(f"[{self.name}] BatchAlertMonitor started.")
 
     async def stop(self):
         """Stop the monitoring loop."""
@@ -308,7 +313,7 @@ class BatchAlertMonitor(ABC):
             except asyncio.CancelledError:
                 pass
             self._task = None
-        logger.info("BatchAlertMonitor stopped.")
+        logger.info(f"[{self.name}] BatchAlertMonitor stopped.")
 
     async def _run_loop(self):
         """The main monitoring loop."""
@@ -317,7 +322,7 @@ class BatchAlertMonitor(ABC):
                 try:
                     results = await self.check_condition()
                 except Exception as e:
-                    logger.error(f"Error in check_condition: {e}", exc_info=True)
+                    logger.error(f"[{self.name}] Error in check_condition: {e}", exc_info=True)
                     results = {} # Or handle global failure?
 
                 now = asyncio.get_running_loop().time()
@@ -348,13 +353,13 @@ class BatchAlertMonitor(ABC):
                     
                     if is_good:
                         if state.is_alerting:
-                            logger.info(f"Condition '{name}' returned to normal. Resolving alert.")
+                            logger.info(f"[{self.name}] Condition '{name}' returned to normal. Resolving alert.")
                             try:
                                 await self.resolve_alert(name)
                             except Exception as e:
-                                logger.error(f"Error in resolve_alert for '{name}': {e}", exc_info=True)
+                                logger.error(f"[{self.name}] Error in resolve_alert for '{name}': {e}", exc_info=True)
                         elif state.first_failure_time is not None:
-                            logger.info(f"Condition '{name}' returned to normal before alert triggered.")
+                            logger.info(f"[{self.name}] Condition '{name}' returned to normal before alert triggered.")
                         
                         state.first_failure_time = None
                         state.last_alert_time = None
@@ -366,21 +371,22 @@ class BatchAlertMonitor(ABC):
                             elapsed = now - state.first_failure_time
                             if elapsed >= self.timeout:
                                 if not state.is_alerting:
-                                    logger.warning(f"Alert timer expired for '{name}'. Starting alerts.")
+                                    logger.warning(f"[{self.name}] Alert timer expired for '{name}'. Starting alerts.")
                                     state.is_alerting = True
                                 
                                 if state.last_alert_time is None or (now - state.last_alert_time) >= self.alert_interval:
                                     try:
+                                        logger.info(f"[{self.name}] Triggering alert for '{name}': {reason}")
                                         await self.trigger_alert(name, reason)
                                         state.last_alert_time = now
                                     except Exception as e:
-                                        logger.error(f"Error in trigger_alert for '{name}': {e}", exc_info=True)
+                                        logger.error(f"[{self.name}] Error in trigger_alert for '{name}': {e}", exc_info=True)
 
                 await asyncio.sleep(self.interval)
 
         except asyncio.CancelledError:
-            logger.info("BatchAlertMonitor loop cancelled.")
+            logger.info(f"[{self.name}] BatchAlertMonitor loop cancelled.")
             raise
         except Exception as e:
-            logger.critical(f"BatchAlertMonitor loop crashed: {e}", exc_info=True)
+            logger.critical(f"[{self.name}] BatchAlertMonitor loop crashed: {e}", exc_info=True)
             self._running = False
