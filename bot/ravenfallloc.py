@@ -58,6 +58,15 @@ def pickrand(*args):
     """Pick a random argument."""
     return random.choice(args)
 
+def to_str(obj):
+    if isinstance(obj, float):
+        if obj.is_integer():
+            obj = str(int(obj))
+    else:
+        obj = str(obj)
+    return obj
+
+
 class RavenfallLocalization:
     """Handles string localization and translation for Ravenfall bot."""
     
@@ -145,7 +154,7 @@ class RavenfallLocalization:
         for a in FSTRINGS.findall(in_str):
             expl_args[a] = ''
         for argname, argvalue in zip(expl_args, in_args):
-            expl_args[argname] = argvalue
+            expl_args[argname] = to_str(argvalue)
         return in_str.format_map(expl_args)
     
     def identify_string(self, in_str: str):
@@ -343,12 +352,7 @@ class Match:
                         string_build.append(value)
                     case "given":
                         if value in mapped_args:
-                            a = mapped_args[value]
-                            if isinstance(a, float):
-                                if a.is_integer():
-                                    a = str(int(a))
-                            else:
-                                a = str(a)
+                            a = to_str(mapped_args[value])
                             string_build.append(a)
                         else:
                             string_build.append("{%s}" % value)
@@ -359,7 +363,7 @@ class Match:
                         except Exception as e:
                             logger.error(f"Evaluation failed for expression '{value}': {e}")
                             eval_out = "(?)"
-                        string_build.append(str(eval_out))
+                        string_build.append(to_str(eval_out))
             str_b = "".join(string_build)
                 
             str_a, str_b = (str_b, str_a)
