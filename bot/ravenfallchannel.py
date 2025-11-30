@@ -982,6 +982,9 @@ class RFChannel:
         asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))
 
     def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None, overwrite_same_reason: bool = False):
+        if self.monitoring_paused and reason != RestartReason.USER:
+            logger.error(f"Not queuing restart for {self.channel_name} because monitoring is paused.", exc_info=True)
+            return
         allow_overwrite = True
         if self.restart_task:
             if self.restart_task.reason == reason:

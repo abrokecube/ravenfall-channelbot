@@ -14,6 +14,7 @@ from utils.websocket_client import AutoReconnectingWebSocket
 from datetime import timedelta, datetime, timezone
 import time
 from .ravenfallrestarttask import RestartReason
+from utils.alert_monitor import BatchAlertMonitor
 
 import os
 
@@ -40,6 +41,7 @@ class RFChannelManager:
         self.load_channels()
 
         self.global_resync_lock = asyncio.Lock()
+        ItemAlertMonitor(self).start()
 
 
     def load_channels(self):
@@ -245,3 +247,29 @@ class RFChannelManager:
             tasks.append(resync_task(channel))
         if tasks:
             await asyncio.gather(*tasks)
+
+class ItemAlertMonitor(BatchAlertMonitor):
+    def __init__(self, rfmanager: RFChannelManager):
+        super().__init__(interval=30, timeout=10*60, alert_interval=60*60)
+        self.rfmanager = rfmanager
+        self.last_counts = {}
+        
+    async def check_condition(self):
+        items = await self.rfmanager.get_total_item_count()
+        alerts = {}
+        for channel_name, item_count in items.items():
+            last_count = self.last_counts.get(channel_name, item_count)
+            self.last_counts[channel_name] = item_count
+            is_alerting = (item_count == last_count)
+            if is_alerting:
+                alerts[channel_name] = "No item gain"
+            else:
+                alerts[channel_name] = False
+        return alerts
+        
+    async def trigger_alert(self, name: str, reason: str):
+        if reason == "No item gain":
+            channel = self.rfmanager.get_channel(channel_name=name)
+            if not channel.monitoring_paused:
+                await channel.queue_restart(90, label="no item gain", reason=RestartReason.ITEM_DESYNC)
+        

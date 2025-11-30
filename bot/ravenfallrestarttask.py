@@ -19,6 +19,7 @@ class RestartReason(Enum):
     USER = "user_restart"
     UNRESPONSIVE = "unresponsive"
     MULTIPLIER_DESYNC = "multiplier_desync"
+    ITEM_DESYNC = "item_desync"
     
 
 class PreRestartEvent(Enum):
