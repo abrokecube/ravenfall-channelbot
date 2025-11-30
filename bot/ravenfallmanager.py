@@ -272,4 +272,7 @@ class ItemAlertMonitor(BatchAlertMonitor):
             channel = self.rfmanager.get_channel(channel_name=name)
             if not channel.monitoring_paused:
                 await channel.queue_restart(90, label="no item gain", reason=RestartReason.ITEM_DESYNC)
+    
+    async def resolve_alert(self, name):
+        pass
         
