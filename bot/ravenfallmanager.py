@@ -41,7 +41,6 @@ class RFChannelManager:
         self.load_channels()
 
         self.global_resync_lock = asyncio.Lock()
-        ItemAlertMonitor(self).start()
 
 
     def load_channels(self):
@@ -69,6 +68,7 @@ class RFChannelManager:
             self.rf_message_processor.add_disconnection_callback(self.on_processor_disconnect)
         else:
             logger.info("RF_MIDDLEMAN_PROCESSOR_HOST or RF_MIDDLEMAN_PROCESSOR_PORT not set, not starting message processor")
+        await ItemAlertMonitor(self).start()
 
     async def stop(self):
         for channel in self.channels:
