@@ -52,6 +52,7 @@ class InfoCog(Cog):
             if channel.custom_town_msg:
                 asdf += f" {channel.custom_town_msg}"
             out_str.append(asdf)
+        out_str.append("Other Ravenfall towns - https://www.ravenfall.stream/towns")
         await ctx.reply(' ✦ '.join(out_str))
 
     @Cog.command(name="event", help="Gets the town's current event")
