@@ -347,7 +347,6 @@ class Match:
             "unping": unping,
             "fill": fill
         })
-        print(eval_globals)
         while str_a != str_b:
             string_build = []
             for mo in TRANSLATE_TOKENIZER.finditer(str_a):

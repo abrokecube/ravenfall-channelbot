@@ -268,7 +268,8 @@ class RFChannel:
             elif key in ("village_boost", "village_boost_no_boost"):
                 town_level, exp_left = message_args[0], message_args[1]
                 level_exp = experience_for_level(town_level+1)
-                additional_args['currentExp'] = level_exp
+                additional_args['requiredExp'] = level_exp
+                additional_args['currentExp'] = (level_exp - exp_left)
                 additional_args['levelPercent'] = f"{(level_exp - exp_left) / level_exp:.2%}"
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
