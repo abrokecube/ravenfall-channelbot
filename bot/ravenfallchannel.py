@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from twitchAPI.chat import Chat, ChatMessage
-from ravenpy import RavenNest
+from ravenpy import RavenNest, experience_for_level
 import aiohttp
 
 from datetime import timedelta
@@ -252,6 +252,8 @@ class RFChannel:
         key = ""
         if match is not None:
             key = match.key
+        message_args = message['Args']
+        additional_args = {}
         if message['Recipent']['Platform'].lower() == 'twitch':
             asyncio.create_task(self.record_character(
                 message['Recipent']['CharacterId'],
@@ -263,8 +265,12 @@ class RFChannel:
             #     # Auto raid is already handled in process_auto_raid_sessionless
             #     asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
                 asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait_first=True))
+            elif key in ("village_boost", "village_boost_no_boost"):
+                town_level, exp_left = message_args[0], message_args[1]
+                level_exp = experience_for_level(town_level+1)
+                additional_args['levelPercent'] = f"{(level_exp - exp_left) / level_exp:.2%}"
         if self.ravenfall_loc_strings_path:
-            trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match).strip()
+            trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
             if len(trans_str) == 0:
                 return {'block': True}
             trans_strs = split_by_utf16_bytes(trans_str, 500)

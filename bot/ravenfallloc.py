@@ -61,7 +61,10 @@ def pickrand(*args):
 def to_str(obj):
     if isinstance(obj, float):
         if obj.is_integer():
-            obj = str(int(obj))
+            obj = int(obj)
+        obj = f"{obj:,}"
+    elif isinstance(obj, int):
+        obj = f"{obj:,}"
     else:
         obj = str(obj)
     return obj
@@ -148,13 +151,14 @@ class RavenfallLocalization:
                 strs = [trans_str]
             self.translated_strings[key] = TranslatedString(key, strs)
     
-    def _fill_args(self, in_str: str, in_args: List):
+    def _fill_args(self, in_str: str, in_args: List, named_args: Dict[str, str] = {}) -> str:
         """Fill in arguments in a format string."""
         expl_args = {}
         for a in FSTRINGS.findall(in_str):
             expl_args[a] = ''
         for argname, argvalue in zip(expl_args, in_args):
             expl_args[argname] = to_str(argvalue)
+        expl_args.update(named_args)
         return in_str.format_map(expl_args)
     
     def identify_string(self, in_str: str):
@@ -166,7 +170,7 @@ class RavenfallLocalization:
                     return m
         return None
 
-    def translate_string(self, in_str: str, in_args: List, match: 'Match' = None):
+    def translate_string(self, in_str: str, in_args: List, match: 'Match' = None, additional_args: Dict[str, str] = {}) -> str:
         """
         Translate a string using the loaded definitions and translations.
         
@@ -323,7 +327,7 @@ class Match:
 
         return mapped_args
             
-    def translate(self, trans_string: str, rf_string: str, rf_args: List | Dict):
+    def translate(self, trans_string: str, rf_string: str, rf_args: List | Dict, additional_args: Dict[str, str] = {}) -> str:
         if isinstance(rf_args, Dict):
             mapped_args = rf_args
         else:
@@ -334,6 +338,7 @@ class Match:
         str_b = ""
         eval_globals = {}
         eval_globals.update(mapped_args)
+        eval_globals.update(additional_args)
         eval_globals.update({
             "pl": pl,
             "llb": "{{",
