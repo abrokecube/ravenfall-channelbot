@@ -188,7 +188,7 @@ class RavenfallLocalization:
                 key = matched.key
             else:
                 logger.warning(f"🚨🚨 No matched key for string: {in_str}")
-                return f"{self._fill_args(in_str, in_args)}"
+                return f"{self._fill_args(in_str, in_args, additional_args)}"
         else:
             logger.debug(f"Using key {match.key}")
             matched = match
@@ -206,7 +206,7 @@ class RavenfallLocalization:
             return ""
             
         translation_string = random.choice(translation.strings)
-        return matched.translate(translation_string, in_str, in_args)
+        return matched.translate(translation_string, in_str, in_args, additional_args)
         
     
     def getstr(self, key: str, args: Dict[str, str] = None) -> str:
