@@ -332,13 +332,13 @@ class Match:
             mapped_args = rf_args
         else:
             mapped_args = self.extract_args(rf_string, rf_args)
+        mapped_args.update(additional_args)
         def fill(string):
-            return self.translate(string, rf_string, rf_args)
+            return self.translate(string, rf_string, rf_args, additional_args)
         str_a = trans_string
         str_b = ""
         eval_globals = {}
         eval_globals.update(mapped_args)
-        eval_globals.update(additional_args)
         eval_globals.update({
             "pl": pl,
             "llb": "{{",
@@ -347,6 +347,7 @@ class Match:
             "unping": unping,
             "fill": fill
         })
+        print(eval_globals)
         while str_a != str_b:
             string_build = []
             for mo in TRANSLATE_TOKENIZER.finditer(str_a):
