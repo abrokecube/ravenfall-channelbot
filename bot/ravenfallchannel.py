@@ -175,9 +175,9 @@ class RFChannel:
         self.update_middleman_connection_status_routine.cancel()
         self.town_level_notification_routine.cancel()
 
-    async def send_chat_message(self, message: str, ignore_error: bool = False):
+    async def send_chat_message(self, message: str, ignore_error: bool = False, reply_id: Optional[str] = None):
         try:
-            await self.chat.send_message(self.channel_name, message)
+            await self.chat.send_message(self.channel_name, message, reply_id=reply_id)
             await self.monitor_ravenfall_command(content=message)
         except Exception as e:
             if not ignore_error:
@@ -205,8 +205,42 @@ class RFChannel:
         await self.twitch_message_waiter.process_message(message)
         if not self.monitoring_paused:
             await self.monitor_ravenfall_command(message=message)
-            if message.first and any(message.text.lower().startswith(f"{prefix}join") for prefix in self.ravenbot_prefixes):
-                await self.first_time_joiner(message)
+        stripped_text = message.text.strip()
+        if not stripped_text:
+            return
+        command = None
+        arguments = []
+        if stripped_text[0] in self.ravenbot_prefixes:
+            parts = stripped_text[1:].split()
+            command = parts[0].lower()
+            if len(parts) > 1:
+                arguments = parts[1:]
+        if message.first and command == "join":
+            await self.first_time_joiner(message)
+        if command == "inspect":
+            response = await send_to_server_and_wait_response(
+                self.middleman_connection_id,
+                RavenBotTemplates.inspect(
+                    username=arguments[0] if arguments else message.user.name,
+                ),
+                message.id,
+                timeout=3
+            )
+            if not response.get('timeout', False):
+                await send_to_client(self.middleman_connection_id, json.dumps(response['responses'][0]))
+            else:
+                is_inspecting_other = len(arguments) > 0 and arguments[0].lower() != message.user.name.lower()
+                if not is_inspecting_other:
+                    await self.send_chat_message(
+                        "You are not currently playing. Use !join to start playing!",
+                        reply_id=message.id
+                    )
+                else:
+                    await self.send_chat_message(
+                        "The user you are trying to inspect is not currently playing.",
+                        reply_id=message.id
+                    )
+
     
     async def event_ravenbot_message(self, message: RavenBotMessage):
         await self.ravenbot_waiter.process_message(message)
@@ -238,8 +272,10 @@ class RFChannel:
 
         if message['Identifier'] == 'task':
             asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait_first=True))
-        if message['Identifier'] == 'leave':
+        elif message['Identifier'] == 'leave':
             await self.fetch_training(message['Sender']['Username'])
+        elif message['Identifier'] == 'inspect':
+            return None
             
         return message
 
@@ -729,7 +765,7 @@ class RFChannel:
         })
         await self.send_chat_message(welcome_msg)
         cd.update_rate_limit()
-
+        
     # --- [ AUTO RESTART ] ---------------------------------------
 
     @routine(delta=timedelta(seconds=20), max_attempts=99999)

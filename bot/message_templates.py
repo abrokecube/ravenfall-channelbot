@@ -99,6 +99,24 @@ class RavenBotTemplates:
         if return_dict:
             return a.build_dict()
         return a.build()
+
+    @staticmethod
+    def inspect(
+        username: str,
+        correlation_id: Optional[Union[str, UUID]] = None,
+        return_dict: bool = False,
+    ):
+        sender = SenderBuilder(
+            username=username.lower(),
+            display_name=username.lower(),
+        )
+        a = RavenBotMessageBuilder(
+            sender=sender.build(),
+            identifier="inspect",
+        )
+        if return_dict:
+            return a.build_dict()
+        return a.build()
     
 
 
