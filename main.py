@@ -98,7 +98,7 @@ class MyCommands(Commands):
         await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
 
     async def get_prefix(self, msg: ChatMessage) -> str:
-        return "!"
+        return os.getenv("BOT_COMMAND_PREFIX", "!")
 
 async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
     save_new_tokens = True
@@ -203,20 +203,24 @@ async def run():
     commands.twitches = twitches
 
     def load_cogs():
-        from bot.cogs.info import InfoCog
-        commands.load_cog(InfoCog, rf_manager=rf_manager)
-        from bot.cogs.testing import TestingCog
-        commands.load_cog(TestingCog)
-        from bot.cogs.game import GameCog
-        commands.load_cog(GameCog, rf_manager=rf_manager)
-        from bot.cogs.testing_rf import TestingRFCog
-        commands.load_cog(TestingRFCog, rf_manager=rf_manager)
-        from bot.cogs.bot import BotStuffCog
-        commands.load_cog(BotStuffCog, rf_manager=rf_manager)
-        from bot.cogs.redeem import RedeemCog
-        commands.load_cog(RedeemCog)
-        from bot.cogs.redeem_rf import RedeemRFCog
-        commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
+        # from bot.cogs.info import InfoCog
+        # commands.load_cog(InfoCog, rf_manager=rf_manager)
+        # from bot.cogs.testing import TestingCog
+        # commands.load_cog(TestingCog)
+        # from bot.cogs.game import GameCog
+        # commands.load_cog(GameCog, rf_manager=rf_manager)
+        # from bot.cogs.testing_rf import TestingRFCog
+        # commands.load_cog(TestingRFCog, rf_manager=rf_manager)
+        # from bot.cogs.bot import BotStuffCog
+        # commands.load_cog(BotStuffCog, rf_manager=rf_manager)
+        # from bot.cogs.redeem import RedeemCog
+        # commands.load_cog(RedeemCog)
+        # from bot.cogs.redeem_rf import RedeemRFCog
+        # commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
+        from bot.cogs.example import ExampleCog
+        commands.load_cog(ExampleCog)
+        from bot.cogs.help import HelpCog
+        commands.load_cog(HelpCog, commands=commands)
         
     async def on_message(message: ChatMessage):
         # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
@@ -226,7 +230,8 @@ async def run():
     async def on_ready(ready_event: EventData):
         global rf_manager
         rf_manager = RFChannelManager(channels, chat, rf)
-        await rf_manager.start()
+        if not os.getenv("DISABLE_RAVENFALL_INTEGRATION", "").lower() in ("1", "true"):
+            await rf_manager.start()
         load_cogs()
         logger.info("Bot is ready for work")
         chat.register_event(ChatEvent.MESSAGE, on_message)

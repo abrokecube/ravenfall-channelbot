@@ -70,6 +70,10 @@ class Cog:
             if not hasattr(func, '_cog_command_info'):
                 func._cog_command_info = []
             
+            # Extract checks
+            if hasattr(func, '_command_checks'):
+                kwargs['checks'] = func._command_checks
+            
             # Store the command name and kwargs with the function
             func._cog_command_info.append((cmd_name, kwargs))
             
