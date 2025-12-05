@@ -19,7 +19,7 @@ import logging
 import ravenpy
 
 from bot.commands import (
-    Commands, CommandContext, Command, Redeem, RedeemContext, 
+    Commands, CommandContext, Command, TwitchRedeem, TwitchRedeemContext, 
     CustomRewardRedemptionStatus, CheckFailure, ArgumentError,
 )
 from bot.models import *
@@ -101,7 +101,7 @@ class MyCommands(Commands):
         else:
             await ctx.send(f"❌ An error occurred")
 
-    async def on_redeem_error(self, ctx: RedeemContext, redeem: Redeem, error: Exception):
+    async def on_redeem_error(self, ctx: TwitchRedeemContext, redeem: TwitchRedeem, error: Exception):
         await ctx.send(f"❌ An error occurred. Points will be refunded.")
         await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
 
@@ -232,7 +232,7 @@ async def run():
         
     async def on_message(message: ChatMessage):
         # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
-        await commands.process_message(message)
+        await commands.process_twitch_message(message)
         await rf_manager.event_twitch_message(message)
 
     async def on_ready(ready_event: EventData):

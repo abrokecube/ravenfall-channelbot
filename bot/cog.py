@@ -2,7 +2,7 @@ from typing import Dict, Type, Optional, TypeVar, Any, Callable, Awaitable, Unio
 from functools import wraps
 
 # Import the necessary types from commands.py
-from .commands import Command, CommandFunc, Commands, Redeem, RedeemFunc
+from .commands import Command, CommandFunc, Commands, TwitchRedeem, TwitchRedeemFunc
 
 # Type variable for the cog class
 TCog = TypeVar('TCog', bound='Cog')
@@ -34,8 +34,8 @@ class Cog:
         """
         self.name = self.__class__.__name__.lower()
         self.description = description
-        self.commands = {}
-        self.redeems = {}
+        self.commands: Dict[str, Command] = {}
+        self.redeems: Dict[str, TwitchRedeem] = {}
         self.bot = None
         self.config = config or {}
         
@@ -83,7 +83,7 @@ class Cog:
         return decorator
 
     @classmethod
-    def redeem(cls, name: Optional[str] = None, **kwargs) -> Callable[[RedeemFunc], RedeemFunc]:
+    def redeem(cls, name: Optional[str] = None, **kwargs) -> Callable[[TwitchRedeemFunc], TwitchRedeemFunc]:
         """Decorator to register a redeem in the cog.
         
         Args:
@@ -93,7 +93,7 @@ class Cog:
         Returns:
             A decorator that registers the redeem.
         """
-        def decorator(func: RedeemFunc) -> RedeemFunc:
+        def decorator(func: TwitchRedeemFunc) -> TwitchRedeemFunc:
             redeem_name = name or func.__name__.lower()
             
             # Store the redeem information in the function itself
@@ -109,7 +109,7 @@ class Cog:
         return decorator
     
     @classmethod
-    def create_instance(cls: Type[TCog], **kwargs) -> TCog:
+    def create_instance(cls: Type[TCog], bot: Commands, **kwargs) -> TCog:
         """Create an instance of the cog and register its commands.
         
         Args:
@@ -132,6 +132,7 @@ class Cog:
                     command = Command(
                         name=cmd_name,
                         func=bound_method,
+                        bot=bot,
                         **cmd_kwargs
                     )
                     instance_commands[cmd_name] = command
@@ -145,9 +146,10 @@ class Cog:
                     # Create a bound method for the redeem
                     bound_method = attr.__get__(instance, cls)
                     # Create a Redeem object
-                    redeem = Redeem(
+                    redeem = TwitchRedeem(
                         name=redeem_name,
                         func=bound_method,
+                        bot=bot,
                         **redeem_kwargs
                     )
                     instance_redeems[redeem_name] = redeem
@@ -161,8 +163,8 @@ class Cog:
 class CogManager:
     """Manages loading and unloading of cogs."""
     
-    def __init__(self, commands: Commands):
-        self.commands = commands
+    def __init__(self, bot: Commands):
+        self.bot = bot
         self.loaded_cogs: Dict[str, Cog] = {}
     
     def load_cog(self, cog_cls: Type[Cog], **kwargs) -> None:
@@ -179,24 +181,24 @@ class CogManager:
             raise RuntimeError(f"Cog '{cog_cls.name}' is already loaded.")
             
         # Create the cog instance
-        cog = cog_cls.create_instance(**kwargs)
+        cog = cog_cls.create_instance(self.bot, **kwargs)
         
         # Register all commands from the cog
         try:
             for name, command in cog.commands.items():
-                self.commands.add_command_object(name, command)
+                self.bot.add_command_object(name, command)
                 for alias in command.aliases:
-                    self.commands.add_command_object(alias, command)
+                    self.bot.add_command_object(alias, command)
                     
             for name, redeem in cog.redeems.items():
-                self.commands.add_redeem_object(name, redeem)
+                self.bot.add_redeem_object(name, redeem)
         except ValueError as e:
             # Add cog context to the error message
             raise ValueError(f"{e} (in cog '{cog.name}')")
         
         # Store the cog and run setup
         self.loaded_cogs[cog.name] = cog
-        self.commands.loop.create_task(cog.setup(self.commands))
+        self.bot.loop.create_task(cog.setup(self.bot))
     
     def unload_cog(self, cog_name: str) -> None:
         """Unload a cog and remove its commands.
@@ -212,9 +214,9 @@ class CogManager:
             
         cog = self.loaded_cogs.pop(cog_name)
         # Remove all commands registered by this cog
-        for cmd_name, cmd in list(self.commands.commands.items()):
+        for cmd_name, cmd in list(self.bot.commands.items()):
             if cmd.func.__self__ == cog:  # type: ignore
-                self.commands.commands.pop(cmd_name)
+                self.bot.commands.pop(cmd_name)
     
     def reload_cog(self, cog_cls: Type[Cog], **kwargs) -> None:
         """Reload a cog by unloading and then loading it again.

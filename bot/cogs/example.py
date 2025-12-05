@@ -11,7 +11,7 @@ This cog demonstrates the new command system features:
 from __future__ import annotations
 from typing import Optional
 from ..cog import Cog
-from ..commands import Context, Commands, UserRole, check, ArgumentParsingError
+from ..commands import Context, Commands, UserRole, check, ArgumentParsingError, parameter
 
 # Example custom type with converter
 class Color:
@@ -193,13 +193,14 @@ class ExampleCog(Cog):
     @Cog.command(
         name="verbose_test", 
         aliases=["verbose", "verb", "db"],
-        arg_aliases={'verbose': ['v', 'debug']}
     )
+    @parameter("verbose", aliases=['v', 'debug'])
     async def verbose_test(self, ctx: Context, verbose: bool = False):
         """Test boolean flags and argument aliases.
         
         Args:
-            verbose: Enable verbose mode (default: False).
+            verbose (bool): 
+                Enable verbose mode (default: False).  
             
         Examples:
             !verbose_test
@@ -211,6 +212,20 @@ class ExampleCog(Cog):
             await ctx.reply("Verbose mode enabled! 📝")
         else:
             await ctx.reply("Verbose mode disabled.")
+
+    @Cog.command(name="greedy_test")
+    @parameter("rest", greedy=True)
+    async def greedy_test(self, ctx: Context, first: str, rest: str):
+        """Test greedy argument parsing.
+        
+        Args:
+            first: The first word.
+            rest: The rest of the message (greedy).
+            
+        Examples:
+            !greedy_test Hello world this is a test
+        """
+        await ctx.reply(f"First: '{first}', Rest: '{rest}'")
 
 def setup(commands: Commands, **kwargs) -> None:
     """Load the example cog.

@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from ..commands import CommandContext, Commands, RedeemContext, CustomRewardRedemptionStatus
+from ..commands import CommandContext, Commands, TwitchRedeemContext, CustomRewardRedemptionStatus
 from ..cog import Cog
 
 class RedeemCog(Cog):

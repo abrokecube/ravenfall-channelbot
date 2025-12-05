@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from ..commands import CommandContext, Commands, RedeemContext, CustomRewardRedemptionStatus
+from ..commands import CommandContext, Commands, TwitchRedeemContext, CustomRewardRedemptionStatus
 from ..cog import Cog
 
 class TestingCog(Cog):
@@ -23,12 +23,12 @@ class TestingCog(Cog):
         await ctx.reply("Pong!")
 
     @Cog.redeem(name="Test redeem")
-    async def test(self, ctx: RedeemContext):
+    async def test(self, ctx: TwitchRedeemContext):
         await ctx.send("I am the almighty test redeem!")
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
 
     @Cog.redeem(name="Test error redeem")
-    async def test_error(self, ctx: RedeemContext):
+    async def test_error(self, ctx: TwitchRedeemContext):
         raise Exception("Test error")
         await ctx.send("You shouldnt be seeing this")
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)

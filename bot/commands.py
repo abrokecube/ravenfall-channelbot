@@ -4,15 +4,42 @@ import asyncio
 import logging
 import inspect
 import os
-from typing import Callable, List, Dict, Awaitable, Union, Optional, TYPE_CHECKING, Protocol, runtime_checkable, Any, Type, cast, get_origin, get_args
+from typing import (
+    Callable, 
+    List,
+    Dict, 
+    Awaitable, 
+    Union, 
+    Optional, 
+    TYPE_CHECKING, 
+    Protocol, 
+    runtime_checkable, 
+    Any, 
+    Type, 
+    cast, 
+    get_origin, 
+    get_args
+)
 from twitchAPI.twitch import Twitch
 from twitchAPI.chat import ChatMessage, Chat
 from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
 from dataclasses import dataclass
 import re
-from enum import Enum
 
-from .doc_parser import parse_google_docstring
+from .command_contexts import Context, TwitchContext
+from .command_enums import OutputMessageType, Platform, UserRole, CustomRewardRedemptionStatus
+from .command_exceptions import (
+    CommandError,
+    CheckFailure,
+    CommandRegistrationError,
+    ArgumentError,
+    UnknownFlagError,
+    DuplicateParameterError,
+    MissingRequiredArgumentError,
+    UnknownArgumentError,
+    ArgumentConversionError,
+    ArgumentParsingError
+)
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -20,126 +47,9 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from .cog import Cog, CogManager
 
-class UserRole(Enum):
-    BOT_OWNER = "bot_owner"
-    ADMIN = "admin"
-    MODERATOR = "moderator"
-    SUBSCRIBER = "subscriber"
-    USER = "user"
-
-class OutputMessageType(Enum):
-    SINGLE_LINE = "single_line"
-    MULTI_LINE = "multiple_lines"
-
-class CommandError(Exception):
-    """Base exception for command-related errors."""
-    def __init__(self, message: str = "Command error"):
-        self.message = message
-        super().__init__(self.message)
-
-class CheckFailure(CommandError):
-    """Raised when a command check fails."""
-    def __init__(self, message: str = "Check failed"):
-        super().__init__(message)
-
-class CommandRegistrationError(CommandError):
-    """Raised when there's an error registering a command or redeem."""
-    def __init__(self, name: str, item_type: str = "Command"):
-        self.name = name
-        self.item_type = item_type
-        super().__init__(f"{item_type} '{name}' already exists")
-
-class ArgumentError(CommandError):
-    """Base exception for argument parsing errors."""
-    pass
-
-class UnknownFlagError(ArgumentError):
-    """Raised when an unknown flag is provided."""
-    def __init__(self, flag_name: str):
-        self.flag_name = flag_name
-        super().__init__(f"Unknown flag '{flag_name}'")
-
-class DuplicateParameterError(ArgumentError):
-    """Raised when a parameter is provided multiple times."""
-    def __init__(self, param_name: str):
-        self.param_name = param_name
-        super().__init__(f"Multiple values provided for parameter '{param_name}'")
-
-class MissingRequiredArgumentError(ArgumentError):
-    """Raised when a required argument is missing."""
-    def __init__(self, param_name: str, keyword_only: bool = False):
-        self.param_name = param_name
-        self.keyword_only = keyword_only
-        arg_type = "keyword-only argument" if keyword_only else "argument"
-        super().__init__(f"Missing required {arg_type}: {param_name}")
-
-class UnknownArgumentError(ArgumentError):
-    """Raised when unknown arguments are provided."""
-    def __init__(self, args: list):
-        self.args = args
-        args_str = ', '.join(f"'{arg}'" for arg in args) if isinstance(args[0], str) else ' '.join(str(a) for a in args)
-        super().__init__(f"Unknown arguments: {args_str}")
-
-class ArgumentConversionError(ArgumentError):
-    """Raised when argument conversion fails."""
-    def __init__(self, value: str, target_type: str, original_error: Exception = None):
-        self.value = value
-        self.target_type = target_type
-        self.original_error = original_error
-        error_msg = f"Could not convert '{value}' to {target_type}"
-        if original_error:
-            error_msg += f": {original_error}"
-        super().__init__(error_msg)
-        
-class ArgumentParsingError(ArgumentError):
-    """Raised when there is a general argument parsing error."""
-    def __init__(self, message: str = "Error parsing arguments"):
-        super().__init__(message)
-
-
-@runtime_checkable
-class Context(Protocol):
-    @property
-    def author(self) -> str:
-        ...
-
-    @property
-    def command_name(self) -> str:
-        ...
-
-    @property
-    def args(self) -> CommandArgs:
-        ...
-
-    @property
-    def platform(self) -> str:
-        ...
-
-    @property
-    def roles(self) -> List[UserRole]:
-        ...
-    
-    @property
-    def expected_output_type(self) -> OutputMessageType:
-        ...
-
-    @property
-    def allows_markdown(self) -> bool:
-        ...
-
-    @property
-    def source(self) -> Any:
-        ...
-
-    async def reply(self, text: str) -> None:
-        ...
-
-    async def send(self, text: str) -> None:
-        ...
-
 # Type for command functions - can be either sync or async
 CommandFunc = Callable[..., Union[None, Awaitable[None]]]
-RedeemFunc = Callable[['RedeemContext'], Union[None, Awaitable[None]]]
+TwitchRedeemFunc = Callable[['TwitchRedeemContext'], Union[None, Awaitable[None]]]
 CheckFunc = Callable[[Context], bool]
 
 class Commands:
@@ -148,7 +58,7 @@ class Commands:
         self.twitch: Twitch = chat.twitch
         self.twitches: Dict[str, Twitch] = twitches
         self.commands: Dict[str, Command] = {}
-        self.redeems: Dict[str, Redeem] = {}
+        self.redeems: Dict[str, TwitchRedeem] = {}
         self.prefix: str = "!"
         self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
         self.cog_manager: Optional[CogManager] = None
@@ -171,19 +81,19 @@ class Commands:
         self.commands[cmd.name] = cmd
         return cmd
 
-    def add_redeem_object(self, name: str, redeem: Redeem):
+    def add_redeem_object(self, name: str, redeem: TwitchRedeem):
         redeem_name = name.lower()
         if redeem_name in self.redeems:
             raise CommandRegistrationError(redeem_name, "Redeem")
             
         self.redeems[redeem.name] = redeem
 
-    def add_redeem(self, name: str, func: RedeemFunc) -> RedeemFunc:
+    def add_redeem(self, name: str, func: TwitchRedeemFunc) -> TwitchRedeemFunc:
         redeem_name = name.lower()
         if redeem_name in self.redeems:
             raise CommandRegistrationError(redeem_name, "Redeem")
             
-        redeem = Redeem(redeem_name, func)
+        redeem = TwitchRedeem(redeem_name, func)
         self.redeems[redeem.name] = redeem
         return redeem
     
@@ -213,7 +123,7 @@ class Commands:
         if self.cog_manager:
             self.cog_manager.reload_cog(cog_cls, **kwargs)
 
-    async def get_prefix(self, msg: ChatMessage) -> str:
+    async def get_prefix(self, ctx: Context) -> str:
         return self.prefix
     
     async def on_command_error(self, ctx: Context, command: Command, error: Exception):
@@ -232,7 +142,7 @@ class Commands:
         logger.error(f"Error executing command '{command.name}':", exc_info=True)
         await ctx.reply(f"An error occurred while executing the command: {error}")
     
-    async def on_redeem_error(self, ctx: RedeemContext, redeem: Redeem, error: Exception):
+    async def on_redeem_error(self, ctx: TwitchRedeemContext, redeem: TwitchRedeem, error: Exception):
         logger.error(f"Error executing redeem '{redeem.name}':", exc_info=True)
         
     def _find_command(self, text: str) -> tuple[str, str]:
@@ -249,27 +159,53 @@ class Commands:
                 return redeem, name[len(redeem):].strip()
         return None, name
 
-    async def process_message(self, msg: ChatMessage) -> None:
-        prefix = await self.get_prefix(msg)
-        if not msg.text.startswith(prefix):
-            return
+    async def process_twitch_message(self, msg: ChatMessage) -> None:
+        await self.process_message(Platform.TWITCH, msg)
+
+    async def process_message(self, platform: Platform, platform_context: Any):
+        ctx: Context = None
+        if platform == Platform.TWITCH:
+            ctx = TwitchContext(platform_context)
+        else:
+            raise ValueError(f"Unsupported platform: {platform}")
+        
+        prefix = await self.get_prefix(ctx)
+        used_prefix = ""
+        if isinstance(prefix, list):
+            for p in prefix:
+                if ctx.message.startswith(p):
+                    used_prefix = p
+                    break
+            else:
+                return
+        else:
+            if not ctx.message.startswith(prefix):
+                return
+            used_prefix = prefix
             
-        content = msg.text[len(prefix):]
+        content = ctx.message[len(used_prefix):]
         content = content.replace("\U000e0000", "").strip()
         
         command_name, remaining_text = self._find_command(content)
         if not command_name or command_name not in self.commands:
             return
-            
-        ctx = TwitchContext(msg, command_name, remaining_text, self)
-        await self.commands[command_name].invoke(ctx)
+
+        command = self.commands[command_name]
+
+        ctx.command = command
+        ctx.prefix = used_prefix
+        ctx.invoked_with = command_name
+        ctx.parameters = remaining_text
+
+        await command.invoke(ctx)
+
 
     async def process_channel_point_redemption(self, redemption: ChannelPointsCustomRewardRedemptionData):
         redeem_name, remaining_text = self._find_redeem(redemption.reward.title)
         if not redeem_name or redeem_name not in self.redeems:
             return
             
-        ctx = RedeemContext(redemption, self)
+        ctx = TwitchRedeemContext(redemption, self)
         try:
             result = self.redeems[redeem_name].func(ctx)
             if asyncio.iscoroutine(result):
@@ -278,20 +214,14 @@ class Commands:
             await self.on_redeem_error(ctx, self.redeems[redeem_name], e)
 
 class Command:
-    def __init__(self, name: str, func: CommandFunc, **kwargs):
+    def __init__(self, name: str, func: CommandFunc, bot: Commands, **kwargs):
         self.name = name
         self.func = func
-        self.aliases = kwargs.get('aliases', [])
-        self.hidden = kwargs.get('hidden', False)
+        self.bot = bot
+        self.aliases: List[str] = kwargs.get('aliases', [])
+        self.hidden: bool = kwargs.get('hidden', False)
         self.checks: List[CheckFunc] = kwargs.get('checks', [])
         
-        # Parse docstring
-        doc = func.__doc__ or ""
-        parsed_doc = parse_google_docstring(doc)
-        self.help = kwargs.get('help', parsed_doc['summary'])
-        self.description = parsed_doc['description']
-        self.doc_args = parsed_doc['args']
-        self.examples = parsed_doc['examples']
         self._arg_aliases = kwargs.get('arg_aliases', {})
         self.arg_mappings = {}
         for param_name, aliases in self._arg_aliases.items():
@@ -299,6 +229,17 @@ class Command:
                 aliases = [aliases]
             self.arg_mappings.update({alias: param_name for alias in aliases})
             self.arg_mappings[param_name] = param_name
+        
+        # Load parameter configurations from decorator
+        self.params_config = getattr(func, '_command_params', {})
+        
+        # Merge aliases from parameter decorators
+        for param_name, config in self.params_config.items():
+            if 'aliases' in config:
+                aliases = config['aliases']
+                if isinstance(aliases, str):
+                    aliases = [aliases]
+                self.arg_mappings.update({alias: param_name for alias in aliases})
         
         # Store signature and resolve type hints
         self.signature = inspect.signature(func)
@@ -352,8 +293,8 @@ class Command:
             except Exception as e:
                 raise ArgumentParsingError(f"Error parsing argument '{param.name}'")
             
-        if type_ in ctx.bot.converters:
-            return await ctx.bot.converters[type_](ctx, value)
+        if type_ in self.bot.converters:
+            return await self.bot.converters[type_](ctx, value)
             
         if type_ is bool:
             if isinstance(value, bool):
@@ -383,8 +324,9 @@ class Command:
         # Separate positional args and flags from ctx.args
         positional_args = []
         named_args = {}
-        
-        for item in ctx.args.args:
+        parsed_args = CommandArgs(ctx.parameters)
+
+        for item in parsed_args.args:
             if isinstance(item, Flag):
                 if not item.name in self.arg_mappings:
                     raise UnknownFlagError(item.name)
@@ -406,7 +348,6 @@ class Command:
             if param_name in named_args:
                 val = named_args[param_name]
                 del named_args[param_name]
-                break
 
             if val is not None:
                 # Argument was provided by name
@@ -419,7 +360,6 @@ class Command:
                 for arg in positional_args[positional_index:]:
                     args.append(arg)
                 positional_index = len(positional_args)
-                break
             
             # Handle KEYWORD_ONLY parameters
             if param.kind == inspect.Parameter.KEYWORD_ONLY:
@@ -441,9 +381,12 @@ class Command:
                 positional_index += 1
                 
                 # Check if this is the last parameter and it's a string (consume rest)
-                if (positional_index == len(params) and 
-                    param.annotation == str and 
-                    positional_index < len(positional_args)):
+                # OR if it is marked as greedy
+                is_greedy = False
+                if param_name in self.params_config:
+                    is_greedy = self.params_config[param_name].get('greedy', False)
+
+                if ((positional_index == len(params) and param.annotation == str) or is_greedy) and positional_index < len(positional_args):
                     # Consume remaining positional args as a single string
                     remaining = positional_args[positional_index:]
                     val = val + ' ' + ' '.join(remaining)
@@ -504,86 +447,29 @@ class Command:
                 await result
                 
         except Exception as e:
-            if hasattr(ctx, 'bot') and hasattr(ctx.bot, 'on_command_error'):
-                await ctx.bot.on_command_error(ctx, self, e)
+            if hasattr(ctx, 'bot') and hasattr(self.bot, 'on_command_error'):
+                await self.bot.on_command_error(ctx, self, e)
             logger.error("Error in command invocation:", exc_info=True)
 
-class Redeem:
-    def __init__(self, name: str, func: RedeemFunc, **kwargs):
+class TwitchRedeem:
+    def __init__(self, name: str, func: TwitchRedeemFunc, bot: Commands, **kwargs):
         self.name = name
         self.func = func
+        self.bot = bot
         
-    async def invoke(self, ctx: RedeemContext, redemption: ChannelPointsCustomRewardRedemptionData) -> None:
+    async def invoke(self, ctx: TwitchRedeemContext, redemption: ChannelPointsCustomRewardRedemptionData) -> None:
         try:
             func = self.func
             result = func(ctx, redemption) # type: ignore
             if asyncio.iscoroutine(result):
                 await result
         except Exception as e:
-            if hasattr(ctx, 'bot') and hasattr(ctx.bot, 'on_redeem_error'):
-                await ctx.bot.on_redeem_error(ctx, self, e)
+            if hasattr(ctx, 'bot') and hasattr(self.bot, 'on_redeem_error'):
+                await self.bot.on_redeem_error(ctx, self, e)
             else:
                 logger.error("Error in redeem invocation:", exc_info=True)
 
-class TwitchContext(Context):
-    def __init__(self, msg: ChatMessage, command: str, parameter: str, bot: Commands):
-        self.msg: ChatMessage = msg
-        self._command: str = command
-        self._parameter: str = parameter
-        self._args: CommandArgs = CommandArgs(parameter)
-        self.bot: Commands = bot
-        self.twitch: Twitch = bot.twitches.get(msg.room.room_id)
-
-    @property
-    def author(self) -> str:
-        return self.msg.user.name
-
-    @property
-    def command_name(self) -> str:
-        return self._command
-
-    @property
-    def args(self) -> CommandArgs:
-        return self._args
-
-    @property
-    def platform(self) -> str:
-        return "twitch"
-    
-    @property
-    def source(self) -> ChatMessage:
-        return self.msg
-
-    @property
-    def expected_output_type(self) -> OutputMessageType:
-        return OutputMessageType.SINGLE_LINE
-
-    @property
-    def allows_markdown(self) -> bool:
-        return False
-
-    @property
-    def roles(self) -> List[UserRole]:
-        roles = [UserRole.USER]
-        if self.msg.user.mod or self.msg.user.name == self.msg.room.name:
-            roles.append(UserRole.MODERATOR)
-        if self.msg.user.subscriber:
-            roles.append(UserRole.SUBSCRIBER)
-        
-        owner_username = os.getenv("OWNER_TWITCH_USERNAME")
-        if owner_username and self.msg.user.name.lower() == owner_username.lower():
-            roles.append(UserRole.BOT_OWNER)
-            roles.append(UserRole.ADMIN)
-            
-        return roles
-
-    async def reply(self, text: str):
-        await self.msg.reply(text)
-
-    async def send(self, text: str):
-        await self.msg.chat.send_message(self.msg.room.name, text)
-
-class RedeemContext:
+class TwitchRedeemContext:
     def __init__(self, redemption: ChannelPointsCustomRewardRedemptionData, bot: Commands):
         self.twitch: Twitch = bot.twitches.get(redemption.broadcaster_user_id)
         self.redemption: ChannelPointsCustomRewardRedemptionData = redemption
@@ -609,10 +495,6 @@ class RedeemContext:
     async def send(self, text: str):
         await self.bot.chat.send_message(self.redemption.broadcaster_user_login, text)
 
-class CustomRewardRedemptionStatus(Enum):
-    UNFULFILLED = 'UNFULFILLED'
-    FULFILLED = 'FULFILLED'
-    CANCELED = 'CANCELED'
 
 @dataclass
 class Flag:
@@ -633,6 +515,26 @@ def check(predicate: CheckFunc):
         if not hasattr(func, '_command_checks'):
             func._command_checks = []
         func._command_checks.append(predicate)
+        return func
+    return decorator
+
+def parameter(name: str, aliases: Union[str, List[str]] = [], greedy: bool = False, hidden: bool = False):
+    """Decorator to configure a command parameter.
+    
+    Args:
+        name: The name of the parameter to configure.
+        aliases: Optional alias or list of aliases for the parameter.
+        greedy: If True, the parameter will consume all remaining input as a single string.
+        hidden: If True, the parameter will be hidden from help documentation.
+    """
+    def decorator(func):
+        if not hasattr(func, '_command_params'):
+            func._command_params = {}
+        func._command_params[name] = {
+            'aliases': aliases,
+            'greedy': greedy,
+            'hidden': hidden
+        }
         return func
     return decorator
 

@@ -1,5 +1,5 @@
 from bot.ravenfallchannel import RFChannel
-from ..commands import CommandContext, Commands, RedeemContext
+from ..commands import CommandContext, Commands, TwitchRedeemContext
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
@@ -492,7 +492,7 @@ class RedeemRFCog(Cog):
                             record_transaction=False
                         )
 
-    async def send_coins_redeem(self, ctx: RedeemContext, amount: int):
+    async def send_coins_redeem(self, ctx: TwitchRedeemContext, amount: int):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
         if channel is None:
             return
@@ -526,18 +526,18 @@ class RedeemRFCog(Cog):
         await ctx.fulfill()
     
     @Cog.redeem(name="Receive 25,000 coins")
-    async def coins_25_000(self, ctx: RedeemContext):
+    async def coins_25_000(self, ctx: TwitchRedeemContext):
         await self.send_coins_redeem(ctx, 25000)
 
     @Cog.redeem(name="Receive 250,000 coins")
-    async def coins_250_000(self, ctx: RedeemContext):
+    async def coins_250_000(self, ctx: TwitchRedeemContext):
         await self.send_coins_redeem(ctx, 250000)
 
     @Cog.redeem(name="Receive 1,000,000 coins")
-    async def coins_1_000_000(self, ctx: RedeemContext):
+    async def coins_1_000_000(self, ctx: TwitchRedeemContext):
         await self.send_coins_redeem(ctx, 1000000)
 
-    async def send_item_credits_redeem(self, ctx: RedeemContext, amount: int, quiet: bool = False):
+    async def send_item_credits_redeem(self, ctx: TwitchRedeemContext, amount: int, quiet: bool = False):
         async with get_async_session() as session:
             trans_id = await add_credits(session, ctx.redemption.user_id, amount, "Item credits redeem")
             if not quiet:
@@ -545,24 +545,24 @@ class RedeemRFCog(Cog):
         await ctx.fulfill()
 
     @Cog.redeem(name="Lurking!")
-    async def lurking(self, ctx: RedeemContext):
+    async def lurking(self, ctx: TwitchRedeemContext):
         await ctx.send("Thanks for lurking!")
         await self.send_item_credits_redeem(ctx, ctx.redemption.reward.cost, quiet=True)
 
     @Cog.redeem(name="Get 100 item credits")
-    async def item_credits_100(self, ctx: RedeemContext):
+    async def item_credits_100(self, ctx: TwitchRedeemContext):
         await self.send_item_credits_redeem(ctx, 100)
 
     @Cog.redeem(name="Get 500 item credits")
-    async def item_credits_500(self, ctx: RedeemContext):
+    async def item_credits_500(self, ctx: TwitchRedeemContext):
         await self.send_item_credits_redeem(ctx, 500)
 
     @Cog.redeem(name="Get 3,000 item credits")
-    async def item_credits_3000(self, ctx: RedeemContext):
+    async def item_credits_3000(self, ctx: TwitchRedeemContext):
         await self.send_item_credits_redeem(ctx, 3000)
 
     @Cog.redeem(name="Get 15,000 item credits")
-    async def item_credits_15_000(self, ctx: RedeemContext):
+    async def item_credits_15_000(self, ctx: TwitchRedeemContext):
         await self.send_item_credits_redeem(ctx, 15000)
 
     @Cog.command(
@@ -930,7 +930,7 @@ class RedeemRFCog(Cog):
 
 
     @Cog.redeem(name="Restart Ravenfall")
-    async def restart_ravenfall(self, ctx: RedeemContext):
+    async def restart_ravenfall(self, ctx: TwitchRedeemContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
         if channel is None:
             return
@@ -944,7 +944,7 @@ class RedeemRFCog(Cog):
             await ctx.cancel()
             
     @Cog.redeem(name="Restart RavenBot")
-    async def restart_ravenbot(self, ctx: RedeemContext):
+    async def restart_ravenbot(self, ctx: TwitchRedeemContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
         if channel is None:
             return
