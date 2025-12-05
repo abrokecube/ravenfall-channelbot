@@ -18,7 +18,10 @@ import logging
 
 import ravenpy
 
-from bot.commands import Commands, CommandContext, Command, Redeem, RedeemContext, CustomRewardRedemptionStatus
+from bot.commands import (
+    Commands, CommandContext, Command, Redeem, RedeemContext, 
+    CustomRewardRedemptionStatus, CheckFailure, ArgumentError,
+)
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
@@ -91,7 +94,12 @@ class MyCommands(Commands):
         super().__init__(twitch)
     
     async def on_command_error(self, ctx: CommandContext, command: Command, error: Exception):
-        await ctx.send(f"❌ An error occurred")
+        if isinstance(error, CheckFailure):
+            await ctx.send(f"❌ {error.message}")
+        elif isinstance(error, ArgumentError):
+            await ctx.send(f"❌ {error.message}")
+        else:
+            await ctx.send(f"❌ An error occurred")
 
     async def on_redeem_error(self, ctx: RedeemContext, redeem: Redeem, error: Exception):
         await ctx.send(f"❌ An error occurred. Points will be refunded.")

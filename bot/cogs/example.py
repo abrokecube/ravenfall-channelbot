@@ -11,7 +11,7 @@ This cog demonstrates the new command system features:
 from __future__ import annotations
 from typing import Optional
 from ..cog import Cog
-from ..commands import Context, Commands, UserRole, check
+from ..commands import Context, Commands, UserRole, check, ArgumentParsingError
 
 # Example custom type with converter
 class Color:
@@ -33,16 +33,18 @@ class Color:
         """Convert a color name to a Color object."""
         name_lower = arg.lower()
         if name_lower not in cls.COLORS:
-            raise ValueError(f"Unknown color: {arg}. Valid colors: {', '.join(cls.COLORS.keys())}")
+            raise ArgumentParsingError(f"Unknown color: {arg}. Valid colors: {', '.join(cls.COLORS.keys())}")
         return Color(name_lower, cls.COLORS[name_lower])
 
 # Example custom check
 def is_moderator_or_owner():
     """Check if user is a moderator or bot owner."""
     def predicate(ctx: Context) -> bool:
-        return (UserRole.MODERATOR in ctx.roles or 
-                UserRole.BOT_OWNER in ctx.roles)
-    return check(predicate, error_message="❌ This command requires moderator privileges.")
+        if not (UserRole.MODERATOR in ctx.roles or 
+                UserRole.BOT_OWNER in ctx.roles):
+            return "❌ This command requires moderator privileges."
+        return True
+    return check(predicate)
 
 class ExampleCog(Cog):
     """Example cog showcasing new command features."""
@@ -186,8 +188,29 @@ class ExampleCog(Cog):
         else:
             await ctx.reply(f"Unknown operation: {operation}")
             return
-        
         await ctx.reply(f"{a} {symbol} {b} = {result}")
+
+    @Cog.command(
+        name="verbose_test", 
+        aliases=["verbose", "verb", "db"],
+        arg_aliases={'verbose': ['v', 'debug']}
+    )
+    async def verbose_test(self, ctx: Context, verbose: bool = False):
+        """Test boolean flags and argument aliases.
+        
+        Args:
+            verbose: Enable verbose mode (default: False).
+            
+        Examples:
+            !verbose_test
+            !verbose_test --verbose
+            !verbose_test -v
+            !verbose_test --debug
+        """
+        if verbose:
+            await ctx.reply("Verbose mode enabled! 📝")
+        else:
+            await ctx.reply("Verbose mode disabled.")
 
 def setup(commands: Commands, **kwargs) -> None:
     """Load the example cog.

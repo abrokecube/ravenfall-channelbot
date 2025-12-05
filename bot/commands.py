@@ -27,10 +27,75 @@ class UserRole(Enum):
     SUBSCRIBER = "subscriber"
     USER = "user"
 
-class CheckFailure(Exception):
-    def __init__(self, message: str = "Check failed"):
+class OutputMessageType(Enum):
+    SINGLE_LINE = "single_line"
+    MULTI_LINE = "multiple_lines"
+
+class CommandError(Exception):
+    """Base exception for command-related errors."""
+    def __init__(self, message: str = "Command error"):
         self.message = message
         super().__init__(self.message)
+
+class CheckFailure(CommandError):
+    """Raised when a command check fails."""
+    def __init__(self, message: str = "Check failed"):
+        super().__init__(message)
+
+class CommandRegistrationError(CommandError):
+    """Raised when there's an error registering a command or redeem."""
+    def __init__(self, name: str, item_type: str = "Command"):
+        self.name = name
+        self.item_type = item_type
+        super().__init__(f"{item_type} '{name}' already exists")
+
+class ArgumentError(CommandError):
+    """Base exception for argument parsing errors."""
+    pass
+
+class UnknownFlagError(ArgumentError):
+    """Raised when an unknown flag is provided."""
+    def __init__(self, flag_name: str):
+        self.flag_name = flag_name
+        super().__init__(f"Unknown flag '{flag_name}'")
+
+class DuplicateParameterError(ArgumentError):
+    """Raised when a parameter is provided multiple times."""
+    def __init__(self, param_name: str):
+        self.param_name = param_name
+        super().__init__(f"Multiple values provided for parameter '{param_name}'")
+
+class MissingRequiredArgumentError(ArgumentError):
+    """Raised when a required argument is missing."""
+    def __init__(self, param_name: str, keyword_only: bool = False):
+        self.param_name = param_name
+        self.keyword_only = keyword_only
+        arg_type = "keyword-only argument" if keyword_only else "argument"
+        super().__init__(f"Missing required {arg_type}: {param_name}")
+
+class UnknownArgumentError(ArgumentError):
+    """Raised when unknown arguments are provided."""
+    def __init__(self, args: list):
+        self.args = args
+        args_str = ', '.join(f"'{arg}'" for arg in args) if isinstance(args[0], str) else ' '.join(str(a) for a in args)
+        super().__init__(f"Unknown arguments: {args_str}")
+
+class ArgumentConversionError(ArgumentError):
+    """Raised when argument conversion fails."""
+    def __init__(self, value: str, target_type: str, original_error: Exception = None):
+        self.value = value
+        self.target_type = target_type
+        self.original_error = original_error
+        error_msg = f"Could not convert '{value}' to {target_type}"
+        if original_error:
+            error_msg += f": {original_error}"
+        super().__init__(error_msg)
+        
+class ArgumentParsingError(ArgumentError):
+    """Raised when there is a general argument parsing error."""
+    def __init__(self, message: str = "Error parsing arguments"):
+        super().__init__(message)
+
 
 @runtime_checkable
 class Context(Protocol):
@@ -54,6 +119,14 @@ class Context(Protocol):
     def roles(self) -> List[UserRole]:
         ...
     
+    @property
+    def expected_output_type(self) -> OutputMessageType:
+        ...
+
+    @property
+    def allows_markdown(self) -> bool:
+        ...
+
     @property
     def source(self) -> Any:
         ...
@@ -81,20 +154,34 @@ class Commands:
         self.cog_manager: Optional[CogManager] = None
         self.converters: Dict[Type, Callable[[Context, str], Awaitable[Any]]] = {}
 
+    def add_command_object(self, name: str, command: Command):
+        cmd_name = name.lower()
+        if cmd_name in self.commands:
+            raise CommandRegistrationError(cmd_name, "Command")
+            
+        self.commands[cmd_name] = command
+
     def add_command(self, name: str, func: CommandFunc) -> Command:
         """Add a new command with the given name and handler function."""
         cmd_name = name.lower()
         if cmd_name in self.commands:
-            raise ValueError(f"Command '{cmd_name}' already exists")
+            raise CommandRegistrationError(cmd_name, "Command")
             
         cmd = Command(cmd_name, func)
         self.commands[cmd.name] = cmd
         return cmd
 
+    def add_redeem_object(self, name: str, redeem: Redeem):
+        redeem_name = name.lower()
+        if redeem_name in self.redeems:
+            raise CommandRegistrationError(redeem_name, "Redeem")
+            
+        self.redeems[redeem.name] = redeem
+
     def add_redeem(self, name: str, func: RedeemFunc) -> RedeemFunc:
         redeem_name = name.lower()
         if redeem_name in self.redeems:
-            raise ValueError(f"Redeem '{redeem_name}' already exists")
+            raise CommandRegistrationError(redeem_name, "Redeem")
             
         redeem = Redeem(redeem_name, func)
         self.redeems[redeem.name] = redeem
@@ -128,8 +215,14 @@ class Commands:
 
     async def get_prefix(self, msg: ChatMessage) -> str:
         return self.prefix
-
+    
     async def on_command_error(self, ctx: Context, command: Command, error: Exception):
+        # Handle argument parsing errors with user-friendly messages
+        if isinstance(error, ArgumentError):
+            logger.warning(f"Argument error for command {command.name}: {error.message}")
+            await ctx.reply(f"❌ {error.message}")
+            return
+        
         if isinstance(error, CheckFailure):
             # Reply with custom error message if available
             logger.warning(f"Check failed for command {command.name}: {error.message}")
@@ -199,6 +292,13 @@ class Command:
         self.description = parsed_doc['description']
         self.doc_args = parsed_doc['args']
         self.examples = parsed_doc['examples']
+        self._arg_aliases = kwargs.get('arg_aliases', {})
+        self.arg_mappings = {}
+        for param_name, aliases in self._arg_aliases.items():
+            if isinstance(aliases, str):
+                aliases = [aliases]
+            self.arg_mappings.update({alias: param_name for alias in aliases})
+            self.arg_mappings[param_name] = param_name
         
         # Store signature and resolve type hints
         self.signature = inspect.signature(func)
@@ -245,19 +345,26 @@ class Command:
         
         # Check for custom converter
         if hasattr(type_, 'convert') and inspect.iscoroutinefunction(type_.convert):
-            return await type_.convert(ctx, value)
+            try:
+                return await type_.convert(ctx, value)
+            except ArgumentError as e:
+                raise ArgumentParsingError(f"Error parsing argument '{param.name}': {e.message}")
+            except Exception as e:
+                raise ArgumentParsingError(f"Error parsing argument '{param.name}'")
             
         if type_ in ctx.bot.converters:
             return await ctx.bot.converters[type_](ctx, value)
             
         if type_ is bool:
+            if isinstance(value, bool):
+                return value
             return value.lower() in ('true', 'yes', '1', 'on')
             
         try:
             return type_(value)
         except Exception as e:
             type_name = getattr(type_, '__name__', str(type_))
-            raise TypeError(f"Could not convert '{value}' to {type_name}: {e}")
+            raise ArgumentConversionError(value, type_name, e)
 
     async def _parse_arguments(self, ctx: Context) -> tuple[list, dict]:
         args = []
@@ -279,15 +386,13 @@ class Command:
         
         for item in ctx.args.args:
             if isinstance(item, Flag):
-                # This is a named argument
-                # Flag.name is the parameter name, Flag.value is the value
-                if item.value is True or item.value is None:
-                    # Boolean flag with no value (e.g., --verbose)
-                    named_args[item.name] = True
-                else:
-                    named_args[item.name] = item.value
+                if not item.name in self.arg_mappings:
+                    raise UnknownFlagError(item.name)
+                param_name = self.arg_mappings[item.name]
+                if param_name in named_args:
+                    raise DuplicateParameterError(param_name)
+                named_args[param_name] = item.value
             else:
-                # This is a positional argument
                 positional_args.append(item)
         
         # Process parameters in order
@@ -295,6 +400,19 @@ class Command:
         
         for param in params:
             param_name = param.name
+                        
+            # Check if this was provided as a named argument (or alias)
+            val = None
+            if param_name in named_args:
+                val = named_args[param_name]
+                del named_args[param_name]
+                break
+
+            if val is not None:
+                # Argument was provided by name
+                converted = await self._convert_argument(ctx, val, param)
+                kwargs[param_name] = converted
+                continue
             
             # Handle VAR_POSITIONAL (*args)
             if param.kind == inspect.Parameter.VAR_POSITIONAL:
@@ -305,26 +423,17 @@ class Command:
             
             # Handle KEYWORD_ONLY parameters
             if param.kind == inspect.Parameter.KEYWORD_ONLY:
-                # Must be provided as named argument
-                if param_name in named_args:
-                    val = named_args[param_name]
-                    converted = await self._convert_argument(ctx, val, param)
-                    kwargs[param_name] = converted
-                elif param.default != inspect.Parameter.empty:
+                # Must be provided as named argument (already checked above)
+                if param.default != inspect.Parameter.empty:
                     kwargs[param_name] = param.default
                 elif self._is_optional(param):
                     kwargs[param_name] = None
                 else:
-                    raise TypeError(f"Missing required keyword-only argument: {param_name}")
+                    raise MissingRequiredArgumentError(param_name, keyword_only=True)
                 continue
             
             # Handle positional or positional-or-keyword parameters
-            # Check if this was provided as a named argument
-            if param_name in named_args:
-                val = named_args[param_name]
-                converted = await self._convert_argument(ctx, val, param)
-                args.append(converted)
-                continue
+            # (Named check already done above)
                 
             # Otherwise, use positional argument
             if positional_index < len(positional_args):
@@ -349,8 +458,13 @@ class Command:
                 elif self._is_optional(param):
                     args.append(None)
                 else:
-                    raise TypeError(f"Missing required argument: {param_name}")
-                    
+                    raise MissingRequiredArgumentError(param_name)
+
+        if len(named_args) > 0:
+            raise UnknownArgumentError(list(named_args.keys()))
+        if positional_index < len(positional_args):
+            raise UnknownArgumentError(positional_args[positional_index:])
+
         return args, kwargs
     
     def _is_optional(self, param: inspect.Parameter) -> bool:
@@ -365,18 +479,19 @@ class Command:
         """Invoke the command with the given context."""
         try:
             # Run checks
-            for check_item in self.checks:
-                # Handle both old format (just function) and new format (function, message)
-                if isinstance(check_item, tuple):
-                    check_func, error_msg = check_item
-                else:
-                    check_func, error_msg = check_item, None
-                    
-                if not check_func(ctx):
-                    if error_msg:
-                        raise CheckFailure(error_msg)
-                    else:
+            for check_func in self.checks:
+                # The check function can either return bool or an error string
+                try:
+                    check_result = check_func(ctx)
+                    if isinstance(check_result, str):
+                        raise CheckFailure(check_result)
+                    if not check_result:
                         raise CheckFailure(f"Check failed for command '{self.name}'")
+                except CheckFailure:
+                    raise
+                except Exception as e:
+                    # Wrap other exceptions
+                    raise CheckFailure(f"Check raised an error: {e}")
 
             # Parse arguments
             args, kwargs = await self._parse_arguments(ctx)
@@ -440,6 +555,14 @@ class TwitchContext(Context):
         return self.msg
 
     @property
+    def expected_output_type(self) -> OutputMessageType:
+        return OutputMessageType.SINGLE_LINE
+
+    @property
+    def allows_markdown(self) -> bool:
+        return False
+
+    @property
     def roles(self) -> List[UserRole]:
         roles = [UserRole.USER]
         if self.msg.user.mod or self.msg.user.name == self.msg.room.name:
@@ -500,17 +623,16 @@ class Flag:
         return f"Flag({self.name}, {self.value})"
 
 # Helper for checks
-def check(predicate: CheckFunc, *, error_message: Optional[str] = None):
+def check(predicate: CheckFunc):
     """Decorator to add a check to a command.
     
     Args:
-        predicate: A function that takes a Context and returns bool.
-        error_message: Optional custom error message to show when check fails.
+        predicate: A function that takes a Context and returns bool or raises CheckFailure.
     """
     def decorator(func):
         if not hasattr(func, '_command_checks'):
             func._command_checks = []
-        func._command_checks.append((predicate, error_message))
+        func._command_checks.append(predicate)
         return func
     return decorator
 

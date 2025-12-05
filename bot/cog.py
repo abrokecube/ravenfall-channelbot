@@ -184,11 +184,12 @@ class CogManager:
         # Register all commands from the cog
         try:
             for name, command in cog.commands.items():
-                self.commands.add_command(name, command.func)
+                self.commands.add_command_object(name, command)
                 for alias in command.aliases:
-                    self.commands.add_command(alias, command.func)
+                    self.commands.add_command_object(alias, command)
+                    
             for name, redeem in cog.redeems.items():
-                self.commands.add_redeem(name, redeem.func)
+                self.commands.add_redeem_object(name, redeem)
         except ValueError as e:
             # Add cog context to the error message
             raise ValueError(f"{e} (in cog '{cog.name}')")
