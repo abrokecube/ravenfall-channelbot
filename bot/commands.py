@@ -23,7 +23,7 @@ from typing import (
 from twitchAPI.twitch import Twitch
 from twitchAPI.chat import ChatMessage, Chat
 from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 
 from .command_contexts import Context, TwitchContext
@@ -51,6 +51,18 @@ if TYPE_CHECKING:
 CommandFunc = Callable[..., Union[None, Awaitable[None]]]
 TwitchRedeemFunc = Callable[['TwitchRedeemContext'], Union[None, Awaitable[None]]]
 CheckFunc = Callable[[Context], bool]
+
+
+@dataclass
+class Parameter:
+    name: str
+    annotation: Any
+    default: Any = inspect.Parameter.empty
+    aliases: List[str] = field(default_factory=list)
+    greedy: bool = False
+    hidden: bool = False
+    kind: inspect._ParameterKind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+
 
 class Commands:
     def __init__(self, chat: Chat, twitches: Dict[str, Twitch] = {}):
@@ -194,7 +206,7 @@ class Commands:
 
         ctx.command = command
         ctx.prefix = used_prefix
-        ctx.invoked_with = command_name
+        ctx.invoked_with = content[:len(command_name)]
         ctx.parameters = remaining_text
 
         await command.invoke(ctx)
@@ -222,25 +234,6 @@ class Command:
         self.hidden: bool = kwargs.get('hidden', False)
         self.checks: List[CheckFunc] = kwargs.get('checks', [])
         
-        self._arg_aliases = kwargs.get('arg_aliases', {})
-        self.arg_mappings = {}
-        for param_name, aliases in self._arg_aliases.items():
-            if isinstance(aliases, str):
-                aliases = [aliases]
-            self.arg_mappings.update({alias: param_name for alias in aliases})
-            self.arg_mappings[param_name] = param_name
-        
-        # Load parameter configurations from decorator
-        self.params_config = getattr(func, '_command_params', {})
-        
-        # Merge aliases from parameter decorators
-        for param_name, config in self.params_config.items():
-            if 'aliases' in config:
-                aliases = config['aliases']
-                if isinstance(aliases, str):
-                    aliases = [aliases]
-                self.arg_mappings.update({alias: param_name for alias in aliases})
-        
         # Store signature and resolve type hints
         self.signature = inspect.signature(func)
         try:
@@ -252,12 +245,60 @@ class Command:
             logger.warning(f"Could not resolve type hints for {func.__name__}: {e}")
             self.type_hints = {}
 
-    async def _convert_argument(self, ctx: Context, value: str, param: inspect.Parameter) -> Any:
+        # Load parameter configurations from decorator
+        params_config = getattr(func, '_command_params', {})
+        
+        self.parameters: List[Parameter] = []
+        self.parameters_map: Dict[str, Parameter] = {}
+        self.arg_mappings: Dict[str, str] = {}
+        
+        # Process parameters
+        # Skip 'self' (if bound) and 'ctx'
+        sig_params = list(self.signature.parameters.values())
+        if sig_params and sig_params[0].name == 'self':
+            sig_params.pop(0)
+        if sig_params and (sig_params[0].name == 'ctx' or sig_params[0].annotation == Context or sig_params[0].annotation == 'Context'):
+            sig_params.pop(0)
+
+        for param in sig_params:
+            param_config = params_config.get(param.name, {})
+            
+            # Resolve aliases
+            aliases = param_config.get('aliases', [])
+            if isinstance(aliases, str):
+                aliases = [aliases]
+            
+            # Create Parameter object
+            p = Parameter(
+                name=param.name,
+                annotation=self.type_hints.get(param.name, param.annotation),
+                default=param.default,
+                aliases=aliases,
+                greedy=param_config.get('greedy', False),
+                hidden=param_config.get('hidden', False),
+                kind=param.kind
+            )
+            self.parameters.append(p)
+            self.parameters_map[param.name] = p
+            
+            # Update mappings
+            self.arg_mappings[param.name] = param.name
+            for alias in aliases:
+                self.arg_mappings[alias] = param.name
+
+        # Add command-level arg aliases (legacy support if needed, or remove if fully deprecated)
+        _arg_aliases = kwargs.get('arg_aliases', {})
+        for param_name, aliases in _arg_aliases.items():
+            if isinstance(aliases, str):
+                aliases = [aliases]
+            for alias in aliases:
+                self.arg_mappings[alias] = param_name
+
+    async def _convert_argument(self, ctx: Context, value: str, param: Parameter) -> Any:
         if param.annotation == inspect.Parameter.empty:
             return value
             
-        # Try to get the resolved type hint first
-        type_ = self.type_hints.get(param.name, param.annotation)
+        type_ = param.annotation
         
         # If still a string (shouldn't happen with get_type_hints, but just in case)
         if isinstance(type_, str):
@@ -311,16 +352,6 @@ class Command:
         args = []
         kwargs = {}
         
-        # Skip 'self' (if bound) and 'ctx'
-        params = list(self.signature.parameters.values())
-        if params and params[0].name == 'self':
-            params.pop(0)
-        if params and (params[0].name == 'ctx' or params[0].annotation == Context or params[0].annotation == 'Context'):
-            params.pop(0)
-            
-        # Build a map of parameter names to their definitions
-        param_map = {p.name: p for p in params}
-        
         # Separate positional args and flags from ctx.args
         positional_args = []
         named_args = {}
@@ -340,7 +371,7 @@ class Command:
         # Process parameters in order
         positional_index = 0
         
-        for param in params:
+        for param in self.parameters:
             param_name = param.name
                         
             # Check if this was provided as a named argument (or alias)
@@ -382,11 +413,11 @@ class Command:
                 
                 # Check if this is the last parameter and it's a string (consume rest)
                 # OR if it is marked as greedy
-                is_greedy = False
-                if param_name in self.params_config:
-                    is_greedy = self.params_config[param_name].get('greedy', False)
+                
+                # Check if this is the last parameter in the list
+                is_last_param = param is self.parameters[-1]
 
-                if ((positional_index == len(params) and param.annotation == str) or is_greedy) and positional_index < len(positional_args):
+                if ((is_last_param and param.annotation == str) or param.greedy) and positional_index < len(positional_args):
                     # Consume remaining positional args as a single string
                     remaining = positional_args[positional_index:]
                     val = val + ' ' + ' '.join(remaining)
@@ -410,7 +441,7 @@ class Command:
 
         return args, kwargs
     
-    def _is_optional(self, param: inspect.Parameter) -> bool:
+    def _is_optional(self, param: Parameter) -> bool:
         """Check if a parameter is Optional[T]."""
         origin = get_origin(param.annotation)
         if origin is Union:
@@ -447,7 +478,7 @@ class Command:
                 await result
                 
         except Exception as e:
-            if hasattr(ctx, 'bot') and hasattr(self.bot, 'on_command_error'):
+            if hasattr(self.bot, 'on_command_error'):
                 await self.bot.on_command_error(ctx, self, e)
             logger.error("Error in command invocation:", exc_info=True)
 
@@ -505,16 +536,16 @@ class Flag:
         return f"Flag({self.name}, {self.value})"
 
 # Helper for checks
-def check(predicate: CheckFunc):
-    """Decorator to add a check to a command.
+def checks(*predicates: CheckFunc):
+    """Decorator to add checks to a command.
     
     Args:
-        predicate: A function that takes a Context and returns bool or raises CheckFailure.
+        *predicates: One or more functions that take a Context and return bool or raises CheckFailure.
     """
     def decorator(func):
         if not hasattr(func, '_command_checks'):
             func._command_checks = []
-        func._command_checks.append(predicate)
+        func._command_checks.extend(predicates)
         return func
     return decorator
 

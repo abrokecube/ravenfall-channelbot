@@ -4,14 +4,14 @@ Example Cog
 This cog demonstrates the new command system features:
 - Typed arguments with automatic parsing
 - Custom type converters
-- Custom checks
+- Custom checks using @checks(check1, check2, ...)
 - Google-style docstrings for documentation
 """
 
 from __future__ import annotations
 from typing import Optional
 from ..cog import Cog
-from ..commands import Context, Commands, UserRole, check, ArgumentParsingError, parameter
+from ..commands import Context, Commands, UserRole, checks, ArgumentParsingError, parameter
 
 # Example custom type with converter
 class Color:
@@ -36,15 +36,22 @@ class Color:
             raise ArgumentParsingError(f"Unknown color: {arg}. Valid colors: {', '.join(cls.COLORS.keys())}")
         return Color(name_lower, cls.COLORS[name_lower])
 
-# Example custom check
-def is_moderator_or_owner():
-    """Check if user is a moderator or bot owner."""
-    def predicate(ctx: Context) -> bool:
-        if not (UserRole.MODERATOR in ctx.roles or 
-                UserRole.BOT_OWNER in ctx.roles):
-            return "❌ This command requires moderator privileges."
-        return True
-    return check(predicate)
+# Example custom checks
+def is_moderator(ctx: Context) -> bool:
+    if UserRole.MODERATOR not in ctx.roles:
+        return "❌ This command requires moderator privileges."
+    return True
+
+def is_bot_owner(ctx: Context) -> bool:
+    if UserRole.BOT_OWNER not in ctx.roles:
+        return "❌ This command requires bot owner privileges."
+    return True
+
+def is_moderator_or_owner(ctx: Context) -> bool:
+    if not (UserRole.MODERATOR in ctx.roles or 
+            UserRole.BOT_OWNER in ctx.roles):
+        return "❌ This command requires moderator privileges."
+    return True
 
 class ExampleCog(Cog):
     """Example cog showcasing new command features."""
@@ -121,7 +128,7 @@ class ExampleCog(Cog):
         await ctx.reply(f"Set your color to {color.name} ({color.hex_code})")
     
     @Cog.command(name="modcommand")
-    @is_moderator_or_owner()
+    @checks(is_moderator_or_owner)
     async def modcommand(self, ctx: Context):
         """A command only moderators and the bot owner can use.
         
@@ -226,6 +233,32 @@ class ExampleCog(Cog):
             !greedy_test Hello world this is a test
         """
         await ctx.reply(f"First: '{first}', Rest: '{rest}'")
+
+    @Cog.command(name="owner_only")
+    @checks(is_bot_owner)
+    async def owner_only_command(self, ctx: Context):
+        """A command only the bot owner can use.
+        
+        This demonstrates using a single check in the @checks decorator.
+        
+        Examples:
+            !owner_only
+        """
+        await ctx.reply("✅ You are the bot owner!")
+
+    @Cog.command(name="multi_check")
+    @checks(is_moderator, is_bot_owner)
+    async def multi_check_command(self, ctx: Context):
+        """A command that demonstrates multiple checks.
+        
+        This command requires BOTH moderator AND bot owner privileges.
+        Note: In practice, you'd usually want OR logic, but this shows
+        how to pass multiple check functions to @checks().
+        
+        Examples:
+            !multi_check
+        """
+        await ctx.reply("✅ You passed all checks!")
 
 def setup(commands: Commands, **kwargs) -> None:
     """Load the example cog.

@@ -15,6 +15,7 @@ class Context(Protocol):
     they just need to have all these attributes and methods.
     """
     message: str
+    full_message: str
     author: str
     roles: List[UserRole]
     prefix: str
@@ -58,6 +59,10 @@ class TwitchContext:
         self.command: Optional[Command] = None
         self.parameters: str = ""
     
+    @property
+    def full_message(self) -> str:
+        return self.message
+
     def _compute_roles(self) -> List[UserRole]:
         """Compute user roles based on Twitch message."""
         import os
