@@ -25,6 +25,8 @@ from twitchAPI.chat import ChatMessage, Chat
 from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
 from dataclasses import dataclass, field
 import re
+from docstring_parser import parse
+from utils.strutils import strjoin
 
 from .command_contexts import Context, TwitchContext
 from .command_enums import OutputMessageType, Platform, UserRole, CustomRewardRedemptionStatus
@@ -62,6 +64,83 @@ class Parameter:
     greedy: bool = False
     hidden: bool = False
     kind: inspect._ParameterKind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+    converter: Any = field(default=None)
+    is_optional: bool = False
+    type_title: str = None
+    type_short_help: str = None
+    type_help: str = None
+    help: Optional[str] = None
+    
+    def get_help_text(self, invoked_name: str = None):
+        param_aliases = self.aliases[:]
+        
+        if invoked_name in param_aliases:
+            param_aliases.remove(invoked_name)
+            param_aliases.append(self.name)
+        param_aliases.sort()
+
+        out_str = []
+        param_str = invoked_name or self.name
+        if self.type_title:
+            param_str += f": {self.type_title}"
+        if self.is_optional:
+            param_str = f"({param_str})"
+        else:
+            param_str = f"<{param_str}>"
+        out_str.append(param_str)
+        out_str.append(self.help)
+        if self.is_optional:
+            out_str.append("Optional")
+        else:
+            out_str.append("Required")
+        type_help = self.type_short_help or self.type_help or None
+        if type_help:
+            out_str.append(f"{self.type_title}: {type_help}")
+        if param_aliases:
+            out_str.append(f"Aliases: {', '.join(param_aliases)}")
+            
+        response = strjoin(' – ', *out_str)
+        return response
+
+
+class Converter:
+    title: str = None
+    short_help: str = None
+    help: str = None
+
+    @classmethod
+    async def convert(cls, ctx: Context, arg: str) -> Any:
+        raise NotImplementedError
+
+
+class Check:
+    title: str = None
+    short_help: str = None
+    help: str = None
+
+    async def check(self, ctx: Context) -> bool:
+        raise NotImplementedError
+
+    def __call__(self, ctx: Context) -> bool:
+        # This allows the check instance to be called like a function
+        # We need to handle async check methods
+        if inspect.iscoroutinefunction(self.check):
+            # If check is async, we can't await it here because __call__ is sync
+            # But the command invoker expects a sync callable that might return a coroutine?
+            # No, the command invoker calls check_func(ctx). 
+            # If check_func is a Check instance, check_func(ctx) returns self.check(ctx)
+            # which is a coroutine if check is async.
+            return self.check(ctx)
+        return self.check(ctx)
+
+class FunctionCheck(Check):
+    def __init__(self, predicate: CheckFunc):
+        self.predicate = predicate
+        self.title = predicate.__name__.replace('_', ' ').title()
+        self.help = getattr(predicate, '__doc__', '')
+    
+    def check(self, ctx: Context) -> bool:
+        return self.predicate(ctx)
 
 
 class Commands:
@@ -211,7 +290,6 @@ class Commands:
 
         await command.invoke(ctx)
 
-
     async def process_channel_point_redemption(self, redemption: ChannelPointsCustomRewardRedemptionData):
         redeem_name, remaining_text = self._find_redeem(redemption.reward.title)
         if not redeem_name or redeem_name not in self.redeems:
@@ -225,15 +303,29 @@ class Commands:
         except Exception as e:
             await self.on_redeem_error(ctx, self.redeems[redeem_name], e)
 
-class Command:
-    def __init__(self, name: str, func: CommandFunc, bot: Commands, **kwargs):
+
+class Command:       
+    def __init__(
+        self, name: str, func: CommandFunc, bot: 'Commands', checks: List[CheckFunc] = [], 
+        aliases: List[str] = [], hidden: bool = False, help: str = None, short_help: str = None, 
+        title: str = None
+    ):
         self.name = name
         self.func = func
         self.bot = bot
-        self.aliases: List[str] = kwargs.get('aliases', [])
-        self.hidden: bool = kwargs.get('hidden', False)
-        self.checks: List[CheckFunc] = kwargs.get('checks', [])
+        self.checks = checks
+        self.aliases = aliases
+        self.hidden = hidden
         
+        # Parse docstring for parameter descriptions and help text
+        doc = parse(func.__doc__ or "")
+        
+        self.title = title or name.replace('_', ' ').title()
+        self.short_help = short_help or doc.short_description
+        self.help = help or doc.long_description or doc.short_description
+        
+        doc_params = {p.arg_name: p.description for p in doc.params}
+
         # Store signature and resolve type hints
         self.signature = inspect.signature(func)
         try:
@@ -247,7 +339,7 @@ class Command:
 
         # Load parameter configurations from decorator
         params_config = getattr(func, '_command_params', {})
-        
+
         self.parameters: List[Parameter] = []
         self.parameters_map: Dict[str, Parameter] = {}
         self.arg_mappings: Dict[str, str] = {}
@@ -268,16 +360,67 @@ class Command:
             if isinstance(aliases, str):
                 aliases = [aliases]
             
+            # Resolve type and check for Optional
+            annotation = self.type_hints.get(param.name, param.annotation)
+            converter = annotation
+            is_optional = False
+            
+            # If still a string (shouldn't happen with get_type_hints, but just in case)
+            if isinstance(converter, str):
+                # Try to evaluate common built-in types
+                builtins_map = {
+                    'int': int,
+                    'float': float,
+                    'str': str,
+                    'bool': bool,
+                }
+                if converter in builtins_map:
+                    converter = builtins_map[converter]
+
+            # Handle Optional[T] - extract the inner type
+            origin = get_origin(converter)
+            if origin is Union:
+                args = get_args(converter)
+                # Check if NoneType is in args
+                if type(None) in args:
+                    is_optional = True
+                    # Filter out NoneType to get the actual type
+                    non_none_types = [t for t in args if t is not type(None)]
+                    if non_none_types:
+                        converter = non_none_types[0]
+            
+            is_optional = is_optional or (param.default != inspect.Parameter.empty)
+
+            # Get help text
+            param_help = param_config.get('help')
+            if not param_help:
+                param_help = doc_params.get(param.name)
+
             # Create Parameter object
             p = Parameter(
                 name=param.name,
-                annotation=self.type_hints.get(param.name, param.annotation),
+                annotation=annotation,
+                converter=converter,
+                is_optional=is_optional,
                 default=param.default,
                 aliases=aliases,
                 greedy=param_config.get('greedy', False),
                 hidden=param_config.get('hidden', False),
-                kind=param.kind
+                kind=param.kind,
+                help=param_help
             )
+            
+            # Extract documentation from converter if available
+            if isinstance(converter, type) and issubclass(converter, Converter):
+                p.type_title = getattr(converter, 'title', None) or converter.__name__
+                p.type_short_help = getattr(converter, 'short_help', None)
+                p.type_help = getattr(converter, 'help', None) or converter.__doc__
+            elif converter in BUILTIN_TYPE_DOCS:
+                docs = BUILTIN_TYPE_DOCS[converter]
+                p.type_title = docs['title']
+                p.type_short_help = docs['short_help']
+                p.type_help = docs['help']
+            
             self.parameters.append(p)
             self.parameters_map[param.name] = p
             
@@ -287,43 +430,18 @@ class Command:
                 self.arg_mappings[alias] = param.name
 
         # Add command-level arg aliases (legacy support if needed, or remove if fully deprecated)
-        _arg_aliases = kwargs.get('arg_aliases', {})
-        for param_name, aliases in _arg_aliases.items():
-            if isinstance(aliases, str):
-                aliases = [aliases]
-            for alias in aliases:
-                self.arg_mappings[alias] = param_name
+        # _arg_aliases = kwargs.get('arg_aliases', {}) # kwargs is no longer used
+        # for param_name, aliases in _arg_aliases.items():
+        #     if isinstance(aliases, str):
+        #         aliases = [aliases]
+        #     for alias in aliases:
+        #         self.arg_mappings[alias] = param_name
 
     async def _convert_argument(self, ctx: Context, value: str, param: Parameter) -> Any:
         if param.annotation == inspect.Parameter.empty:
             return value
             
-        type_ = param.annotation
-        
-        # If still a string (shouldn't happen with get_type_hints, but just in case)
-        if isinstance(type_, str):
-            # Try to evaluate common built-in types
-            builtins_map = {
-                'int': int,
-                'float': float,
-                'str': str,
-                'bool': bool,
-            }
-            
-            if type_ in builtins_map:
-                type_ = builtins_map[type_]
-            else:
-                # For other forward references, just return the value
-                return value
-        
-        # Handle Optional[T] - extract the inner type
-        origin = get_origin(type_)
-        if origin is Union:
-            args = get_args(type_)
-            # Filter out NoneType to get the actual type
-            non_none_types = [t for t in args if t is not type(None)]
-            if non_none_types:
-                type_ = non_none_types[0]
+        type_ = param.converter
         
         # Check for custom converter
         if hasattr(type_, 'convert') and inspect.iscoroutinefunction(type_.convert):
@@ -397,7 +515,7 @@ class Command:
                 # Must be provided as named argument (already checked above)
                 if param.default != inspect.Parameter.empty:
                     kwargs[param_name] = param.default
-                elif self._is_optional(param):
+                elif param.is_optional:
                     kwargs[param_name] = None
                 else:
                     raise MissingRequiredArgumentError(param_name, keyword_only=True)
@@ -429,7 +547,7 @@ class Command:
                 # No positional argument provided
                 if param.default != inspect.Parameter.empty:
                     args.append(param.default)
-                elif self._is_optional(param):
+                elif param.is_optional:
                     args.append(None)
                 else:
                     raise MissingRequiredArgumentError(param_name)
@@ -440,14 +558,7 @@ class Command:
             raise UnknownArgumentError(positional_args[positional_index:])
 
         return args, kwargs
-    
-    def _is_optional(self, param: Parameter) -> bool:
-        """Check if a parameter is Optional[T]."""
-        origin = get_origin(param.annotation)
-        if origin is Union:
-            args = get_args(param.annotation)
-            return type(None) in args
-        return False
+
 
     async def invoke(self, ctx: Context) -> None:
         """Invoke the command with the given context."""
@@ -457,6 +568,9 @@ class Command:
                 # The check function can either return bool or an error string
                 try:
                     check_result = check_func(ctx)
+                    if asyncio.iscoroutine(check_result):
+                        check_result = await check_result
+                    
                     if isinstance(check_result, str):
                         raise CheckFailure(check_result)
                     if not check_result:
@@ -481,6 +595,47 @@ class Command:
             if hasattr(self.bot, 'on_command_error'):
                 await self.bot.on_command_error(ctx, self, e)
             logger.error("Error in command invocation:", exc_info=True)
+            
+    def get_help_text(self, prefix: str, invoked_name: str = None):
+        if not invoked_name:
+            invoked_name = self.name
+        nm_out = [f"{prefix}{invoked_name}"]
+        description = self.short_help or self.help or ""
+        
+        for param in self.parameters:
+            if param.hidden:
+                continue
+            param_str = param.name
+            if param.type_title:
+                param_str += f": {param.type_title}"
+            if param.is_optional:
+                param_str = f"({param_str})"
+            else:
+                param_str = f"<{param_str}>"
+            nm_out.append(param_str)
+        
+        name_and_usage = " ".join(nm_out)
+        aliases = ""
+        if self.aliases:
+            alias_list = list(self.aliases)
+            if invoked_name != self.name:
+                alias_list.remove(invoked_name)
+                alias_list.append(self.name)
+            alias_list.sort()
+            aliases = f"Aliases: {', '.join(alias_list)}"
+        restrictions = ""
+        if self.checks:
+            restr_to = []
+            for check in self.checks:
+                if check.__doc__:
+                    restr_to.append(check.__doc__)
+                else:
+                    restr_to.append(check.__name__)
+            restrictions = f"Limited to: {', '.join(restr_to)}"
+
+        response = strjoin(' – ', name_and_usage, description, restrictions, aliases)
+        return response
+
 
 class TwitchRedeem:
     def __init__(self, name: str, func: TwitchRedeemFunc, bot: Commands, **kwargs):
@@ -536,20 +691,30 @@ class Flag:
         return f"Flag({self.name}, {self.value})"
 
 # Helper for checks
-def checks(*predicates: CheckFunc):
+def checks(*predicates: Union[CheckFunc, Check, Type[Check]]):
     """Decorator to add checks to a command.
     
     Args:
-        *predicates: One or more functions that take a Context and return bool or raises CheckFailure.
+        *predicates: One or more functions or Check classes/instances.
     """
     def decorator(func):
         if not hasattr(func, '_command_checks'):
             func._command_checks = []
-        func._command_checks.extend(predicates)
+        
+        processed_checks = []
+        for p in predicates:
+            if isinstance(p, type) and issubclass(p, Check):
+                processed_checks.append(p())
+            elif isinstance(p, Check):
+                processed_checks.append(p)
+            else:
+                processed_checks.append(FunctionCheck(p))
+                
+        func._command_checks.extend(processed_checks)
         return func
     return decorator
 
-def parameter(name: str, aliases: Union[str, List[str]] = [], greedy: bool = False, hidden: bool = False):
+def parameter(name: str, aliases: Union[str, List[str]] = [], greedy: bool = False, hidden: bool = False, help: str = None):
     """Decorator to configure a command parameter.
     
     Args:
@@ -557,6 +722,7 @@ def parameter(name: str, aliases: Union[str, List[str]] = [], greedy: bool = Fal
         aliases: Optional alias or list of aliases for the parameter.
         greedy: If True, the parameter will consume all remaining input as a single string.
         hidden: If True, the parameter will be hidden from help documentation.
+        help: Help text for the parameter.
     """
     def decorator(func):
         if not hasattr(func, '_command_params'):
@@ -564,10 +730,34 @@ def parameter(name: str, aliases: Union[str, List[str]] = [], greedy: bool = Fal
         func._command_params[name] = {
             'aliases': aliases,
             'greedy': greedy,
-            'hidden': hidden
+            'hidden': hidden,
+            'help': help
         }
         return func
     return decorator
+
+BUILTIN_TYPE_DOCS = {
+    str: {
+        'title': 'Text',
+        'short_help': 'A text string',
+        'help': 'A sequence of characters.'
+    },
+    int: {
+        'title': 'Number',
+        'short_help': 'An integer number',
+        'help': 'A whole number without decimals.'
+    },
+    float: {
+        'title': 'Decimal',
+        'short_help': 'A decimal number',
+        'help': 'A number with a decimal point.'
+    },
+    bool: {
+        'title': 'Boolean',
+        'short_help': 'True or False',
+        'help': 'A boolean value (true/false, yes/no, on/off).'
+    }
+}
 
 DELIMETERS = ('=', ':')
 RE_FLAG = re.compile(r'[-a-zA-Z]{2}[a-zA-Z]+[:=]+.+|-[a-zA-Z]\b|--[a-zA-Z]+\b')

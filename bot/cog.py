@@ -53,11 +53,14 @@ class Cog:
         pass
     
     @classmethod
-    def command(cls, name: Optional[str] = None, **kwargs) -> Callable[[CommandFunc], CommandFunc]:
+    def command(cls, name: Optional[str] = None, help: str = None, short_help: str = None, title: str = None, **kwargs) -> Callable[[CommandFunc], CommandFunc]:
         """Decorator to register a command in the cog.
         
         Args:
             name: Optional command name. If not provided, uses the function name.
+            help: Optional long help text.
+            short_help: Optional short help text.
+            title: Optional title for the command.
             **kwargs: Additional keyword arguments to pass to the Command constructor.
             
         Returns:
@@ -73,6 +76,13 @@ class Cog:
             # Extract checks
             if hasattr(func, '_command_checks'):
                 kwargs['checks'] = func._command_checks
+            
+            if help:
+                kwargs['help'] = help
+            if short_help:
+                kwargs['short_help'] = short_help
+            if title:
+                kwargs['title'] = title
             
             # Store the command name and kwargs with the function
             func._cog_command_info.append((cmd_name, kwargs))

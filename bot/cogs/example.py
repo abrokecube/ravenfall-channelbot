@@ -11,12 +11,16 @@ This cog demonstrates the new command system features:
 from __future__ import annotations
 from typing import Optional
 from ..cog import Cog
-from ..commands import Context, Commands, UserRole, checks, ArgumentParsingError, parameter
+from ..commands import Context, Commands, UserRole, checks, ArgumentParsingError, parameter, Converter, Check
 
 # Example custom type with converter
-class Color:
+class Color(Converter):
     """A simple color class with a custom converter."""
     
+    title = "Color"
+    short_help = "A color name or hex code"
+    help = "Available colors: red, green, blue, yellow."
+
     COLORS = {
         'red': '#FF0000',
         'green': '#00FF00',
@@ -37,10 +41,14 @@ class Color:
         return Color(name_lower, cls.COLORS[name_lower])
 
 # Example custom checks
-def is_moderator(ctx: Context) -> bool:
-    if UserRole.MODERATOR not in ctx.roles:
-        return "❌ This command requires moderator privileges."
-    return True
+class ModeratorCheck(Check):
+    title = "Moderator"
+    help = "Requires moderator privileges."
+    
+    async def check(self, ctx: Context) -> bool:
+        if UserRole.MODERATOR not in ctx.roles:
+            return "❌ This command requires moderator privileges."
+        return True
 
 def is_bot_owner(ctx: Context) -> bool:
     if UserRole.BOT_OWNER not in ctx.roles:
@@ -247,7 +255,7 @@ class ExampleCog(Cog):
         await ctx.reply("✅ You are the bot owner!")
 
     @Cog.command(name="multi_check")
-    @checks(is_moderator, is_bot_owner)
+    @checks(ModeratorCheck, is_bot_owner)
     async def multi_check_command(self, ctx: Context):
         """A command that demonstrates multiple checks.
         

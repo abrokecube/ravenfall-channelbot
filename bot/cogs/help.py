@@ -31,133 +31,14 @@ class HelpCog(Cog):
         return f"Commands: {' | '.join(commands_lists)}"
     
     def build_command_info_single_line(self, ctx: Context, command: Command, invoked_name: str) -> str:
-        command_func = command.func
-        doc_string = command_func.__doc__ or ""
-        nm_out = [f"Usage: {ctx.prefix}{invoked_name}"]
-        description = ""
-        doc_parsed = None
-
-        if doc_string:
-            doc_parsed = parse(doc_string)
-            description = doc_parsed.description
-
-        if doc_parsed and doc_parsed.params:
-            for param in doc_parsed.params:
-                param_str = param.arg_name
-                param_options = command.parameters_map.get(command.arg_mappings.get(param_str, ""), {})
-                if param_options.hidden:
-                    continue
-                if param.type_name:
-                    param_str += f": {param.type_name}"
-                if param.is_optional:
-                    param_str = f"({param_str})"
-                else:
-                    param_str = f"<{param_str}>"
-                nm_out.append(param_str)
-        else:
-            func_inspect = inspect.signature(command_func)
-            for param in [x for x in func_inspect.parameters.values()][2:]:
-                param_str = param.name
-                param_options = command.parameters_map.get(command.arg_mappings.get(param_str, ""), {})
-                if param_options.hidden:
-                    continue
-                param_type = param.annotation
-                param_type_name = ""
-                param_is_optional = param.default != param.empty
-                if param_type in (str, int, float):
-                    param_type_name = param_type.__name__
-                if param_type_name:
-                    param_str += f": {param_type_name}"
-                if param_is_optional:
-                    param_str = f"({param_str})"
-                else:
-                    param_str = f"<{param_str}>"
-                nm_out.append(param_str)
-        
-        name_and_usage = " ".join(nm_out)
-        aliases = ""
-        if command.aliases:
-            alias_list = list(command.aliases)
-            if invoked_name != command.name:
-                alias_list.remove(invoked_name)
-                alias_list.append(command.name)
-            alias_list.sort()
-            aliases = f"Aliases: {', '.join(alias_list)}"
-        restrictions = ""
-        if command.checks:
-            restr_to = []
-            for check in command.checks:
-                if check.__doc__:
-                    restr_to.append(check.__doc__)
-                else:
-                    restr_to.append(check.__name__)
-            restrictions = f"Limited to: {', '.join(restr_to)}"
-
-        response = strjoin(' – ', name_and_usage, description, restrictions, aliases)
-        return response
+        return f"Usage: {command.get_help_text(ctx.prefix, invoked_name)}"
     
     def build_arg_info_single_line(self, ctx: Context, command: Command, arg_name: str) -> str:
-        command_func = command.func
-        doc_string = command_func.__doc__ or ""
-        doc_parsed = None
-
-        if doc_string:
-            doc_parsed = parse(doc_string)
-
-        matched_arg_name = command.arg_mappings.get(arg_name, arg_name)
-        param_found = False
-        param_is_optional = False
-        param_aliases: List[str] = []
-        param_description = ""
-        param_type_name = ""
-        if doc_parsed and doc_parsed.params:
-            for param in doc_parsed.params:
-                if param.arg_name == matched_arg_name:
-                    param_is_optional = param.is_optional
-                    param_type_name = param.type_name or ""
-                    param_description = param.description
-                    param_found = True
-                    break
-        else:
-            func_inspect = inspect.signature(command_func)
-            for param in [x for x in func_inspect.parameters.values()][2:]:
-                if param.name == matched_arg_name:
-                    param_is_optional = param.default != param.empty
-                    param_type = param.annotation
-                    if param_type in (str, int, float):
-                        param_type_name = param_type.__name__
-                    param_found = True
-                    break
-        if not param_found:
+        matched_arg_name = command.arg_mappings.get(arg_name, None)
+        if not matched_arg_name:
             return f"Argument '{arg_name}' not found in command '{command.name}'."
-        param_options = command.parameters_map.get(command.arg_mappings.get(arg_name, ""), {})
-        param_is_hidden = param_options.hidden
-        param_aliases = param_options.aliases[:]
-        
-        if arg_name in param_aliases:
-            param_aliases.remove(arg_name)
-            param_aliases.append(matched_arg_name)
-        param_aliases.sort()
-
-        out_str = []
-        param_str = arg_name
-        if param_type_name:
-            param_str += f": {param_type_name}"
-        if param_is_optional:
-            param_str = f"({param_str})"
-        else:
-            param_str = f"<{param_str}>"
-        out_str.append(param_str)
-        out_str.append(param_description)
-        if param_is_optional:
-            out_str.append("Optional")
-        else:
-            out_str.append("Required")
-        if param_aliases:
-            out_str.append(f"Aliases: {', '.join(param_aliases)}")
-            
-        response = strjoin(' – ', *out_str)
-        return response
+        param_data = command.parameters_map.get(matched_arg_name, {})
+        return param_data.get_help_text(arg_name)
 
     @Cog.command(name="help")
     @parameter("command_name", greedy=True)
