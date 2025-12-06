@@ -29,7 +29,7 @@ from docstring_parser import parse
 from utils.strutils import strjoin
 
 from .command_contexts import Context, TwitchContext
-from .command_enums import OutputMessageType, Platform, UserRole, CustomRewardRedemptionStatus
+from .command_enums import OutputMessageType, Platform, UserRole, CustomRewardRedemptionStatus, ParameterKind
 from .command_exceptions import (
     CommandError,
     CheckFailure,
@@ -40,7 +40,7 @@ from .command_exceptions import (
     MissingRequiredArgumentError,
     UnknownArgumentError,
     ArgumentConversionError,
-    ArgumentParsingError
+    EmptyFlagValueError
 )
 
 # Configure logger for this module
@@ -63,13 +63,28 @@ class Parameter:
     aliases: List[str] = field(default_factory=list)
     greedy: bool = False
     hidden: bool = False
-    kind: inspect._ParameterKind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+    kind: ParameterKind = ParameterKind.POSITIONAL_OR_KEYWORD
     converter: Any = field(default=None)
     is_optional: bool = False
     type_title: str = None
     type_short_help: str = None
     type_help: str = None
     help: Optional[str] = None
+    
+    def get_parameter_display(self, invoked_name: str = None) -> str:
+        param_str = invoked_name or self.name
+        if self.type_title:
+            param_str += f": {self.type_title}"
+        if self.kind == ParameterKind.KEYWORD_ONLY:
+            if len(param_str) == 1:
+                param_str = f"(-{param_str})"
+            else:
+                param_str = f"(--{param_str})"
+        elif self.is_optional:
+            param_str = f"({param_str})"
+        else:
+            param_str = f"<{param_str}>"
+        return param_str
     
     def get_help_text(self, invoked_name: str = None):
         param_aliases = self.aliases[:]
@@ -80,19 +95,17 @@ class Parameter:
         param_aliases.sort()
 
         out_str = []
-        param_str = invoked_name or self.name
-        if self.type_title:
-            param_str += f": {self.type_title}"
-        if self.is_optional:
-            param_str = f"({param_str})"
-        else:
-            param_str = f"<{param_str}>"
+        param_str = self.get_parameter_display(invoked_name)
         out_str.append(param_str)
         out_str.append(self.help)
+        properties = []
         if self.is_optional:
-            out_str.append("Optional")
+            properties.append("optional")
         else:
-            out_str.append("Required")
+            properties.append("required")
+        if self.kind == ParameterKind.KEYWORD_ONLY:
+            properties.append("keyword-only")
+        out_str.append(f"{', '.join(properties)}".capitalize())
         type_help = self.type_short_help or self.type_help or None
         if type_help:
             out_str.append(f"{self.type_title}: {type_help}")
@@ -104,6 +117,8 @@ class Parameter:
 
 
 class Converter:
+    """To display a custom error message when conversion fails,
+    raise command_exceptions.ArgumentConversionError in the convert method."""
     title: str = None
     short_help: str = None
     help: str = None
@@ -218,23 +233,31 @@ class Commands:
         return self.prefix
     
     async def on_command_error(self, ctx: Context, command: Command, error: Exception):
-        # Handle argument parsing errors with user-friendly messages
-        if isinstance(error, ArgumentError):
-            logger.warning(f"Argument error for command {command.name}: {error.message}")
-            await ctx.reply(f"❌ {error.message}")
-            return
+        usage_text = command.get_usage_text(ctx.prefix, ctx.invoked_with)
+        if isinstance(error, MissingRequiredArgumentError):
+            await ctx.send(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
+        elif isinstance(error, EmptyFlagValueError):
+            await ctx.send(f"❌ Expected a value for '{error.parameter.name}' (type: {error.parameter.type_title})")
+        elif isinstance(error, ArgumentConversionError):
+            out_text = f"❌ Error turning '{error.value}' ({error.parameter.name}) into type {error.parameter.type_title}"
+            if error.message:
+                out_text += f": {error.message}"
+            await ctx.send(out_text)
+        elif isinstance(error, UnknownArgumentError):
+            await ctx.send(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
+        elif isinstance(error, UnknownFlagError):
+            await ctx.send(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
+        elif isinstance(error, CheckFailure):
+            await ctx.send(f"❌ {error.message}")
+        elif isinstance(error, ArgumentError):
+            await ctx.send(f"❌ {error.message}")
+        else:
+            await ctx.send(f"❌ An error occurred")
         
-        if isinstance(error, CheckFailure):
-            # Reply with custom error message if available
-            logger.warning(f"Check failed for command {command.name}: {error.message}")
-            await ctx.reply(error.message)
-            return
-        
-        logger.error(f"Error executing command '{command.name}':", exc_info=True)
-        await ctx.reply(f"An error occurred while executing the command: {error}")
     
     async def on_redeem_error(self, ctx: TwitchRedeemContext, redeem: TwitchRedeem, error: Exception):
-        logger.error(f"Error executing redeem '{redeem.name}':", exc_info=True)
+        await ctx.send(f"❌ An error occurred. Points will be refunded.")
+        await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
         
     def _find_command(self, text: str) -> tuple[str, str]:
         text_lower = text.lower()
@@ -339,6 +362,15 @@ class Command:
 
         # Load parameter configurations from decorator
         params_config = getattr(func, '_command_params', {})
+        
+        # Map inspect kinds to ParameterKind
+        kind_mapping = {
+            inspect.Parameter.POSITIONAL_ONLY: ParameterKind.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD: ParameterKind.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.VAR_POSITIONAL: ParameterKind.VAR_POSITIONAL,
+            inspect.Parameter.KEYWORD_ONLY: ParameterKind.KEYWORD_ONLY,
+            inspect.Parameter.VAR_KEYWORD: ParameterKind.VAR_KEYWORD
+        }
 
         self.parameters: List[Parameter] = []
         self.parameters_map: Dict[str, Parameter] = {}
@@ -406,7 +438,7 @@ class Command:
                 aliases=aliases,
                 greedy=param_config.get('greedy', False),
                 hidden=param_config.get('hidden', False),
-                kind=param.kind,
+                kind=kind_mapping[param.kind],
                 help=param_help
             )
             
@@ -445,12 +477,14 @@ class Command:
         
         # Check for custom converter
         if hasattr(type_, 'convert') and inspect.iscoroutinefunction(type_.convert):
+            if value == True:
+                raise EmptyFlagValueError(param)
             try:
                 return await type_.convert(ctx, value)
-            except ArgumentError as e:
-                raise ArgumentParsingError(f"Error parsing argument '{param.name}': {e.message}")
+            except ArgumentConversionError as e:
+                raise ArgumentConversionError(e.message, value, param)
             except Exception as e:
-                raise ArgumentParsingError(f"Error parsing argument '{param.name}'")
+                raise ArgumentConversionError(None, value, param, e)
             
         if type_ in self.bot.converters:
             return await self.bot.converters[type_](ctx, value)
@@ -459,13 +493,27 @@ class Command:
             if isinstance(value, bool):
                 return value
             return value.lower() in ('true', 'yes', '1', 'on')
-            
-        try:
-            return type_(value)
-        except Exception as e:
-            type_name = getattr(type_, '__name__', str(type_))
-            raise ArgumentConversionError(value, type_name, e)
-
+        elif type_ is int:
+            try:
+                return int(value)
+            except ValueError as e:
+                raise ArgumentConversionError("Expected an integer", value, param, e)
+        elif type_ is float:
+            try:
+                return float(value)
+            except ValueError as e:
+                raise ArgumentConversionError("Expected a number", value, param, e)
+        elif type_ is str:
+            if value == True:
+                raise EmptyFlagValueError(param)
+            return value
+        else:
+            # Attempt to call the type as a constructor
+            try:
+                return type_(value)
+            except Exception as e:
+                raise ArgumentConversionError(f"Could not convert to {type_.__name__}", value, param, e)    
+        
     async def _parse_arguments(self, ctx: Context) -> tuple[list, dict]:
         args = []
         kwargs = {}
@@ -476,12 +524,13 @@ class Command:
         parsed_args = CommandArgs(ctx.parameters)
 
         for item in parsed_args.args:
+            # TODO: add support for *args and **kwargs in command parsing
             if isinstance(item, Flag):
                 if not item.name in self.arg_mappings:
                     raise UnknownFlagError(item.name)
                 param_name = self.arg_mappings[item.name]
                 if param_name in named_args:
-                    raise DuplicateParameterError(param_name)
+                    raise DuplicateParameterError(self.parameters_map[param_name])
                 named_args[param_name] = item.value
             else:
                 positional_args.append(item)
@@ -505,20 +554,20 @@ class Command:
                 continue
             
             # Handle VAR_POSITIONAL (*args)
-            if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            if param.kind == ParameterKind.VAR_POSITIONAL:
                 for arg in positional_args[positional_index:]:
                     args.append(arg)
                 positional_index = len(positional_args)
             
             # Handle KEYWORD_ONLY parameters
-            if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            if param.kind == ParameterKind.KEYWORD_ONLY:
                 # Must be provided as named argument (already checked above)
                 if param.default != inspect.Parameter.empty:
                     kwargs[param_name] = param.default
                 elif param.is_optional:
                     kwargs[param_name] = None
                 else:
-                    raise MissingRequiredArgumentError(param_name, keyword_only=True)
+                    raise MissingRequiredArgumentError(param)
                 continue
             
             # Handle positional or positional-or-keyword parameters
@@ -550,7 +599,7 @@ class Command:
                 elif param.is_optional:
                     args.append(None)
                 else:
-                    raise MissingRequiredArgumentError(param_name)
+                    raise MissingRequiredArgumentError(param)
 
         if len(named_args) > 0:
             raise UnknownArgumentError(list(named_args.keys()))
@@ -592,30 +641,29 @@ class Command:
                 await result
                 
         except Exception as e:
+            logger.error("Error in command invocation:", exc_info=True)
             if hasattr(self.bot, 'on_command_error'):
                 await self.bot.on_command_error(ctx, self, e)
-            logger.error("Error in command invocation:", exc_info=True)
-            
-    def get_help_text(self, prefix: str, invoked_name: str = None):
+    
+    def get_usage_text(self, prefix: str, invoked_name: str = None):
         if not invoked_name:
             invoked_name = self.name
         nm_out = [f"{prefix}{invoked_name}"]
-        description = self.short_help or self.help or ""
         
         for param in self.parameters:
             if param.hidden:
                 continue
-            param_str = param.name
-            if param.type_title:
-                param_str += f": {param.type_title}"
-            if param.is_optional:
-                param_str = f"({param_str})"
-            else:
-                param_str = f"<{param_str}>"
+            param_str = param.get_parameter_display()
             nm_out.append(param_str)
         
-        name_and_usage = " ".join(nm_out)
+        return " ".join(nm_out)
+        
+    def get_help_text(self, prefix: str, invoked_name: str = None):
+        if not invoked_name:
+            invoked_name = self.name
+        description = self.short_help or self.help or ""
         aliases = ""
+        name_and_usage = self.get_usage_text(prefix, invoked_name)
         if self.aliases:
             alias_list = list(self.aliases)
             if invoked_name != self.name:
@@ -791,11 +839,11 @@ class CommandArgs:
                     current[-1] = char
                 elif in_quotes is None:
                     # Start of quoted string
-                    # current.append('"')
+                    current.append('"')
                     in_quotes = char
                 elif char == in_quotes:
                     # End of quoted string
-                    # current.append('"')
+                    current.append('"')
                     in_quotes = None
                 else:
                     # Nested quotes of different type, add to current
@@ -827,6 +875,8 @@ class CommandArgs:
                 if has_delimiter:
                     if delimiter_char in flag_name:
                         flag_name, flag_value = flag_name.split(delimiter_char, 1)
+                if isinstance(flag_value, str) and flag_value[0] == '"' and flag_value[-1] == '"':
+                    flag_value = flag_value[1:-1]
                 flag = Flag(flag_name, flag_value)
                 self.flags.append(flag)
                 self.args.append(flag)

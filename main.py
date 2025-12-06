@@ -93,18 +93,6 @@ class MyCommands(Commands):
     def __init__(self, twitch: Twitch):
         super().__init__(twitch)
     
-    async def on_command_error(self, ctx: CommandContext, command: Command, error: Exception):
-        if isinstance(error, CheckFailure):
-            await ctx.send(f"❌ {error.message}")
-        elif isinstance(error, ArgumentError):
-            await ctx.send(f"❌ {error.message}")
-        else:
-            await ctx.send(f"❌ An error occurred")
-
-    async def on_redeem_error(self, ctx: TwitchRedeemContext, redeem: TwitchRedeem, error: Exception):
-        await ctx.send(f"❌ An error occurred. Points will be refunded.")
-        await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
-
     async def get_prefix(self, msg: ChatMessage) -> str:
         return os.getenv("BOT_COMMAND_PREFIX", "!")
 

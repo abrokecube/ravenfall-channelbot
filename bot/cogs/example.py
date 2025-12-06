@@ -11,7 +11,8 @@ This cog demonstrates the new command system features:
 from __future__ import annotations
 from typing import Optional
 from ..cog import Cog
-from ..commands import Context, Commands, UserRole, checks, ArgumentParsingError, parameter, Converter, Check
+from ..commands import Context, Commands, UserRole, checks, parameter, Converter, Check
+from ..command_exceptions import ArgumentConversionError, CheckFailure
 
 # Example custom type with converter
 class Color(Converter):
@@ -37,7 +38,7 @@ class Color(Converter):
         """Convert a color name to a Color object."""
         name_lower = arg.lower()
         if name_lower not in cls.COLORS:
-            raise ArgumentParsingError(f"Unknown color: {arg}. Valid colors: {', '.join(cls.COLORS.keys())}")
+            raise ArgumentConversionError(f"Unknown color: {arg}. Valid colors: {', '.join(cls.COLORS.keys())}")
         return Color(name_lower, cls.COLORS[name_lower])
 
 # Example custom checks
@@ -161,7 +162,7 @@ class ExampleCog(Cog):
         
         Args:
             username: The user to greet.
-            greeting: Custom greeting message (keyword-only, optional).
+            greeting: Custom greeting message.
             
         Examples:
             !greetuser borkedcube

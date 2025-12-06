@@ -19,3 +19,10 @@ class CustomRewardRedemptionStatus(Enum):
     UNFULFILLED = 'UNFULFILLED'
     FULFILLED = 'FULFILLED'
     CANCELED = 'CANCELED'
+
+class ParameterKind(Enum):
+    POSITIONAL_ONLY = 0
+    POSITIONAL_OR_KEYWORD = 1
+    VAR_POSITIONAL = 2
+    KEYWORD_ONLY = 3
+    VAR_KEYWORD = 4

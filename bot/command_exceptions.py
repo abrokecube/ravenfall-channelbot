@@ -1,3 +1,10 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+from .command_enums import ParameterKind
+
+if TYPE_CHECKING:
+    from .commands import Parameter
+
 class CommandError(Exception):
     """Base exception for command-related errors."""
     def __init__(self, message: str = "Command error"):
@@ -28,38 +35,41 @@ class UnknownFlagError(ArgumentError):
 
 class DuplicateParameterError(ArgumentError):
     """Raised when a parameter is provided multiple times."""
-    def __init__(self, param_name: str):
-        self.param_name = param_name
-        super().__init__(f"Multiple values provided for parameter '{param_name}'")
+    def __init__(self, parameter: Parameter):
+        self.parameter = parameter
+        super().__init__(f"Multiple values provided for parameter '{parameter.name}'")
 
 class MissingRequiredArgumentError(ArgumentError):
     """Raised when a required argument is missing."""
-    def __init__(self, param_name: str, keyword_only: bool = False):
-        self.param_name = param_name
-        self.keyword_only = keyword_only
+    def __init__(self, parameter: Parameter):
+        self.parameter = parameter
+        keyword_only = parameter.kind == ParameterKind.KEYWORD_ONLY
         arg_type = "keyword-only argument" if keyword_only else "argument"
-        super().__init__(f"Missing required {arg_type}: {param_name}")
+        super().__init__(f"Missing required {arg_type}: {parameter.name}")
 
 class UnknownArgumentError(ArgumentError):
     """Raised when unknown arguments are provided."""
     def __init__(self, args: list):
-        self.args = args
+        self.arguments = args
         args_str = ', '.join(f"'{arg}'" for arg in args) if isinstance(args[0], str) else ' '.join(str(a) for a in args)
         super().__init__(f"Unknown arguments: {args_str}")
 
 class ArgumentConversionError(ArgumentError):
     """Raised when argument conversion fails."""
-    def __init__(self, value: str, target_type: str, original_error: Exception = None):
+    def __init__(self, message: str = None, value: str = None, parameter: Parameter = None, original_error: Exception = None):
         self.value = value
-        self.target_type = target_type
         self.original_error = original_error
-        error_msg = f"Could not convert '{value}' to {target_type}"
-        if original_error:
-            error_msg += f": {original_error}"
+        self.parameter = parameter
+        self.message = message
+        if message:
+            error_msg = message
+        else:
+            error_msg = f"Cannot convert '{value}' into {parameter.type_title} ({parameter.name})"
+        # if original_error:
+        #     error_msg += f": {original_error}"
         super().__init__(error_msg)
-        
-class ArgumentParsingError(ArgumentError):
-    """Raised when there is a general argument parsing error."""
-    def __init__(self, message: str = "Error parsing arguments"):
-        super().__init__(message)
 
+class EmptyFlagValueError(ArgumentConversionError):
+    """Raised when a flag is provided without a value."""
+    def __init__(self, parameter: Parameter = None):
+        super().__init__(f"Expected a value for '{parameter.name}'", None, parameter, None)
