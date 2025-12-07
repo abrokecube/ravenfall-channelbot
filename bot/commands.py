@@ -33,6 +33,7 @@ from .command_enums import OutputMessageType, Platform, UserRole, CustomRewardRe
 from .command_exceptions import (
     CommandError,
     CheckFailure,
+    VerificationFailure,
     CommandRegistrationError,
     ArgumentError,
     UnknownFlagError,
@@ -255,6 +256,8 @@ class Commands:
             await ctx.send(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
         elif isinstance(error, CheckFailure):
             await ctx.send(f"❌ {error.message}")
+        elif isinstance(error, VerificationFailure):
+            await ctx.send(f"❌ {error.message}")
         elif isinstance(error, ArgumentError):
             await ctx.send(f"❌ {error.message}")
         else:
@@ -334,17 +337,14 @@ class Commands:
 
 
 class Command:       
-    def __init__(
-        self, name: str, func: CommandFunc, bot: 'Commands', checks: List[CheckFunc] = [], 
-        aliases: List[str] = [], hidden: bool = False, help: str = None, short_help: str = None, 
-        title: str = None
-    ):
+    def __init__(self, name: str, func: CommandFunc, bot: 'Commands', checks: List[CheckFunc] = None, aliases: List[str] = None, hidden: bool = False, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None):
         self.name = name
         self.func = func
         self.bot = bot
-        self.checks = checks
-        self.aliases = aliases
+        self.checks = checks or []
+        self.aliases = aliases or []
         self.hidden = hidden
+        self.verifier = verifier
         
         # Parse docstring for parameter descriptions and help text
         doc = parse(func.__doc__ or "")
@@ -369,7 +369,10 @@ class Command:
         # Load parameter configurations from decorator
         params_config = getattr(func, '_command_params', {})
         
-        # Map inspect kinds to ParameterKind
+        # Load verifier from decorator if not provided
+        if not self.verifier:
+            self.verifier = getattr(func, '_command_verifier', None)
+
         kind_mapping = {
             inspect.Parameter.POSITIONAL_ONLY: ParameterKind.POSITIONAL_ONLY,
             inspect.Parameter.POSITIONAL_OR_KEYWORD: ParameterKind.POSITIONAL_OR_KEYWORD,
@@ -639,35 +642,59 @@ class Command:
 
         return args, kwargs
 
+    async def _run_checks(self, ctx: Context):
+        # Run checks
+        for check_func in self.checks:
+            # The check function can either return bool or an error string
+            try:
+                check_result = check_func(ctx)
+                if asyncio.iscoroutine(check_result):
+                    check_result = await check_result
+                
+                if isinstance(check_result, str):
+                    raise CheckFailure(check_result)
+                if not check_result:
+                    raise CheckFailure(f"Check failed for command '{self.name}'")
+            except CheckFailure:
+                raise
+            except Exception as e:
+                # Wrap other exceptions
+                raise CheckFailure(f"There was an error during a check")
+        return True
+
+    async def _run_verification(self, ctx: Context, *args, **kwargs):
+        # Run verifier if present
+        if self.verifier:
+            try:
+                verify_result = self.verifier(ctx, *args, **kwargs)
+                if asyncio.iscoroutine(verify_result):
+                    verify_result = await verify_result
+                
+                if isinstance(verify_result, str):
+                    raise VerificationFailure(verify_result)
+                if verify_result is False:
+                    raise VerificationFailure(f"Verification failed for command '{self.name}'")
+            except VerificationFailure:
+                raise
+            except Exception as e:
+                raise VerificationFailure("There was an error during verification")
+        return True
+
+    async def verify(self, ctx: Context):
+        await self._run_checks(ctx)
+        args, kwargs = await self._parse_arguments(ctx)
+        await self._run_verification(ctx, args, kwargs)
+        return True
 
     async def invoke(self, ctx: Context) -> None:
         """Invoke the command with the given context."""
         try:
-            # Run checks
-            for check_func in self.checks:
-                # The check function can either return bool or an error string
-                try:
-                    check_result = check_func(ctx)
-                    if asyncio.iscoroutine(check_result):
-                        check_result = await check_result
-                    
-                    if isinstance(check_result, str):
-                        raise CheckFailure(check_result)
-                    if not check_result:
-                        raise CheckFailure(f"Check failed for command '{self.name}'")
-                except CheckFailure:
-                    raise
-                except Exception as e:
-                    # Wrap other exceptions
-                    raise CheckFailure(f"Check raised an error: {e}")
-
-            # Parse arguments
+            await self._run_checks(ctx)
             args, kwargs = await self._parse_arguments(ctx)
-            
-            # Call the function
+            await self._run_verification(ctx, *args, **kwargs)
+
             result = self.func(ctx, *args, **kwargs)
-            
-            # Await the result if it's a coroutine
+
             if asyncio.iscoroutine(result):
                 await result
                 
@@ -790,6 +817,17 @@ def checks(*predicates: Union[CheckFunc, Check, Type[Check]]):
                 processed_checks.append(FunctionCheck(p))
                 
         func._command_checks.extend(processed_checks)
+        return func
+    return decorator
+
+def verification(verifier_func):
+    """Decorator to add a verification function to a command.
+    
+    The verifier function should accept (ctx, *args, **kwargs) matching the command's signature.
+    It should return True (pass), False (fail), or a string (fail with message).
+    """
+    def decorator(func):
+        func._command_verifier = verifier_func
         return func
     return decorator
 

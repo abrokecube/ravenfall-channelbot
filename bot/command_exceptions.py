@@ -16,6 +16,11 @@ class CheckFailure(CommandError):
     def __init__(self, message: str = "Check failed"):
         super().__init__(message)
 
+class VerificationFailure(CommandError):
+    """Raised when a command verification fails."""
+    def __init__(self, message: str = "Verification failed"):
+        super().__init__(message)
+
 class CommandRegistrationError(CommandError):
     """Raised when there's an error registering a command or redeem."""
     def __init__(self, name: str, item_type: str = "Command"):

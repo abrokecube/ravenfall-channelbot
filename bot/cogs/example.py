@@ -11,7 +11,17 @@ This cog demonstrates the new command system features:
 from __future__ import annotations
 from typing import Optional
 from ..cog import Cog
-from ..commands import Context, Commands, UserRole, checks, parameter, Converter, Check
+from ..commands import (
+    Context, 
+    Commands, 
+    UserRole, 
+    checks, 
+    parameter, 
+    Converter, 
+    Check, 
+    verification, 
+    CommandError
+)
 from ..command_exceptions import ArgumentConversionError, CheckFailure
 
 # Example custom type with converter
@@ -136,6 +146,28 @@ class ExampleCog(Cog):
         """
         await ctx.reply(f"Set your color to {color.name} ({color.hex_code})")
     
+    async def transfer_verify(ctx: Context, amount: int, user: str):
+        aga = 10 / 0
+        if amount == 0:
+            return "Amount must be greater than 0."
+        if amount < 0:
+            return "Amount must be positive."
+        if user == ctx.author:
+            return "You cannot transfer coins to yourself."
+        return True
+
+    @Cog.command(name="transfer")
+    @verification(transfer_verify)
+    async def transfer(self, ctx: Context, amount: int, user: str):
+        """Transfer coins to another user.
+        
+        Args:
+            amount: The amount of coins to transfer.
+            user: The user to transfer coins to.
+        """
+        await ctx.reply(f"Transferred {amount} coins to {user}.")
+
+
     @Cog.command(name="modcommand")
     @checks(is_moderator_or_owner)
     async def modcommand(self, ctx: Context):
