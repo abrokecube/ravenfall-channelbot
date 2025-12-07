@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from ..commands import CommandContext, Commands, TwitchRedeemContext, CustomRewardRedemptionStatus
+from ..commands import Context, Commands, TwitchRedeemContext, CustomRewardRedemptionStatus
 from ..cog import Cog
 
 class TestingCog(Cog):
@@ -15,11 +15,11 @@ class TestingCog(Cog):
     #     raise Exception("Test error")
 
     @Cog.command(name="hi", help="Says hi")
-    async def hi(self, ctx: CommandContext):
-        await ctx.reply(f"hi {ctx.msg.user.name}")
+    async def hi(self, ctx: Context):
+        await ctx.reply(f"hi {ctx.author}")
 
     @Cog.command(name="ping", help="Pong!")
-    async def ping(self, ctx: CommandContext):
+    async def ping(self, ctx: Context):
         await ctx.reply("Pong!")
 
     @Cog.redeem(name="Test redeem")

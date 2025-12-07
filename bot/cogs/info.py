@@ -14,12 +14,17 @@ from utils import (
 
 from ..prometheus import get_prometheus_instant, get_prometheus_series
 
-from ..commands import CommandContext, Commands
+from ..commands import Context, Commands, checks, parameter
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..models import Village, GameSession
 from .. import braille
 from ..ravenfall import Character, Skills
+
+from utils.commands_rf import RFChannelConverter, TwitchUsername
+from ..ravenfallchannel import RFChannel
+from ..command_enums import UserRole
+from ..command_utils import HasRole
 
 import ravenpy
 
@@ -36,7 +41,7 @@ class InfoCog(Cog):
         self.rf_manager = rf_manager
     
     @Cog.command(name="towns", help="Lists all towns")
-    async def towns(self, ctx: CommandContext):
+    async def towns(self, ctx: Context):
         out_str = []
         for idx, channel in enumerate(self.rf_manager.channels):
             village: Village = await channel.get_query('select * from village')
@@ -56,23 +61,13 @@ class InfoCog(Cog):
         await ctx.reply(' ✦ '.join(out_str))
 
     @Cog.command(name="event", help="Gets the town's current event")
-    async def event(self, ctx: CommandContext):
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
-        debug = ctx.args.get_flag("d").value is not None
-        if not debug:
-            await ctx.reply(channel.event_text)
-        else:
-            await ctx.reply(
-                f"Event: {channel.event} - Sub-event: {channel.sub_event} - Text: {channel.event_text}"
-            )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def event(self, ctx: Context, channel: RFChannel = 'this'):
+        await ctx.reply(channel.event_text)
 
     @Cog.command(name="uptime", help="Gets the town's uptime")
-    async def uptime(self, ctx: CommandContext):
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def uptime(self, ctx: Context, channel: RFChannel = 'this'):
         session: GameSession = await channel.get_query('select * from session')
         if not isinstance(session, dict):
             await ctx.reply("Ravenfall seems to be offline!")
@@ -80,7 +75,7 @@ class InfoCog(Cog):
         await ctx.reply(f"Ravenfall uptime: {seconds_to_dhms(session['secondssincestart'])}")
     
     @Cog.command(name="system", help="System info of the computer running everything")
-    async def system(self, ctx: CommandContext):
+    async def system(self, ctx: Context):
         cpu_usage = await asyncio.to_thread(psutil.cpu_percent, 1)
         cpu_freq = psutil.cpu_freq().current
         ram = psutil.virtual_memory()
@@ -103,7 +98,8 @@ class InfoCog(Cog):
         ))
 
     @Cog.command(name="rfram", help="Ravenfall RAM usage")
-    async def rfram(self, ctx: CommandContext):
+    @parameter("all_", display_name="all", aliases=["a"])
+    async def rfram(self, ctx: Context, all_: bool = False):
         processes: Dict[str, List[float]] = {}
         working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
         change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
@@ -144,7 +140,7 @@ class InfoCog(Cog):
                     processes_named[name] = processes[pid]
                     break
         out_str = []
-        if "all" in ctx.parameter.lower():
+        if all_:
             for name, (bytes_used, change, series) in processes_named.items():
                 s = "+"
                 if change < 0:
@@ -168,16 +164,11 @@ class InfoCog(Cog):
         help="Gets a user's experience earn rate",
         aliases=["expirate"]
     )
-    async def exprate(self, ctx: CommandContext):
-        args = ctx.parameter.split()
-        target_user = ctx.msg.user.name
-        if len(ctx.parameter) > 2 and len(args) > 0:
-            target_user = filter_username(args[0])
-        if not is_twitch_username(target_user):
-            await ctx.reply("Invalid username.")
-            return
-        
-        query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[30s]))" % (target_user, ctx.msg.room.name)
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def exprate(self, ctx: Context, target_user: TwitchUsername = None, channel: RFChannel = 'this'):
+        if not target_user:
+            target_user = ctx.author        
+        query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[30s]))" % (target_user, channel.channel_name)
         data = await get_prometheus_series(query, 10*60)
         if len(data) == 0:
             await ctx.reply("No data recorded. Your character may not be in this town right now.")
@@ -195,18 +186,10 @@ class InfoCog(Cog):
         help="Gets a user's character info",
         aliases=["char", "show"]
     )
-    async def character(self, ctx: CommandContext):
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
-
-        args = ctx.parameter.split()
-        target_user = ctx.msg.user.name
-        if len(ctx.parameter) > 2 and len(args) > 0:
-            target_user = filter_username(args[0])
-        if not is_twitch_username(target_user):
-            await ctx.reply("Invalid username.")
-            return
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def character(self, ctx: Context, target_user: TwitchUsername = None, channel: RFChannel = 'this'):
+        if not target_user:
+            target_user = ctx.author        
 
         player_info = await channel.get_query("select * from players where name = \'%s\'" % target_user)
         if isinstance(player_info, dict) and player_info:
@@ -276,7 +259,7 @@ class InfoCog(Cog):
                     f"({char_stat.level_exp/char_stat.total_exp_for_level:.1%}) "\
                     f"{char_stat.level_exp:,.0f}/{char_stat.total_exp_for_level:,.0f} EXP"
                 )
-        query = "sum(deriv(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[2m]))" % (target_user, ctx.msg.room.name)
+        query = "sum(deriv(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[2m]))" % (target_user, channel.channel_name)
         data = await get_prometheus_series(query, 1)
         data_pairs = [(x[0], float(x[1])) for x in data[0]['values']]
         char_exp_per_h = data_pairs[-1][1]*60*60
@@ -317,10 +300,8 @@ class InfoCog(Cog):
         name="mult", 
         help="Gets the town's current multiplier",
     )
-    async def mult(self, ctx: CommandContext):
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def mult(self, ctx: Context, channel: RFChannel = 'this'):
         multiplier = await channel.get_query("select * from multiplier")
         mult = int(multiplier['multiplier'])
         if not isinstance(multiplier, dict):

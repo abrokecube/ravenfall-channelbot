@@ -6,7 +6,6 @@ from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallchannel import RFChannel
 from utils.commands_rf import RFChannelConverter
-import os
 
 
 class BotStuffCog(Cog):
@@ -18,7 +17,7 @@ class BotStuffCog(Cog):
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def reloadstrings(self, ctx: Context, all_: bool = False, channel: RFChannel = None):
+    async def reloadstrings(self, ctx: Context, all_: bool = False, channel: RFChannel = 'this'):
         """Reloads Ravenfall translation strings.
         
         Args: 
@@ -47,7 +46,7 @@ class BotStuffCog(Cog):
     @Cog.command(name="pause_monitoring")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def pause_monitoring(self, ctx: Context, channel: RFChannel = None):
+    async def pause_monitoring(self, ctx: Context, channel: RFChannel = 'this'):
         """Pause channel monitoring
         
         Args:
@@ -63,7 +62,7 @@ class BotStuffCog(Cog):
     @Cog.command(name="resumemonitoring", help="Resume channel monitoring")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def resume_monitoring(self, ctx: Context, channel: RFChannel = None):
+    async def resume_monitoring(self, ctx: Context, channel: RFChannel = 'this'):
         """Resume channel monitoring
         
         Args:

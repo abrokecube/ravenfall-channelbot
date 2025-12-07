@@ -1,9 +1,12 @@
 from bot.ravenfallchannel import RFChannel
-from ..commands import CommandContext, Commands, TwitchRedeemContext
+from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter
+from ..command_enums import UserRole, Platform
+from ..command_utils import HasRole, TwitchOnly
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
+from utils.commands_rf import RFChannelConverter, TwitchUsername
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
 from database.session import get_async_session
@@ -580,9 +583,10 @@ class RedeemRFCog(Cog):
             "credit",
         ]
     )
-    async def credits_balance(self, ctx: CommandContext):
+    @checks(TwitchOnly)
+    async def credits_balance(self, ctx: Context):
         async with get_async_session() as session:
-            credits = await get_user_credits(session, ctx.msg.user.id)
+            credits = await get_user_credits(session, ctx.data.user.id)
             await ctx.reply(f"You have {credits:,} item {pl(credits, 'credit', 'credits')}.")
 
     @Cog.command(
@@ -599,11 +603,8 @@ class RedeemRFCog(Cog):
             "creditv",
         ]
     )
-    async def credits_value(self, ctx: CommandContext):
-        item_name = ctx.parameter
-        if not item_name:
-            await ctx.reply(f"Usage: !{ctx.command} <item>")
-            return
+    @parameter("item_name", greedy=True)
+    async def credits_value(self, ctx: Context, item_name: str):
         item = get_item(item_name)
         if item is None:
             await ctx.reply("Item not found")
@@ -633,11 +634,11 @@ class RedeemRFCog(Cog):
             "creditpurchase",
         ]
     )
-    async def credits_buy(self, ctx: CommandContext):
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
-        args = ctx.parameter.split()
+    @parameter("query", greedy=True)
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(TwitchOnly)
+    async def credits_buy(self, ctx: Context, query: str, channel: RFChannel = 'this'):
+        args = query.split()
 
         if len(args) < 1:
             await ctx.reply(f"Usage: !{ctx.command} <item> [count]")
@@ -660,7 +661,7 @@ class RedeemRFCog(Cog):
             await ctx.reply(f"{item.name} is not redeemable.")
             return
         async with get_async_session() as session:
-            balance = await get_user_credits(session, ctx.msg.user.id)
+            balance = await get_user_credits(session, ctx.data.user.id)
             if balance < price * count:
                 await ctx.reply(
                     f"You do not have enough credits to purchase {count:,}× {item.name}{pl(count, '', '(s)')}. "
@@ -728,10 +729,8 @@ class RedeemRFCog(Cog):
             "creditstockcoin",
         ]
     )
-    async def stock_coins(self, ctx: CommandContext):
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def stock_coins(self, ctx: Context, channel: RFChannel = 'this'):
         count = await get_coins_count(channel)
         await ctx.reply(
             f"There {pl(count, 'is', 'are')} currently {count:,} {pl(count, 'coin', 'coins')} in stock."
@@ -746,14 +745,10 @@ class RedeemRFCog(Cog):
             "creditstock",
         ]
     )
-    async def stock_item(self, ctx: CommandContext):
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
-        if len(ctx.parameter.strip()) == 0:
-            await ctx.reply(f"Usage: !{ctx.command} <item>")
-            return
-        item, count = await get_item_count(channel, ctx.parameter)
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("item_name", greedy=True)
+    async def stock_item(self, ctx: Context, item_name: str, channel: RFChannel = 'this'):
+        item, count = await get_item_count(channel, item_name)
         if item is None:
             await ctx.reply(f"Could not identify item.")
             return
@@ -765,10 +760,8 @@ class RedeemRFCog(Cog):
         )
     
     @Cog.command(name="stock all")
-    async def stock_all(self, ctx: CommandContext):
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def stock_all(self, ctx: Context, channel: RFChannel = 'this'):
         item_counts = await get_all_item_count(channel)
         out_str = [
             "Stock list for channel: " + channel.channel_name,
@@ -841,14 +834,11 @@ class RedeemRFCog(Cog):
         await ctx.reply(f"Stock list: {url}")
 
     @Cog.command(name="giftto")
-    async def giftto(self, ctx: CommandContext):
-        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
-            return
-
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
-        args = ctx.parameter.split()
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("query", greedy=True)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def giftto(self, ctx: Context, query: str, channel: RFChannel = 'this'):
+        args = query.split()
 
         if len(args) < 2:
             await ctx.reply(f"Usage: !{ctx.command} <user> <item> [count]")
@@ -898,34 +888,16 @@ class RedeemRFCog(Cog):
             "add credits",
         ]
     )
-    async def addcredits(self, ctx: CommandContext):
-        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
-            return
-
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
-        args = ctx.parameter.split()
-
-        if len(args) < 2:
-            await ctx.reply(f"Usage: !{ctx.command} <user> <amount>")
-            return
-
-        amount = None
-        try:
-            amount = int(args.pop())
-        except ValueError:
-            await ctx.reply(f"Usage: !{ctx.command} <user> <amount>")
-            return
-
-        recipient_name = args[0]
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def addcredits(self, ctx: Context, recipient_name: TwitchUsername, amount: int, channel: RFChannel = 'this'):
         user = await first(self.rf_manager.chat.twitch.get_users(logins=[recipient_name]))
         if user is None:
             await ctx.reply(f"User {recipient_name} not found")
             return
         
         async with get_async_session() as session:
-            trans_id = await add_credits(session, user.id, amount, f"Added by {ctx.msg.user.name}")
+            trans_id = await add_credits(session, user.id, amount, f"Added by {ctx.author}")
             await ctx.reply(f"Gave {amount:,} {pl(amount, 'credit', 'credits')} to {recipient_name}. (ID: {trans_id})")
 
 

@@ -53,7 +53,7 @@ class Cog:
         pass
     
     @classmethod
-    def command(cls, name: Optional[str] = None, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, **kwargs) -> Callable[[CommandFunc], CommandFunc]:
+    def command(cls, name: Optional[str] = None, aliases: List[str] = [], help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, **kwargs) -> Callable[[CommandFunc], CommandFunc]:
         """Decorator to register a command in the cog.
         To send an error message to chat, raise CommandError within the command function.
         
@@ -90,6 +90,8 @@ class Cog:
                 kwargs['short_help'] = short_help
             if title:
                 kwargs['title'] = title
+            if aliases:
+                kwargs['aliases'] = aliases
             
             # Store the command name and kwargs with the function
             func._cog_command_info.append((cmd_name, kwargs))

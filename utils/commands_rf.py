@@ -6,17 +6,18 @@ from ..bot.commands import Converter, Check, Context
 from ..bot.command_exceptions import ArgumentConversionError
 from ..bot.command_contexts import TwitchContext
 
+import re
 
 class RFChannelConverter(Converter):
     title = "RFChannel"
     short_help = "A Ravenfall channel name"
-    help = "The name of a Ravenfall channel monitored by the bot."
+    help = "A Ravenfall channel monitored by the bot."
     
     async def convert(self, ctx: Context, arg: str) -> RFChannel:
         if not hasattr(ctx.command.cog, 'rf_manager'):
             raise ValueError("RFChannelConverter requires an rf_manager property in the cog.")
         rf_manager: 'RFChannelManager' = ctx.command.cog.rf_manager
-        if not arg:
+        if arg == 'this':
             if isinstance(ctx, TwitchContext):
                 arg = ctx.data.room.name
             else:
@@ -27,4 +28,22 @@ class RFChannelConverter(Converter):
         if channel is None:
             raise ArgumentConversionError(f"Ravenfall channel '{arg}' not found.")
         return channel
+
+tw_username_re = re.compile(r"^@?[a-zA-Z0-9][\w]{2,24}$")
+tw_username_f_re = re.compile(r"^@?[a-zA-Z0-9/|][\w/|]{2,24}$")
+def is_twitch_username(text: str, pre_filter=False):
+    if pre_filter:
+        return bool(tw_username_f_re.match(text))
+    else:
+        return bool(tw_username_re.match(text))
+
+class TwitchUsername(Converter):
+    title = "Twitch username"
+    short_help = "A valid Twitch username"
+    help = "A valid Twitch username"
     
+    async def convert(self, ctx: Context, arg: str):
+        is_valid = is_twitch_username(arg)
+        if not is_valid:
+            raise ArgumentConversionError("Not a valid username.")
+        return arg.lstrip("@").replace("\U000e0000", '').replace("|","").replace("/","")

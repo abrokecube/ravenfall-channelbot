@@ -103,11 +103,15 @@ class Parameter:
         param_str = self.get_parameter_display(invoked_name)
         out_str.append(param_str)
         help_text = self.help
+        type_help = self.type_short_help or self.type_help or None            
         if not help_text:
             if self.kind == ParameterKind.VAR_KEYWORD:
                 help_text = "Command accepts any named argument"
             elif self.kind == ParameterKind.VAR_POSITIONAL:
                 help_text = "Command accepts any additional arguments"
+            elif type_help:
+                help_text = type_help
+                type_help = None
         out_str.append(help_text)
         properties = []
         if self.is_optional:
@@ -117,7 +121,6 @@ class Parameter:
         if self.kind == ParameterKind.KEYWORD_ONLY:
             properties.append("keyword-only")
         out_str.append(f"{', '.join(properties)}".capitalize())
-        type_help = self.type_short_help or self.type_help or None            
         if type_help:
             out_str.append(f"Expects {self.type_title}: {type_help}")
         if param_aliases:
@@ -278,8 +281,8 @@ class Commands:
 
     async def process_message(self, platform: Platform, platform_context: Any):
         ctx: Context = None
-        if platform == Platform.TWITCH:
-            ctx = TwitchContext(platform_context)
+        if platform == Platform.TWITCH and isinstance(platform_context, ChatMessage):
+            ctx = TwitchContext(platform_context, self.twitches.get(platform_context.room.room_id))
         else:
             raise ValueError(f"Unsupported platform: {platform}")
         
@@ -482,6 +485,9 @@ class Command:
         #         self.arg_mappings[alias] = param_name
 
     async def _convert_argument(self, ctx: Context, value: str, param: Parameter) -> Any:
+        if value is None:
+            return value
+        
         if param.annotation == inspect.Parameter.empty:
             return value
             
@@ -982,6 +988,3 @@ class CommandArgs:
             elif not case_sensitive and flag.name.lower() in [n.lower() for n in names]:
                 return flag
         return Flag(name, default)
-
-# Alias for backward compatibility
-CommandContext = TwitchContext

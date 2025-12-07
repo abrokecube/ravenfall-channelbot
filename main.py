@@ -19,7 +19,7 @@ import logging
 import ravenpy
 
 from bot.commands import (
-    Commands, CommandContext, Command, TwitchRedeem, TwitchRedeemContext, 
+    Commands, Context, Command, TwitchRedeem, TwitchRedeemContext, 
     CustomRewardRedemptionStatus, CheckFailure, ArgumentError,
 )
 from bot.models import *

@@ -138,10 +138,7 @@ class ExampleCog(Cog):
     @Cog.command(name="setcolor")
     async def setcolor(self, ctx: Context, color: Color):
         """Set your favorite color.
-        
-        Args:
-            color: Your favorite color (red, green, blue, or yellow).
-            
+                    
         Examples:
             !setcolor red
             !setcolor blue
@@ -277,7 +274,7 @@ class ExampleCog(Cog):
         """
         await ctx.reply(f"First: '{first}', Rest: '{rest}'")
 
-    @Cog.command(name="owner_only")
+    @Cog.command(name="owner_only", aliases=["owner only"])
     @checks(is_bot_owner)
     async def owner_only_command(self, ctx: Context):
         """A command only the bot owner can use.

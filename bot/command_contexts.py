@@ -5,7 +5,7 @@ from .command_enums import OutputMessageType, Platform, UserRole
 
 if TYPE_CHECKING:
     from .commands import Commands, Command
-    from twitchAPI.chat import ChatMessage
+    from twitchAPI.chat import ChatMessage, Twitch
 
 @runtime_checkable
 class Context(Protocol):
@@ -42,9 +42,7 @@ class TwitchContext(Context):
     using populate_common_fields() after construction.
     """
     
-    def __init__(self, msg: 'ChatMessage'):
-        self.msg = msg
-        
+    def __init__(self, msg: 'ChatMessage', twitch: 'Twitch'):
         # Platform-specific fields
         self.message = msg.text
         self.author = msg.user.name
@@ -53,6 +51,7 @@ class TwitchContext(Context):
         self.platform_allows_markdown = False
         self.platform_output_type = OutputMessageType.SINGLE_LINE
         self.data: ChatMessage = msg
+        self.api: Twitch = twitch
         
         self.prefix: str = ""
         self.invoked_with: str = ""
