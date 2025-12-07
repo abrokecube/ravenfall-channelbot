@@ -99,7 +99,8 @@ class InfoCog(Cog):
 
     @Cog.command(name="rfram", help="Ravenfall RAM usage")
     @parameter("all_", display_name="all", aliases=["a"])
-    async def rfram(self, ctx: Context, all_: bool = False):
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def rfram(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
         processes: Dict[str, List[float]] = {}
         working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
         change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
@@ -150,7 +151,7 @@ class InfoCog(Cog):
                 )
             await ctx.reply(f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes")
         else:
-            bytes_used, change, series = processes_named[ctx.msg.room.name]
+            bytes_used, change, series = processes_named[channel.channel_name]
             graph = braille.simple_line_graph(
                 series, max_gap=30, width=26, fill_type=1, hard_min_val=1
             )

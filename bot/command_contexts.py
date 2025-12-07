@@ -68,14 +68,14 @@ class TwitchContext(Context):
         
         roles = [UserRole.USER]
         
-        if self.msg.user.mod or self.msg.user.name == self.msg.room.name:
+        if self.data.user.mod or self.data.user.name == self.data.room.name:
             roles.append(UserRole.MODERATOR)
         
-        if self.msg.user.subscriber:
+        if self.data.user.subscriber:
             roles.append(UserRole.SUBSCRIBER)
         
         owner_username = os.getenv("OWNER_TWITCH_USERNAME")
-        if owner_username and self.msg.user.name.lower() == owner_username.lower():
+        if owner_username and self.data.user.name.lower() == owner_username.lower():
             roles.append(UserRole.BOT_OWNER)
             roles.append(UserRole.ADMIN)
         
@@ -83,9 +83,9 @@ class TwitchContext(Context):
     
     async def reply(self, text: str) -> None:
         """Reply to the message that triggered the command."""
-        await self.msg.reply(text)
+        await self.data.reply(text)
     
     async def send(self, text: str) -> None:
         """Send a message to the channel."""
-        await self.msg.chat.send_message(self.msg.room.name, text)
+        await self.data.chat.send_message(self.data.room.name, text)
 
