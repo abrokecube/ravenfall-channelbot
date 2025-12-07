@@ -42,12 +42,14 @@ class HelpCog(Cog):
 
     @Cog.command(name="help")
     @parameter("command_name", greedy=True)
-    async def help(self, ctx: Context, command_name: Optional[str] = None):
+    async def help(self, ctx: Context, command_name: Optional[str] = None, **kwargs):
         """Shows help for a command or lists all commands.
 
         Args:
             command_name: The name of the command to show help for.
         """
+        if kwargs:
+            command_name += " " + " ".join([x for x in kwargs.keys()])
         if command_name:
             command, parameter = ctx.command.bot._find_command(command_name)
             if command is None:

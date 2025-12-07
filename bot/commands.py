@@ -97,7 +97,13 @@ class Parameter:
         out_str = []
         param_str = self.get_parameter_display(invoked_name)
         out_str.append(param_str)
-        out_str.append(self.help)
+        help_text = self.help
+        if not help_text:
+            if self.kind == ParameterKind.VAR_KEYWORD:
+                help_text = "Command accepts any named argument"
+            elif self.kind == ParameterKind.VAR_POSITIONAL:
+                help_text = "Command accepts any additional arguments"
+        out_str.append(help_text)
         properties = []
         if self.is_optional:
             properties.append("optional")
@@ -106,9 +112,9 @@ class Parameter:
         if self.kind == ParameterKind.KEYWORD_ONLY:
             properties.append("keyword-only")
         out_str.append(f"{', '.join(properties)}".capitalize())
-        type_help = self.type_short_help or self.type_help or None
+        type_help = self.type_short_help or self.type_help or None            
         if type_help:
-            out_str.append(f"{self.type_title}: {type_help}")
+            out_str.append(f"Expects {self.type_title}: {type_help}")
         if param_aliases:
             out_str.append(f"Aliases: {', '.join(param_aliases)}")
             
@@ -421,7 +427,9 @@ class Command:
                     if non_none_types:
                         converter = non_none_types[0]
             
-            is_optional = is_optional or (param.default != inspect.Parameter.empty)
+            is_optional = is_optional or \
+                (param.default != inspect.Parameter.empty) or \
+                (param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD))
 
             # Get help text
             param_help = param_config.get('help')
@@ -523,14 +531,24 @@ class Command:
         named_args = {}
         parsed_args = CommandArgs(ctx.parameters)
 
+        # Check if we have a VAR_KEYWORD parameter
+        has_var_keyword = any(p.kind == ParameterKind.VAR_KEYWORD for p in self.parameters)
+
         for item in parsed_args.args:
-            # TODO: add support for *args and **kwargs in command parsing
             if isinstance(item, Flag):
-                if not item.name in self.arg_mappings:
+                if item.name in self.arg_mappings:
+                    param_name = self.arg_mappings[item.name]
+                elif has_var_keyword:
+                    param_name = item.name
+                else:
                     raise UnknownFlagError(item.name)
-                param_name = self.arg_mappings[item.name]
+                
                 if param_name in named_args:
-                    raise DuplicateParameterError(self.parameters_map[param_name])
+                    if param_name in self.parameters_map:
+                        raise DuplicateParameterError(self.parameters_map[param_name])
+                    else:
+                        raise ArgumentError(f"Duplicate argument: {param_name}")
+                        
                 named_args[param_name] = item.value
             else:
                 positional_args.append(item)
@@ -556,8 +574,21 @@ class Command:
             # Handle VAR_POSITIONAL (*args)
             if param.kind == ParameterKind.VAR_POSITIONAL:
                 for arg in positional_args[positional_index:]:
-                    args.append(arg)
+                    converted = await self._convert_argument(ctx, arg, param)
+                    args.append(converted)
                 positional_index = len(positional_args)
+                continue
+            
+            # Handle VAR_KEYWORD (**kwargs)
+            if param.kind == ParameterKind.VAR_KEYWORD:
+                for name, value in list(named_args.items()):
+                    # We need to create a temporary parameter for conversion if needed
+                    # But usually **kwargs doesn't have a specific type for keys, only values
+                    # The param.converter applies to the values
+                    converted = await self._convert_argument(ctx, value, param)
+                    kwargs[name] = converted
+                    del named_args[name]
+                continue
             
             # Handle KEYWORD_ONLY parameters
             if param.kind == ParameterKind.KEYWORD_ONLY:
