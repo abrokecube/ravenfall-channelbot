@@ -55,6 +55,7 @@ class Cog:
     @classmethod
     def command(cls, name: Optional[str] = None, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, **kwargs) -> Callable[[CommandFunc], CommandFunc]:
         """Decorator to register a command in the cog.
+        To send an error message to chat, raise CommandError within the command function.
         
         Args:
             name: Optional command name. If not provided, uses the function name.
@@ -149,6 +150,7 @@ class Cog:
                         name=cmd_name,
                         func=bound_method,
                         bot=bot,
+                        cog=instance,
                         **cmd_kwargs
                     )
                     instance_commands[cmd_name] = command
@@ -203,8 +205,6 @@ class CogManager:
         try:
             for name, command in cog.commands.items():
                 self.bot.add_command_object(name, command)
-                for alias in command.aliases:
-                    self.bot.add_command_object(alias, command)
                     
             for name, redeem in cog.redeems.items():
                 self.bot.add_redeem_object(name, redeem)

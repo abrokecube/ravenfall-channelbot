@@ -34,7 +34,7 @@ class Context(Protocol):
         ...
 
 
-class TwitchContext:
+class TwitchContext(Context):
     """Twitch-specific command context.
     
     Implements the Context protocol without inheriting from it.
@@ -52,7 +52,7 @@ class TwitchContext:
         self.platform = Platform.TWITCH
         self.platform_allows_markdown = False
         self.platform_output_type = OutputMessageType.SINGLE_LINE
-        self.data = msg
+        self.data: ChatMessage = msg
         
         self.prefix: str = ""
         self.invoked_with: str = ""

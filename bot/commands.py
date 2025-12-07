@@ -59,6 +59,7 @@ CheckFunc = Callable[[Context], bool]
 @dataclass
 class Parameter:
     name: str
+    display_name: str
     annotation: Any
     default: Any = inspect.Parameter.empty
     aliases: List[str] = field(default_factory=list)
@@ -71,9 +72,10 @@ class Parameter:
     type_short_help: str = None
     type_help: str = None
     help: Optional[str] = None
+    command: 'Command' = None
     
     def get_parameter_display(self, invoked_name: str = None) -> str:
-        param_str = invoked_name or self.name
+        param_str = invoked_name or self.display_name
         if self.type_title:
             param_str += f": {self.type_title}"
         if self.kind == ParameterKind.KEYWORD_ONLY:
@@ -93,6 +95,8 @@ class Parameter:
         if invoked_name in param_aliases:
             param_aliases.remove(invoked_name)
             param_aliases.append(self.name)
+        if self.display_name != self.name and invoked_name == self.name:
+            param_aliases.append(self.display_name)
         param_aliases.sort()
 
         out_str = []
@@ -130,12 +134,13 @@ class Converter:
     short_help: str = None
     help: str = None
 
-    @classmethod
-    async def convert(cls, ctx: Context, arg: str) -> Any:
+    async def convert(self, ctx: Context, arg: str) -> Any:
         raise NotImplementedError
 
 
 class Check:
+    """To display a custom error message when conversion fails,
+    raise command_exceptions.CheckError in the convert method."""
     title: str = None
     short_help: str = None
     help: str = None
@@ -143,17 +148,6 @@ class Check:
     async def check(self, ctx: Context) -> bool:
         raise NotImplementedError
 
-    def __call__(self, ctx: Context) -> bool:
-        # This allows the check instance to be called like a function
-        # We need to handle async check methods
-        if inspect.iscoroutinefunction(self.check):
-            # If check is async, we can't await it here because __call__ is sync
-            # But the command invoker expects a sync callable that might return a coroutine?
-            # No, the command invoker calls check_func(ctx). 
-            # If check_func is a Check instance, check_func(ctx) returns self.check(ctx)
-            # which is a coroutine if check is async.
-            return self.check(ctx)
-        return self.check(ctx)
 
 class FunctionCheck(Check):
     def __init__(self, predicate: CheckFunc):
@@ -178,21 +172,16 @@ class Commands:
         self.converters: Dict[Type, Callable[[Context, str], Awaitable[Any]]] = {}
 
     def add_command_object(self, name: str, command: Command):
+        """Adds an initialized command"""
         cmd_name = name.lower()
         if cmd_name in self.commands:
             raise CommandRegistrationError(cmd_name, "Command")
-            
         self.commands[cmd_name] = command
-
-    def add_command(self, name: str, func: CommandFunc) -> Command:
-        """Add a new command with the given name and handler function."""
-        cmd_name = name.lower()
-        if cmd_name in self.commands:
-            raise CommandRegistrationError(cmd_name, "Command")
-            
-        cmd = Command(cmd_name, func)
-        self.commands[cmd.name] = cmd
-        return cmd
+        for alias in command.aliases:
+            alias_name = alias.lower()
+            if alias_name in self.commands:
+                raise CommandRegistrationError(alias_name, "Alias")
+            self.commands[alias_name] = command
 
     def add_redeem_object(self, name: str, redeem: TwitchRedeem):
         redeem_name = name.lower()
@@ -259,6 +248,8 @@ class Commands:
         elif isinstance(error, VerificationFailure):
             await ctx.send(f"❌ {error.message}")
         elif isinstance(error, ArgumentError):
+            await ctx.send(f"❌ {error.message}")
+        elif isinstance(error, CommandError):
             await ctx.send(f"❌ {error.message}")
         else:
             await ctx.send(f"❌ An error occurred")
@@ -337,10 +328,11 @@ class Commands:
 
 
 class Command:       
-    def __init__(self, name: str, func: CommandFunc, bot: 'Commands', checks: List[CheckFunc] = None, aliases: List[str] = None, hidden: bool = False, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None):
+    def __init__(self, name: str, func: CommandFunc, bot: 'Commands', checks: List[Check] = None, aliases: List[str] = None, hidden: bool = False, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, cog: 'Cog' = None):
         self.name = name
         self.func = func
         self.bot = bot
+        self.cog = cog
         self.checks = checks or []
         self.aliases = aliases or []
         self.hidden = hidden
@@ -367,7 +359,7 @@ class Command:
             self.type_hints = {}
 
         # Load parameter configurations from decorator
-        params_config = getattr(func, '_command_params', {})
+        params_config: Dict = getattr(func, '_command_params', {})
         
         # Load verifier from decorator if not provided
         if not self.verifier:
@@ -394,12 +386,14 @@ class Command:
             sig_params.pop(0)
 
         for param in sig_params:
-            param_config = params_config.get(param.name, {})
+            param_config: Dict = params_config.get(param.name, {})
             
             # Resolve aliases
             aliases = param_config.get('aliases', [])
             if isinstance(aliases, str):
                 aliases = [aliases]
+            
+            display_name = param_config.get('display_name', param.name)
             
             # Resolve type and check for Optional
             annotation = self.type_hints.get(param.name, param.annotation)
@@ -438,10 +432,15 @@ class Command:
             param_help = param_config.get('help')
             if not param_help:
                 param_help = doc_params.get(param.name)
+                
+            converter = param_config.get('converter', None) or converter
+            if not converter:
+                converter = str
 
             # Create Parameter object
             p = Parameter(
                 name=param.name,
+                display_name=display_name,
                 annotation=annotation,
                 converter=converter,
                 is_optional=is_optional,
@@ -450,7 +449,8 @@ class Command:
                 greedy=param_config.get('greedy', False),
                 hidden=param_config.get('hidden', False),
                 kind=kind_mapping[param.kind],
-                help=param_help
+                help=param_help,
+                command=self
             )
             
             # Extract documentation from converter if available
@@ -469,6 +469,7 @@ class Command:
             
             # Update mappings
             self.arg_mappings[param.name] = param.name
+            self.arg_mappings[display_name] = param.name
             for alias in aliases:
                 self.arg_mappings[alias] = param.name
 
@@ -644,10 +645,10 @@ class Command:
 
     async def _run_checks(self, ctx: Context):
         # Run checks
-        for check_func in self.checks:
+        for check_class in self.checks:
             # The check function can either return bool or an error string
             try:
-                check_result = check_func(ctx)
+                check_result = check_class.check(ctx)
                 if asyncio.iscoroutine(check_result):
                     check_result = await check_result
                 
@@ -733,11 +734,8 @@ class Command:
         if self.checks:
             restr_to = []
             for check in self.checks:
-                if check.__doc__:
-                    restr_to.append(check.__doc__)
-                else:
-                    restr_to.append(check.__name__)
-            restrictions = f"Limited to: {', '.join(restr_to)}"
+                restr_to.append(check.title or check.short_help or check.help or check.__qualname__)
+            restrictions = f"Limited to: {', '.join(restr_to).capitalize()}"
 
         response = strjoin(' – ', name_and_usage, description, restrictions, aliases)
         return response
@@ -831,7 +829,12 @@ def verification(verifier_func):
         return func
     return decorator
 
-def parameter(name: str, aliases: Union[str, List[str]] = [], greedy: bool = False, hidden: bool = False, help: str = None):
+def parameter(
+    name: str, aliases: Union[str, List[str]] = [],
+    greedy: bool = False, hidden: bool = False,
+    help: str = None, converter: Converter = None,
+    display_name: str = None
+    ):
     """Decorator to configure a command parameter.
     
     Args:
@@ -848,7 +851,9 @@ def parameter(name: str, aliases: Union[str, List[str]] = [], greedy: bool = Fal
             'aliases': aliases,
             'greedy': greedy,
             'hidden': hidden,
-            'help': help
+            'help': help,
+            'converter': converter,
+            'display_name': display_name or name
         }
         return func
     return decorator

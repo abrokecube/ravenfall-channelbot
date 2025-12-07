@@ -1,41 +1,58 @@
-from ..commands import CommandContext, Commands
+from ..commands import Context, TwitchContext, Commands, checks, parameter
+from ..command_enums import UserRole, Platform
+from ..command_utils import HasRole
+from ..command_exceptions import CommandError
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
+from ..ravenfallchannel import RFChannel
+from utils.commands_rf import RFChannelConverter
 import os
+
 
 class BotStuffCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
     
-    @Cog.command(name="reloadstrings", help="Reloads localization strings")
-    async def reloadstrings(self, ctx: CommandContext):
-        if not (ctx.msg.user.mod or ctx.msg.room.room_id == ctx.msg.user.id):
-            return
+    @Cog.command(name="reloadstrings")
+    @parameter("all_", display_name="all", aliases=["a"])
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def reloadstrings(self, ctx: Context, all_: bool = False, channel: RFChannel = None):
+        """Reloads Ravenfall translation strings.
         
-        do_all = ctx.args.get_flag(['a', 'all']).value is not None
-        if do_all:
-            for channel in self.rf_manager.channels:
-                channel.rfloc.load_definitions()
-                channel.rfloc.load_translations()
+        Args: 
+            all: Reloads strings for all channels.
+            channel_name: The name of the channel to reload strings for.
+        """        
+        if all_:
+            for _channel in self.rf_manager.channels:
+                _channel.rfloc.load_definitions()
+                _channel.rfloc.load_translations()
             await ctx.reply("Strings reloaded for all channels!")
             return
 
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+        if isinstance(ctx, TwitchContext) and not channel_name:
+            channel_name = ctx.data.room.name
+        if not channel_name:
+            raise CommandError("Missing channel_name")
+        
+        channel = self.rf_manager.get_channel(channel_name=channel_name)
         if channel is None:
             return
         channel.rfloc.load_definitions()
         channel.rfloc.load_translations()
         await ctx.reply("Strings reloaded!")
     
-    @Cog.command(name="pausemonitoring", help="Pause channel monitoring")
-    async def pause_monitoring(self, ctx: CommandContext):
-        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
-            return
-
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
+    @Cog.command(name="pause_monitoring")
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def pause_monitoring(self, ctx: Context, channel: RFChannel = None):
+        """Pause channel monitoring
+        
+        Args:
+            channel: Channel to pause monitoring for
+        """
         if channel.monitoring_paused:
             await ctx.reply("Channel monitoring is already paused.")
             return
@@ -44,19 +61,21 @@ class BotStuffCog(Cog):
         await ctx.reply("Channel monitoring paused.")
         
     @Cog.command(name="resumemonitoring", help="Resume channel monitoring")
-    async def resume_monitoring(self, ctx: CommandContext):
-        if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
-            return
-
-        channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
-        if channel is None:
-            return
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def resume_monitoring(self, ctx: Context, channel: RFChannel = None):
+        """Resume channel monitoring
+        
+        Args:
+            channel: Channel to resume monitoring for
+        """
         if not channel.monitoring_paused:
             await ctx.reply("Channel monitoring is not paused.")
             return
         channel.monitoring_paused = False
         await channel.start()
         await ctx.reply("Channel monitoring resumed.")
+        
         
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

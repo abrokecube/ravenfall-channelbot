@@ -23,6 +23,7 @@ from ..commands import (
     CommandError
 )
 from ..command_exceptions import ArgumentConversionError, CheckFailure
+from ..command_utils import HasRole
 
 # Example custom type with converter
 class Color(Converter):
@@ -102,6 +103,7 @@ class ExampleCog(Cog):
         await ctx.reply(f"{a} × {b} = {result}")
     
     @Cog.command(name="divide")
+    @checks(HasRole(UserRole.BOT_OWNER))
     async def divide(self, ctx: Context, numerator: float, denominator: float):
         """Divide two numbers.
         
@@ -262,7 +264,7 @@ class ExampleCog(Cog):
             await ctx.reply("Verbose mode disabled.")
 
     @Cog.command(name="greedy_test")
-    @parameter("rest", greedy=True)
+    @parameter("rest", greedy=True, display_name="reast")
     async def greedy_test(self, ctx: Context, first: str, rest: str):
         """Test greedy argument parsing.
         
