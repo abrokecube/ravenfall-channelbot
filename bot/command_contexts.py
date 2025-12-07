@@ -46,12 +46,12 @@ class TwitchContext(Context):
         # Platform-specific fields
         self.message = msg.text
         self.author = msg.user.name
-        self.roles = self._compute_roles()
         self.platform = Platform.TWITCH
         self.platform_allows_markdown = False
         self.platform_output_type = OutputMessageType.SINGLE_LINE
         self.data: ChatMessage = msg
         self.api: Twitch = twitch
+        self.roles = self._compute_roles()
         
         self.prefix: str = ""
         self.invoked_with: str = ""
