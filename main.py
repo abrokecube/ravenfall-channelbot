@@ -199,22 +199,24 @@ async def run():
     commands.twitches = twitches
 
     def load_cogs():
-        from bot.cogs.info import InfoCog
-        commands.load_cog(InfoCog, rf_manager=rf_manager)
-        from bot.cogs.testing import TestingCog
-        commands.load_cog(TestingCog)
-        from bot.cogs.game import GameCog
-        commands.load_cog(GameCog, rf_manager=rf_manager)
-        from bot.cogs.testing_rf import TestingRFCog
-        commands.load_cog(TestingRFCog, rf_manager=rf_manager)
-        from bot.cogs.bot import BotStuffCog
-        commands.load_cog(BotStuffCog, rf_manager=rf_manager)
-        from bot.cogs.redeem import RedeemCog
-        commands.load_cog(RedeemCog)
-        from bot.cogs.redeem_rf import RedeemRFCog
-        commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
-        # from bot.cogs.example import ExampleCog
-        # commands.load_cog(ExampleCog)
+        if os.getenv("COMMAND_TESTING") == "1":
+            from bot.cogs.example import ExampleCog
+            commands.load_cog(ExampleCog)
+        else:
+            from bot.cogs.info import InfoCog
+            commands.load_cog(InfoCog, rf_manager=rf_manager)
+            from bot.cogs.testing import TestingCog
+            commands.load_cog(TestingCog)
+            from bot.cogs.game import GameCog
+            commands.load_cog(GameCog, rf_manager=rf_manager)
+            from bot.cogs.testing_rf import TestingRFCog
+            commands.load_cog(TestingRFCog, rf_manager=rf_manager)
+            from bot.cogs.bot import BotStuffCog
+            commands.load_cog(BotStuffCog, rf_manager=rf_manager)
+            from bot.cogs.redeem import RedeemCog
+            commands.load_cog(RedeemCog)
+            from bot.cogs.redeem_rf import RedeemRFCog
+            commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
         from bot.cogs.help import HelpCog
         commands.load_cog(HelpCog, commands=commands)
         
