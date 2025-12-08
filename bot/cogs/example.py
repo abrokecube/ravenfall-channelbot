@@ -247,7 +247,7 @@ class ExampleCog(Cog):
         name="verbose_test", 
         aliases=["verbose", "verb", "db"],
     )
-    @parameter("verbose", aliases=['v', 'debug'])
+    @parameter("verbose", display_name="verb", aliases=['v', 'debug'])
     async def verbose_test(self, ctx: Context, verbose: bool = False):
         """Test boolean flags and argument aliases.
         

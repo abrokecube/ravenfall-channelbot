@@ -31,14 +31,6 @@ class BotStuffCog(Cog):
             await ctx.reply("Strings reloaded for all channels!")
             return
 
-        if isinstance(ctx, TwitchContext) and not channel_name:
-            channel_name = ctx.data.room.name
-        if not channel_name:
-            raise CommandError("Missing channel_name")
-        
-        channel = self.rf_manager.get_channel(channel_name=channel_name)
-        if channel is None:
-            return
         channel.rfloc.load_definitions()
         channel.rfloc.load_translations()
         await ctx.reply("Strings reloaded!")
