@@ -23,6 +23,7 @@ from ..commands import (
     CommandError
 )
 from ..command_exceptions import ArgumentConversionError, CheckFailure
+from ..command_contexts import TwitchRedeemContext
 from ..command_utils import HasRole
 
 # Example custom type with converter
@@ -52,29 +53,30 @@ class Color(Converter):
             raise ArgumentConversionError(f"Unknown color: {arg}. Valid colors: {', '.join(cls.COLORS.keys())}")
         return Color(name_lower, cls.COLORS[name_lower])
 
-# Example custom checks
-class ModeratorCheck(Check):
-    title = "Moderator"
-    help = "Requires moderator privileges."
-    
-    async def check(self, ctx: Context) -> bool:
-        if UserRole.MODERATOR not in ctx.roles:
-            return "❌ This command requires moderator privileges."
-        return True
-
-def is_bot_owner(ctx: Context) -> bool:
-    if UserRole.BOT_OWNER not in ctx.roles:
-        return "❌ This command requires bot owner privileges."
-    return True
-
-def is_moderator_or_owner(ctx: Context) -> bool:
-    if not (UserRole.MODERATOR in ctx.roles or 
-            UserRole.BOT_OWNER in ctx.roles):
-        return "❌ This command requires moderator privileges."
-    return True
-
 class ExampleCog(Cog):
     """Example cog showcasing new command features."""
+    
+    @Cog.listener("custom_event")
+    async def on_custom_event(self, ctx: Context, data: str):
+        """Example of a generic event listener."""
+        print(f"Custom event received: {data}")
+        await ctx.send(f"Custom event received: {data}")
+
+    @Cog.redeem(name="test redeem")
+    async def hydrate_redeem(self, ctx: TwitchRedeemContext, *args):
+        """Example of a simple redeem without parameters."""
+        await ctx.send(f"{ctx.author} says: Stay hydrated! (args: {args})")
+
+    # @Cog.redeem(name="Highlight My Message")
+    # async def highlight_redeem(self, ctx: TwitchRedeemContext, message: str):
+    #     """Example of a redeem with a parameter (user input)."""
+    #     await ctx.send(f"Highlighting: {message}")
+    #     # In a real scenario, you might do something with the message
+        
+    # @Cog.redeem(name="Gamble")
+    # async def gamble_redeem(self, ctx: TwitchRedeemContext, amount: int):
+    #     """Example of a redeem with a typed parameter."""
+    #     await ctx.send(f"{ctx.author} gambled {amount} points!")
     
     @Cog.command(name="echo")
     async def echo(self, ctx: Context, message: str):
@@ -146,7 +148,7 @@ class ExampleCog(Cog):
         await ctx.reply(f"Set your color to {color.name} ({color.hex_code})")
     
     async def transfer_verify(ctx: Context, amount: int, user: str):
-        aga = 10 / 0
+        # aga = 10 / 0 # This line was problematic and removed
         if amount == 0:
             return "Amount must be greater than 0."
         if amount < 0:
@@ -155,8 +157,10 @@ class ExampleCog(Cog):
             return "You cannot transfer coins to yourself."
         return True
 
-    @Cog.command(name="transfer")
+    @Cog.command(name="transfer", help="Transfer currency to another user")
     @verification(transfer_verify)
+    @parameter("amount", help="Amount to transfer")
+    @parameter("user", help="User to transfer to")
     async def transfer(self, ctx: Context, amount: int, user: str):
         """Transfer coins to another user.
         
@@ -168,7 +172,7 @@ class ExampleCog(Cog):
 
 
     @Cog.command(name="modcommand")
-    @checks(is_moderator_or_owner)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
     async def modcommand(self, ctx: Context):
         """A command only moderators and the bot owner can use.
         
@@ -275,7 +279,7 @@ class ExampleCog(Cog):
         await ctx.reply(f"First: '{first}', Rest: '{rest}'")
 
     @Cog.command(name="owner_only", aliases=["owner only"])
-    @checks(is_bot_owner)
+    @checks(HasRole(UserRole.BOT_OWNER))
     async def owner_only_command(self, ctx: Context):
         """A command only the bot owner can use.
         
@@ -287,7 +291,7 @@ class ExampleCog(Cog):
         await ctx.reply("✅ You are the bot owner!")
 
     @Cog.command(name="multi_check")
-    @checks(ModeratorCheck, is_bot_owner)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.MODERATOR, UserRole.ADMIN))
     async def multi_check_command(self, ctx: Context):
         """A command that demonstrates multiple checks.
         

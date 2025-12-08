@@ -26,3 +26,11 @@ class ParameterKind(Enum):
     VAR_POSITIONAL = 2
     KEYWORD_ONLY = 3
     VAR_KEYWORD = 4
+
+class BucketType(Enum):
+    DEFAULT = 0
+    GLOBAL = 0
+    USER = 1
+    CHANNEL = 2
+    GUILD = 3
+    CUSTOM = 4

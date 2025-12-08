@@ -21,6 +21,12 @@ class VerificationFailure(CommandError):
     def __init__(self, message: str = "Verification failed"):
         super().__init__(message)
 
+class CommandOnCooldown(CommandError):
+    """Raised when a command is on cooldown."""
+    def __init__(self, retry_after: float):
+        self.retry_after = retry_after
+        super().__init__(f"Command is on cooldown. Try again in {retry_after:.2f}s")
+
 class CommandRegistrationError(CommandError):
     """Raised when there's an error registering a command or redeem."""
     def __init__(self, name: str, item_type: str = "Command"):

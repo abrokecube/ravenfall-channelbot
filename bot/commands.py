@@ -28,12 +28,13 @@ import re
 from docstring_parser import parse
 from utils.strutils import strjoin
 
-from .command_contexts import Context, TwitchContext
-from .command_enums import OutputMessageType, Platform, UserRole, CustomRewardRedemptionStatus, ParameterKind
+from .command_contexts import Context, TwitchContext, TwitchRedeemContext
+from .command_enums import OutputMessageType, Platform, UserRole, CustomRewardRedemptionStatus, ParameterKind, BucketType
 from .command_exceptions import (
     CommandError,
     CheckFailure,
     VerificationFailure,
+    CommandOnCooldown,
     CommandRegistrationError,
     ArgumentError,
     UnknownFlagError,
@@ -73,6 +74,7 @@ class Parameter:
     type_help: str = None
     help: Optional[str] = None
     command: 'Command' = None
+    regex: str = None
     
     def get_parameter_display(self, invoked_name: str = None) -> str:
         param_str = invoked_name or self.display_name
@@ -137,219 +139,120 @@ class Converter:
     short_help: str = None
     help: str = None
 
-    async def convert(self, ctx: Context, arg: str) -> Any:
+    @classmethod
+    async def convert(cls, ctx: Context, arg: str) -> Any:
         raise NotImplementedError
 
 
-class Check:
-    """To display a custom error message when conversion fails,
-    raise command_exceptions.CheckError in the convert method."""
-    title: str = None
-    short_help: str = None
-    help: str = None
-
-    async def check(self, ctx: Context) -> bool:
-        raise NotImplementedError
-
-
-class FunctionCheck(Check):
-    def __init__(self, predicate: CheckFunc):
-        self.predicate = predicate
-        self.title = predicate.__name__.replace('_', ' ').title()
-        self.help = getattr(predicate, '__doc__', '')
+class Cooldown:
+    def __init__(self, rate: int, per: float, type: BucketType = BucketType.DEFAULT):
+        self.rate = rate
+        self.per = per
+        self.type = type
+        self._windows: Dict[Any, List[float]] = {}
     
-    def check(self, ctx: Context) -> bool:
-        return self.predicate(ctx)
-
-
-class Commands:
-    def __init__(self, chat: Chat, twitches: Dict[str, Twitch] = {}):
-        self.chat: Chat = chat
-        self.twitch: Twitch = chat.twitch
-        self.twitches: Dict[str, Twitch] = twitches
-        self.commands: Dict[str, Command] = {}
-        self.redeems: Dict[str, TwitchRedeem] = {}
-        self.prefix: str = "!"
-        self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
-        self.cog_manager: Optional[CogManager] = None
-        self.converters: Dict[Type, Callable[[Context, str], Awaitable[Any]]] = {}
-
-    def add_command_object(self, name: str, command: Command):
-        """Adds an initialized command"""
-        cmd_name = name.lower()
-        if cmd_name in self.commands:
-            raise CommandRegistrationError(cmd_name, "Command")
-        self.commands[cmd_name] = command
-        for alias in command.aliases:
-            alias_name = alias.lower()
-            if alias_name in self.commands:
-                raise CommandRegistrationError(alias_name, "Alias")
-            self.commands[alias_name] = command
-
-    def add_redeem_object(self, name: str, redeem: TwitchRedeem):
-        redeem_name = name.lower()
-        if redeem_name in self.redeems:
-            raise CommandRegistrationError(redeem_name, "Redeem")
+    def get_retry_after(self, ctx: Context) -> float:
+        import time
+        now = time.time()
+        key = ctx.get_bucket_key(self.type)
+        
+        if key not in self._windows:
+            return 0.0
             
-        self.redeems[redeem.name] = redeem
-
-    def add_redeem(self, name: str, func: TwitchRedeemFunc) -> TwitchRedeemFunc:
-        redeem_name = name.lower()
-        if redeem_name in self.redeems:
-            raise CommandRegistrationError(redeem_name, "Redeem")
+        window = self._windows[key]
+        # Remove expired timestamps
+        window = [t for t in window if now - t < self.per]
+        self._windows[key] = window
+        
+        if len(window) < self.rate:
+            return 0.0
             
-        redeem = TwitchRedeem(redeem_name, func)
-        self.redeems[redeem.name] = redeem
-        return redeem
-    
-    def add_converter(self, type_: Type, converter: Callable[[Context, str], Awaitable[Any]]):
-        self.converters[type_] = converter
+        return self.per - (now - window[0])
+
+    def update_rate_limit(self, ctx: Context):
+        import time
+        now = time.time()
+        key = ctx.get_bucket_key(self.type)
         
-    def setup_cog_manager(self) -> CogManager:
-        if not hasattr(self, 'cog_manager') or self.cog_manager is None:
-            from .cog import CogManager
-            self.cog_manager = CogManager(self)
-        return self.cog_manager
-        
-    def load_cog(self, cog_cls: type[Cog], **kwargs) -> None:
-        if self.cog_manager is None:
-            self.setup_cog_manager()
-        try:
-            self.cog_manager.load_cog(cog_cls, **kwargs)
-        except Exception as e:
-            logger.error(f"Error loading cog '{cog_cls.name}':", exc_info=True)
-            raise
-        
-    def unload_cog(self, cog_name: str) -> None:
-        if self.cog_manager:
-            self.cog_manager.unload_cog(cog_name)
+        if key not in self._windows:
+            self._windows[key] = []
             
-    def reload_cog(self, cog_cls: type[Cog], **kwargs) -> None:
-        if self.cog_manager:
-            self.cog_manager.reload_cog(cog_cls, **kwargs)
-
-    async def get_prefix(self, ctx: Context) -> str:
-        return self.prefix
-    
-    async def on_command_error(self, ctx: Context, command: Command, error: Exception):
-        usage_text = command.get_usage_text(ctx.prefix, ctx.invoked_with)
-        if isinstance(error, MissingRequiredArgumentError):
-            await ctx.send(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
-        elif isinstance(error, EmptyFlagValueError):
-            await ctx.send(f"❌ Expected a value for '{error.parameter.name}' (type: {error.parameter.type_title})")
-        elif isinstance(error, ArgumentConversionError):
-            out_text = f"❌ Error turning '{error.value}' ({error.parameter.name}) into type {error.parameter.type_title}"
-            if error.message:
-                out_text += f": {error.message}"
-            await ctx.send(out_text)
-        elif isinstance(error, UnknownArgumentError):
-            await ctx.send(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
-        elif isinstance(error, UnknownFlagError):
-            await ctx.send(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
-        elif isinstance(error, CheckFailure):
-            await ctx.send(f"❌ {error.message}")
-        elif isinstance(error, VerificationFailure):
-            await ctx.send(f"❌ {error.message}")
-        elif isinstance(error, ArgumentError):
-            await ctx.send(f"❌ {error.message}")
-        elif isinstance(error, CommandError):
-            await ctx.send(f"❌ {error.message}")
-        else:
-            await ctx.send(f"❌ An error occurred")
-        
-    
-    async def on_redeem_error(self, ctx: TwitchRedeemContext, redeem: TwitchRedeem, error: Exception):
-        await ctx.send(f"❌ An error occurred. Points will be refunded.")
-        await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
-        
-    def _find_command(self, text: str) -> tuple[str, str]:
-        text_lower = text.lower()
-        for cmd in sorted(self.commands.keys(), key=len, reverse=True):
-            if text_lower == cmd or text_lower.startswith(cmd + ' '):
-                return cmd, text[len(cmd):].strip()
-        return None, text
-
-    def _find_redeem(self, name: str) -> tuple[str, str]:
-        name_lower = name.lower()
-        for redeem in sorted(self.redeems.keys(), key=len, reverse=True):
-            if name_lower == redeem or name_lower.startswith(redeem + ' '):
-                return redeem, name[len(redeem):].strip()
-        return None, name
-
-    async def process_twitch_message(self, msg: ChatMessage) -> None:
-        await self.process_message(Platform.TWITCH, msg)
-
-    async def process_message(self, platform: Platform, platform_context: Any):
-        ctx: Context = None
-        if platform == Platform.TWITCH and isinstance(platform_context, ChatMessage):
-            ctx = TwitchContext(platform_context, self.twitches.get(platform_context.room.room_id))
-        else:
-            raise ValueError(f"Unsupported platform: {platform}")
-        
-        prefix = await self.get_prefix(ctx)
-        used_prefix = ""
-        if isinstance(prefix, list):
-            for p in prefix:
-                if ctx.message.startswith(p):
-                    used_prefix = p
-                    break
-            else:
-                return
-        else:
-            if not ctx.message.startswith(prefix):
-                return
-            used_prefix = prefix
-            
-        content = ctx.message[len(used_prefix):]
-        content = content.replace("\U000e0000", "").strip()
-        
-        command_name, remaining_text = self._find_command(content)
-        if not command_name or command_name not in self.commands:
-            return
-
-        command = self.commands[command_name]
-
-        ctx.command = command
-        ctx.prefix = used_prefix
-        ctx.invoked_with = content[:len(command_name)]
-        ctx.parameters = remaining_text
-
-        await command.invoke(ctx)
-
-    async def process_channel_point_redemption(self, redemption: ChannelPointsCustomRewardRedemptionData):
-        redeem_name, remaining_text = self._find_redeem(redemption.reward.title)
-        if not redeem_name or redeem_name not in self.redeems:
-            return
-            
-        ctx = TwitchRedeemContext(redemption, self)
-        try:
-            result = self.redeems[redeem_name].func(ctx)
-            if asyncio.iscoroutine(result):
-                await result
-        except Exception as e:
-            await self.on_redeem_error(ctx, self.redeems[redeem_name], e)
+        window = self._windows[key]
+        # Remove expired timestamps
+        window = [t for t in window if now - t < self.per]
+        window.append(now)
+        self._windows[key] = window
 
 
-class Command:       
-    def __init__(self, name: str, func: CommandFunc, bot: 'Commands', checks: List[Check] = None, aliases: List[str] = None, hidden: bool = False, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, cog: 'Cog' = None):
+class BaseCommand:
+    def __init__(self, name: str, checks: List[Check] = None, cooldown: Cooldown = None, verifier: Callable = None):
         self.name = name
-        self.func = func
-        self.bot = bot
-        self.cog = cog
         self.checks = checks or []
-        self.aliases = aliases or []
-        self.hidden = hidden
+        self.cooldown = cooldown
         self.verifier = verifier
+
+    async def _run_checks(self, ctx: Context):
+        for check in self.checks:
+            try:
+                check_result = check.check(ctx)
+                if asyncio.iscoroutine(check_result):
+                    check_result = await check_result
+                
+                if isinstance(check_result, str):
+                    raise CheckFailure(check_result)
+                if not check_result:
+                    raise CheckFailure(f"Check failed for command '{self.name}'")
+            except CheckFailure:
+                raise
+            except Exception as e:
+                raise CheckFailure(f"Check raised an error: {e}")
+        return True
+
+    async def _check_cooldown(self, ctx: Context):
+        if self.cooldown:
+            retry_after = self.cooldown.get_retry_after(ctx)
+            if retry_after > 0:
+                raise CommandOnCooldown(retry_after)
+            self.cooldown.update_rate_limit(ctx)
+        return True
+
+    async def _run_verification(self, ctx: Context, *args, **kwargs):
+        # Run verifier if present
+        if self.verifier:
+            try:
+                verify_result = self.verifier(ctx, *args, **kwargs)
+                if asyncio.iscoroutine(verify_result):
+                    verify_result = await verify_result
+                
+                if isinstance(verify_result, str):
+                    raise VerificationFailure(verify_result)
+                if verify_result is False:
+                    raise VerificationFailure(f"Verification failed for command '{self.name}'")
+            except VerificationFailure:
+                raise
+            except Exception as e:
+                raise VerificationFailure("There was an error during verification")
+        return True
+
+    async def invoke(self, ctx: Context, *args, **kwargs):
+        raise NotImplementedError
+
+
+class EventListener(BaseCommand):
+    def __init__(self, name: str, func: Callable, event_type: str, checks: List[Check] = None, cooldown: Cooldown = None, verifier: Callable = None):
+        super().__init__(name, checks, cooldown, verifier)
+        self.func = func
+        self.event_type = event_type
         
+        # Load cooldown/verifier from decorator if not provided
+        if not self.cooldown:
+            self.cooldown = getattr(func, '_command_cooldown', None)
+        if not self.verifier:
+            self.verifier = getattr(func, '_command_verifier', None)
+
         # Parse docstring for parameter descriptions and help text
         doc = parse(func.__doc__ or "")
         
-        self.title = title or name.replace('_', ' ').title()
-        self.short_help = short_help or doc.short_description
-        self.help = help or doc.long_description or doc.short_description
-        
-        doc_params = {p.arg_name: p.description for p in doc.params}
-
         # Store signature and resolve type hints
         self.signature = inspect.signature(func)
         try:
@@ -364,10 +267,6 @@ class Command:
         # Load parameter configurations from decorator
         params_config: Dict = getattr(func, '_command_params', {})
         
-        # Load verifier from decorator if not provided
-        if not self.verifier:
-            self.verifier = getattr(func, '_command_verifier', None)
-
         kind_mapping = {
             inspect.Parameter.POSITIONAL_ONLY: ParameterKind.POSITIONAL_ONLY,
             inspect.Parameter.POSITIONAL_OR_KEYWORD: ParameterKind.POSITIONAL_OR_KEYWORD,
@@ -380,13 +279,20 @@ class Command:
         self.parameters_map: Dict[str, Parameter] = {}
         self.arg_mappings: Dict[str, str] = {}
         
+        doc_params = {p.arg_name: p.description for p in doc.params}
+
         # Process parameters
         # Skip 'self' (if bound) and 'ctx'
         sig_params = list(self.signature.parameters.values())
         if sig_params and sig_params[0].name == 'self':
             sig_params.pop(0)
-        if sig_params and (sig_params[0].name == 'ctx' or sig_params[0].annotation == Context or sig_params[0].annotation == 'Context'):
+        if sig_params and (sig_params[0].name == 'ctx' or sig_params[0].annotation == Context or sig_params[0].annotation == 'Context' or 'Context' in str(sig_params[0].annotation)):
             sig_params.pop(0)
+            
+        # Also skip 'redemption' if it's a redeem event and explicitly typed or named
+        if self.event_type == "twitch_redeem" and sig_params:
+             if sig_params[0].name == 'redemption' or 'ChannelPointsCustomRewardRedemptionData' in str(sig_params[0].annotation):
+                 sig_params.pop(0)
 
         for param in sig_params:
             param_config: Dict = params_config.get(param.name, {})
@@ -396,8 +302,8 @@ class Command:
             if isinstance(aliases, str):
                 aliases = [aliases]
             
-            display_name = param_config.get('display_name', param.name)
-            
+            display_name = param_config.get('display_name', None) or param.name
+
             # Resolve type and check for Optional
             annotation = self.type_hints.get(param.name, param.annotation)
             converter = annotation
@@ -453,7 +359,8 @@ class Command:
                 hidden=param_config.get('hidden', False),
                 kind=kind_mapping[param.kind],
                 help=param_help,
-                command=self
+                command=self,
+                regex=param_config.get('regex')
             )
             
             # Extract documentation from converter if available
@@ -476,14 +383,6 @@ class Command:
             for alias in aliases:
                 self.arg_mappings[alias] = param.name
 
-        # Add command-level arg aliases (legacy support if needed, or remove if fully deprecated)
-        # _arg_aliases = kwargs.get('arg_aliases', {}) # kwargs is no longer used
-        # for param_name, aliases in _arg_aliases.items():
-        #     if isinstance(aliases, str):
-        #         aliases = [aliases]
-        #     for alias in aliases:
-        #         self.arg_mappings[alias] = param_name
-
     async def _convert_argument(self, ctx: Context, value: str, param: Parameter) -> Any:
         if value is None:
             return value
@@ -503,10 +402,7 @@ class Command:
                 raise ArgumentConversionError(e.message, value, param)
             except Exception as e:
                 raise ArgumentConversionError(None, value, param, e)
-            
-        if type_ in self.bot.converters:
-            return await self.bot.converters[type_](ctx, value)
-            
+                        
         if type_ is bool:
             if isinstance(value, bool):
                 return value
@@ -630,6 +526,39 @@ class Command:
                     remaining = positional_args[positional_index:]
                     val = val + ' ' + ' '.join(remaining)
                     positional_index = len(positional_args)
+                elif param.regex and positional_index < len(positional_args):
+                    # Reconstruct remaining string to match regex
+                    remaining_tokens = positional_args[positional_index:]
+                    remaining_str = ' '.join(remaining_tokens)
+                    match = re.match(param.regex, remaining_str)
+                    if match:
+                        matched_str = match.group(0)
+                        val = matched_str
+                        # Figure out how many tokens we consumed
+                        # This is tricky because tokens were split by space, but regex might match partial tokens or multiple tokens
+                        # A simple approximation: split matched string by space and count tokens
+                        # But this fails if multiple spaces were collapsed.
+                        # Ideally we should rely on the fact that positional_args are tokens.
+                        # Let's try to consume tokens until we cover the length of matched_str
+                        
+                        # Better approach: check if matched_str corresponds to N tokens
+                        # For now, let's assume greedy matching on tokens if regex is used?
+                        # Or just consume tokens that are fully contained in the match?
+                        
+                        # Let's try to reconstruct the consumed tokens
+                        consumed_len = 0
+                        tokens_consumed = 0
+                        for token in remaining_tokens:
+                            if consumed_len >= len(matched_str):
+                                break
+                            consumed_len += len(token) + 1 # +1 for space
+                            tokens_consumed += 1
+                        
+                        positional_index += tokens_consumed
+                    else:
+                        # Regex didn't match, maybe fail or let it try single token?
+                        # If regex is specified, it MUST match?
+                        pass
 
                 converted = await self._convert_argument(ctx, val, param)
                 args.append(converted)
@@ -649,46 +578,257 @@ class Command:
 
         return args, kwargs
 
-    async def _run_checks(self, ctx: Context):
-        # Run checks
-        for check_class in self.checks:
-            # The check function can either return bool or an error string
-            try:
-                check_result = check_class.check(ctx)
-                if asyncio.iscoroutine(check_result):
-                    check_result = await check_result
-                
-                if isinstance(check_result, str):
-                    raise CheckFailure(check_result)
-                if not check_result:
-                    raise CheckFailure(f"Check failed for command '{self.name}'")
-            except CheckFailure:
-                raise
-            except Exception as e:
-                # Wrap other exceptions
-                raise CheckFailure(f"There was an error during a check")
-        return True
+    async def invoke(self, ctx: Context, *args, **kwargs):
+        try:
+            await self._run_checks(ctx)
+            await self._check_cooldown(ctx)
+            
+            # Parse arguments if parameters are defined
+            if self.parameters:
+                parsed_args, parsed_kwargs = await self._parse_arguments(ctx)
+                # Combine parsed args with provided args
+                # Usually dispatch provides args/kwargs, but for commands/redeems they come from parsing
+                # If dispatch provided args, we might want to prepend them?
+                # For now, let's assume if parameters are defined, we use parsed args.
+                args = (*args, *parsed_args)
+                kwargs = {**kwargs, **parsed_kwargs}
 
-    async def _run_verification(self, ctx: Context, *args, **kwargs):
-        # Run verifier if present
-        if self.verifier:
-            try:
-                verify_result = self.verifier(ctx, *args, **kwargs)
-                if asyncio.iscoroutine(verify_result):
-                    verify_result = await verify_result
-                
-                if isinstance(verify_result, str):
-                    raise VerificationFailure(verify_result)
-                if verify_result is False:
-                    raise VerificationFailure(f"Verification failed for command '{self.name}'")
-            except VerificationFailure:
-                raise
-            except Exception as e:
-                raise VerificationFailure("There was an error during verification")
-        return True
+            await self._run_verification(ctx, *args, **kwargs)
+            
+            result = self.func(ctx, *args, **kwargs)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as e:
+            # We need a way to bubble up errors or handle them
+            raise e
 
+
+class Dispatcher:
+    def __init__(self, bot: 'Commands'):
+        self.bot = bot
+        self.listeners: Dict[str, EventListener] = {}
+
+    def register(self, listener: EventListener):
+        if listener.name in self.listeners:
+            raise CommandRegistrationError(listener.name, "Listener")
+        self.listeners[listener.name] = listener
+
+    async def dispatch(self, ctx: Context, key: str, *args, **kwargs):
+        if key in self.listeners:
+            try:
+                await self.listeners[key].invoke(ctx, *args, **kwargs)
+            except Exception as e:
+                await self.handle_error(ctx, self.listeners[key], e)
+
+    async def handle_error(self, ctx: Context, listener: EventListener, error: Exception):
+        # Default error handling
+        logger.error(f"Error in listener '{listener.name}':", exc_info=True)
+
+
+class CommandDispatcher(Dispatcher):
+    async def handle_error(self, ctx: Context, listener: EventListener, error: Exception):
+        if hasattr(self.bot, 'on_command_error'):
+            await self.bot.on_command_error(ctx, listener, error)
+        else:
+            await super().handle_error(ctx, listener, error)
+
+class RedeemDispatcher(Dispatcher):
+    async def handle_error(self, ctx: Context, listener: EventListener, error: Exception):
+        if hasattr(self.bot, 'on_redeem_error'):
+            await self.bot.on_redeem_error(ctx, listener, error)
+        else:
+            await super().handle_error(ctx, listener, error)
+
+
+class Check:
+    """To display a custom error message when conversion fails,
+    raise command_exceptions.CheckError in the convert method."""
+    title: str = None
+    short_help: str = None
+    help: str = None
+    hide_in_help: bool = False
+
+    async def check(self, ctx: Context) -> bool:
+        raise NotImplementedError
+
+
+class FunctionCheck(Check):
+    def __init__(self, predicate: CheckFunc):
+        self.predicate = predicate
+        self.title = predicate.__name__.replace('_', ' ').title()
+        self.help = getattr(predicate, '__doc__', '')
+    
+    def check(self, ctx: Context) -> bool:
+        return self.predicate(ctx)
+
+
+class Commands:
+    def __init__(self, chat: Chat, twitches: Dict[str, Twitch] = {}):
+        self.chat: Chat = chat
+        self.twitch: Twitch = chat.twitch
+        self.twitches: Dict[str, Twitch] = twitches
+        
+        self.dispatchers: Dict[str, Dispatcher] = {
+            "command": CommandDispatcher(self),
+            "twitch_redeem": RedeemDispatcher(self)
+        }
+        
+        self.prefix: str = "!"
+        self.loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
+        self.cog_manager: Optional[CogManager] = None
+
+    def add_dispatcher(self, event_type: str, dispatcher: Dispatcher):
+        self.dispatchers[event_type] = dispatcher
+
+    def add_listener(self, listener: EventListener):
+        if listener.event_type not in self.dispatchers:
+            # Create a default dispatcher if one doesn't exist
+            self.dispatchers[listener.event_type] = Dispatcher(self)
+        
+        self.dispatchers[listener.event_type].register(listener)
+            
+    def setup_cog_manager(self) -> CogManager:
+        if not hasattr(self, 'cog_manager') or self.cog_manager is None:
+            from .cog import CogManager
+            self.cog_manager = CogManager(self)
+        return self.cog_manager
+        
+    def load_cog(self, cog_cls: type[Cog], **kwargs) -> None:
+        if self.cog_manager is None:
+            self.setup_cog_manager()
+        try:
+            self.cog_manager.load_cog(cog_cls, **kwargs)
+        except Exception as e:
+            logger.error(f"Error loading cog '{cog_cls.name}':", exc_info=True)
+            raise
+        
+    def unload_cog(self, cog_name: str) -> None:
+        if self.cog_manager:
+            self.cog_manager.unload_cog(cog_name)
+            
+    def reload_cog(self, cog_cls: type[Cog], **kwargs) -> None:
+        if self.cog_manager:
+            self.cog_manager.reload_cog(cog_cls, **kwargs)
+
+    async def get_prefix(self, ctx: Context) -> str:
+        return self.prefix
+    
+    async def on_command_error(self, ctx: Context, command: Command, error: Exception):
+        usage_text = command.get_usage_text(ctx.prefix, ctx.invoked_with)
+        if isinstance(error, MissingRequiredArgumentError):
+            await ctx.send(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
+        elif isinstance(error, EmptyFlagValueError):
+            await ctx.send(f"❌ Expected a value for '{error.parameter.name}' (type: {error.parameter.type_title})")
+        elif isinstance(error, ArgumentConversionError):
+            out_text = f"❌ Error turning '{error.value}' ({error.parameter.name}) into type {error.parameter.type_title}"
+            if error.message:
+                out_text += f": {error.message}"
+            await ctx.send(out_text)
+        elif isinstance(error, UnknownArgumentError):
+            await ctx.send(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
+        elif isinstance(error, UnknownFlagError):
+            await ctx.send(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
+        elif isinstance(error, CheckFailure):
+            await ctx.send(f"❌ {error.message}")
+        elif isinstance(error, VerificationFailure):
+            await ctx.send(f"❌ {error.message}")
+        elif isinstance(error, ArgumentError):
+            await ctx.send(f"❌ {error.message}")
+        elif isinstance(error, CommandError):
+            await ctx.send(f"❌ {error.message}")
+        else:
+            await ctx.send(f"❌ An error occurred")
+        
+    
+    async def on_redeem_error(self, ctx: TwitchRedeemContext, redeem: TwitchRedeem, error: Exception):
+        await ctx.send(f"❌ An error occurred. Points will be refunded.")
+        await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
+        
+    def _find_command(self, text: str) -> tuple[str, str]:
+        text_lower = text.lower()
+        for cmd in sorted(self.dispatchers["command"].listeners.keys(), key=len, reverse=True):
+            if text_lower == cmd or text_lower.startswith(cmd + ' '):
+                return cmd, text[len(cmd):].strip()
+        return None, text
+
+    def _find_redeem(self, name: str) -> tuple[str, str]:
+        name_lower = name.lower()
+        for redeem in sorted(self.dispatchers["twitch_redeem"].listeners.keys(), key=len, reverse=True):
+            if name_lower == redeem:
+                return redeem, name
+        return None, name
+
+    async def process_twitch_message(self, msg: ChatMessage) -> None:
+        await self.process_message(Platform.TWITCH, msg)
+
+    async def process_message(self, platform: Platform, platform_context: Any):
+        ctx: Context = None
+        if platform == Platform.TWITCH and isinstance(platform_context, ChatMessage):
+            ctx = TwitchContext(platform_context, self.twitches.get(platform_context.room.room_id))
+        else:
+            raise ValueError(f"Unsupported platform: {platform}")
+        
+        prefix = await self.get_prefix(ctx)
+        used_prefix = ""
+        if isinstance(prefix, list):
+            for p in prefix:
+                if ctx.message.startswith(p):
+                    used_prefix = p
+                    break
+            else:
+                return
+        else:
+            if not ctx.message.startswith(prefix):
+                return
+            used_prefix = prefix
+            
+        content = ctx.message[len(used_prefix):]
+        content = content.replace("\U000e0000", "").strip()
+        
+        command_name, remaining_text = self._find_command(content)
+        if not command_name or command_name not in self.dispatchers["command"].listeners:
+            return
+
+        command = self.dispatchers["command"].listeners[command_name]
+
+        ctx.command = command
+        ctx.prefix = used_prefix
+        ctx.invoked_with = content[:len(command_name)]
+        ctx.parameters = remaining_text
+
+        await self.dispatchers["command"].dispatch(ctx, command_name)
+
+    async def process_channel_point_redemption(self, redemption: ChannelPointsCustomRewardRedemptionData):
+        redeem_name, remaining_text = self._find_redeem(redemption.reward.title)
+        if not redeem_name:
+            return
+            
+        ctx = TwitchRedeemContext(redemption, self)
+        await self.dispatchers["twitch_redeem"].dispatch(ctx, redeem_name)
+
+
+class Command(EventListener):       
+    def __init__(self, name: str, func: CommandFunc, bot: 'Commands', checks: List[Check] = None, aliases: List[str] = None, hidden: bool = False, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, cog: 'Cog' = None):
+        super().__init__(name, func, "command", checks, None, verifier)
+        self.bot = bot
+        self.cog = cog
+        self.aliases = aliases or []
+        self.hidden = hidden
+        
+        # Load cooldown from decorator if present
+        if not self.cooldown:
+            self.cooldown = getattr(func, '_command_cooldown', None)
+        
+        # Parse docstring for parameter descriptions and help text
+        doc = parse(func.__doc__ or "")
+        
+        self.title = title or name.replace('_', ' ').title()
+        self.short_help = short_help or doc.short_description
+        self.help = help or doc.long_description or doc.short_description
+        
     async def verify(self, ctx: Context):
         await self._run_checks(ctx)
+        await self._check_cooldown(ctx)
         args, kwargs = await self._parse_arguments(ctx)
         await self._run_verification(ctx, args, kwargs)
         return True
@@ -696,15 +836,7 @@ class Command:
     async def invoke(self, ctx: Context) -> None:
         """Invoke the command with the given context."""
         try:
-            await self._run_checks(ctx)
-            args, kwargs = await self._parse_arguments(ctx)
-            await self._run_verification(ctx, *args, **kwargs)
-
-            result = self.func(ctx, *args, **kwargs)
-
-            if asyncio.iscoroutine(result):
-                await result
-                
+            await super().invoke(ctx)
         except Exception as e:
             logger.error("Error in command invocation:", exc_info=True)
             if hasattr(self.bot, 'on_command_error'):
@@ -747,49 +879,19 @@ class Command:
         return response
 
 
-class TwitchRedeem:
-    def __init__(self, name: str, func: TwitchRedeemFunc, bot: Commands, **kwargs):
-        self.name = name
-        self.func = func
+class TwitchRedeem(EventListener):
+    def __init__(self, name: str, func: TwitchRedeemFunc, bot: Commands, checks: List[Check] = None, cooldown: Cooldown = None, **kwargs):
+        super().__init__(name, func, "twitch_redeem", checks, cooldown)
         self.bot = bot
         
-    async def invoke(self, ctx: TwitchRedeemContext, redemption: ChannelPointsCustomRewardRedemptionData) -> None:
+    async def invoke(self, ctx: TwitchRedeemContext) -> None:
         try:
-            func = self.func
-            result = func(ctx, redemption) # type: ignore
-            if asyncio.iscoroutine(result):
-                await result
+            await super().invoke(ctx)
         except Exception as e:
             if hasattr(ctx, 'bot') and hasattr(self.bot, 'on_redeem_error'):
                 await self.bot.on_redeem_error(ctx, self, e)
             else:
                 logger.error("Error in redeem invocation:", exc_info=True)
-
-class TwitchRedeemContext:
-    def __init__(self, redemption: ChannelPointsCustomRewardRedemptionData, bot: Commands):
-        self.twitch: Twitch = bot.twitches.get(redemption.broadcaster_user_id)
-        self.redemption: ChannelPointsCustomRewardRedemptionData = redemption
-        self.bot: Commands = bot
-
-    async def update_status(self, status: CustomRewardRedemptionStatus):
-        if self.redemption.status == "unfulfilled":
-            await self.twitch.update_redemption_status(
-                self.redemption.broadcaster_user_id,
-                self.redemption.reward.id,
-                self.redemption.id,
-                status
-            )
-        else:
-            logger.warning(f"Redemption is not in the UNFULFILLED state (current: {self.redemption.status})", stack_info=True)
-    
-    async def fulfill(self):
-        await self.update_status(CustomRewardRedemptionStatus.FULFILLED)
-    
-    async def cancel(self):
-        await self.update_status(CustomRewardRedemptionStatus.CANCELED)
-
-    async def send(self, text: str):
-        await self.bot.chat.send_message(self.redemption.broadcaster_user_login, text)
 
 
 @dataclass
@@ -824,6 +926,19 @@ def checks(*predicates: Union[CheckFunc, Check, Type[Check]]):
         return func
     return decorator
 
+def cooldown(rate: int, per: float, type: BucketType = BucketType.DEFAULT):
+    """Decorator to apply a cooldown to a command.
+    
+    Args:
+        rate: Number of uses allowed.
+        per: Time period in seconds.
+        type: The bucket type for the cooldown.
+    """
+    def decorator(func):
+        func._command_cooldown = Cooldown(rate, per, type)
+        return func
+    return decorator
+
 def verification(verifier_func):
     """Decorator to add a verification function to a command.
     
@@ -838,7 +953,7 @@ def verification(verifier_func):
 def parameter(
     name: str, aliases: Union[str, List[str]] = [],
     greedy: bool = False, hidden: bool = False,
-    help: str = None, converter: Converter = None,
+    help: str = None, regex: str = None,
     display_name: str = None
     ):
     """Decorator to configure a command parameter.
@@ -849,6 +964,7 @@ def parameter(
         greedy: If True, the parameter will consume all remaining input as a single string.
         hidden: If True, the parameter will be hidden from help documentation.
         help: Help text for the parameter.
+        regex: Regex pattern to match for this parameter.
     """
     def decorator(func):
         if not hasattr(func, '_command_params'):
@@ -858,8 +974,8 @@ def parameter(
             'greedy': greedy,
             'hidden': hidden,
             'help': help,
-            'converter': converter,
-            'display_name': display_name or name
+            'regex': regex,
+            'display_name': display_name
         }
         return func
     return decorator

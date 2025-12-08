@@ -12,6 +12,7 @@ class HasRole(Check):
         role_names = ', '.join(role.name.lower().replace("_", " ") for role in required_roles)
         self.title = role_names
         self.short_help = role_names
+        self.hide_in_help = True
         if len(required_roles) == 1:
             self.help = f"Requires the {role_names} role."
         else:

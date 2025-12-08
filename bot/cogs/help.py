@@ -11,7 +11,7 @@ class HelpCog(Cog):
         super().__init__(**kwargs)
         self.commands_manager = commands
 
-    def build_command_list_single_line(self) -> str:
+    async def build_command_list_single_line(self, ctx: Context = None) -> str:
         cogs_dict: Dict[str, List[Command]] = {}
         
         if self.commands_manager.cog_manager:
@@ -24,7 +24,31 @@ class HelpCog(Cog):
                 
         commands_lists = []
         for cog_name, commands in cogs_dict.items():
-            visible_cmds = [c.name for c in commands if not c.hidden]
+            visible_cmds = []
+            for c in commands:
+                if c.hidden:
+                    continue
+                
+                # Check if command should be hidden based on checks
+                should_hide = False
+                if ctx:
+                    for check in c.checks:
+                        if check.hide_in_help:
+                            try:
+                                check_result = check.check(ctx)
+                                if inspect.isawaitable(check_result):
+                                    check_result = await check_result
+                                
+                                if not check_result:
+                                    should_hide = True
+                                    break
+                            except:
+                                should_hide = True
+                                break
+                
+                if not should_hide:
+                    visible_cmds.append(c.name)
+            
             if visible_cmds:
                 commands_lists.append(', '.join(sorted(visible_cmds)))
                 
@@ -55,12 +79,13 @@ class HelpCog(Cog):
             if command is None:
                 await ctx.reply(f"Command '{command_name}' not found.")
                 return
+            command = ctx.command.bot.dispatchers['command'].listeners[command]
             if not parameter:
-                await ctx.reply(self.build_command_info_single_line(ctx, ctx.command.bot.commands[command], command_name))
+                await ctx.reply(self.build_command_info_single_line(ctx, command, command_name))
             else:
-                await ctx.reply(self.build_arg_info_single_line(ctx, ctx.command.bot.commands[command], parameter))
+                await ctx.reply(self.build_arg_info_single_line(ctx, command, parameter))
         else:
-            await ctx.reply(self.build_command_list_single_line())
+            await ctx.reply(await self.build_command_list_single_line(ctx))
 
 def setup(commands: Commands, **kwargs) -> None:
     commands.load_cog(HelpCog, commands=commands, **kwargs)

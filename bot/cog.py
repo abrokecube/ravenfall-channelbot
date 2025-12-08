@@ -2,7 +2,7 @@ from typing import Dict, Type, Optional, TypeVar, Any, Callable, Awaitable, Unio
 from functools import wraps
 
 # Import the necessary types from commands.py
-from .commands import Command, CommandFunc, Commands, TwitchRedeem, TwitchRedeemFunc
+from .commands import Command, CommandFunc, Commands, TwitchRedeem, TwitchRedeemFunc, EventListener
 
 # Type variable for the cog class
 TCog = TypeVar('TCog', bound='Cog')
@@ -36,6 +36,7 @@ class Cog:
         self.description = description
         self.commands: Dict[str, Command] = {}
         self.redeems: Dict[str, TwitchRedeem] = {}
+        self.listeners: Dict[str, Dict[str, EventListener]] = {}
         self.bot = None
         self.config = config or {}
         
@@ -53,79 +54,35 @@ class Cog:
         pass
     
     @classmethod
-    def command(cls, name: Optional[str] = None, aliases: List[str] = [], help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, **kwargs) -> Callable[[CommandFunc], CommandFunc]:
-        """Decorator to register a command in the cog.
-        To send an error message to chat, raise CommandError within the command function.
-        
-        Args:
-            name: Optional command name. If not provided, uses the function name.
-            help: Optional long help text.
-            short_help: Optional short help text.
-            title: Optional title for the command.
-            verifier: Optional verification function.
-            **kwargs: Additional keyword arguments to pass to the Command constructor.
+    def _create_listener_decorator(cls, event_type: str, name: Optional[str] = None, **kwargs) -> Callable[[Callable], Callable]:
+        """Helper to create a listener decorator."""
+        def decorator(func: Callable) -> Callable:
+            listener_name = name or func.__name__.lower()
             
-        Returns:
-            A decorator that registers the command.
-        """
-        def decorator(func: CommandFunc) -> CommandFunc:
-            cmd_name = name or func.__name__.lower()
+            # Store the listener information in the function itself
+            if not hasattr(func, '_cog_listener_info'):
+                func._cog_listener_info = []
             
-            # Store the command information in the function itself
-            if not hasattr(func, '_cog_command_info'):
-                func._cog_command_info = []
+            # Store the listener name and kwargs with the function
+            func._cog_listener_info.append((event_type, listener_name, kwargs))
             
-            # Extract checks
-            if hasattr(func, '_command_checks'):
-                kwargs['checks'] = func._command_checks
-            
-            if hasattr(func, '_command_verifier'):
-                kwargs['verifier'] = func._command_verifier
-            elif verifier:
-                kwargs['verifier'] = verifier
-            
-            if help:
-                kwargs['help'] = help
-            if short_help:
-                kwargs['short_help'] = short_help
-            if title:
-                kwargs['title'] = title
-            if aliases:
-                kwargs['aliases'] = aliases
-            
-            # Store the command name and kwargs with the function
-            func._cog_command_info.append((cmd_name, kwargs))
-            
-            # Return the original function so it can still be accessed normally
             return func
-            
         return decorator
 
     @classmethod
-    def redeem(cls, name: Optional[str] = None, **kwargs) -> Callable[[TwitchRedeemFunc], TwitchRedeemFunc]:
-        """Decorator to register a redeem in the cog.
-        
-        Args:
-            name: Optional redeem name. If not provided, uses the function name.
-            **kwargs: Additional keyword arguments to pass to the Redeem constructor.
-            
-        Returns:
-            A decorator that registers the redeem.
-        """
-        def decorator(func: TwitchRedeemFunc) -> TwitchRedeemFunc:
-            redeem_name = name or func.__name__.lower()
-            
-            # Store the redeem information in the function itself
-            if not hasattr(func, '_cog_redeem_info'):
-                func._cog_redeem_info = []
-            
-            # Store the redeem name and kwargs with the function
-            func._cog_redeem_info.append((redeem_name, kwargs))
-            
-            # Return the original function so it can still be accessed normally
-            return func
-            
-        return decorator
+    def command(cls, name: Optional[str] = None, **kwargs) -> Callable[[Callable], Callable]:
+        """Decorator to register a command in the cog."""
+        return cls._create_listener_decorator("command", name, **kwargs)
+
+    @classmethod
+    def redeem(cls, name: Optional[str] = None, **kwargs) -> Callable[[Callable], Callable]:
+        """Decorator to register a channel point redemption in the cog."""
+        return cls._create_listener_decorator("twitch_redeem", name, **kwargs)
+    
+    @classmethod
+    def listener(cls, event_type: str, name: Optional[str] = None, **kwargs) -> Callable[[Callable], Callable]:
+        """Decorator to register a generic event listener in the cog."""
+        return cls._create_listener_decorator(event_type, name, **kwargs)
     
     @classmethod
     def create_instance(cls: Type[TCog], bot: Commands, **kwargs) -> TCog:
@@ -139,44 +96,52 @@ class Cog:
         """
         instance = cls(**kwargs)
         instance_commands = {}
-        
-        # Find all methods that have command info
-        for attr_name in dir(instance):
-            attr = getattr(instance, attr_name)
-            if hasattr(attr, '_cog_command_info'):
-                for cmd_name, cmd_kwargs in attr._cog_command_info:
-                    # Create a bound method for the command
-                    bound_method = attr.__get__(instance, cls)
-                    # Create a Command object
-                    command = Command(
-                        name=cmd_name,
-                        func=bound_method,
-                        bot=bot,
-                        cog=instance,
-                        **cmd_kwargs
-                    )
-                    instance_commands[cmd_name] = command
-        
         instance_redeems = {}
-        # Find all methods that have redeem info
+        instance_listeners = {}
+        
+        # Find all methods that have listener info
         for attr_name in dir(instance):
             attr = getattr(instance, attr_name)
-            if hasattr(attr, '_cog_redeem_info'):
-                for redeem_name, redeem_kwargs in attr._cog_redeem_info:
-                    # Create a bound method for the redeem
+            if hasattr(attr, '_cog_listener_info'):
+                for event_type, listener_name, listener_kwargs in attr._cog_listener_info:
+                    # Create a bound method for the listener
                     bound_method = attr.__get__(instance, cls)
-                    # Create a Redeem object
-                    redeem = TwitchRedeem(
-                        name=redeem_name,
-                        func=bound_method,
-                        bot=bot,
-                        **redeem_kwargs
-                    )
-                    instance_redeems[redeem_name] = redeem
-        
-        # Set the instance's commands
+                    
+                    # Create the appropriate object based on event_type
+                    listener = None
+                    if event_type == "command":
+                        listener = Command(
+                            name=listener_name,
+                            func=bound_method,
+                            bot=bot,
+                            cog=instance,
+                            **listener_kwargs
+                        )
+                        instance_commands[listener_name] = listener
+                    elif event_type == "twitch_redeem":
+                        listener = TwitchRedeem(
+                            name=listener_name,
+                            func=bound_method,
+                            bot=bot,
+                            **listener_kwargs
+                        )
+                        instance_redeems[listener_name] = listener
+                    else:
+                        listener = EventListener(
+                            name=listener_name,
+                            func=bound_method,
+                            event_type=event_type,
+                            **listener_kwargs
+                        )
+                    
+                    if event_type not in instance_listeners:
+                        instance_listeners[event_type] = {}
+                    instance_listeners[event_type][listener_name] = listener
+
+        # Set the instance's commands, redeems, and listeners
         instance.commands = instance_commands
         instance.redeems = instance_redeems
+        instance.listeners = instance_listeners
         
         return instance
 
@@ -205,11 +170,15 @@ class CogManager:
         
         # Register all commands from the cog
         try:
-            for name, command in cog.commands.items():
-                self.bot.add_command_object(name, command)
+            # for name, command in cog.commands.items():
+            #     self.bot.add_command_object(name, command)
                     
-            for name, redeem in cog.redeems.items():
-                self.bot.add_redeem_object(name, redeem)
+            # for name, redeem in cog.redeems.items():
+            #     self.bot.add_redeem_object(name, redeem)
+                
+            for event_type, listeners in cog.listeners.items():
+                for name, listener in listeners.items():
+                    self.bot.add_listener(listener)
         except ValueError as e:
             # Add cog context to the error message
             raise ValueError(f"{e} (in cog '{cog.name}')")
