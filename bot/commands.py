@@ -249,6 +249,10 @@ class EventListener(BaseCommand):
             self.cooldown = getattr(func, '_command_cooldown', None)
         if not self.verifier:
             self.verifier = getattr(func, '_command_verifier', None)
+            
+        # Load checks from decorator
+        if hasattr(func, '_command_checks'):
+            self.checks.extend(getattr(func, '_command_checks'))
 
         # Parse docstring for parameter descriptions and help text
         doc = parse(func.__doc__ or "")

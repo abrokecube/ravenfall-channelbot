@@ -39,7 +39,7 @@ class HelpCog(Cog):
                                 if inspect.isawaitable(check_result):
                                     check_result = await check_result
                                 
-                                if not check_result:
+                                if isinstance(check_result, str) or not check_result:
                                     should_hide = True
                                     break
                             except:
