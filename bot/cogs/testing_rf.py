@@ -18,7 +18,7 @@ class TestingRFCog(Cog):
         self.rf_manager = rf_manager
     
     @Cog.command(name="debug manager", help="Get properties of the RFChannelManager")
-    @checks(UserRole.BOT_OWNER)
+    @checks(HasRole(UserRole.BOT_OWNER))
     async def debug_manager(self, ctx: Context, property: str):
         result = self.rf_manager.__dict__.get(property, "Invalid property")
         result_text = f"{property}: {result}"
@@ -30,7 +30,7 @@ class TestingRFCog(Cog):
 
     @Cog.command(name="debug channel", help="Get properties of a channel")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @checks(UserRole.BOT_OWNER)
+    @checks(HasRole(UserRole.BOT_OWNER))
     async def debug_channel(self, ctx: Context, property: str, channel: RFChannel = 'this'):
         result = channel.__dict__.get(property, "Invalid property")
         result_text = f"{property}: {result}"
@@ -73,7 +73,7 @@ class TestingRFCog(Cog):
     @Cog.command(name="eval", help="Eval a Python expression with access to rf_manager, channel, and ctx")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("expr", display_name="expression", greedy=True)
-    @checks(UserRole.BOT_OWNER)
+    @checks(HasRole(UserRole.BOT_OWNER))
     async def eval_rf(self, ctx: Context, expr: str, channel: RFChannel = 'this'):
         local_ctx = {
             "rf_manager": self.rf_manager,
