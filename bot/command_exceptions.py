@@ -23,8 +23,9 @@ class VerificationFailure(CommandError):
 
 class CommandOnCooldown(CommandError):
     """Raised when a command is on cooldown."""
-    def __init__(self, retry_after: float):
+    def __init__(self, cooldown: Cooldown, retry_after: float):
         self.retry_after = retry_after
+        self.cooldown = cooldown
         super().__init__(f"Command is on cooldown. Try again in {retry_after:.2f}s")
 
 class CommandRegistrationError(CommandError):

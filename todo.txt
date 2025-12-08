@@ -1,5 +1,2 @@
 - Add help for types and checks in the help command
-- Use checks to hide commands from the help command list that the user cannot invoke
-- Support regex or something to consume multi-word parameters without being greedy
 - Command cooldowns
-- Modular way to write more command invoker things (rewards and stuff)

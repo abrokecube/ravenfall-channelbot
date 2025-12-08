@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 import re
 from docstring_parser import parse
 from utils.strutils import strjoin
+from utils.format_time import format_seconds, TimeSize
 
 from .command_contexts import Context, TwitchContext, TwitchRedeemContext
 from .command_enums import OutputMessageType, Platform, UserRole, CustomRewardRedemptionStatus, ParameterKind, BucketType
@@ -145,16 +146,23 @@ class Converter:
 
 
 class Cooldown:
-    def __init__(self, rate: int, per: float, type: BucketType = BucketType.DEFAULT):
+    def __init__(self, rate: int, per: float, bucket: Union[BucketType, List[BucketType]] = BucketType.DEFAULT):
         self.rate = rate
         self.per = per
-        self.type = type
+
+        if not isinstance(bucket, list):
+            bucket = [bucket]
+        self.bucket = bucket
         self._windows: Dict[Any, List[float]] = {}
     
+    def _get_bucket_key(self, ctx: Context) -> str:
+        keys = [str(ctx.get_bucket_key(t)) for t in self.bucket]
+        return ":".join(keys)
+
     def get_retry_after(self, ctx: Context) -> float:
         import time
         now = time.time()
-        key = ctx.get_bucket_key(self.type)
+        key = self._get_bucket_key(ctx)
         
         if key not in self._windows:
             return 0.0
@@ -172,7 +180,7 @@ class Cooldown:
     def update_rate_limit(self, ctx: Context):
         import time
         now = time.time()
-        key = ctx.get_bucket_key(self.type)
+        key = self._get_bucket_key(ctx)
         
         if key not in self._windows:
             self._windows[key] = []
@@ -212,7 +220,7 @@ class BaseCommand:
         if self.cooldown:
             retry_after = self.cooldown.get_retry_after(ctx)
             if retry_after > 0:
-                raise CommandOnCooldown(retry_after)
+                raise CommandOnCooldown(self.cooldown, retry_after)
             self.cooldown.update_rate_limit(ctx)
         return True
 
@@ -530,39 +538,24 @@ class EventListener(BaseCommand):
                     remaining = positional_args[positional_index:]
                     val = val + ' ' + ' '.join(remaining)
                     positional_index = len(positional_args)
-                elif param.regex and positional_index < len(positional_args):
-                    # Reconstruct remaining string to match regex
-                    remaining_tokens = positional_args[positional_index:]
-                    remaining_str = ' '.join(remaining_tokens)
-                    match = re.match(param.regex, remaining_str)
-                    if match:
-                        matched_str = match.group(0)
-                        val = matched_str
-                        # Figure out how many tokens we consumed
-                        # This is tricky because tokens were split by space, but regex might match partial tokens or multiple tokens
-                        # A simple approximation: split matched string by space and count tokens
-                        # But this fails if multiple spaces were collapsed.
-                        # Ideally we should rely on the fact that positional_args are tokens.
-                        # Let's try to consume tokens until we cover the length of matched_str
-                        
-                        # Better approach: check if matched_str corresponds to N tokens
-                        # For now, let's assume greedy matching on tokens if regex is used?
-                        # Or just consume tokens that are fully contained in the match?
-                        
-                        # Let's try to reconstruct the consumed tokens
-                        consumed_len = 0
-                        tokens_consumed = 0
+                elif param.regex:
+                    # Iteratively consume tokens as long as they match the regex
+                    current_val = val
+                    tokens_consumed = 0
+                    
+                    # Only attempt to extend if the base value matches
+                    if re.match(param.regex, current_val):
+                        remaining_tokens = positional_args[positional_index:]
                         for token in remaining_tokens:
-                            if consumed_len >= len(matched_str):
+                            next_val = current_val + " " + token
+                            if re.match(param.regex, next_val):
+                                current_val = next_val
+                                tokens_consumed += 1
+                            else:
                                 break
-                            consumed_len += len(token) + 1 # +1 for space
-                            tokens_consumed += 1
-                        
-                        positional_index += tokens_consumed
-                    else:
-                        # Regex didn't match, maybe fail or let it try single token?
-                        # If regex is specified, it MUST match?
-                        pass
+                    
+                    val = current_val
+                    positional_index += tokens_consumed
 
                 converted = await self._convert_argument(ctx, val, param)
                 args.append(converted)
@@ -719,7 +712,10 @@ class Commands:
     
     async def on_command_error(self, ctx: Context, command: Command, error: Exception):
         usage_text = command.get_usage_text(ctx.prefix, ctx.invoked_with)
-        if isinstance(error, MissingRequiredArgumentError):
+        if isinstance(error, CommandOnCooldown):
+            if error.cooldown.per >= 60:
+                await ctx.send(f"❌ Command '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}")
+        elif isinstance(error, MissingRequiredArgumentError):
             await ctx.send(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
         elif isinstance(error, EmptyFlagValueError):
             await ctx.send(f"❌ Expected a value for '{error.parameter.name}' (type: {error.parameter.type_title})")
@@ -842,7 +838,13 @@ class Command(EventListener):
         try:
             await super().invoke(ctx)
         except Exception as e:
-            logger.error("Error in command invocation:", exc_info=True)
+            ignore_list = (
+                CommandOnCooldown, UnknownFlagError,
+                DuplicateParameterError, MissingRequiredArgumentError,
+                UnknownArgumentError, ArgumentConversionError,
+            )
+            if not isinstance(e, ignore_list):
+                logger.error("Error in command invocation:", exc_info=True)
             if hasattr(self.bot, 'on_command_error'):
                 await self.bot.on_command_error(ctx, self, e)
     
@@ -878,8 +880,15 @@ class Command(EventListener):
             for check in self.checks:
                 restr_to.append(check.title or check.short_help or check.help or check.__qualname__)
             restrictions = f"Limited to: {', '.join(restr_to).capitalize()}"
+        cooldowns = ""
+        if self.cooldown:
+            cd_buckets = ', '.join([b.name.lower() for b in self.cooldown.bucket])
+            if self.cooldown.rate == 1:
+                cooldowns = f"Cooldown: {self.cooldown.per}s ({cd_buckets})"
+            else:
+                cooldowns = f"Cooldown: {self.cooldown.rate}x/{self.cooldown.per}s ({cd_buckets})"
 
-        response = strjoin(' – ', name_and_usage, description, restrictions, aliases)
+        response = strjoin(' – ', name_and_usage, description, restrictions, aliases, cooldowns)
         return response
 
 
@@ -930,7 +939,7 @@ def checks(*predicates: Union[CheckFunc, Check, Type[Check]]):
         return func
     return decorator
 
-def cooldown(rate: int, per: float, type: BucketType = BucketType.DEFAULT):
+def cooldown(rate: int, per: float, type: Union[BucketType, List[BucketType]] = BucketType.DEFAULT):
     """Decorator to apply a cooldown to a command.
     
     Args:

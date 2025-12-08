@@ -17,6 +17,7 @@ from ..commands import (
     UserRole, 
     checks, 
     parameter, 
+    cooldown,
     Converter, 
     Check, 
     verification, 
@@ -25,6 +26,7 @@ from ..commands import (
 from ..command_exceptions import ArgumentConversionError, CheckFailure
 from ..command_contexts import TwitchRedeemContext
 from ..command_utils import HasRole
+from ..command_enums import BucketType
 
 # Example custom type with converter
 class Color(Converter):
@@ -303,6 +305,17 @@ class ExampleCog(Cog):
             !multi_check
         """
         await ctx.reply("✅ You passed all checks!")
+
+    @Cog.command()
+    @parameter("item_name", help="The name of the item", regex=r'^[a-zA-Z ]+$')
+    @parameter("amount", help="The amount of the item")
+    async def item_amount(self, ctx: Context, item_name: str, amount: int):
+        await ctx.reply(f"You have {amount} of {item_name}.")
+
+    @Cog.command()
+    @cooldown(1, 10, [BucketType.USER, BucketType.CHANNEL])
+    async def cooldown_test(self, ctx: Context):
+        await ctx.reply("buh")
 
 def setup(commands: Commands, **kwargs) -> None:
     """Load the example cog.
