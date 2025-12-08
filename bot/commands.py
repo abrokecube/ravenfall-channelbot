@@ -587,11 +587,12 @@ class EventListener(BaseCommand):
                 # Usually dispatch provides args/kwargs, but for commands/redeems they come from parsing
                 # If dispatch provided args, we might want to prepend them?
                 # For now, let's assume if parameters are defined, we use parsed args.
+                logger.info(f"passed args: {args} | kwargs: {kwargs}")
+                logger.info(f"parsed args: {parsed_args} | kwargs: {parsed_kwargs}")
                 args = (*args, *parsed_args)
                 kwargs = {**kwargs, **parsed_kwargs}
 
             await self._run_verification(ctx, *args, **kwargs)
-            
             result = self.func(ctx, *args, **kwargs)
             if asyncio.iscoroutine(result):
                 await result
