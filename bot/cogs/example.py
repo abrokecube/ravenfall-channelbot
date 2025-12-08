@@ -140,7 +140,8 @@ class ExampleCog(Cog):
         await ctx.reply(f"Hello, {target}! 👋")
     
     @Cog.command(name="setcolor")
-    async def setcolor(self, ctx: Context, color: Color):
+    @parameter('color', converter=Color)
+    async def setcolor(self, ctx: Context, color: str):
         """Set your favorite color.
                     
         Examples:

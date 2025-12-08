@@ -17,7 +17,8 @@ class RFChannelConverter(Converter):
     short_help = "A Ravenfall channel name"
     help = "A Ravenfall channel monitored by the bot."
     
-    async def convert(self, ctx: Context, arg: str) -> RFChannel:
+    @classmethod
+    async def convert(cls, ctx: Context, arg: str) -> RFChannel:
         if not hasattr(ctx.command.cog, 'rf_manager'):
             raise ValueError("RFChannelConverter requires an rf_manager property in the cog.")
         rf_manager: 'RFChannelManager' = ctx.command.cog.rf_manager
@@ -38,8 +39,9 @@ class RFItemConverter(Converter):
     short_help = "An item name"
     help = "An item name"
     
-    async def convert(self, ctx: Context, arg: str) -> Item:
-        item_search_results = ravenpy.search_item(item_name, limit=1)
+    @classmethod
+    async def convert(cls, ctx: Context, arg: str) -> Item:
+        item_search_results = ravenpy.search_item(arg, limit=1)
         if not item_search_results:
             raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
         if item_search_results[0][1] < 85:
