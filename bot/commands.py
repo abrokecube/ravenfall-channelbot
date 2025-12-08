@@ -493,7 +493,7 @@ class EventListener(BaseCommand):
             if param.kind == ParameterKind.VAR_POSITIONAL:
                 for arg in positional_args[positional_index:]:
                     converted = await self._convert_argument(ctx, arg, param)
-                    args.append(converted)
+                    kwargs[param.name] = converted
                 positional_index = len(positional_args)
                 continue
             
@@ -558,13 +558,16 @@ class EventListener(BaseCommand):
                     positional_index += tokens_consumed
 
                 converted = await self._convert_argument(ctx, val, param)
-                args.append(converted)
+                kwargs[param.name] = converted
+                # args.append(converted)
             else:
                 # No positional argument provided
                 if param.default != inspect.Parameter.empty:
-                    args.append(param.default)
+                    kwargs[param.name] = param.default
+                    # args.append(param.default)
                 elif param.is_optional:
-                    args.append(None)
+                    kwargs[param.name] = None
+                    # args.append(None)
                 else:
                     raise MissingRequiredArgumentError(param)
 
