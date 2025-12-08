@@ -972,7 +972,7 @@ def parameter(
     name: str, aliases: Union[str, List[str]] = [],
     greedy: bool = False, hidden: bool = False,
     help: str = None, regex: str = None,
-    display_name: str = None
+    display_name: str = None, converter: Converter = None
     ):
     """Decorator to configure a command parameter.
     
@@ -993,7 +993,8 @@ def parameter(
             'hidden': hidden,
             'help': help,
             'regex': regex,
-            'display_name': display_name
+            'display_name': display_name,
+            'converter': converter
         }
         return func
     return decorator
