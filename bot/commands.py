@@ -664,6 +664,8 @@ class Commands:
         self.chat: Chat = chat
         self.twitch: Twitch = chat.twitch
         self.twitches: Dict[str, Twitch] = twitches
+
+        self.error_cooldown = Cooldown(1, 5, [BucketType.USER, BucketType.CHANNEL])
         
         self.dispatchers: Dict[str, Dispatcher] = {
             "command": CommandDispatcher(self),
@@ -713,8 +715,9 @@ class Commands:
     async def on_command_error(self, ctx: Context, command: Command, error: Exception):
         usage_text = command.get_usage_text(ctx.prefix, ctx.invoked_with)
         if isinstance(error, CommandOnCooldown):
-            if error.cooldown.per >= 60:
-                await ctx.send(f"❌ Command '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}")
+            if error.cooldown.per >= 60 and self.error_cooldown.get_retry_after(ctx) <= 0:
+                await ctx.send(f"❌ Command '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}.")
+                self.error_cooldown.update_rate_limit(ctx)
         elif isinstance(error, MissingRequiredArgumentError):
             await ctx.send(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
         elif isinstance(error, EmptyFlagValueError):
@@ -729,7 +732,9 @@ class Commands:
         elif isinstance(error, UnknownFlagError):
             await ctx.send(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
         elif isinstance(error, CheckFailure):
-            await ctx.send(f"❌ {error.message}")
+            if self.error_cooldown.get_retry_after(ctx) <= 0:
+                await ctx.send(f"❌ {error.message}")
+                self.error_cooldown.update_rate_limit(ctx)
         elif isinstance(error, VerificationFailure):
             await ctx.send(f"❌ {error.message}")
         elif isinstance(error, ArgumentError):

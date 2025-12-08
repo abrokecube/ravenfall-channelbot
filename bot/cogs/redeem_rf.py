@@ -6,7 +6,7 @@ from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
-from utils.commands_rf import RFChannelConverter, TwitchUsername
+from utils.commands_rf import RFChannelConverter, TwitchUsername, RFItemConverter
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
 from database.session import get_async_session
@@ -603,12 +603,8 @@ class RedeemRFCog(Cog):
             "creditv",
         ]
     )
-    @parameter("item_name", greedy=True)
-    async def credits_value(self, ctx: Context, item_name: str):
-        item = get_item(item_name)
-        if item is None:
-            await ctx.reply("Item not found")
-            return
+    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
+    async def credits_value(self, ctx: Context, item: Item):
         if item.soulbound:
             await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
             return
@@ -634,25 +630,10 @@ class RedeemRFCog(Cog):
             "creditpurchase",
         ]
     )
-    @parameter("query", greedy=True)
+    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(TwitchOnly)
-    async def credits_buy(self, ctx: Context, query: str, channel: RFChannel = 'this'):
-        args = query.split()
-
-        if len(args) < 1:
-            await ctx.reply(f"Usage: !{ctx.command} <item> [count]")
-            return
-
-        count = 1
-        if args[-1].isdigit():
-            count = int(args.pop())
-        item_name = " ".join(args)
-
-        item = get_item(item_name)
-        if item is None:
-            await ctx.reply(f"Could not identify item. Please check your spelling.")
-            return
+    async def credits_buy(self, ctx: Context, item: Item, count: int, channel: RFChannel = 'this'):
         if item.soulbound:
             await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
             return
@@ -746,12 +727,8 @@ class RedeemRFCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @parameter("item_name", greedy=True)
-    async def stock_item(self, ctx: Context, item_name: str, channel: RFChannel = 'this'):
-        item, count = await get_item_count(channel, item_name)
-        if item is None:
-            await ctx.reply(f"Could not identify item.")
-            return
+    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
+    async def stock_item(self, ctx: Context, item: Item, channel: RFChannel = 'this'):
         warning = ""
         if item.soulbound:
             warning = " (This item cannot be redeemed.)"
@@ -835,23 +812,11 @@ class RedeemRFCog(Cog):
 
     @Cog.command(name="giftto")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @parameter("query", greedy=True)
+    @parameter("item_name", regex=r"^[a-zA-Z ]+$")
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def giftto(self, ctx: Context, query: str, channel: RFChannel = 'this'):
-        args = query.split()
-
-        if len(args) < 2:
-            await ctx.reply(f"Usage: !{ctx.command} <user> <item> [count]")
-            return
-
-        count = 1
-        if args[-1].isdigit():
-            count = int(args.pop())
-        elif args[-1].lower() == "all":
-            count = -1
-            args.pop()
-        recipient_name = args[0]
-        item_name = " ".join(args[1:])
+    async def giftto(self, ctx: Context, recipient_name: TwitchUsername, item_name: str, count: int, channel: RFChannel = 'this'):
+        if count == 0:
+            count = 1
         
         try:
             if item_name.lower() == "coins":

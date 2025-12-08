@@ -317,6 +317,11 @@ class ExampleCog(Cog):
     async def cooldown_test(self, ctx: Context):
         await ctx.reply("buh")
 
+    @Cog.command()
+    @cooldown(1, 90, [BucketType.USER, BucketType.CHANNEL])
+    async def long_cooldown_test(self, ctx: Context):
+        await ctx.reply("buh")
+
 def setup(commands: Commands, **kwargs) -> None:
     """Load the example cog.
     

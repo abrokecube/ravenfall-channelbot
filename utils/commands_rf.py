@@ -6,6 +6,10 @@ from ..bot.commands import Converter, Check, Context
 from ..bot.command_exceptions import ArgumentConversionError
 from ..bot.command_contexts import TwitchContext
 
+from ravenpy import ravenpy
+from ravenpy.ravenpy import Item
+
+
 import re
 
 class RFChannelConverter(Converter):
@@ -28,6 +32,19 @@ class RFChannelConverter(Converter):
         if channel is None:
             raise ArgumentConversionError(f"Ravenfall channel '{arg}' not found.")
         return channel
+
+class RFItemConverter(Converter):
+    title = "Item"
+    short_help = "An item name"
+    help = "An item name"
+    
+    async def convert(self, ctx: Context, arg: str) -> Item:
+        item_search_results = ravenpy.search_item(item_name, limit=1)
+        if not item_search_results:
+            raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
+        if item_search_results[0][1] < 85:
+            raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
+        return item_search_results[0][0]
 
 tw_username_re = re.compile(r"^@?[a-zA-Z0-9][\w]{2,24}$")
 tw_username_f_re = re.compile(r"^@?[a-zA-Z0-9/|][\w/|]{2,24}$")
