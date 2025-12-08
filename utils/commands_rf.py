@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from bot.ravenfallmanager import RFChannelManager
-    from bot.ravenfallchannel import RFChannel
+from bot.ravenfallchannel import RFChannel
 from bot.commands import Converter, Check, Context
 from bot.command_exceptions import ArgumentConversionError
 from bot.command_contexts import TwitchContext
