@@ -22,6 +22,16 @@ class TestingCog(Cog):
     async def ping(self, ctx: Context):
         await ctx.reply("Pong!")
 
+    @Cog.command()
+    async def roles(self, ctx: Context):
+        """Show your current roles.
+        
+        Examples:
+            !roles
+        """
+        role_names = [role.value for role in ctx.roles]
+        await ctx.reply(f"Your roles: {', '.join(role_names)}")
+
     @Cog.redeem(name="Test redeem")
     async def test(self, ctx: TwitchRedeemContext):
         await ctx.send("I am the almighty test redeem!")
