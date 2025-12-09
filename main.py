@@ -9,6 +9,7 @@ from twitchAPI import helper
 from twitchAPI.type import MissingScopeException, InvalidTokenException
 
 from dotenv import load_dotenv
+load_dotenv()
 
 import os
 import asyncio
@@ -30,7 +31,6 @@ from bot.server import SomeEndpoints
 import database.utils as db_utils
 from database.session import get_async_session
 
-load_dotenv()
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
 logger_config = {
