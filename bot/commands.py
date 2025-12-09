@@ -193,11 +193,12 @@ class Cooldown:
 
 
 class BaseCommand:
-    def __init__(self, name: str, checks: List[Check] = None, cooldown: Cooldown = None, verifier: Callable = None):
+    def __init__(self, name: str, checks: List[Check] = None, cooldown: Cooldown = None, verifier: Callable = None, aliases: List[str] = []):
         self.name = name
         self.checks = checks or []
         self.cooldown = cooldown
         self.verifier = verifier
+        self.aliases = aliases
 
     async def _run_checks(self, ctx: Context):
         for check in self.checks:
@@ -247,8 +248,8 @@ class BaseCommand:
 
 
 class EventListener(BaseCommand):
-    def __init__(self, name: str, func: Callable, event_type: str, checks: List[Check] = None, cooldown: Cooldown = None, verifier: Callable = None):
-        super().__init__(name, checks, cooldown, verifier)
+    def __init__(self, name: str, func: Callable, event_type: str, checks: List[Check] = None, cooldown: Cooldown = None, verifier: Callable = None, aliases: List[str] = []):
+        super().__init__(name, checks, cooldown, verifier, aliases)
         self.func = func
         self.event_type = event_type
         
@@ -583,8 +584,6 @@ class EventListener(BaseCommand):
                 # Usually dispatch provides args/kwargs, but for commands/redeems they come from parsing
                 # If dispatch provided args, we might want to prepend them?
                 # For now, let's assume if parameters are defined, we use parsed args.
-                logger.info(f"passed args: {args} | kwargs: {kwargs}")
-                logger.info(f"parsed args: {parsed_args} | kwargs: {parsed_kwargs}")
                 args = (*args, *parsed_args)
                 kwargs = {**kwargs, **parsed_kwargs}
 
@@ -606,6 +605,10 @@ class Dispatcher:
         if listener.name in self.listeners:
             raise CommandRegistrationError(listener.name, "Listener")
         self.listeners[listener.name] = listener
+        for alias in listener.aliases:
+            if alias in self.listeners:
+                raise CommandRegistrationError(alias, "Listener alias")
+            self.listeners[alias] = listener
 
     async def dispatch(self, ctx: Context, key: str, *args, **kwargs):
         if key in self.listeners:
@@ -682,7 +685,7 @@ class Commands:
             self.dispatchers[listener.event_type] = Dispatcher(self)
         
         self.dispatchers[listener.event_type].register(listener)
-            
+                    
     def setup_cog_manager(self) -> CogManager:
         if not hasattr(self, 'cog_manager') or self.cog_manager is None:
             from .cog import CogManager
@@ -810,11 +813,10 @@ class Commands:
 
 
 class Command(EventListener):       
-    def __init__(self, name: str, func: CommandFunc, bot: 'Commands', checks: List[Check] = None, aliases: List[str] = None, hidden: bool = False, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, cog: 'Cog' = None):
-        super().__init__(name, func, "command", checks, None, verifier)
+    def __init__(self, name: str, func: CommandFunc, bot: 'Commands', checks: List[Check] = None, aliases: List[str] = [], hidden: bool = False, help: str = None, short_help: str = None, title: str = None, verifier: Callable = None, cog: 'Cog' = None):
+        super().__init__(name, func, "command", checks, None, verifier, aliases)
         self.bot = bot
         self.cog = cog
-        self.aliases = aliases or []
         self.hidden = hidden
         
         # Load cooldown from decorator if present
