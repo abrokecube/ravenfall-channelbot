@@ -1,6 +1,6 @@
 from bot.ravenfallchannel import RFChannel
 from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter
-from ..command_enums import UserRole, Platform
+from ..command_enums import UserRole, Platform, CustomRewardRedemptionStatus
 from ..command_utils import HasRole, TwitchOnly
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
@@ -31,6 +31,7 @@ from datetime import timedelta, datetime, timezone
 from bot.models import Player
 from database.models import UserCreditIdleEarn, Character, Channel
 from sqlalchemy import select
+
 
 logger = logging.getLogger(__name__)
 

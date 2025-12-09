@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from typing import Callable, List, Dict, Awaitable, Union, Optional, TYPE_CHECKING, Protocol, runtime_checkable, Any, Type, TypeVar, cast, get_origin, get_args
-from .command_enums import OutputMessageType, Platform, UserRole, BucketType
+from .command_enums import OutputMessageType, Platform, UserRole, BucketType, CustomRewardRedemptionStatus
 
 if TYPE_CHECKING:
     from .commands import Commands, Command
     from twitchAPI.chat import ChatMessage, Twitch
+    from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
 
 @runtime_checkable
 class Context(Protocol):
