@@ -1,11 +1,11 @@
-from ..commands import Context, Commands, checks, parameter
+from ..commands import Context, Commands, checks, parameter, cooldown
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
 from utils.format_time import format_seconds, TimeSize
 from utils.commands_rf import RFChannelConverter
 from ..ravenfallchannel import RFChannel
-from ..command_enums import UserRole
+from ..command_enums import UserRole, BucketType
 from ..command_utils import HasRole
 
 import asyncio
@@ -18,6 +18,7 @@ class GameCog(Cog):
     @Cog.command(name="update", help="Updates the town boost")
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @cooldown(1, 20, [BucketType.CHANNEL])
     async def update(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
         channels = []
         if all_:

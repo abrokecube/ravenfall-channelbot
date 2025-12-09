@@ -855,9 +855,8 @@ class RedeemRFCog(Cog):
             "add credits",
         ]
     )
-    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def addcredits(self, ctx: Context, recipient_name: TwitchUsername, amount: int, channel: RFChannel = 'this'):
+    async def addcredits(self, ctx: Context, recipient_name: TwitchUsername, amount: int):
         user = await first(self.rf_manager.chat.twitch.get_users(logins=[recipient_name]))
         if user is None:
             await ctx.reply(f"User {recipient_name} not found")
