@@ -733,7 +733,7 @@ class RedeemRFCog(Cog):
         warning = ""
         if item.soulbound:
             warning = " (This item cannot be redeemed.)"
-        count = await get_item_count(channel, item.name)
+        _, count = await get_item_count(channel, item.name)
         await ctx.reply(
             f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.{warning}"
         )
