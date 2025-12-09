@@ -8,6 +8,8 @@ from ..ravenfallchannel import RFChannel
 from ..command_enums import UserRole
 from ..command_utils import HasRole
 
+import asyncio
+
 class GameCog(Cog):
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
         super().__init__(**kwargs)
@@ -17,9 +19,18 @@ class GameCog(Cog):
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def update(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
-        town_boost = await channel.get_town_boost()
-        msg_text = f"{channel.ravenbot_prefixes[0]}town {town_boost[0].skill.lower()}"
-        await channel.send_chat_message(msg_text)
+        channels = []
+        if all_:
+            channels = self.rf_manager.channels
+        else:
+            channels = [channel]
+
+        tasks = []
+        for channel_ in channels:
+            town_boost = await channel_.get_town_boost()
+            msg_text = f"{channel_.ravenbot_prefixes[0]}town {town_boost[0].skill.lower()}"
+            tasks.append(channel_.send_chat_message(msg_text))
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     @Cog.command(
         name="rfrestartstatus",
