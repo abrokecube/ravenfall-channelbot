@@ -156,7 +156,6 @@ class RFChannel:
         if self.monitoring_paused:
             return
         await self.chat.join_room(self.channel_name)
-        self.update_boosts_routine.start()
         self.update_mult_routine.start()
         self.update_events_routine.start()
         self.backup_state_data_routine.start(instant=False)
@@ -166,7 +165,6 @@ class RFChannel:
         self.town_level_notification_routine.start()
 
     async def stop(self):
-        self.update_boosts_routine.cancel()
         self.update_mult_routine.cancel()
         self.update_events_routine.cancel()
         self.backup_state_data_routine.cancel()
@@ -490,24 +488,6 @@ class RFChannel:
             return False
         return not self.middleman_connection_status.server_connected
 
-    @routine(delta=timedelta(hours=3), wait_first=True, max_attempts=99999)
-    async def update_boosts_routine(self):
-        if self.channel_restart_lock.locked():
-            async with self.channel_restart_lock:
-                return
-        while True:
-            village: Village = await self.get_query("select * from village")
-            if village is not None:
-                break
-            await asyncio.sleep(30)
-        if len(village['boost'].strip()) <= 0:
-            return
-        split = village['boost'].split()
-        boost_stat = split[0]
-        boost_value = float(split[1].rstrip("%"))
-        msg = f"{self.ravenbot_prefixes[0]}town {boost_stat.lower()}"
-        await self.send_chat_message(msg)
-
     @routine(delta=timedelta(seconds=3), max_attempts=99999)
     async def update_mult_routine(self):
         if self.channel_restart_lock.locked():
@@ -692,40 +672,40 @@ class RFChannel:
 
     @routine(delta=timedelta(hours=5), wait_first=True, max_attempts=99999)
     async def backup_state_data_routine(self, instant: bool = True):
-        async with self.channel_restart_lock:
-            async with self.channel_post_restart_lock:
-                locked_global_resync = False
-                if self.manager.ravennest_is_online:
-                    if not instant:
-                        await self.manager.global_resync_lock.acquire()
-                        locked_global_resync = True
-                    try:
-                        r = await send_multichat_command(
-                            text="?resync",
-                            user_id=self.channel_id,
-                            user_name=self.channel_name,
-                            channel_id=self.channel_id,
-                            channel_name=self.channel_name
-                        )
-                        if r['status'] != 200:
-                            await self.send_chat_message("?resync")
-                    except Exception as e:
-                        if locked_global_resync:
-                            self.manager.global_resync_lock.release()
-                        raise e
-                    await asyncio.sleep(15)
-                try:
-                    await backup_file_with_date_async(
-                        f"{os.getenv('RAVENFALL_SANDBOXED_FOLDER').replace('{box}', self.sandboxie_box).rstrip('\\/')}\\state-data.json",
-                        int(os.getenv('BACKUP_RETENTION_COUNT'))
-                    )
-                    logger.info(f"Backed up state data for {self.channel_name}")
-                except Exception as e:
-                    logger.error(f"Failed to backup state data for {self.channel_name}: {e}")
-                finally:
-                    if locked_global_resync:
-                        await asyncio.sleep(60 - 15)
-                        self.manager.global_resync_lock.release()
+        while self.channel_restart_lock.locked() or self.channel_post_restart_lock.locked():
+            await asyncio.sleep(5)
+        locked_global_resync = False
+        if self.manager.ravennest_is_online:
+            if not instant:
+                await self.manager.global_resync_lock.acquire()
+                locked_global_resync = True
+            try:
+                r = await send_multichat_command(
+                    text="?resync",
+                    user_id=self.channel_id,
+                    user_name=self.channel_name,
+                    channel_id=self.channel_id,
+                    channel_name=self.channel_name
+                )
+                if r['status'] != 200:
+                    await self.send_chat_message("?resync")
+            except Exception as e:
+                if locked_global_resync:
+                    self.manager.global_resync_lock.release()
+                raise e
+            await asyncio.sleep(15)
+        try:
+            await backup_file_with_date_async(
+                f"{os.getenv('RAVENFALL_SANDBOXED_FOLDER').replace('{box}', self.sandboxie_box).rstrip('\\/')}\\state-data.json",
+                int(os.getenv('BACKUP_RETENTION_COUNT'))
+            )
+            logger.info(f"Backed up state data for {self.channel_name}")
+        except Exception as e:
+            logger.error(f"Failed to backup state data for {self.channel_name}: {e}")
+        finally:
+            if locked_global_resync:
+                await asyncio.sleep(60 - 15)
+                self.manager.global_resync_lock.release()
 
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def update_middleman_connection_status_routine(self):

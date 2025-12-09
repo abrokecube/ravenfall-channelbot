@@ -1,6 +1,6 @@
 from typing import List, Dict
 from .ravenfallchannel import RFChannel
-from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent
+from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent, Village
 from .multichat_command import send_multichat_command, get_desync_info, get_total_item_count
 from . import middleman
 from .messageprocessor import MessageProcessor, RavenMessage, MessageMetadata, ClientInfo
@@ -55,6 +55,7 @@ class RFChannelManager:
             await channel.start()
         self.mult_check_routine.start()
         self.resync_routine.start()
+        self.update_boosts_routine.start()
         msg_processor_host = os.getenv("RF_MIDDLEMAN_PROCESSOR_HOST", None)
         msg_processor_port = os.getenv("RF_MIDDLEMAN_PROCESSOR_PORT", None)
         if msg_processor_host and msg_processor_port:
@@ -247,6 +248,26 @@ class RFChannelManager:
             tasks.append(resync_task(channel))
         if tasks:
             await asyncio.gather(*tasks)
+    
+    @routine(delta=timedelta(hours=3), wait_first=True, max_attempts=99999)
+    async def update_boosts_routine(self):
+        for channel in self.channels:
+            if channel.channel_restart_lock.locked():
+                async with channel.channel_restart_lock:
+                    return
+            while True:
+                village: Village = await channel.get_query("select * from village")
+                if village is not None:
+                    break
+                await asyncio.sleep(30)
+            if len(village['boost'].strip()) <= 0:
+                continue
+            split = village['boost'].split()
+            boost_stat = split[0]
+            boost_value = float(split[1].rstrip("%"))
+            msg = f"{channel.ravenbot_prefixes[0]}town {boost_stat.lower()}"
+            await channel.send_chat_message(msg)
+            await asyncio.sleep(120)
 
 class ItemAlertMonitor(BatchAlertMonitor):
     def __init__(self, rfmanager: RFChannelManager):
