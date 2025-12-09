@@ -476,63 +476,53 @@ class EventListener(BaseCommand):
         
         for param in self.parameters:
             param_name = param.name
-                        
-            # Check if this was provided as a named argument (or alias)
-            val = None
-            if param_name in named_args:
-                val = named_args[param_name]
-                del named_args[param_name]
-
-            if val is not None:
-                # Argument was provided by name
-                converted = await self._convert_argument(ctx, val, param)
-                kwargs[param_name] = converted
-                continue
             
-            # Handle VAR_POSITIONAL (*args)
+            # 1. Handle VAR_POSITIONAL (*args)
             if param.kind == ParameterKind.VAR_POSITIONAL:
                 for arg in positional_args[positional_index:]:
                     converted = await self._convert_argument(ctx, arg, param)
-                    kwargs[param.name] = converted
+                    args.append(converted)
                 positional_index = len(positional_args)
                 continue
             
-            # Handle VAR_KEYWORD (**kwargs)
+            # 2. Handle VAR_KEYWORD (**kwargs)
             if param.kind == ParameterKind.VAR_KEYWORD:
                 for name, value in list(named_args.items()):
-                    # We need to create a temporary parameter for conversion if needed
-                    # But usually **kwargs doesn't have a specific type for keys, only values
-                    # The param.converter applies to the values
                     converted = await self._convert_argument(ctx, value, param)
                     kwargs[name] = converted
                     del named_args[name]
                 continue
             
-            # Handle KEYWORD_ONLY parameters
+            # 3. Handle specific argument (Positional, Keyword, or both)
+            
+            # Check if provided by name
+            if param_name in named_args:
+                val = named_args[param_name]
+                del named_args[param_name]
+                
+                converted = await self._convert_argument(ctx, val, param)
+                kwargs[param_name] = converted
+                continue
+            
+            # If KEYWORD_ONLY and not in named_args (checked above)
             if param.kind == ParameterKind.KEYWORD_ONLY:
-                # Must be provided as named argument (already checked above)
                 if param.default != inspect.Parameter.empty:
-                    kwargs[param_name] = param.default
+                    converted = await self._convert_argument(ctx, param.default, param)
+                    kwargs[param_name] = converted
                 elif param.is_optional:
                     kwargs[param_name] = None
                 else:
                     raise MissingRequiredArgumentError(param)
                 continue
-            
-            # Handle positional or positional-or-keyword parameters
-            # (Named check already done above)
                 
-            # Otherwise, use positional argument
+            # Try to get from positional args
             if positional_index < len(positional_args):
                 val = positional_args[positional_index]
                 positional_index += 1
                 
-                # Check if this is the last parameter and it's a string (consume rest)
-                # OR if it is marked as greedy
-                
-                # Check if this is the last parameter in the list
+                # Handle greedy/regex consumption
                 is_last_param = param is self.parameters[-1]
-
+                
                 if ((is_last_param and param.annotation == str) or param.greedy) and positional_index < len(positional_args):
                     # Consume remaining positional args as a single string
                     remaining = positional_args[positional_index:]
@@ -556,18 +546,21 @@ class EventListener(BaseCommand):
                     
                     val = current_val
                     positional_index += tokens_consumed
-
+                
                 converted = await self._convert_argument(ctx, val, param)
-                kwargs[param.name] = converted
-                # args.append(converted)
+                
+                # Decide where to put it
+                if param.kind == ParameterKind.POSITIONAL_ONLY:
+                    args.append(converted)
+                else:
+                    kwargs[param_name] = converted
             else:
-                # No positional argument provided
+                # Not provided positionally
                 if param.default != inspect.Parameter.empty:
-                    kwargs[param.name] = param.default
-                    # args.append(param.default)
+                    converted = await self._convert_argument(ctx, param.default, param)
+                    kwargs[param_name] = converted
                 elif param.is_optional:
-                    kwargs[param.name] = None
-                    # args.append(None)
+                    kwargs[param_name] = None
                 else:
                     raise MissingRequiredArgumentError(param)
 

@@ -323,6 +323,10 @@ class ExampleCog(Cog):
     async def long_cooldown_test(self, ctx: Context):
         await ctx.reply("buh")
 
+    @Cog.command()
+    async def args_test(self, ctx: Context, *args: str):
+        await ctx.reply(f"Args: {args}")
+
 def setup(commands: Commands, **kwargs) -> None:
     """Load the example cog.
     

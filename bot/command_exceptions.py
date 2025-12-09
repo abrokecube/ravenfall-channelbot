@@ -31,7 +31,7 @@ class CommandOnCooldown(CommandError):
 class CommandRegistrationError(CommandError):
     """Raised when there's an error registering a command or redeem."""
     def __init__(self, name: str, item_type: str = "Command"):
-        self.name = name
+        self.display_name = name
         self.item_type = item_type
         super().__init__(f"{item_type} '{name}' already exists")
 
@@ -49,7 +49,7 @@ class DuplicateParameterError(ArgumentError):
     """Raised when a parameter is provided multiple times."""
     def __init__(self, parameter: Parameter):
         self.parameter = parameter
-        super().__init__(f"Multiple values provided for parameter '{parameter.name}'")
+        super().__init__(f"Multiple values provided for parameter '{parameter.display_name}'")
 
 class MissingRequiredArgumentError(ArgumentError):
     """Raised when a required argument is missing."""
@@ -57,7 +57,7 @@ class MissingRequiredArgumentError(ArgumentError):
         self.parameter = parameter
         keyword_only = parameter.kind == ParameterKind.KEYWORD_ONLY
         arg_type = "keyword-only argument" if keyword_only else "argument"
-        super().__init__(f"Missing required {arg_type}: {parameter.name}")
+        super().__init__(f"Missing required {arg_type}: {parameter.display_name}")
 
 class UnknownArgumentError(ArgumentError):
     """Raised when unknown arguments are provided."""
@@ -76,7 +76,7 @@ class ArgumentConversionError(ArgumentError):
         if message:
             error_msg = message
         else:
-            error_msg = f"Cannot convert '{value}' into {parameter.type_title} ({parameter.name})"
+            error_msg = f"Cannot convert '{value}' into {parameter.type_title} ({parameter.display_name})"
         # if original_error:
         #     error_msg += f": {original_error}"
         super().__init__(error_msg)
@@ -84,4 +84,4 @@ class ArgumentConversionError(ArgumentError):
 class EmptyFlagValueError(ArgumentConversionError):
     """Raised when a flag is provided without a value."""
     def __init__(self, parameter: Parameter = None):
-        super().__init__(f"Expected a value for '{parameter.name}'", None, parameter, None)
+        super().__init__(f"Expected a value for '{parameter.display_name}'", None, parameter, None)
