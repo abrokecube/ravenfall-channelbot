@@ -42,9 +42,9 @@ class TestingRFCog(Cog):
     
     # @Cog.command(name="restore auto raids", help="Restore auto raids")
     # async def restore_auto_raids(self, ctx: Context):
-    #     if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+    #     if os.getenv("OWNER_TWITCH_ID") != ctx.data.user.id:
     #         return
-    #     channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+    #     channel = self.rf_manager.get_channel(channel_id=ctx.data.room.room_id)
     #     if channel is None:
     #         return
     #     await channel.restore_auto_raids()
@@ -52,9 +52,9 @@ class TestingRFCog(Cog):
 
     # @Cog.command(name="restore sailors", help="Restore sailors")
     # async def restore_sailors(self, ctx: Context):
-    #     if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+    #     if os.getenv("OWNER_TWITCH_ID") != ctx.data.user.id:
     #         return
-    #     channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+    #     channel = self.rf_manager.get_channel(channel_id=ctx.data.room.room_id)
     #     if channel is None:
     #         return
     #     await channel.restore_sailors()
@@ -62,9 +62,9 @@ class TestingRFCog(Cog):
 
     # @Cog.command(name="fetch training", help="Fetch training")
     # async def fetch_training(self, ctx: Context):
-    #     if os.getenv("OWNER_TWITCH_ID") != ctx.msg.user.id:
+    #     if os.getenv("OWNER_TWITCH_ID") != ctx.data.user.id:
     #         return
-    #     channel = self.rf_manager.get_channel(channel_id=ctx.msg.room.room_id)
+    #     channel = self.rf_manager.get_channel(channel_id=ctx.data.room.room_id)
     #     if channel is None:
     #         return
     #     await channel.fetch_all_training()

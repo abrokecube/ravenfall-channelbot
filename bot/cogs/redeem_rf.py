@@ -524,7 +524,7 @@ class RedeemRFCog(Cog):
             return
         except Exception as e:
             await ctx.cancel()
-            logger.error(f"Unknown error occurred in coin redeem: {e}")
+            logger.error(f"Unknown error occurred in coin redeem", exc_info=True)
             await ctx.send(f"❌ An unknown error occurred. Please try again later. You have been refunded.")
             return
         await ctx.fulfill()
@@ -653,7 +653,7 @@ class RedeemRFCog(Cog):
 
         await ctx.reply(f"Sending you {count}× {item.name}{pl(count, "", "(s)")}...")
         try:
-            await send_items(ctx.msg.user.name, channel, item.name, count)
+            await send_items(ctx.data.user.name, channel, item.name, count)
         except OutOfItemsError as e:
             logger.error(f"Error in item redeem: {e}")
             await ctx.send(
@@ -663,7 +663,7 @@ class RedeemRFCog(Cog):
             return
         except PartialSendError as e:
             async with get_async_session() as session:
-                trans_id = await add_credits(session, ctx.msg.user.id, -price * e.items_sent, f"Shop purchase: {item.name} x{count}")
+                trans_id = await add_credits(session, ctx.data.user.id, -price * e.items_sent, f"Shop purchase: {item.name} x{count}")
             await ctx.send(
                 f"There were not enough {count:,}× {item.name}{pl(count, '', '(s)')} in stock. "
                 f"You received {e.items_sent:,}× {item.name}{pl(e.items_sent, '', '(s)')}. "
@@ -680,12 +680,12 @@ class RedeemRFCog(Cog):
             await ctx.send(f"❌ Error: {e}. Your credits were not deducted.")
             return
         except Exception as e:
-            logger.error(f"Unknown error occurred in command: {e}")
+            logger.error(f"Unknown error occurred in command", exc_info=True)
             await ctx.send(f"❌ An unknown error occurred. Please try again later. Your credits were not deducted.")
             return
 
         async with get_async_session() as session:
-            trans_id = await add_credits(session, ctx.msg.user.id, -price * count, f"Shop purchase: {item.name} x{count}")
+            trans_id = await add_credits(session, ctx.data.user.id, -price * count, f"Shop purchase: {item.name} x{count}")
             balance -= price * count
 
         await asyncio.sleep(0.5)
@@ -733,6 +733,7 @@ class RedeemRFCog(Cog):
         warning = ""
         if item.soulbound:
             warning = " (This item cannot be redeemed.)"
+        count = await get_item_count(channel, item.name)
         await ctx.reply(
             f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.{warning}"
         )
@@ -838,7 +839,7 @@ class RedeemRFCog(Cog):
             await ctx.send(f"❌ Error: {e}")
             return
         except Exception as e:
-            logger.error(f"Unknown error occurred in command: {e}")
+            logger.error(f"Unknown error occurred in command", exc_info=True)
             await ctx.send(f"❌ An unknown error occurred. Please try again later.")
             return
             
