@@ -1,0 +1,34 @@
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .commands import UserRole
+
+from .commands import Check, TwitchContext, Context
+    
+class HasRole(Check):
+    """Check if the user has at least one of the specified roles."""
+    
+    def __init__(self, *required_roles: 'UserRole'):
+        self.required_roles = required_roles
+        role_names = ', '.join(role.name.lower().replace("_", " ") for role in required_roles)
+        self.title = role_names
+        self.short_help = role_names
+        self.hide_in_help = True
+        if len(required_roles) == 1:
+            self.help = f"Requires the {role_names} role."
+        else:
+            self.help = f"Requires one of the following roles: {role_names}."
+    
+    async def check(self, ctx) -> bool:
+        if not any(role in ctx.roles for role in self.required_roles):
+            return f"You do not have permission to use this command."
+        return True
+
+class TwitchOnly(Check):
+    title = "Twitch only"
+    help = "Can only be run in Twitch"
+    
+    async def check(self, ctx: Context):
+        if not isinstance(ctx, TwitchContext):
+            return "This command can only be run on Twitch."
+        return True
+    

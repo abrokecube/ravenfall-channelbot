@@ -1,0 +1,1 @@
+- Add help for types and checks in the help command

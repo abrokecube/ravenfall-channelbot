@@ -1,4 +1,4 @@
-from ..commands import CommandContext, Commands
+from ..commands import Context, Commands
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 
@@ -8,8 +8,8 @@ class MinimalCog(Cog):
         self.rf_manager = rf_manager
     
     @Cog.command(name="hi", help="Says hi")
-    async def hi(self, ctx: CommandContext):
-        await ctx.reply(f"hi {ctx.msg.user.name}")
+    async def hi(self, ctx: Context):
+        await ctx.reply(f"hi {ctx.author}")
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

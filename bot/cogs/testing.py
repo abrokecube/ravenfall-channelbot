@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from ..commands import CommandContext, Commands, RedeemContext, CustomRewardRedemptionStatus
+from ..commands import Context, Commands, TwitchRedeemContext, CustomRewardRedemptionStatus
 from ..cog import Cog
 
 class TestingCog(Cog):
@@ -15,20 +15,30 @@ class TestingCog(Cog):
     #     raise Exception("Test error")
 
     @Cog.command(name="hi", help="Says hi")
-    async def hi(self, ctx: CommandContext):
-        await ctx.reply(f"hi {ctx.msg.user.name}")
+    async def hi(self, ctx: Context):
+        await ctx.reply(f"hi {ctx.author}")
 
     @Cog.command(name="ping", help="Pong!")
-    async def ping(self, ctx: CommandContext):
+    async def ping(self, ctx: Context):
         await ctx.reply("Pong!")
 
+    @Cog.command()
+    async def roles(self, ctx: Context):
+        """Show your current roles.
+        
+        Examples:
+            !roles
+        """
+        role_names = [role.value for role in ctx.roles]
+        await ctx.reply(f"Your roles: {', '.join(role_names)}")
+
     @Cog.redeem(name="Test redeem")
-    async def test(self, ctx: RedeemContext):
+    async def test(self, ctx: TwitchRedeemContext):
         await ctx.send("I am the almighty test redeem!")
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
 
     @Cog.redeem(name="Test error redeem")
-    async def test_error(self, ctx: RedeemContext):
+    async def test_error(self, ctx: TwitchRedeemContext):
         raise Exception("Test error")
         await ctx.send("You shouldnt be seeing this")
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
