@@ -145,7 +145,10 @@ class TwitchRedeemContext(Context):
 
     async def update_status(self, status: CustomRewardRedemptionStatus):
         if self.redemption.status == "unfulfilled":
-            await self.bot.twitch.update_redemption_status(
+            twitch = self.bot.twitch
+            if self.redemption.broadcaster_user_id in self.bot.twitches:
+                twitch = self.bot.twitches[self.redemption.broadcaster_user_id]
+            await twitch.update_redemption_status(
                 self.redemption.broadcaster_user_id,
                 self.redemption.reward.id,
                 self.redemption.id,

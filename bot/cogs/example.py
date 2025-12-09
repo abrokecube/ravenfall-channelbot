@@ -183,17 +183,7 @@ class ExampleCog(Cog):
             !modcommand
         """
         await ctx.reply("✅ You have moderator privileges!")
-    
-    @Cog.command(name="roles")
-    async def roles(self, ctx: Context):
-        """Show your current roles.
         
-        Examples:
-            !roles
-        """
-        role_names = [role.value for role in ctx.roles]
-        await ctx.reply(f"Your roles: {', '.join(role_names)}")
-    
     @Cog.command(name="greetuser")
     async def greetuser(self, ctx: Context, username: str, *, greeting: Optional[str] = "Hello"):
         """Greet a user with a custom greeting.

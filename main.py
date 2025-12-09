@@ -202,10 +202,8 @@ async def run():
         if os.getenv("COMMAND_TESTING") == "1":
             from bot.cogs.example import ExampleCog
             commands.load_cog(ExampleCog)
-            
-            from bot.cogs.testing_rf import TestingRFCog
-            commands.load_cog(TestingRFCog, rf_manager=rf_manager)
-
+            from bot.cogs.testing import TestingCog
+            commands.load_cog(TestingCog)
         else:
             from bot.cogs.info import InfoCog
             commands.load_cog(InfoCog, rf_manager=rf_manager)
