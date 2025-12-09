@@ -121,7 +121,7 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def rfrestartpostpone(self, ctx: Context, seconds: float = 5*60, channel: RFChannel = 'this'):
+    async def rfrestartpostpone(self, ctx: Context, seconds: int = 5*60, channel: RFChannel = 'this'):
         restart_task = channel.restart_task
         if restart_task is None:
             await ctx.reply("No restart task found.")
@@ -139,7 +139,7 @@ class GameCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("reason", aliases=["r"])
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def rfrestart(self, ctx: Context, seconds: float = 30, reason: str = "User restart", channel: RFChannel = 'this'):
+    async def rfrestart(self, ctx: Context, seconds: int = 30, reason: str = "User restart", channel: RFChannel = 'this'):
         channel.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True)
         await ctx.reply(f"Restart queued. Restarting in {seconds}s.")
 
@@ -171,8 +171,8 @@ class GameCog(Cog):
     async def togglebotmonitor(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
         channel.monitoring_paused = not channel.monitoring_paused
         if all_:
-            for channel in self.rf_manager.channels:
-                channel.monitoring_paused = channel.monitoring_paused
+            for channel_ in self.rf_manager.channels:
+                channel_.monitoring_paused = channel.monitoring_paused
             await ctx.reply("RavenBot monitoring is now " + ("PAUSED" if channel.monitoring_paused else "RESUMED") + " for all channels.")
         else:
             await ctx.reply("RavenBot monitoring is now " + ("PAUSED" if channel.monitoring_paused else "RESUMED") + " for this channel.")
@@ -189,8 +189,10 @@ class GameCog(Cog):
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def backupstate(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
         if all_:
+            tasks = []
             for channel in self.rf_manager.channels:
-                await channel.backup_state_data_routine()
+                tasks.append(channel.backup_state_data_routine())
+            await asyncio.gather(*tasks)
             await ctx.reply("Backed up all state data.")
         else:
             await channel.backup_state_data_routine()

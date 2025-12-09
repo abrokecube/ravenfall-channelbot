@@ -750,16 +750,16 @@ class Commands:
         await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
         
     def _find_command(self, text: str) -> tuple[str, str]:
-        text_lower = text.lower()
+        # text_lower = text.lower()
         for cmd in sorted(self.dispatchers["command"].listeners.keys(), key=len, reverse=True):
-            if text_lower == cmd or text_lower.startswith(cmd + ' '):
+            if text == cmd or text.startswith(cmd + ' '):
                 return cmd, text[len(cmd):].strip()
         return None, text
 
     def _find_redeem(self, name: str) -> tuple[str, str]:
-        name_lower = name.lower()
+        # name_lower = name.lower()
         for redeem in sorted(self.dispatchers["twitch_redeem"].listeners.keys(), key=len, reverse=True):
-            if name_lower == redeem:
+            if name == redeem:
                 return redeem, name
         return None, name
 
