@@ -124,6 +124,8 @@ class Parameter:
         if self.kind == ParameterKind.KEYWORD_ONLY:
             properties.append("keyword-only")
         out_str.append(f"{', '.join(properties)}".capitalize())
+        if self.default != inspect.Parameter.empty and self.default != False:
+            out_str.append(f"Default: {self.default}")
         if type_help:
             out_str.append(f"Expects {self.type_title}: {type_help}")
         if param_aliases:
@@ -849,7 +851,7 @@ class Command(EventListener):
             ignore_list = (
                 CommandOnCooldown, UnknownFlagError,
                 DuplicateParameterError, MissingRequiredArgumentError,
-                UnknownArgumentError, ArgumentConversionError,
+                UnknownArgumentError,
             )
             if not isinstance(e, ignore_list):
                 logger.error("Error in command invocation:", exc_info=True)

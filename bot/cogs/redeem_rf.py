@@ -634,7 +634,7 @@ class RedeemRFCog(Cog):
     @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(TwitchOnly)
-    async def credits_buy(self, ctx: Context, item: Item, count: int, channel: RFChannel = 'this'):
+    async def credits_buy(self, ctx: Context, item: Item, count: int = 1, channel: RFChannel = 'this'):
         if item.soulbound:
             await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
             return
