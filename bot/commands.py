@@ -908,10 +908,9 @@ class TwitchRedeem(EventListener):
         try:
             await super().invoke(ctx)
         except Exception as e:
+            logger.error("Error in redeem invocation:", exc_info=True)
             if hasattr(ctx, 'bot') and hasattr(self.bot, 'on_redeem_error'):
                 await self.bot.on_redeem_error(ctx, self, e)
-            else:
-                logger.error("Error in redeem invocation:", exc_info=True)
 
 
 @dataclass
