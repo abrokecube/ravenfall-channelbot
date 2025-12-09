@@ -749,7 +749,8 @@ class Commands:
         await ctx.send(f"❌ An error occurred. Points will be refunded.")
         try:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
-        except Exception:
+        except Exception as e:
+            logging.error("Couldnt refund", exc_info=True)
             await ctx.send(f"❌ Couldn't refund points.")
         
     def _find_command(self, text: str) -> tuple[str, str]:
