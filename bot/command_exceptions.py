@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from .command_enums import ParameterKind
 
 if TYPE_CHECKING:
-    from .commands import Parameter
+    from .commands import Parameter, Cooldown
 
 class CommandError(Exception):
     """Base exception for command-related errors."""
