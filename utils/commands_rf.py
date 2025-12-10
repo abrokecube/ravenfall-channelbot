@@ -4,7 +4,7 @@ if TYPE_CHECKING:
 from bot.ravenfallchannel import RFChannel
 from bot.commands import Converter, Check, Context
 from bot.command_exceptions import ArgumentConversionError
-from bot.command_contexts import TwitchContext
+from bot.command_contexts import TwitchContext, ServerContext
 
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
@@ -23,14 +23,21 @@ class RFChannelConverter(Converter):
         rf_manager: 'RFChannelManager' = ctx.command.cog.rf_manager
         if arg == 'this':
             if isinstance(ctx, TwitchContext):
-                arg = ctx.data.room.name
+                query = ctx.data.room.name
+            elif isinstance(ctx, ServerContext):
+                query = ctx.data.room_name
             else:
                 raise ArgumentConversionError("A channel must be specified.")
-        channel_by_name = rf_manager.get_channel(channel_name=arg)
-        channel_by_id = rf_manager.get_channel(channel_id=arg)
+        else:
+            query = arg
+        channel_by_name = rf_manager.get_channel(channel_name=query)
+        channel_by_id = rf_manager.get_channel(channel_id=query)
         channel = channel_by_name or channel_by_id
         if channel is None:
-            raise ArgumentConversionError(f"Ravenfall channel '{arg}' not found.")
+            if arg == 'this':
+                raise ArgumentConversionError("A channel must be specified.")
+            else:
+                raise ArgumentConversionError(f"Ravenfall channel '{arg}' not found.")
         return channel
 
 class RFItemConverter(Converter):

@@ -718,33 +718,34 @@ class Commands:
         usage_text = command.get_usage_text(ctx.prefix, ctx.invoked_with)
         if isinstance(error, CommandOnCooldown):
             if error.cooldown.per >= 60 and self.error_cooldown.get_retry_after(ctx) <= 0:
-                await ctx.send(f"❌ Command '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}.")
+                await ctx.reply(f"❌ Command '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}.")
                 self.error_cooldown.update_rate_limit(ctx)
         elif isinstance(error, MissingRequiredArgumentError):
-            await ctx.send(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
+            await ctx.reply(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
         elif isinstance(error, EmptyFlagValueError):
-            await ctx.send(f"❌ Expected a value for '{error.parameter.name}' (type: {error.parameter.type_title})")
+            await ctx.reply(f"❌ Expected a value for argument '{error.parameter.name}' (type: {error.parameter.type_title})")
         elif isinstance(error, ArgumentConversionError):
-            out_text = f"❌ Error turning '{error.value}' ({error.parameter.name}) into type {error.parameter.type_title}"
             if error.message:
-                out_text += f": {error.message}"
-            await ctx.send(out_text)
+                out_text = f"❌ Error in argument '{error.parameter.name}': {error.message}"
+            else:
+                out_text = f"❌ Error turning '{error.value}' ({error.parameter.name}) into {error.parameter.type_title}"
+            await ctx.reply(out_text)
         elif isinstance(error, UnknownArgumentError):
-            await ctx.send(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
+            await ctx.reply(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
         elif isinstance(error, UnknownFlagError):
-            await ctx.send(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
+            await ctx.reply(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
         elif isinstance(error, CheckFailure):
             if self.error_cooldown.get_retry_after(ctx) <= 0:
-                await ctx.send(f"❌ {error.message}")
+                await ctx.reply(f"❌ {error.message}")
                 self.error_cooldown.update_rate_limit(ctx)
         elif isinstance(error, VerificationFailure):
-            await ctx.send(f"❌ {error.message}")
+            await ctx.reply(f"❌ {error.message}")
         elif isinstance(error, ArgumentError):
-            await ctx.send(f"❌ {error.message}")
+            await ctx.reply(f"❌ {error.message}")
         elif isinstance(error, CommandError):
-            await ctx.send(f"❌ {error.message}")
+            await ctx.reply(f"❌ {error.message}")
         else:
-            await ctx.send(f"❌ An error occurred")
+            await ctx.reply(f"❌ An unknown error occurred")
         
     
     async def on_redeem_error(self, ctx: TwitchRedeemContext, redeem: TwitchRedeem, error: Exception):
@@ -845,7 +846,7 @@ class Command(EventListener):
             ignore_list = (
                 CommandOnCooldown, UnknownFlagError,
                 DuplicateParameterError, MissingRequiredArgumentError,
-                UnknownArgumentError,
+                UnknownArgumentError, CheckFailure,
             )
             if not isinstance(e, ignore_list):
                 logger.error("Error in command invocation:", exc_info=True)

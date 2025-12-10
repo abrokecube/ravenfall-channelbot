@@ -76,6 +76,10 @@ logger_config = {
         'filename': 'rfchannels.log',
         'console_level': logging.INFO,
     },
+    'bot.commands': {
+        'filename': 'commands.log',
+        'console_level': logging.INFO,
+    }
 
 }
 setup_logging(level=logging.DEBUG, loggers_config=logger_config)
