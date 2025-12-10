@@ -2,7 +2,7 @@ import asyncio
 from utils.websocket_client import AutoReconnectingWebSocket
 
 
-URL = "http://192.168.1.174:7110/api/chat/stream"
+URL = "ws://127.0.0.1:7110/api/chat/stream"
 
 async def on_message(msg):
     print(msg)

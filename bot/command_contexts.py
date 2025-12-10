@@ -116,7 +116,6 @@ class TwitchRedeemContext(Context):
         self.platform_output_type = OutputMessageType.SINGLE_LINE
         self.data = redemption
         self.message = redemption.user_input or ""
-        self.full_message = self.message
         self.author = redemption.user_login
         self.prefix = ""
         self.invoked_with = redemption.reward.title
@@ -169,6 +168,7 @@ class ServerContext(Context):
     """Context for commands triggered via the custom chat server."""
     
     def __init__(self, message: 'ServerChatMessage', chat_manager: 'ServerChatManager'):
+        self.message = message.content
         self.author = message.author
         self.prefix = ""
         self.invoked_with = ""
@@ -191,11 +191,11 @@ class ServerContext(Context):
     async def reply(self, text: str) -> None:
         """Reply to the message."""
         # Send message back to the same room
-        await self.chat_manager.send_message(self.data.room_name, "Bot", text)
+        await self.chat_manager.send_message(self.data.room_name, "Bot", text, self.data.id)
 
     async def send(self, text: str) -> None:
-        """Send a message to the channel (same as reply for now)."""
-        await self.reply(text)
+        """Send a message to the channel."""
+        await self.chat_manager.send_message(self.data.room_name, "Bot", text)
 
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
         if bucket_type == BucketType.USER:
