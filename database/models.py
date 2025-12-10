@@ -115,6 +115,20 @@ class UserCreditTransaction(Base):
     description = Column(String)
     timestamp = Column(DateTime)
     
+class ChatMessage(Base):
+    __tablename__ = 'chat_messages'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    room_name = Column(String, nullable=False)
+    user_name = Column(String, nullable=False)
+    content = Column(String, nullable=False)
+    timestamp = Column(DateTime, nullable=False)
+    reply_to_id = Column(Integer, ForeignKey('chat_messages.id'), nullable=True)
+    user_id = Column(String, nullable=True)
+    
+    
+    reply_to = relationship("ChatMessage", remote_side=[id], backref="replies")
+    
 
 async def create_all_tables():
     async with engine.begin() as conn:

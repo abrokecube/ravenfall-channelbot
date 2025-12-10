@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from .commands import Commands, Command
     from twitchAPI.chat import ChatMessage, Twitch
     from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
+    from .chat_system import Message as ServerChatMessage, ChatManager as ServerChatManager
 
 @runtime_checkable
 class Context(Protocol):
@@ -46,7 +47,7 @@ class TwitchContext(Context):
     using populate_common_fields() after construction.
     """
     
-    def __init__(self, msg: 'ChatMessage', twitch: 'Twitch'):
+    def __init__(self, msg: 'ChatMessage', twitch: 'Twitch' = None):
         # Platform-specific fields
         self.message = msg.text
         self.author = msg.user.name
@@ -163,3 +164,44 @@ class TwitchRedeemContext(Context):
     
     async def cancel(self):
         await self.update_status(CustomRewardRedemptionStatus.CANCELED)
+
+class ServerContext(Context):
+    """Context for commands triggered via the custom chat server."""
+    
+    def __init__(self, message: 'ServerChatMessage', chat_manager: 'ServerChatManager'):
+        self.author = message.author
+        self.prefix = ""
+        self.invoked_with = ""
+        self.command = None
+        self.parameters = ""
+        self.platform = Platform.SERVER
+        self.platform_allows_markdown = True
+        self.platform_output_type = OutputMessageType.MULTI_LINE
+        self.data: ServerChatMessage = message
+        self.bot = None
+        self.chat_manager: ServerChatManager = chat_manager
+        self.roles = self._compute_roles()
+        
+    def _compute_roles(self):
+        roles = [UserRole.USER]
+        if self.data.user_id == "admin":
+            roles.extend([UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR])
+        return roles
+        
+    async def reply(self, text: str) -> None:
+        """Reply to the message."""
+        # Send message back to the same room
+        await self.chat_manager.send_message(self.data.room_name, "Bot", text)
+
+    async def send(self, text: str) -> None:
+        """Send a message to the channel (same as reply for now)."""
+        await self.reply(text)
+
+    def get_bucket_key(self, bucket_type: BucketType) -> Any:
+        if bucket_type == BucketType.USER:
+            return self.author
+        elif bucket_type == BucketType.CHANNEL:
+            return self.data.room_name
+        elif bucket_type == BucketType.GUILD:
+            return self.data.room_name
+        return None

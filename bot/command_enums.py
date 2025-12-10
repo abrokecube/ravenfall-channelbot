@@ -13,6 +13,7 @@ class OutputMessageType(Enum):
 
 class Platform(Enum):
     TWITCH = "twitch"
+    SERVER = "server"
     GENERIC = "generic"
 
 class CustomRewardRedemptionStatus(Enum):

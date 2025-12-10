@@ -769,15 +769,9 @@ class Commands:
                 return redeem, name
         return None, name
 
-    async def process_twitch_message(self, msg: ChatMessage) -> None:
-        await self.process_message(Platform.TWITCH, msg)
-
-    async def process_message(self, platform: Platform, platform_context: Any):
-        ctx: Context = None
-        if platform == Platform.TWITCH and isinstance(platform_context, ChatMessage):
-            ctx = TwitchContext(platform_context, self.twitches.get(platform_context.room.room_id))
-        else:
-            raise ValueError(f"Unsupported platform: {platform}")
+    async def process_chat_message(self, ctx: Context):
+        if isinstance(ctx, TwitchContext):
+            ctx.api = self.twitches.get(ctx.data.room.room_id, None)
         
         prefix = await self.get_prefix(ctx)
         used_prefix = ""

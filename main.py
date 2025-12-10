@@ -23,11 +23,13 @@ from bot.commands import (
     Commands, Context, Command, TwitchRedeem, TwitchRedeemContext, 
     CustomRewardRedemptionStatus, CheckFailure, ArgumentError,
 )
+from bot.command_contexts import TwitchContext
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
 from utils.logging_fomatter import setup_logging
 from bot.server import SomeEndpoints
+from bot.chat_system import ChatManager
 import database.utils as db_utils
 from database.session import get_async_session
 
@@ -173,6 +175,9 @@ async def run():
     chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
 
     commands = MyCommands(chat)
+    chat_manager = ChatManager(commands)
+
+    chat_manager.admin_key = os.getenv("CHAT_SERVER_ADMIN_KEY", None)
 
     async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionAddEvent):
         await commands.process_channel_point_redemption(redemption.event)
@@ -224,7 +229,8 @@ async def run():
         
     async def on_message(message: ChatMessage):
         # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
-        await commands.process_twitch_message(message)
+        ctx = TwitchContext(message)
+        await commands.process_chat_message(ctx)
         await rf_manager.event_twitch_message(message)
 
     async def on_ready(ready_event: EventData):
@@ -236,7 +242,7 @@ async def run():
         logger.info("Bot is ready for work")
         chat.register_event(ChatEvent.MESSAGE, on_message)
         
-        server = SomeEndpoints(rf_manager, os.getenv("SERVER_HOST", "0.0.0.0"), os.getenv("SERVER_PORT", 8080))
+        server = SomeEndpoints(rf_manager, chat_manager, os.getenv("SERVER_HOST", "0.0.0.0"), os.getenv("SERVER_PORT", 8080))
         await server.start()
 
     chat.register_event(ChatEvent.READY, on_ready)
