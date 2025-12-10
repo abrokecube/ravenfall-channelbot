@@ -127,3 +127,6 @@ class ChatManager:
 
     async def register_websocket(self, ws: web.WebSocketResponse):
         self.websockets.add(ws)
+
+    async def unregister_websocket(self, ws: web.WebSocketResponse):
+        self.websockets.discard(ws)

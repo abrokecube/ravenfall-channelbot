@@ -37,6 +37,13 @@ class SomeEndpoints:
         ws = web.WebSocketResponse()
         await ws.prepare(request)
         await self.chat_manager.register_websocket(ws)
+
+        try:
+            async for _ in ws:
+                pass
+        finally:
+            await self.chat_manager.unregister_websocket(ws)
+
         return ws
 
     async def handle_history(self, request: web.Request):
