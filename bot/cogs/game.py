@@ -105,11 +105,9 @@ class GameCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def rfrestartcancel(self, ctx: Context, channel: RFChannel = 'this'):
-        restart_task = channel.restart_task
-        if restart_task is None:
+        if not channel.cancel_restart():
             await ctx.reply("No restart task found.")
             return
-        restart_task.cancel()
         await ctx.reply("Restart task cancelled.")
 
     @Cog.command(

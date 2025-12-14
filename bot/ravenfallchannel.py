@@ -1028,6 +1028,16 @@ class RFChannel:
         if self.restart_task:
             self.restart_task.postpone(seconds)
     
+    def cancel_restart(self):
+        if self.restart_task is None:
+            return False
+        self.restart_task.cancel()
+        if self.channel_restart_lock.locked():
+            self.channel_restart_lock.release()
+            self.global_restart_lock.release()
+        if self.channel_post_restart_lock.locked():
+            self.channel_post_restart_lock.release()
+        return True
 
     # --- [ AUTO RAID ] ---------------------------------------
 
