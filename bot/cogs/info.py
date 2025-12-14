@@ -329,6 +329,7 @@ class InfoCog(Cog):
     @parameter("enchanted", aliases=["e"], help="Display enchanted stats")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def highest_(self, ctx: Context, skill: str, name_regex: re.Pattern = r'.*', enchanted: bool = False, channel: RFChannel = 'this'):
+        skill = skill.lower()
         players: List[Player] = await channel.get_query("select * from players")
         if not isinstance(players, list):
             await ctx.reply("Ravenfall seems to be offline!")
