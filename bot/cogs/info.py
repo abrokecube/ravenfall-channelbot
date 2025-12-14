@@ -330,7 +330,7 @@ class InfoCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def highest_(self, ctx: Context, skill: str, name_regex: re.Pattern = r'.*', enchanted: bool = False, channel: RFChannel = 'this'):
         players: List[Player] = await channel.get_query("select * from players")
-        if not isinstance(players, dict):
+        if not isinstance(players, list):
             await ctx.reply("Ravenfall seems to be offline!")
             return
         players = filter(lambda x : name_regex.match(x['name']), players)
