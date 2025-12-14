@@ -46,7 +46,7 @@ def filter_text(context: Context, text: str):
         text = " - ".join(text.splitlines())
     split_text = [text]
     if context.platform_character_limit is not None and context.platform_character_limit > 0:
-        split_text = split_by_utf16_bytes(text)
+        split_text = split_by_utf16_bytes(text, context.platform_character_limit)
     return split_text
 
 class TwitchContext(Context):
