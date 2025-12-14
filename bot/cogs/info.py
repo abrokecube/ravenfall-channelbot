@@ -323,7 +323,7 @@ class InfoCog(Cog):
                 f"thanks to {multiplier['eventname']}!"
             )
             
-    @Cog.command(help="Top player of a skill")
+    @Cog.command(help="Top player of a skill", aliases=['h', 'top_', 't'])
     @parameter("skill", converter=RFSkill)
     @parameter("name_regex", help="Filter usernames using a regex", converter=Regex)
     @parameter("enchanted", aliases=["e"], help="Display enchanted stats")
@@ -333,7 +333,7 @@ class InfoCog(Cog):
         if not isinstance(players, list):
             await ctx.reply("Ravenfall seems to be offline!")
             return
-        players = filter(lambda x : name_regex.match(x['name']), players)
+        players = list(filter(lambda x : name_regex.match(x['name']), players))
         a = "level"
         if enchanted:
             a = "maxlevel"
