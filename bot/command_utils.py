@@ -67,7 +67,7 @@ class Choice(Converter):
         self.case_sensitive = case_sensitive
         self.string_map = string_map
         
-    def convert(self, ctx: Context, arg: str) -> str:
+    async def convert(self, ctx: Context, arg: str) -> str:
         if not arg in self.string_map:
             raise ArgumentConversionError(f"Choice '{arg}' is not a valid option. Valid choices: {self.short_help}")
         return self.string_map[arg]

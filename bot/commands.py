@@ -62,6 +62,7 @@ CheckFunc = Callable[[Context], bool]
 class Parameter:
     name: str
     display_name: str
+    raw_annotation: Any
     annotation: Any
     default: Any = inspect.Parameter.empty
     aliases: List[str] = field(default_factory=list)
@@ -320,12 +321,12 @@ class EventListener(BaseCommand):
             display_name = param_config.get('display_name', None) or param.name
 
             # Resolve type and check for Optional
-            annotation = self.type_hints.get(param.name, param.annotation)
-            converter = annotation
+            raw_annotation = self.type_hints.get(param.name, param.annotation)
+            annotation = raw_annotation
             is_optional = False
             
             # If still a string (shouldn't happen with get_type_hints, but just in case)
-            if isinstance(converter, str):
+            if isinstance(annotation, str):
                 # Try to evaluate common built-in types
                 builtins_map = {
                     'int': int,
@@ -333,20 +334,20 @@ class EventListener(BaseCommand):
                     'str': str,
                     'bool': bool,
                 }
-                if converter in builtins_map:
-                    converter = builtins_map[converter]
+                if annotation in builtins_map:
+                    annotation = builtins_map[annotation]
 
             # Handle Optional[T] - extract the inner type
-            origin = get_origin(converter)
+            origin = get_origin(annotation)
             if origin is Union:
-                args = get_args(converter)
+                args = get_args(annotation)
                 # Check if NoneType is in args
                 if type(None) in args:
                     is_optional = True
                     # Filter out NoneType to get the actual type
                     non_none_types = [t for t in args if t is not type(None)]
                     if non_none_types:
-                        converter = non_none_types[0]
+                        annotation = non_none_types[0]
             
             is_optional = is_optional or \
                 (param.default != inspect.Parameter.empty) or \
@@ -357,7 +358,7 @@ class EventListener(BaseCommand):
             if not param_help:
                 param_help = doc_params.get(param.name)
                 
-            converter = param_config.get('converter', None) or converter
+            converter = param_config.get('converter', None) or annotation
             if not converter:
                 converter = str
 
@@ -365,6 +366,7 @@ class EventListener(BaseCommand):
             p = Parameter(
                 name=param.name,
                 display_name=display_name,
+                raw_annotation=raw_annotation,
                 annotation=annotation,
                 converter=converter,
                 is_optional=is_optional,
@@ -398,7 +400,7 @@ class EventListener(BaseCommand):
             for alias in aliases:
                 self.arg_mappings[alias] = param.name
 
-    async def _convert_argument(self, ctx: Context, value: str, param: Parameter) -> Any:
+    async def _convert_argument(self, ctx: Context, value: str | Any, param: Parameter) -> Any:
         if value is None:
             return value
         
@@ -411,6 +413,9 @@ class EventListener(BaseCommand):
         if hasattr(type_, 'convert') and inspect.iscoroutinefunction(type_.convert):
             if value == True:
                 raise EmptyFlagValueError(param)
+            if not isinstance(value, str):
+                if type(value) is type(type_):
+                    return value
             try:
                 return await type_.convert(ctx, value)
             except ArgumentConversionError as e:

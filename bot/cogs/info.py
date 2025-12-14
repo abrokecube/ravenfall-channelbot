@@ -328,7 +328,7 @@ class InfoCog(Cog):
     @parameter("name_regex", help="Filter usernames using a regex", converter=Regex)
     @parameter("enchanted", aliases=["e"], help="Display enchanted stats")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def highest(self, ctx: Context, skill: str, name_regex: re.Pattern, enchanted: bool = False, channel: RFChannel = 'this'):
+    async def highest_(self, ctx: Context, skill: str, name_regex: re.Pattern = r'.*', enchanted: bool = False, channel: RFChannel = 'this'):
         players: List[Player] = await channel.get_query("select * from players")
         if not isinstance(players, dict):
             await ctx.reply("Ravenfall seems to be offline!")
