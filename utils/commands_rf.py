@@ -5,6 +5,7 @@ from bot.ravenfallchannel import RFChannel
 from bot.commands import Converter, Check, Context
 from bot.command_exceptions import ArgumentConversionError
 from bot.command_contexts import TwitchContext, ServerContext
+from bot.command_utils import Choice
 
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
@@ -71,3 +72,28 @@ class TwitchUsername(Converter):
         if not is_valid:
             raise ArgumentConversionError("Not a valid username.")
         return arg.lstrip("@").replace("\U000e0000", '').replace("|","").replace("/","")
+
+class _RFSkill(Choice):
+    def __init__(self, case_sensitive=False):
+        definition = {
+            "Attack": ['atk', 'att'],
+            "Defense": ['def'],
+            "Strength": ['str'],
+            "Health": ['hp'],
+            "Woodcutting": ['wood', 'chop', 'wdc', 'chomp'],
+            "Mining": ['mine', 'min'],
+            "Crafting": ['craft'],
+            "Cooking": ['cook', "ckn"],
+            "Farming": ['farm', 'fm'],
+            "Slayer": ['slay'],
+            "Magic": [],
+            "Ranged": ["range"],
+            "Sailing": ['sail'],
+            "Healing": ['heal'],
+            "Gathering": ["gath"],
+            "Alchemy": ["brew", "alch"],
+            "CombatLevel": ["combat"]
+        }
+        super().__init__(definition, "Ravenfall skill", case_sensitive)
+
+RFSkill = _RFSkill()

@@ -21,10 +21,14 @@ from ..models import Village, GameSession
 from .. import braille
 from ..ravenfall import Character, Skills
 
-from utils.commands_rf import RFChannelConverter, TwitchUsername
+from utils.commands_rf import RFChannelConverter, TwitchUsername, RFSkill
+from ..command_utils import Regex
 from ..ravenfallchannel import RFChannel
 from ..command_enums import UserRole
 from ..command_utils import HasRole
+from models import Player
+
+import re
 
 import ravenpy
 
@@ -318,6 +322,41 @@ class InfoCog(Cog):
                 f"ending in {format_seconds(multiplier['timeleft'], TimeSize.LONG)}, "
                 f"thanks to {multiplier['eventname']}!"
             )
+            
+    @Cog.command(help="Top player of a skill")
+    @parameter("skill", converter=RFSkill)
+    @parameter("name_regex", help="Filter usernames using a regex", converter=Regex)
+    @parameter("enchanted", aliases=["e"], help="Display enchanted stats")
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def highest(self, ctx: Context, skill: str, name_regex: re.Pattern, enchanted: bool = False, channel: RFChannel = 'this'):
+        players: List[Player] = await channel.get_query("select * from players")
+        if not isinstance(players, dict):
+            await ctx.reply("Ravenfall seems to be offline!")
+            return
+        players = filter(lambda x : name_regex.match(x['name']), players)
+        a = "level"
+        if enchanted:
+            a = "maxlevel"
+        players.sort(key=lambda x : x["stats"][skill][a], reverse=True)
+        
+        top_level = players[0]["stats"][skill][a]
+        top_players = []
+        for player in players:
+            if player["stats"][skill][a] == top_level:
+                top_players.append(utils.unping(player["name"]))
+            else:
+                break
+        
+        if len(top_players) == 0 or top_level == 0:
+            await ctx.reply(f"Nobody has trained {skill}!")
+        elif len(top_players) == 1:
+            await ctx.reply(f"{top_players[0]} has the highest {skill} level with level {top_level}")
+        else:
+            joined = strutils.strjoin(", ", *top_players, " and")
+            await ctx.reply(f"{joined} have the highest {skill} level with level {top_level}")
+            
+            
+            
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.
