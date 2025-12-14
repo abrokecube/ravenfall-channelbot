@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from typing import Callable, List, Dict, Awaitable, Union, Optional, TYPE_CHECKING, Protocol, runtime_checkable, Any, Type, TypeVar, cast, get_origin, get_args
 from .command_enums import OutputMessageType, Platform, UserRole, BucketType, CustomRewardRedemptionStatus
+from utils.strutils import split_by_utf16_bytes
 
 if TYPE_CHECKING:
     from .commands import Commands, Command
     from twitchAPI.chat import ChatMessage, Twitch
     from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
     from .chat_system import Message as ServerChatMessage, ChatManager as ServerChatManager
+
 
 @runtime_checkable
 class Context(Protocol):
@@ -27,6 +29,7 @@ class Context(Protocol):
     platform: Platform
     platform_allows_markdown: bool
     platform_output_type: OutputMessageType
+    platform_character_limit: int
     data: Any
     
     async def reply(self, text: str) -> None:
@@ -38,6 +41,13 @@ class Context(Protocol):
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
         ...
 
+def filter_text(context: Context, text: str):
+    if context.platform_output_type == OutputMessageType.SINGLE_LINE:
+        text = " - ".join(text.splitlines())
+    split_text = [text]
+    if context.platform_character_limit is not None and context.platform_character_limit > 0:
+        split_text = split_by_utf16_bytes(text)
+    return split_text
 
 class TwitchContext(Context):
     """Twitch-specific command context.
@@ -54,6 +64,7 @@ class TwitchContext(Context):
         self.platform = Platform.TWITCH
         self.platform_allows_markdown = False
         self.platform_output_type = OutputMessageType.SINGLE_LINE
+        self.platform_character_limit = 500
         self.data: ChatMessage = msg
         self.api: Twitch = twitch
         self.roles = self._compute_roles()
@@ -88,11 +99,13 @@ class TwitchContext(Context):
     
     async def reply(self, text: str) -> None:
         """Reply to the message that triggered the command."""
-        await self.data.reply(text)
+        for text_ in filter_text(self, text):
+            await self.data.reply(text_)
     
     async def send(self, text: str) -> None:
         """Send a message to the channel."""
-        await self.data.chat.send_message(self.data.room.name, text)
+        for text_ in filter_text(self, text):
+            await self.data.chat.send_message(self.data.room.name, text_)
 
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
         if bucket_type == BucketType.USER:
@@ -121,16 +134,19 @@ class TwitchRedeemContext(Context):
         self.invoked_with = redemption.reward.title
         self.command = None
         self.parameters = self.message
+        self.platform_character_limit = 500
         self.roles = [UserRole.USER] # Basic role assignment for now
 
     async def reply(self, text: str) -> None:
         """Reply to the user who redeemed."""
         # We can't reply directly to a redemption, so we send a message to chat
-        await self.bot.chat.send_message(self.redemption.broadcaster_user_login, f"@{self.author} {text}")
+        for text_ in filter_text(self, text):
+            await self.bot.chat.send_message(self.redemption.broadcaster_user_login, f"@{self.author} {text_}")
 
     async def send(self, text: str) -> None:
         """Send a message to the channel."""
-        await self.bot.chat.send_message(self.redemption.broadcaster_user_login, text)
+        for text_ in filter_text(self, text):
+            await self.bot.chat.send_message(self.redemption.broadcaster_user_login, text_)
 
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
         if bucket_type == BucketType.USER:
@@ -177,6 +193,7 @@ class ServerContext(Context):
         self.platform = Platform.SERVER
         self.platform_allows_markdown = True
         self.platform_output_type = OutputMessageType.MULTI_LINE
+        self.platform_character_limit = None
         self.data: ServerChatMessage = message
         self.bot = None
         self.chat_manager: ServerChatManager = chat_manager
@@ -191,11 +208,13 @@ class ServerContext(Context):
     async def reply(self, text: str) -> None:
         """Reply to the message."""
         # Send message back to the same room
-        await self.chat_manager.send_message(self.data.room_name, "Bot", text, self.data.id)
+        for text_ in filter_text(self, text):
+            await self.chat_manager.send_message(self.data.room_name, "Bot", text_, self.data.id)
 
     async def send(self, text: str) -> None:
         """Send a message to the channel."""
-        await self.chat_manager.send_message(self.data.room_name, "Bot", text)
+        for text_ in filter_text(self, text):
+            await self.chat_manager.send_message(self.data.room_name, "Bot", text_)
 
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
         if bucket_type == BucketType.USER:

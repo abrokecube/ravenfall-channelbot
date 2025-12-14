@@ -351,12 +351,10 @@ class InfoCog(Cog):
         if len(top_players) == 0 or top_level == 0:
             await ctx.reply(f"Nobody has trained {skill}!")
         elif len(top_players) == 1:
-            await ctx.reply(f"{top_players[0]} has the highest {skill} level with level {top_level}")
+            await ctx.reply(f"{top_players[0]} has level {top_level} {skill}!")
         else:
-            joined = strutils.strjoin(", ", *top_players, " and")
-            await ctx.reply(f"{joined} have the highest {skill} level with level {top_level}")
-            
-            
+            joined = strutils.strjoin(", ", *top_players, before_end=" and")
+            await ctx.reply(f"{joined} have level {top_level} {skill}!")
             
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
