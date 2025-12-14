@@ -26,7 +26,7 @@ from ..command_utils import Regex
 from ..ravenfallchannel import RFChannel
 from ..command_enums import UserRole
 from ..command_utils import HasRole
-from models import Player
+from ..models import Player
 
 import re
 
