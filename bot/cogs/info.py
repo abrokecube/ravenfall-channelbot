@@ -353,7 +353,8 @@ class InfoCog(Cog):
         elif len(top_players) == 1:
             await ctx.reply(f"{top_players[0]} has level {top_level} {skill}!")
         else:
-            joined = strutils.strjoin(", ", *top_players, before_end=" and")
+            top_players.sort()
+            joined = strutils.strjoin(", ", *top_players, before_end=" and ", include_conn_char_before_end=True)
             await ctx.reply(f"{joined} have level {top_level} {skill}!")
             
 
