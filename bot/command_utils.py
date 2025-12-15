@@ -5,6 +5,7 @@ if TYPE_CHECKING:
 from .commands import Check, TwitchContext, Context, Converter
 from .command_exceptions import ArgumentConversionError
 import re
+import glob
     
 class HasRole(Check):
     """Check if the user has at least one of the specified roles."""
@@ -77,11 +78,19 @@ class Regex(Converter):
     short_help = "A python regular expression"
     help = "A python regular expression"
     
-    @classmethod
-    async def convert(cls, ctx: Context, arg: str) -> re.Pattern:
+    async def convert(ctx: Context, arg: str) -> re.Pattern:
         try:
             return re.compile(arg)
         except Exception as e:
-            raise ArgumentConversionError("Couldn't compile regex expression")
+            raise ArgumentConversionError("Couldn't compile regex")
     
-
+class Glob(Converter):
+    title = "Glob"
+    short_help = "A glob pattern"
+    help = "A glob pattern"
+    
+    async def convert(ctx: Context, arg: str) -> re.Pattern:
+        try:
+            return re.compile(glob.translate(arg))
+        except Exception as e:
+            raise ArgumentConversionError("Couldn't compile glob expression")

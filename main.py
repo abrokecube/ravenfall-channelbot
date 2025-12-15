@@ -214,8 +214,6 @@ async def run():
             from bot.cogs.testing import TestingCog
             commands.load_cog(TestingCog)
         else:
-            from bot.cogs.info import InfoCog
-            commands.load_cog(InfoCog, rf_manager=rf_manager)
             from bot.cogs.testing import TestingCog
             commands.load_cog(TestingCog)
             from bot.cogs.game import GameCog
@@ -230,6 +228,8 @@ async def run():
             commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
         from bot.cogs.help import HelpCog
         commands.load_cog(HelpCog, commands=commands)
+        from bot.cogs.info import InfoCog
+        commands.load_cog(InfoCog, rf_manager=rf_manager)
         
     async def on_message(message: ChatMessage):
         # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)

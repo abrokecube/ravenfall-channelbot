@@ -1027,7 +1027,7 @@ BUILTIN_TYPE_DOCS = {
 }
 
 DELIMETERS = ('=', ':')
-RE_FLAG = re.compile(r'[-a-zA-Z]{2}[a-zA-Z]+[:=]+.+|-[a-zA-Z]\b|--[a-zA-Z]+\b')
+RE_FLAG = re.compile(r'[-a-zA-Z]{2}[a-zA-Z]+[:=]+.+|-[a-zA-Z]\b|--[a-zA-Z_]+\b')
 
 class CommandArgs:
     def __init__(self, text: str):

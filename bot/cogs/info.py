@@ -22,10 +22,8 @@ from .. import braille
 from ..ravenfall import Character, Skills
 
 from utils.commands_rf import RFChannelConverter, TwitchUsername, RFSkill
-from ..command_utils import Regex
+from ..command_utils import Glob
 from ..ravenfallchannel import RFChannel
-from ..command_enums import UserRole
-from ..command_utils import HasRole
 from ..models import Player
 
 import re
@@ -323,18 +321,21 @@ class InfoCog(Cog):
                 f"thanks to {multiplier['eventname']}!"
             )
             
-    @Cog.command(help="Top player of a skill", aliases=['h', 'top_', 't'])
+    @Cog.command(help="Get the top player(s) of a skill", aliases=['h', 'top_', 't'])
     @parameter("skill", converter=RFSkill)
-    @parameter("name_regex", help="Filter usernames using a regex", converter=Regex)
+    @parameter("name_glob", aliases=['g'], help="Filter usernames using a glob expression", converter=Glob)
     @parameter("enchanted", aliases=["e"], help="Display enchanted stats")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def highest_(self, ctx: Context, skill: str, name_regex: re.Pattern = r'.*', enchanted: bool = False, channel: RFChannel = 'this'):
+    async def highest_(self, ctx: Context, skill: str, *, name_glob: re.Pattern = '*', enchanted: bool = False, channel: RFChannel = 'this'):
         skill = skill.lower()
         players: List[Player] = await channel.get_query("select * from players")
         if not isinstance(players, list):
             await ctx.reply("Ravenfall seems to be offline!")
             return
-        players = list(filter(lambda x : name_regex.match(x['name']), players))
+        players = list(filter(lambda x : name_glob.match(x['name']), players))
+        if not players:
+            await ctx.reply("No players!")
+            return
         a = "level"
         if enchanted:
             a = "maxlevel"
@@ -354,7 +355,7 @@ class InfoCog(Cog):
             await ctx.reply(f"{top_players[0]} has level {top_level} {skill}!")
         else:
             top_players.sort()
-            joined = strutils.strjoin(", ", *top_players, before_end=" and ", include_conn_char_before_end=True)
+            joined = strutils.strjoin(", ", *top_players, before_end=" and ")
             await ctx.reply(f"{joined} have level {top_level} {skill}!")
             
 
