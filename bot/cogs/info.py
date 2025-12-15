@@ -323,16 +323,21 @@ class InfoCog(Cog):
             
     @Cog.command(help="Get the top player(s) of a skill", aliases=['h', 'top_', 't'])
     @parameter("skill", converter=RFSkill)
-    @parameter("name_glob", aliases=['g'], help="Filter usernames using a glob expression", converter=Glob)
+    @parameter("name_glob", aliases=['g', 'f', 'filter', 'glob'], help="Filter usernames using a glob expression", converter=Glob)
+    @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
     @parameter("enchanted", aliases=["e"], help="Display enchanted stats")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def highest_(self, ctx: Context, skill: str, *, name_glob: re.Pattern = '*', enchanted: bool = False, channel: RFChannel = 'this'):
+    async def highest_(self, ctx: Context, skill: str, *, name_glob: re.Pattern = '*', invert_glob: bool = False, enchanted: bool = False, channel: RFChannel = 'this'):
         skill = skill.lower()
         players: List[Player] = await channel.get_query("select * from players")
         if not isinstance(players, list):
             await ctx.reply("Ravenfall seems to be offline!")
             return
-        players = list(filter(lambda x : name_glob.match(x['name']), players))
+        if not invert_glob:
+            players = list(filter(lambda x : name_glob.match(x['name']), players))
+        else:
+            players = list(filter(lambda x : not bool(name_glob.match(x['name'])), players))
+            
         if not players:
             await ctx.reply("No players!")
             return
@@ -362,14 +367,18 @@ class InfoCog(Cog):
     @parameter("sort_by", aliases=['s'], converter=Choice(['name', 'combatlevel', 'none']))
     @parameter("group_by", aliases=['g'], converter=Choice(['training', 'island', 'none']))
     @parameter("channel", aliases=["c"], converter=RFChannelConverter)
-    @parameter("name_glob", aliases=['filter', 'f'], help="Filter usernames using a glob expression", converter=Glob)
-    async def player_list(self, ctx: Context, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", channel: RFChannel = 'this'):
+    @parameter("name_glob", aliases=['filter', 'f', "glob"], help="Filter usernames using a glob expression", converter=Glob)
+    @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
+    async def player_list(self, ctx: Context, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", invert_glob: bool = False, channel: RFChannel = 'this'):
         players: List[Player] = await channel.get_query("select * from players")
         total_player_count = len(players)
         if not isinstance(players, list):
             await ctx.reply("Ravenfall seems to be offline!")
             return
-        players = list(filter(lambda x : name_glob.match(x['name']), players))
+        if not invert_glob:
+            players = list(filter(lambda x : name_glob.match(x['name']), players))
+        else:
+            players = list(filter(lambda x : not bool(name_glob.match(x['name'])), players))
         filtered_player_count = len(players)
         if not players:
             await ctx.reply("No players!")
@@ -380,7 +389,7 @@ class InfoCog(Cog):
             case "name":
                 players_parsed.sort(key=lambda x: x.user_name)
             case "combatlevel":
-                players_parsed.sort(key=lambda x: x.combat_level)
+                players_parsed.sort(key=lambda x: x.combat_level, reverse=True)
                 
         players_grouped: Dict[str, List[Character]] = defaultdict(list)
         
@@ -423,50 +432,51 @@ class InfoCog(Cog):
                 out_str.append(f"{group_name} --- -- -- - -")
             for char in items:
                 what = ""
-                if char.training in (Skills.Attack, Skills.Defense, Skills.Strength, Skills.Health, Skills.Magic, Skills.Ranged):
-                    what = f"training {char.training.name.lower()}"
-                elif char.training in ravenpy.resource_skills:
-                    if char.target_item:
-                        what = f"{char.training.name.lower()} {char.target_item.item.name.lower()}"
-                    else:
-                        what = f"{char.training.name.lower()}"
-                elif char.training == Skills.Alchemy:
-                    what = f"training alchemy"
-                elif char.training == Skills.Sailing:
-                    pass
-                elif char.training is None:
-                    pass
-                else:
-                    what = f"{char.training.name.lower()}"
 
-                if char.in_onsen:
-                    what = "resting"
+                stats = []
+                if not char.in_onsen:
+                    for char_stat in char.training_stats:
+                        skill_name = char_stat.skill.name
+                        enchant_levels = ""
+                        if char_stat.enchant_levels > 0:
+                            enchant_levels = f"[+{char_stat.enchant_levels}]"
+                        stats.append(utils.strjoin(" ",*(
+                            f"{skill_name} {char_stat.level}",
+                            enchant_levels, 
+                            f"({char_stat.level_exp/char_stat.total_exp_for_level:.1%})"
+                        )))
+                    what = utils.strjoin(', ', *stats)
 
                 where = ""
                 if char.in_raid:
-                    where = "in a raid"
+                    where = "raid"
                 if char.in_arena:
-                    where = "in the arena"
+                    where = "arena"
                 if char.in_dungeon:
-                    where = "in a dungeon"
+                    where = "dungeon"
                 if char.in_onsen:
-                    where = "in the onsen"
+                    where = "resting"
 
                 where_island = ""
                 if char.island:
-                    where_island = f"at {char.island.name.capitalize()}"
-                elif not (char.in_raid or char.in_dungeon):
-                    where_island = "sailing the seas"
+                    where_island = f"{char.island.name.capitalize()}"
                     
-                rested = ""
+                rest_time = "0s"
                 if char.rested_time.total_seconds() > 0:
-                    s = TimeSize.SMALL_SPACES 
-                    rested = f"with {format_seconds(char.rested_time.total_seconds(),s)} of rest time"
+                    s = TimeSize.SMALL 
+                    rest_time = format_seconds(char.rested_time.total_seconds(),s)
+                    if char.in_onsen:
+                        rest_time += "+"
+                    else:
+                        rest_time += "-"
                     
                 out_str.append(utils.fill_whitespace(
                     f"{char.user_name.ljust(24)}  "
                     f"Lv.{str(char.combat_level).ljust(4)}  "
-                    f"{utils.strjoin(" ", what, where, where_island, rested)}  ", 
+                    f"{where.ljust(7)}  "
+                    f"{where_island.ljust(8)}  "
+                    f"{rest_time.ljust(9)}  "
+                    f"{what}  ", 
                     "."
                 ))
             out_str.append("")    
