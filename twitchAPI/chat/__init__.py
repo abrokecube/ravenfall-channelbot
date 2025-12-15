@@ -600,8 +600,6 @@ class Chat:
         self.no_shared_chat_messages: bool = no_shared_chat_messages
         self.listen_confirm_timeout: int = 30
         """Time in second that any :code:`listen_` should wait for its subscription to be completed."""
-        self.reconnect_delay_steps: List[int] = [0, 1, 2, 4, 8, 16, 32, 64, 128]
-        """Time in seconds between reconnect attempts"""
         self.log_no_registered_command_handler: bool = True
         """Controls if instances of commands being issued in chat where no handler exists should be logged. |default|:code:`True`"""
         self.__connection = None
@@ -871,6 +869,7 @@ class Chat:
         while True:
             try:
                 self.__connection = await self._session.ws_connect(self.connection_url)
+                break
             except Exception:
                 retry += 1
                 backoff = min(120, (2 ** retry)) + random.uniform(0, 1)
@@ -1352,7 +1351,7 @@ class Chat:
             raise ValueError('message must be a non empty string')
         await self._send_message(message)
 
-    async def send_message(self, room: CHATROOM_TYPE, text: str):
+    async def send_message(self, room: CHATROOM_TYPE, text: str, reply_id: Optional[str] = None):
         """Send a message to the given channel
 
         Please note that you first need to join a channel before you can send a message to it.
@@ -1377,8 +1376,11 @@ class Chat:
             room = f'#{room}'.lower()
         bucket = self._get_message_bucket(room[1:])
         await bucket.put()
-        await self._send_message(f'PRIVMSG {room} :{text}')
-
+        if reply_id is not None:
+            await self._send_message(f'@reply-parent-msg-id={reply_id} PRIVMSG {room} :{text}')
+        else:
+            await self._send_message(f'PRIVMSG {room} :{text}')
+            
     async def leave_room(self, chat_rooms: Union[List[str], str]):
         """leave one or more chat rooms\n
         Will only exit once all given chat rooms where successfully left
