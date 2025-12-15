@@ -25,7 +25,6 @@ from utils.commands_rf import RFChannelConverter, TwitchUsername, RFSkill, Choic
 from ..command_utils import Glob
 from ..ravenfallchannel import RFChannel
 from ..models import Player
-
 import re
 
 import ravenpy
@@ -366,10 +365,12 @@ class InfoCog(Cog):
     @parameter("name_glob", aliases=['filter', 'f'], help="Filter usernames using a glob expression", converter=Glob)
     async def player_list(self, ctx: Context, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", channel: RFChannel = 'this'):
         players: List[Player] = await channel.get_query("select * from players")
+        total_player_count = len(players)
         if not isinstance(players, list):
             await ctx.reply("Ravenfall seems to be offline!")
             return
         players = list(filter(lambda x : name_glob.match(x['name']), players))
+        filtered_player_count = len(players)
         if not players:
             await ctx.reply("No players!")
             return
@@ -406,11 +407,14 @@ class InfoCog(Cog):
         
         out_str = []
         
-        out_str.append(
-            f"Player info for {channel.channel_name} "
-            f"(as of {datetime.now(timezone.utc).strftime("%d %b %Y %H:%M:%S UTC")})"
-            "\n"
-        )
+        top_line = []
+        top_line.append(f"Player info for {channel.channel_name} ")
+        if total_player_count != filtered_player_count:
+            top_line.append("(filtered) ")
+        top_line.append(f"(as of {datetime.now(timezone.utc).strftime("%d %b %Y %H:%M:%S UTC")})")
+        
+        out_str.append(''.join(top_line))
+        out_str.append("")
         
         for group_name, items in players_grouped.items():
             if not items:
@@ -467,8 +471,26 @@ class InfoCog(Cog):
                 ))
             out_str.append("")    
         
+        if total_player_count == filtered_player_count:
+            player_count_text = (
+                f"{utils.pl2(total_player_count, "player", "players")} in {channel.channel_name}"
+            )
+            out_str.append(f"{utils.pl2(total_player_count, "player", "players")} total")
+        else:
+            player_count_text = (
+                f"{filtered_player_count}/{total_player_count} "
+                f"{utils.pl2(filtered_player_count, "player", "players", False)} "
+                f"in {channel.channel_name}"
+            )
+            out_str.append(
+                f"{filtered_player_count}/{total_player_count} "
+                f"{utils.pl2(filtered_player_count, "player", "players", False)} total"
+            )
+        out_str.append("")    
         url = await utils.upload_to_pastes("\n".join(out_str))
-        await ctx.reply(f"Player info: {url}")
+        await ctx.reply(
+            f"{player_count_text}: {url}"
+        )
 
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
