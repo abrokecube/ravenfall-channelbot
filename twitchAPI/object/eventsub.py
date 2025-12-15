@@ -20,12 +20,13 @@ __all__ = ['ChannelPollBeginEvent', 'ChannelUpdateEvent', 'ChannelFollowEvent', 
            'CharityDonationEvent', 'ChannelShoutoutCreateEvent', 'ChannelShoutoutReceiveEvent', 'ChannelChatClearEvent',
            'ChannelChatClearUserMessagesEvent', 'ChannelChatMessageDeleteEvent', 'ChannelChatNotificationEvent', 'ChannelAdBreakBeginEvent',
            'ChannelChatMessageEvent', 'ChannelChatSettingsUpdateEvent', 'UserWhisperMessageEvent', 'ChannelPointsAutomaticRewardRedemptionAddEvent',
+           'ChannelPointsAutomaticRewardRedemptionAdd2Event',
            'ChannelVIPAddEvent', 'ChannelVIPRemoveEvent', 'ChannelUnbanRequestCreateEvent', 'ChannelUnbanRequestResolveEvent',
            'ChannelSuspiciousUserMessageEvent', 'ChannelSuspiciousUserUpdateEvent', 'ChannelModerateEvent', 'ChannelWarningAcknowledgeEvent',
            'ChannelWarningSendEvent', 'AutomodMessageHoldEvent', 'AutomodMessageUpdateEvent', 'AutomodSettingsUpdateEvent',
            'AutomodTermsUpdateEvent', 'ChannelChatUserMessageHoldEvent', 'ChannelChatUserMessageUpdateEvent', 'ChannelSharedChatBeginEvent',
-           'ChannelSharedChatUpdateEvent', 'ChannelSharedChatEndEvent',
-           'Subscription', 'ChannelPollBeginData', 'PollChoice', 'BitsVoting', 'ChannelPointsVoting', 'ChannelUpdateData', 'ChannelFollowData',
+           'ChannelSharedChatUpdateEvent', 'ChannelSharedChatEndEvent', 'ChannelBitsUseEvent',
+           'Subscription', 'MessageMetadata', 'ChannelPollBeginData', 'PollChoice', 'BitsVoting', 'ChannelPointsVoting', 'ChannelUpdateData', 'ChannelFollowData',
            'ChannelSubscribeData', 'ChannelSubscriptionEndData', 'ChannelSubscriptionGiftData', 'ChannelSubscriptionMessageData',
            'SubscriptionMessage', 'Emote', 'ChannelCheerData', 'ChannelRaidData', 'ChannelBanData', 'ChannelUnbanData', 'ChannelModeratorAddData',
            'ChannelModeratorRemoveData', 'ChannelPointsCustomRewardData', 'GlobalCooldown', 'Image', 'MaxPerStream', 'MaxPerUserPerStream',
@@ -42,14 +43,16 @@ __all__ = ['ChannelPollBeginEvent', 'ChannelUpdateEvent', 'ChannelFollowEvent', 
            'ChannelChatMessageData', 'ChatMessage', 'ChatMessageBadge', 'ChatMessageFragment', 'ChatMessageFragmentCheermoteMetadata',
            'ChatMessageFragmentMentionMetadata', 'ChatMessageReplyMetadata', 'ChatMessageCheerMetadata', 'ChatMessageFragmentEmoteMetadata',
            'ChannelChatSettingsUpdateData', 'WhisperInformation', 'UserWhisperMessageData', 'AutomaticReward', 'RewardMessage', 'RewardEmote',
-           'ChannelPointsAutomaticRewardRedemptionAddData', 'ChannelVIPAddData', 'ChannelVIPRemoveData', 'ChannelUnbanRequestCreateData',
+           'ChannelPointsAutomaticRewardRedemptionAddData', 'ChannelPointsAutomaticRewardRedemptionAdd2Data', 'ChannelVIPAddData', 'ChannelVIPRemoveData',
+           'ChannelUnbanRequestCreateData', 'AutomaticReward2',
            'ChannelUnbanRequestResolveData', 'MessageWithID', 'ChannelSuspiciousUserMessageData', 'ChannelSuspiciousUserUpdateData',
            'ModerateMetadataSlow', 'ModerateMetadataWarn', 'ModerateMetadataDelete', 'ModerateMetadataTimeout', 'ModerateMetadataUnmod',
            'ModerateMetadataUnvip', 'ModerateMetadataUntimeout', 'ModerateMetadataUnraid', 'ModerateMetadataUnban', 'ModerateMetadataUnbanRequest',
            'ModerateMetadataAutomodTerms', 'ModerateMetadataBan', 'ModerateMetadataMod', 'ModerateMetadataVip', 'ModerateMetadataRaid',
            'ModerateMetadataFollowers', 'ChannelModerateData', 'ChannelWarningAcknowledgeData', 'ChannelWarningSendData', 'AutomodMessageHoldData',
            'AutomodMessageUpdateData', 'AutomodSettingsUpdateData', 'AutomodTermsUpdateData', 'ChannelChatUserMessageHoldData', 'ChannelChatUserMessageUpdateData',
-           'SharedChatParticipant', 'ChannelSharedChatBeginData', 'ChannelSharedChatUpdateData', 'ChannelSharedChatEndData']
+           'SharedChatParticipant', 'ChannelSharedChatBeginData', 'ChannelSharedChatUpdateData', 'ChannelSharedChatEndData', 'PowerUpEmote', 'PowerUp',
+           'ChannelBitsUseData']
 
 
 # Event Data
@@ -63,6 +66,21 @@ class Subscription(TwitchObject):
     transport: dict
     type: str
     version: str
+
+
+class MessageMetadata(TwitchObject):
+    message_id: str
+    """An ID that uniquely identifies the message. 
+    Twitch sends messages at least once, but if Twitch is unsure of whether you received a notification, it’ll resend the message. 
+    This means you may receive a notification twice. If Twitch resends the message, the message ID will be the same."""
+    message_type: str
+    """The type of message, which is set to notification."""
+    message_timestamp: datetime
+    """The timestamp that the message was sent."""
+    subscription_type: str
+    """The type of event sent in the message."""
+    subscription_version: str
+    """The version number of the subscription type’s definition. This is the same value specified in the subscription request."""
 
 
 class PollChoice(TwitchObject):
@@ -1519,6 +1537,8 @@ class ChannelChatMessageData(TwitchObject):
     - channel_points_highlighted
     - channel_points_sub_only
     - user_intro
+    - power_ups_message_effect
+    - power_ups_gigantified_emote
     """
     badges: List[ChatMessageBadge]
     """List of chat badges."""
@@ -1531,6 +1551,33 @@ class ChannelChatMessageData(TwitchObject):
     """Optional. Metadata if this message is a reply."""
     channel_points_custom_reward_id: str
     """Optional. The ID of a channel points custom reward that was redeemed."""
+    source_broadcaster_user_id: Optional[str]
+    """The broadcaster user ID of the channel the message was sent from. 
+    
+    Is None when the message happens in the same channel as the broadcaster. 
+    Is not None when in a shared chat session, and the action happens in the channel of a participant other than the broadcaster."""
+    source_broadcaster_user_name: Optional[str]
+    """The user name of the broadcaster of the channel the message was sent from. 
+    
+    Is None when the message happens in the same channel as the broadcaster. 
+    Is not None when in a shared chat session, and the action happens in the channel of a participant other than the broadcaster."""
+    source_broadcaster_user_login: Optional[str]
+    """The login of the broadcaster of the channel the message was sent from. 
+    
+    Is None when the message happens in the same channel as the broadcaster. 
+    Is not None when in a shared chat session, and the action happens in the channel of a participant other than the broadcaster."""
+    source_message_id: Optional[str]
+    """The UUID that identifies the source message from the channel the message was sent from. 
+    
+    Is None when the message happens in the same channel as the broadcaster. 
+    Is not None when in a shared chat session, and the action happens in the channel of a participant other than the broadcaster."""
+    source_badges: Optional[List[ChatMessageBadge]]
+    """The list of chat badges for the chatter in the channel the message was sent from. 
+    
+    Is None when the message happens in the same channel as the broadcaster. 
+    Is not None when in a shared chat session, and the action happens in the channel of a participant other than the broadcaster."""
+    is_source_only: Optional[bool]
+    """Determines if a message delivered during a shared chat session is only sent to the source channel. Has no effect if the message is not sent during a shared chat session."""
 
 
 class ChannelChatSettingsUpdateData(TwitchObject):
@@ -1605,7 +1652,7 @@ class AutomaticReward(TwitchObject):
     type: str
     """The type of reward. One of:
     
-    - ssingle_message_bypass_sub_mode
+    - single_message_bypass_sub_mode
     - send_highlighted_message
     - random_sub_emote_unlock
     - chosen_sub_emote_unlock
@@ -1615,6 +1662,22 @@ class AutomaticReward(TwitchObject):
     """The reward cost."""
     unlocked_emote: Optional[MessageFragmentEmote]
     """Emote that was unlocked."""
+
+
+class AutomaticReward2(TwitchObject):
+    type: str
+    """The type of reward. One of:
+
+    - single_message_bypass_sub_mode
+    - send_highlighted_message
+    - random_sub_emote_unlock
+    - chosen_sub_emote_unlock
+    - chosen_modified_sub_emote_unlock
+    """
+    channel_points: int
+    """Number of channel points used."""
+    unlocked_emote: Optional[RewardEmote]
+    """Emote associated with the reward."""
 
 
 class RewardMessage(TwitchObject):
@@ -1645,6 +1708,29 @@ class ChannelPointsAutomaticRewardRedemptionAddData(TwitchObject):
     """An object that contains the user message and emote information needed to recreate the message."""
     user_input: Optional[str]
     """A string that the user entered if the reward requires input."""
+    redeemed_at: datetime
+    """The time of when the reward was redeemed."""
+
+
+class ChannelPointsAutomaticRewardRedemptionAdd2Data(TwitchObject):
+    broadcaster_user_id: str
+    """The ID of the channel where the reward was redeemed."""
+    broadcaster_user_login: str
+    """The login of the channel where the reward was redeemed."""
+    broadcaster_user_name: str
+    """The display name of the channel where the reward was redeemed."""
+    user_id: str
+    """The ID of the redeeming user."""
+    user_login: str
+    """The login of the redeeming user."""
+    user_name: str
+    """The display name of the redeeming user."""
+    id: str
+    """The ID of the Redemption."""
+    reward: AutomaticReward2
+    """An object that contains the reward information."""
+    message: RewardMessage
+    """An object that contains the user message and emote information needed to recreate the message."""
     redeemed_at: datetime
     """The time of when the reward was redeemed."""
 
@@ -1755,7 +1841,7 @@ class ChannelSuspiciousUserMessageData(TwitchObject):
     shared_ban_channel_ids: List[str]
     """A list of channel IDs where the suspicious user is also banned."""
     types: List[str]
-    """User types (if any) that apply to the suspicious user, can be “manual”, “ban_evader_detector”, or “shared_channel_ban”."""
+    """User types (if any) that apply to the suspicious user, can be “manually_added”, “ban_evader”, or “banned_in_shared_channel”."""
     ban_evasion_evaluation: str
     """A ban evasion likelihood value (if any) that as been applied to the user automatically by Twitch, can be “unknown”, “possible”, or “likely”."""
     message: MessageWithID
@@ -2294,333 +2380,458 @@ class ChannelSharedChatEndData(TwitchObject):
     """The user login of the host channel."""
 
 
+class PowerUpEmote(TwitchObject):
+    id: str
+    """The ID that uniquely identifies this emote."""
+    name: str
+    """The human readable emote token."""
+
+
+class PowerUp(TwitchObject):
+    type: str
+    """Possible values:
+    
+    - message_effect
+    - celebration
+    - gigantify_an_emote"""
+    emote: Optional[PowerUpEmote]
+    """Emote associated with the reward."""
+    message_effect_id: Optional[str]
+    """The ID of the message effect."""
+
+
+class ChannelBitsUseData(TwitchObject):
+    broadcaster_user_id: str
+    """The User ID of the channel where the Bits were redeemed."""
+    broadcaster_user_login: str
+    """The login of the channel where the Bits were used."""
+    broadcaster_user_name: str
+    """The display name of the channel where the Bits were used."""
+    user_id: str
+    """The User ID of the redeeming user."""
+    user_login: str
+    """The login name of the redeeming user."""
+    user_name: str
+    """The display name of the redeeming user."""
+    bits: int
+    """The number of Bits used."""
+    type: str
+    """Possible values are:
+    
+    - cheer
+    - power_up
+    - combo"""
+    message: Optional[Message]
+    """Contains the user message and emote information needed to recreate the message."""
+    power_up: Optional[PowerUp]
+    """Data about Power-up."""
+
+
 # Events
 
 class ChannelPollBeginEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPollBeginData
 
 
 class ChannelUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelUpdateData
 
 
 class ChannelFollowEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelFollowData
 
 
 class ChannelSubscribeEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSubscribeData
 
 
 class ChannelSubscriptionEndEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSubscribeData
 
 
 class ChannelSubscriptionGiftEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSubscriptionGiftData
 
 
 class ChannelSubscriptionMessageEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSubscriptionMessageData
 
 
 class ChannelCheerEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelCheerData
 
 
 class ChannelRaidEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelRaidData
 
 
 class ChannelBanEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelBanData
 
 
 class ChannelUnbanEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelUnbanData
 
 
 class ChannelModeratorAddEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelModeratorAddData
 
 
 class ChannelModeratorRemoveEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelModeratorRemoveData
 
 
 class ChannelPointsCustomRewardAddEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPointsCustomRewardData
 
 
 class ChannelPointsCustomRewardUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPointsCustomRewardData
 
 
 class ChannelPointsCustomRewardRemoveEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPointsCustomRewardData
 
 
 class ChannelPointsCustomRewardRedemptionAddEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPointsCustomRewardRedemptionData
 
 
 class ChannelPointsCustomRewardRedemptionUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPointsCustomRewardRedemptionData
 
 
 class ChannelPollProgressEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPollProgressData
 
 
 class ChannelPollEndEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPollEndData
 
 
 class ChannelPredictionEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPredictionData
 
 
 class ChannelPredictionEndEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPredictionEndData
 
 
 class DropEntitlementGrantEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: DropEntitlementGrantData
 
 
 class ExtensionBitsTransactionCreateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ExtensionBitsTransactionCreateData
 
 
 class GoalEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: GoalData
 
 
 class HypeTrainEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: HypeTrainData
 
 
 class HypeTrainEndEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: HypeTrainEndData
 
 
 class StreamOnlineEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: StreamOnlineData
 
 
 class StreamOfflineEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: StreamOfflineData
 
 
 class UserAuthorizationGrantEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: UserAuthorizationGrantData
 
 
 class UserAuthorizationRevokeEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: UserAuthorizationRevokeData
 
 
 class UserUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: UserUpdateData
 
 
 class ShieldModeEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ShieldModeData
 
 
 class CharityCampaignStartEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: CharityCampaignStartData
 
 
 class CharityCampaignProgressEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: CharityCampaignProgressData
 
 
 class CharityCampaignStopEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: CharityCampaignStopData
 
 
 class CharityDonationEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: CharityDonationData
 
 
 class ChannelShoutoutCreateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelShoutoutCreateData
 
 
 class ChannelShoutoutReceiveEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelShoutoutReceiveData
 
 
 class ChannelChatClearEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelChatClearData
 
 
 class ChannelChatClearUserMessagesEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelChatClearUserMessagesData
 
 
 class ChannelChatMessageDeleteEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelChatMessageDeleteData
 
 
 class ChannelChatNotificationEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelChatNotificationData
 
 
 class ChannelAdBreakBeginEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelAdBreakBeginData
 
 
 class ChannelChatMessageEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelChatMessageData
 
 
 class ChannelChatSettingsUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelChatSettingsUpdateData
 
 
 class UserWhisperMessageEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: UserWhisperMessageData
 
 
 class ChannelPointsAutomaticRewardRedemptionAddEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelPointsAutomaticRewardRedemptionAddData
+
+
+class ChannelPointsAutomaticRewardRedemptionAdd2Event(TwitchObject):
+    subscription: Subscription
+    metadata: MessageMetadata
+    event: ChannelPointsAutomaticRewardRedemptionAdd2Data
 
 
 class ChannelVIPAddEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelVIPAddData
 
 
 class ChannelVIPRemoveEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelVIPRemoveData
 
 
 class ChannelUnbanRequestCreateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelUnbanRequestCreateData
 
 
 class ChannelUnbanRequestResolveEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelUnbanRequestResolveData
 
 
 class ChannelSuspiciousUserMessageEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSuspiciousUserMessageData
 
 
 class ChannelSuspiciousUserUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSuspiciousUserUpdateData
 
 
 class ChannelModerateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelModerateData
 
 
 class ChannelWarningAcknowledgeEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelWarningAcknowledgeData
 
 
 class ChannelWarningSendEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelWarningSendData
 
 
 class AutomodMessageHoldEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: AutomodMessageHoldData
 
 
 class AutomodMessageUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: AutomodMessageUpdateData
 
 
 class AutomodSettingsUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: AutomodSettingsUpdateData
 
 
 class AutomodTermsUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: AutomodTermsUpdateData
 
 
 class ChannelChatUserMessageHoldEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelChatUserMessageHoldData
 
 
 class ChannelChatUserMessageUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelChatUserMessageUpdateData
 
 
 class ChannelSharedChatBeginEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSharedChatBeginData
 
 
 class ChannelSharedChatUpdateEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSharedChatUpdateData
 
 
 class ChannelSharedChatEndEvent(TwitchObject):
     subscription: Subscription
+    metadata: MessageMetadata
     event: ChannelSharedChatEndData
+
+
+class ChannelBitsUseEvent(TwitchObject):
+    subscription: Subscription
+    metadata: MessageMetadata
+    event: ChannelBitsUseData

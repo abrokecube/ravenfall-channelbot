@@ -29,9 +29,10 @@ from twitchAPI.object.eventsub import (ChannelPollBeginEvent, ChannelUpdateEvent
                                        ChannelSuspiciousUserMessageEvent, ChannelSuspiciousUserUpdateEvent, ChannelModerateEvent,
                                        ChannelWarningAcknowledgeEvent, ChannelWarningSendEvent, AutomodMessageHoldEvent, AutomodMessageUpdateEvent,
                                        AutomodSettingsUpdateEvent, AutomodTermsUpdateEvent, ChannelChatUserMessageHoldEvent, ChannelChatUserMessageUpdateEvent,
-                                       ChannelSharedChatBeginEvent, ChannelSharedChatUpdateEvent, ChannelSharedChatEndEvent)
+                                       ChannelSharedChatBeginEvent, ChannelSharedChatUpdateEvent, ChannelSharedChatEndEvent, ChannelBitsUseEvent,
+                                       ChannelPointsAutomaticRewardRedemptionAdd2Event)
 from twitchAPI.helper import remove_none_values
-from twitchAPI.type import TwitchAPIException
+from twitchAPI.type import TwitchAPIException, AuthType
 import asyncio
 from logging import getLogger, Logger
 from twitchAPI.twitch import Twitch
@@ -75,7 +76,7 @@ class EventSubBase(ABC):
         """
 
     @abstractmethod
-    def _get_transport(self):
+    def _get_transport(self) -> dict:
         pass
 
     # ==================================================================================================================
@@ -83,7 +84,7 @@ class EventSubBase(ABC):
     # ==================================================================================================================
 
     @abstractmethod
-    async def _build_request_header(self):
+    async def _build_request_header(self) -> dict:
         pass
 
     async def _api_post_request(self, session, url: str, data: Union[dict, None] = None):
@@ -110,10 +111,10 @@ class EventSubBase(ABC):
 
     async def unsubscribe_all(self):
         """Unsubscribe from all subscriptions"""
-        ret = await self._twitch.get_eventsub_subscriptions()
+        ret = await self._twitch.get_eventsub_subscriptions(target_token=self._target_token())
         async for d in ret:
             try:
-                await self._twitch.delete_eventsub_subscription(d.id)
+                await self._twitch.delete_eventsub_subscription(d.id, target_token=self._target_token())
             except TwitchAPIException as e:
                 self.logger.warning(f'failed to unsubscribe from event {d.id}: {str(e)}')
         self._callbacks.clear()
@@ -123,10 +124,14 @@ class EventSubBase(ABC):
         for key, value in self._callbacks.items():
             self.logger.debug(f'unsubscribe from event {key}')
             try:
-                await self._twitch.delete_eventsub_subscription(key)
+                await self._twitch.delete_eventsub_subscription(key, target_token=self._target_token())
             except TwitchAPIException as e:
                 self.logger.warning(f'failed to unsubscribe from event {key}: {str(e)}')
         self._callbacks.clear()
+
+    @abstractmethod
+    def _target_token(self) -> AuthType:
+        pass
 
     @abstractmethod
     async def _unsubscribe_hook(self, topic_id: str) -> bool:
@@ -135,7 +140,7 @@ class EventSubBase(ABC):
     async def unsubscribe_topic(self, topic_id: str) -> bool:
         """Unsubscribe from a specific topic."""
         try:
-            await self._twitch.delete_eventsub_subscription(topic_id)
+            await self._twitch.delete_eventsub_subscription(topic_id, target_token=self._target_token())
             self._callbacks.pop(topic_id, None)
             return await self._unsubscribe_hook(topic_id)
         except TwitchAPIException as e:
@@ -1454,6 +1459,29 @@ class EventSubBase(ABC):
         return await self._subscribe('channel.channel_points_automatic_reward_redemption.add', '1', param, callback,
                                      ChannelPointsAutomaticRewardRedemptionAddEvent)
 
+    async def listen_channel_points_automatic_reward_redemption_add_v2(self,
+                                                                       broadcaster_user_id: str,
+                                                                       callback: Callable[[ChannelPointsAutomaticRewardRedemptionAdd2Event], Awaitable[None]]) -> str:
+        """A viewer has redeemed an automatic channel points reward on the specified channel.
+
+        Requires :const:`~twitchAPI.type.AuthScope.CHANNEL_READ_REDEMPTIONS` or :const:`~twitchAPI.type.AuthScope.CHANNEL_MANAGE_REDEMPTIONS` scope.
+
+        For more information see here: https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#channelchannel_points_automatic_reward_redemptionadd-v2
+
+        :param broadcaster_user_id: The broadcaster user ID for the channel you want to receive channel points reward add notifications for.
+        :param callback: function for callback
+        :raises ~twitchAPI.type.EventSubSubscriptionConflict: if a conflict was found with this subscription
+            (e.g. already subscribed to this exact topic)
+        :raises ~twitchAPI.type.EventSubSubscriptionTimeout: if :const:`~twitchAPI.eventsub.webhook.EventSubWebhook.wait_for_subscription_confirm`
+            is true and the subscription was not fully confirmed in time
+        :raises ~twitchAPI.type.EventSubSubscriptionError: if the subscription failed (see error message for details)
+        :raises ~twitchAPI.type.TwitchBackendException: if the subscription failed due to a twitch backend error
+        :returns: The id of the topic subscription
+        """
+        param = {'broadcaster_user_id': broadcaster_user_id}
+        return await self._subscribe('channel.channel_points_automatic_reward_redemption.add', '2', param, callback,
+                                     ChannelPointsAutomaticRewardRedemptionAdd2Event)
+
     async def listen_channel_vip_add(self,
                                      broadcaster_user_id: str,
                                      callback: Callable[[ChannelVIPAddEvent], Awaitable[None]]) -> str:
@@ -1961,3 +1989,25 @@ class EventSubBase(ABC):
             'broadcaster_user_id': broadcaster_user_id,
         }
         return await self._subscribe('channel.shared_chat.end', '1', param, callback, ChannelSharedChatEndEvent)
+
+    async def listen_channel_bits_use(self,
+                                      broadcaster_user_id: str,
+                                      callback: Callable[[ChannelBitsUseEvent], Awaitable[None]]) -> str:
+        """A notification is sent whenever Bits are used on a channel.
+
+         For more information see here: https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#channelbitsuse
+
+        :param broadcaster_user_id: The user ID of the channel broadcaster.
+        :param callback: function for callback
+        :raises ~twitchAPI.type.EventSubSubscriptionConflict: if a conflict was found with this subscription
+            (e.g. already subscribed to this exact topic)
+        :raises ~twitchAPI.type.EventSubSubscriptionTimeout: if :const:`~twitchAPI.eventsub.webhook.EventSubWebhook.wait_for_subscription_confirm`
+            is true and the subscription was not fully confirmed in time
+        :raises ~twitchAPI.type.EventSubSubscriptionError: if the subscription failed (see error message for details)
+        :raises ~twitchAPI.type.TwitchBackendException: if the subscription failed due to a twitch backend error
+        :returns: The id of the topic subscription
+        """
+        param = {
+            'broadcaster_user_id': broadcaster_user_id,
+        }
+        return await self._subscribe('channel.bits.use', '1', param, callback, ChannelBitsUseEvent)

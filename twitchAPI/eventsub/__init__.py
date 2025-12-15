@@ -259,9 +259,13 @@ The Callback Payload is the type of the parameter passed to the callback functio
      - Function: :const:`~twitchAPI.eventsub.base.EventSubBase.listen_user_whisper_message()` |br|
        Payload: :const:`~twitchAPI.object.eventsub.UserWhisperMessageEvent`
      - A user receives a whisper.
-   * - **Channel Points Automatic Reward Redemption**
+   * - **Channel Points Automatic Reward Redemption** v1
      - Function: :const:`~twitchAPI.eventsub.base.EventSubBase.listen_channel_points_automatic_reward_redemption_add()` |br|
        Payload: :const:`~twitchAPI.object.eventsub.ChannelPointsAutomaticRewardRedemptionAddEvent`
+     - A viewer has redeemed an automatic channel points reward on the specified channel.
+   * - **Channel Points Automatic Reward Redemption** v2
+     - Function: :const:`~twitchAPI.eventsub.base.EventSubBase.listen_channel_points_automatic_reward_redemption_add_v2()` |br|
+       Payload: :const:`~twitchAPI.object.eventsub.ChannelPointsAutomaticRewardRedemptionAdd2Event`
      - A viewer has redeemed an automatic channel points reward on the specified channel.
    * - **Channel VIP Add**
      - Function: :const:`~twitchAPI.eventsub.base.EventSubBase.listen_channel_vip_add()` |br|
@@ -335,4 +339,8 @@ The Callback Payload is the type of the parameter passed to the callback functio
      - Function: :const:`~twitchAPI.eventsub.base.EventSubBase.listen_channel_shared_chat_end()` |br|
        Payload: :const:`~twitchAPI.object.eventsub.ChannelSharedChatEndEvent`
      - A notification when a channel leaves a shared chat session or the session ends.
+   * - **Channel Bits Use**
+     - Function: :const:`~twitchAPI.eventsub.base.EventSubBase.listen_channel_bits_use()` |br|
+       Payload: :const:`~twitchAPI.object.eventsub.ChannelBitsUseEvent`
+     - A notification is sent whenever Bits are used on a channel.
 """

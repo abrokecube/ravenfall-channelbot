@@ -78,15 +78,13 @@ import aiohttp
 from .twitch import Twitch
 from .helper import build_url, build_scope, get_uuid, TWITCH_AUTH_BASE_URL, fields_to_enum
 from .type import AuthScope, InvalidRefreshTokenException, UnauthorizedException, TwitchAPIException
-from typing import Optional, Callable, Awaitable, Tuple
 import webbrowser
 from aiohttp import web
 import asyncio
 from threading import Thread
 from concurrent.futures import CancelledError
 from logging import getLogger, Logger
-
-from typing import List, Union
+from typing import List, Union, Optional, Callable, Awaitable, Tuple
 
 __all__ = ['refresh_access_token', 'validate_token', 'get_user_info', 'revoke_token', 'CodeFlow', 'UserAuthenticator', 'UserAuthenticationStorageHelper']
 
@@ -237,7 +235,7 @@ class CodeFlow:
         self._device_code: Optional[str] = None
         self._expires_in: Optional[datetime.datetime] = None
 
-    async def get_code(self) -> (str, str):
+    async def get_code(self) -> Tuple[str, str]:
         """Requests a Code and URL from teh API to start the flow
 
         :return: The Code and URL used to further the flow
@@ -253,7 +251,7 @@ class CodeFlow:
                 self._expires_in = datetime.datetime.now() + datetime.timedelta(seconds=data['expires_in'])
                 return data['user_code'], data['verification_uri']
 
-    async def wait_for_auth_complete(self) -> (str, str):
+    async def wait_for_auth_complete(self) -> Tuple[str, str]:
         """Waits till the user completed the flow on teh website and then generates the tokens.
 
         :return: the generated access_token and refresh_token
@@ -504,7 +502,7 @@ class UserAuthenticator:
             if data.get('access_token') is None:
                 raise TwitchAPIException(f'Authentication failed:\n{str(data)}')
             return data['access_token'], data['refresh_token']
-        elif user_token is not None:
+        elif user_token is not None and self._callback_func is not None:
             self._callback_func(data['access_token'], data['refresh_token'])
 
 
@@ -534,7 +532,7 @@ class UserAuthenticationStorageHelper:
         self.auth_generator = auth_generator_func if auth_generator_func is not None else self._default_auth_gen
         self.auth_base_url: str = auth_base_url
 
-    async def _default_auth_gen(self, twitch: 'Twitch', scopes: List[AuthScope]) -> (str, str):
+    async def _default_auth_gen(self, twitch: 'Twitch', scopes: List[AuthScope]) -> Tuple[str, str]:
         auth = UserAuthenticator(twitch, scopes, force_verify=True, auth_base_url=self.auth_base_url)
         return await auth.authenticate()
 

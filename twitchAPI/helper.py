@@ -14,9 +14,9 @@ from enum import Enum
 
 from .type import AuthScope
 
-from typing import Union, List, Type, Optional
+from typing import Union, List, Type, Optional, overload
 
-__all__ = ['first', 'limit', 'TWITCH_API_BASE_URL', 'TWITCH_AUTH_BASE_URL', 'TWITCH_PUB_SUB_URL', 'TWITCH_CHAT_URL', 'TWITCH_EVENT_SUB_WEBSOCKET_URL',
+__all__ = ['first', 'limit', 'TWITCH_API_BASE_URL', 'TWITCH_AUTH_BASE_URL', 'TWITCH_CHAT_URL', 'TWITCH_EVENT_SUB_WEBSOCKET_URL',
            'build_url', 'get_uuid', 'build_scope', 'fields_to_enum', 'make_enum',
            'enum_value_or_none', 'datetime_to_str', 'remove_none_values', 'ResultType', 'RateLimitBucket', 'RATE_LIMIT_SIZES', 'done_task_callback']
 
@@ -26,8 +26,6 @@ TWITCH_API_BASE_URL: str = "https://api.twitch.tv/helix/"
 """The base url to the Twitch API endpoints"""
 TWITCH_AUTH_BASE_URL: str = "https://id.twitch.tv/oauth2/"
 """The base url to the twitch authentication endpoints"""
-TWITCH_PUB_SUB_URL: str = "wss://pubsub-edge.twitch.tv"
-"""The url to the Twitch PubSub websocket"""
 TWITCH_CHAT_URL: str = "wss://irc-ws.chat.twitch.tv:443"
 """The url to the Twitch Chat websocket"""
 TWITCH_EVENT_SUB_WEBSOCKET_URL: str = 'wss://eventsub.wss.twitch.tv/ws'
@@ -92,10 +90,18 @@ def build_scope(scopes: List[AuthScope]) -> str:
     return ' '.join([s.value for s in scopes])
 
 
+@overload
+def fields_to_enum(data: dict, fields: List[str], _enum: Type[Enum], default: Optional[Enum]) -> dict:
+    ...
+
+@overload
+def fields_to_enum(data: List[dict], fields: List[str], _enum: Type[Enum], default: Optional[Enum]) -> List[dict]:
+    ...
+
 def fields_to_enum(data: Union[dict, list],
                    fields: List[str],
                    _enum: Type[Enum],
-                   default: Optional[Enum]) -> Union[dict, list]:
+                   default: Optional[Enum]) -> Union[dict, List]:
     """Iterates a dict or list and tries to replace every dict entry with key in fields with the correct Enum value
 
     :param data: dict or list

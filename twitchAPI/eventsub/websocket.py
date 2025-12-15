@@ -80,7 +80,6 @@ Code Example
 import asyncio
 import datetime
 import json
-import random
 import threading
 from asyncio import CancelledError
 from dataclasses import dataclass
@@ -90,6 +89,7 @@ from typing import Optional, List, Dict, Callable, Awaitable
 
 import aiohttp
 from aiohttp import ClientSession, WSMessage, ClientWebSocketResponse
+from collections import deque
 
 from .base import EventSubBase
 
@@ -133,7 +133,8 @@ class EventSubWebsocket(EventSubBase):
                  connection_url: Optional[str] = None,
                  subscription_url: Optional[str] = None,
                  callback_loop: Optional[asyncio.AbstractEventLoop] = None,
-                 revocation_handler: Optional[Callable[[dict], Awaitable[None]]] = None):
+                 revocation_handler: Optional[Callable[[dict], Awaitable[None]]] = None,
+                 message_deduplication_history_length: int = 50):
         """
         :param twitch: The Twitch instance to be used
         :param connection_url: Alternative connection URL, useful for development with the twitch-cli
@@ -142,6 +143,7 @@ class EventSubWebsocket(EventSubBase):
             Set this if you or a library you use cares about which asyncio event loop is running the callbacks.
             Defaults to the one used by EventSub Websocket.
         :param revocation_handler: Optional handler for when subscriptions get revoked. |default| :code:`None`
+        :param message_deduplication_history_length: The amount of messages being considered for the duplicate message deduplication. |default| :code:`50`
         """
         super().__init__(twitch, 'twitchAPI.eventsub.websocket')
         self.subscription_url: Optional[str] = subscription_url
@@ -163,10 +165,13 @@ class EventSubWebsocket(EventSubBase):
         self._callback_loop = callback_loop
         self._is_reconnecting: bool = False
         self._active_subscriptions = {}
+        self._msg_id_history: deque = deque(maxlen=message_deduplication_history_length)
         self.revokation_handler: Optional[Callable[[dict], Awaitable[None]]] = revocation_handler
         """Optional handler for when subscriptions get revoked."""
         self._task_callback = partial(done_task_callback, self.logger)
         self._reconnect_timeout: Optional[datetime.datetime] = None
+        self.reconnect_delay_steps: List[int] = [0, 1, 2, 4, 8, 16, 32, 64, 128]
+        """Time in seconds between reconnect attempts"""
 
     def start(self):
         """Starts the EventSub client
@@ -201,10 +206,11 @@ class EventSubWebsocket(EventSubBase):
         self._startup_complete = False
         self._running = False
         self._ready = False
-        f = asyncio.run_coroutine_threadsafe(self._stop(), self._socket_loop)
-        f.result()
+        if self._socket_loop is not None:
+            f = asyncio.run_coroutine_threadsafe(self._stop(), self._socket_loop)
+            f.result()
 
-    def _get_transport(self):
+    def _get_transport(self) -> dict:
         return {
             'method': 'websocket',
             'session_id': self.active_session.id
@@ -246,6 +252,9 @@ class EventSubWebsocket(EventSubBase):
         }
         return sub_id
 
+    def _target_token(self) -> AuthType:
+        return AuthType.USER
+
     async def _connect(self, is_startup: bool = False):
         if is_startup:
             self.logger.debug(f'connecting to {self.connection_url}...')
@@ -258,17 +267,20 @@ class EventSubWebsocket(EventSubBase):
             while not self._connection.closed:
                 await asyncio.sleep(0.1)
         retry = 0
+        need_retry = True
         if self._session is None:
             self._session = aiohttp.ClientSession(timeout=self._twitch.session_timeout)
-        while True:
+        while need_retry and retry < len(self.reconnect_delay_steps):
+            need_retry = False
             try:
                 self._connection = await self._session.ws_connect(self.connection_url)
-                break
             except Exception:
+                self.logger.warning(f'connection attempt failed, retry in {self.reconnect_delay_steps[retry]} seconds...')
+                await asyncio.sleep(self.reconnect_delay_steps[retry])
                 retry += 1
-                backoff = min(120, (2 ** retry)) + random.uniform(0, 1)
-                self.logger.warning(f'connection attempt failed, retry in {backoff:.2f}s...')
-                await asyncio.sleep(backoff)
+                need_retry = True
+        if retry >= len(self.reconnect_delay_steps):
+            raise TwitchBackendException(f'can\'t connect to EventSub websocket {self.connection_url}')
 
     def _run_socket(self):
         self._socket_loop = asyncio.new_event_loop()
@@ -390,7 +402,7 @@ class EventSubWebsocket(EventSubBase):
         try:
             for sub in subs.values():
                 await self._subscribe(**sub)
-        except:
+        except BaseException:
             self.logger.exception('exception while resubscribing')
             if not self._active_subscriptions:  # Restore old subscriptions for next reconnect
                 self._active_subscriptions = subs
@@ -420,15 +432,16 @@ class EventSubWebsocket(EventSubBase):
         self._reset_timeout()
         new_connection = None
         retry = 0
-        while True:  # We only have up to 30 seconds to move to new connection, but we'll let the timeout handle that
+        need_retry = True
+        while need_retry and retry <= 5:  # We only have up to 30 seconds to move to new connection
+            need_retry = False
             try:
                 new_connection = await self._session.ws_connect(new_session.reconnect_url)
-                break
             except Exception as err:
+                self.logger.warning(f"reconnection attempt failed because {err}, retry in {self.reconnect_delay_steps[retry]} seconds...")
+                await asyncio.sleep(self.reconnect_delay_steps[retry])
                 retry += 1
-                backoff = min(30, (2 ** retry)) + random.uniform(0, 1)  # Cap at 30s for reconnection attempts
-                self.logger.warning(f"reconnection attempt failed because {err}, retry in {backoff:.2f}s...")
-                await asyncio.sleep(backoff)
+                need_retry = True
         if new_connection is None:  # We failed to establish new connection, do nothing and force a full refresh
             self.logger.warning(f"Failed to establish connection to {new_session.reconnect_url}, Twitch will close and we'll reconnect")
             return
@@ -472,11 +485,16 @@ class EventSubWebsocket(EventSubBase):
     async def _handle_notification(self, data: dict):
         self._reset_timeout()
         _payload = data.get('payload', {})
+        _payload['metadata'] = data.get('metadata', {})
         sub_id = _payload.get('subscription', {}).get('id')
         callback = self._callbacks.get(sub_id)
         if callback is None:
             self.logger.error(f'received event for unknown subscription with ID {sub_id}')
         else:
-            t = self._callback_loop.create_task(callback['callback'](callback['event'](**_payload)))
-            t.add_done_callback(self._task_callback)
+            msg_id = _payload['metadata'].get('message_id')
+            if msg_id is not None and msg_id in self._msg_id_history:
+                self.logger.warning(f'got message with duplicate id {msg_id}! Discarding message')
+            else:
+                t = self._callback_loop.create_task(callback['callback'](callback['event'](**_payload)))
+                t.add_done_callback(self._task_callback)
 
