@@ -145,7 +145,8 @@ class RFChannel:
         self.monitoring_paused = config.get('pause_monitoring', False)
         self.is_monitoring = False  # Whether we're currently monitoring a command
         self.current_monitor = None  # Current monitor info if monitoring
-        self.restart_attempts = {'count': 0, 'last_attempt': 0}  # Track restart attempts
+        self.ravenbot_restart_attempts = {'count': 0, 'last_attempt': 0}  # Track restart attempts
+        self.ravenfall_restart_attempts = 0
         self.restart_future = None  # Current restart future if any
 
         self.cooldowns: Cooldown = Cooldown()
@@ -793,7 +794,12 @@ class RFChannel:
         run_pre_restart: bool = True, 
         run_post_restart: bool = True,
         silent: bool = False,
+        *, 
+        reset_attempts: bool = True
     ):
+        if reset_attempts:
+            self.ravenfall_restart_attempts = 0
+        self.ravenfall_restart_attempts += 1
         if run_pre_restart:
             await self._ravenfall_pre_restart()
             
@@ -829,11 +835,18 @@ class RFChannel:
                 break
             await asyncio.sleep(1)
         if not authenticated:
-            await self.send_chat_message(f"Restart failed (pinging @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')})")
             logger.error(f"Failed to authenticate Ravenfall for {self.channel_name}")
             self.channel_restart_lock.release()
             self.global_restart_lock.release()
-            return False
+            if self.ravenfall_restart_attempts % 3 == 2:
+                await self.send_chat_message(f"Restart failed, retrying in 2 minutes")
+                await asyncio.sleep(120)
+            else:
+                await self.send_chat_message(f"Restart failed, retrying in 20 seconds")
+                await asyncio.sleep(20)
+            return self._restart_ravenfall(False, run_post_restart, silent, reset_attempts=False)
+            # await self.send_chat_message(f"Restart failed (pinging @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')})")
+            # return False
         # if not silent:
         #     await self.send_chat_message("Ravenfall has been restarted.")
         if self.manager.middleman_power_saving and self.manager.middleman_connected:
@@ -948,12 +961,12 @@ class RFChannel:
             current_time = time.time()
             
             # Reset counter if last attempt was long ago
-            if current_time - self.restart_attempts['last_attempt'] > RETRY_WINDOW:
-                self.restart_attempts['count'] = 0
+            if current_time - self.ravenbot_restart_attempts['last_attempt'] > RETRY_WINDOW:
+                self.ravenbot_restart_attempts['count'] = 0
             
-            self.restart_attempts['count'] += 1
-            self.restart_attempts['last_attempt'] = current_time
-            attempts = self.restart_attempts['count']
+            self.ravenbot_restart_attempts['count'] += 1
+            self.ravenbot_restart_attempts['last_attempt'] = current_time
+            attempts = self.ravenbot_restart_attempts['count']
             attempts_remaining = MAX_RETRIES - attempts
             
             resp_retry = "Hmm , let me restart RavenBot..."
