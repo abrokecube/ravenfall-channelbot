@@ -21,7 +21,7 @@ from ..models import Village, GameSession
 from .. import braille
 from ..ravenfall import Character, Skills
 
-from utils.commands_rf import RFChannelConverter, TwitchUsername, RFSkill
+from utils.commands_rf import RFChannelConverter, TwitchUsername, RFSkill, Choice
 from ..command_utils import Glob
 from ..ravenfallchannel import RFChannel
 from ..models import Player
@@ -35,6 +35,7 @@ import psutil
 import asyncio
 import time
 import os
+from collections import defaultdict
 
 
 class InfoCog(Cog):
@@ -357,7 +358,118 @@ class InfoCog(Cog):
             top_players.sort()
             joined = strutils.strjoin(", ", *top_players, before_end=" and ")
             await ctx.reply(f"{joined} have level {top_level} {skill}!")
-            
+    
+    @Cog.command(name='playerlist', help="Lists players", aliases=['player list', 'players'])
+    @parameter("sort_by", aliases=['s'], converter=Choice(['name', 'combatlevel', 'none']))
+    @parameter("group_by", aliases=['g'], converter=Choice(['training', 'island', 'none']))
+    @parameter("channel", aliases=["c"], converter=RFChannelConverter)
+    @parameter("name_glob", aliases=['filter', 'f'], help="Filter usernames using a glob expression", converter=Glob)
+    async def player_list(self, ctx: Context, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", channel: RFChannel = 'this'):
+        players: List[Player] = await channel.get_query("select * from players")
+        if not isinstance(players, list):
+            await ctx.reply("Ravenfall seems to be offline!")
+            return
+        players = list(filter(lambda x : name_glob.match(x['name']), players))
+        if not players:
+            await ctx.reply("No players!")
+            return
+        
+        players_parsed = [Character(x) for x in players]
+        match sort_by:
+            case "name":
+                players_parsed.sort(key=lambda x: x.user_name)
+            case "combatlevel":
+                players_parsed.sort(key=lambda x: x.combat_level)
+                
+        players_grouped: Dict[str, List[Character]] = defaultdict(list)
+        
+        match group_by:
+            case "training":
+                for a in ["Attack", "Defense", "Strength", "Health", "Magic", "Ranged", "Woodcutting", "Fishing", "Mining", "Crafting", "Cooking", "Farming", "Slayer", "Sailing", "Healing", "Gathering", "Alchemy", "Not training"]:
+                    players_grouped[a] = []
+
+                for p in players_parsed:
+                    if p.training:
+                        players_grouped[p.training.name].append(p)
+                    else:
+                        players_grouped["Not training"].append(p)
+            case "island":
+                for a in ["Home", "Away", "Ironhill", "Kyo", "Heim", "Atria", "Eldara", "Unknown"]:
+                    players_grouped[a] = []
+                for p in players_parsed:
+                    if p.island:
+                        players_grouped[p.island.name].append(p)
+                    else:
+                        players_grouped["Unknown"].append(p)                
+            case _:
+                players_grouped[""] = players_parsed
+        
+        out_str = []
+        
+        out_str.append(
+            f"Player info for {channel.channel_name} "
+            f"(as of {datetime.now(timezone.utc).strftime("%d %b %Y %H:%M:%S UTC")})"
+            "\n"
+        )
+        
+        for group_name, items in players_grouped.items():
+            if not items:
+                continue
+            if group_name:
+                out_str.append(f"{group_name} --- -- -- - -")
+            for char in items:
+                what = ""
+                if char.training in (Skills.Attack, Skills.Defense, Skills.Strength, Skills.Health, Skills.Magic, Skills.Ranged):
+                    what = f"training {char.training.name.lower()}"
+                elif char.training in ravenpy.resource_skills:
+                    if char.target_item:
+                        what = f"{char.training.name.lower()} {char.target_item.item.name.lower()}"
+                    else:
+                        what = f"{char.training.name.lower()}"
+                elif char.training == Skills.Alchemy:
+                    what = f"training alchemy"
+                elif char.training == Skills.Sailing:
+                    pass
+                elif char.training is None:
+                    pass
+                else:
+                    what = f"{char.training.name.lower()}"
+
+                if char.in_onsen:
+                    what = "resting"
+
+                where = ""
+                if char.in_raid:
+                    where = "in a raid"
+                if char.in_arena:
+                    where = "in the arena"
+                if char.in_dungeon:
+                    where = "in a dungeon"
+                if char.in_onsen:
+                    where = "in the onsen"
+
+                where_island = ""
+                if char.island:
+                    where_island = f"at {char.island.name.capitalize()}"
+                elif not (char.in_raid or char.in_dungeon):
+                    where_island = "sailing the seas"
+                    
+                rested = ""
+                if char.rested_time.total_seconds() > 0:
+                    s = TimeSize.SMALL_SPACES 
+                    rested = f"with {format_seconds(char.rested_time.total_seconds(),s)} of rest time"
+                    
+                out_str.append(utils.fill_whitespace(
+                    f"{char.user_name.ljust(24)}  "
+                    f"Lv.{str(char.combat_level).ljust(4)}  "
+                    f"{utils.strjoin(" ", what, where, where_island, rested)}  ", 
+                    "."
+                ))
+            out_str.append("")    
+        
+        url = await utils.upload_to_pastes("\n".join(out_str))
+        await ctx.reply(f"Player info: {url}")
+
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

@@ -186,3 +186,4 @@ def truncate_by_bytes(s: str, max_bytes: int, start_byte: int = 0, encoding: str
         truncated = truncated[:-1]  # Remove last byte to keep it even
     
     return truncated.decode(encoding, errors='ignore')
+
