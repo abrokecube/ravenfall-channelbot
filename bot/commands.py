@@ -381,7 +381,9 @@ class EventListener(BaseCommand):
             )
             
             # Extract documentation from converter if available
-            if isinstance(converter, type) and issubclass(converter, Converter):
+            is_subclass = isinstance(converter, type) and issubclass(converter, Converter)
+            is_instance = isinstance(converter, Converter)
+            if is_subclass or is_instance:
                 p.type_title = getattr(converter, 'title', None) or converter.__name__
                 p.type_short_help = getattr(converter, 'short_help', None)
                 p.type_help = getattr(converter, 'help', None) or converter.__doc__
