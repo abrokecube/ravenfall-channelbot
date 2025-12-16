@@ -138,18 +138,22 @@ class RFChannelManager:
         old_online = self.ravennest_is_online
         is_online = False
         multiplier: ExpMult | None = None
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
-            try:
-                async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False) as response:
-                    data: GameMultiplier = await response.json()
-                    if data:
-                        is_online = True
-                        if data["multiplier"] != self.global_multiplier:
-                            self.global_multiplier = data["multiplier"]
-                            self.global_multiplier_last_change = now
-                        multiplier = ExpMult(**data)
-            except Exception as e:
-                logger.error(f"Can't connect to Ravenfall API: {e}")
+        attempts = 3
+        while attempts > 0:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                try:
+                    async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False) as response:
+                        data: GameMultiplier = await response.json()
+                        if data:
+                            is_online = True
+                            if data["multiplier"] != self.global_multiplier:
+                                self.global_multiplier = data["multiplier"]
+                                self.global_multiplier_last_change = now
+                            multiplier = ExpMult(**data)
+                        break
+                except Exception as e:
+                    logger.error(f"Can't connect to Ravenfall API: {e}")
+            attempts -= 1
         self.ravennest_is_online = is_online
         
         if self.ravennest_is_online != old_online:
