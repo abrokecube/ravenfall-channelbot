@@ -497,7 +497,9 @@ class InfoCog(Cog):
                         action_symbol = "*"
             
             not_earning = ""
-            if (not any([y != 0 for x, y in char_exprates[char.user_name][-15:]])) and not training_skill_is_maxed:
+            if (not char.is_resting) \
+                and (not any([y != 0 for x, y in char_exprates[char.user_name][-15:]])) \
+                and not training_skill_is_maxed:
                 not_earning = "Not earning exp"
                 action_symbol = "x"
             
