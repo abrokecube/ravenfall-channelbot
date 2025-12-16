@@ -14,8 +14,7 @@ from utils import (
 
 from ..prometheus import get_prometheus_instant, get_prometheus_series
 
-from ..commands import Context, Commands, checks, parameter, cooldown
-from ..command_enums import BucketType
+from ..commands import Context, Commands, checks, parameter
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..models import Village, GameSession, GameMultiplier
@@ -372,7 +371,6 @@ class InfoCog(Cog):
     @parameter("channel", aliases=["c"], converter=RFChannelConverter)
     @parameter("name_glob", aliases=['filter', 'f', "glob"], help="Filter usernames using a glob expression", converter=Glob)
     @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
-    @cooldown(1, 10, BucketType.CHANNEL)
     async def player_list(self, ctx: Context, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", invert_glob: bool = False, channel: RFChannel = 'this'):
         tasks = [
             channel.get_query("select * from players"),
@@ -411,7 +409,7 @@ class InfoCog(Cog):
         
         char_exprates = {}
         for series in char_exprate_series:
-            char_exprates[id_to_username[series['metric']['player_id']]] = [[x, float(y)] for x, y in series['values']]
+            char_exprates[id_to_username[series['metric']['player_id']]] = series['values']
         
         match sort_by:
             case "name":
@@ -462,12 +460,21 @@ class InfoCog(Cog):
                 f"Event: {multiplier['eventname']}"
             )
         out_str.append(f"Boosts: {village['boost']}")
-        out_str.append(f"Current event: {channel.event_text}")
         out_str.append("")
         
-        char_actions = {}
+        out_str.append(utils.fill_whitespace(
+            f"{"USER NAME".ljust(24)}  "
+            f"{"C.LEVEL".ljust(7)}  "
+            f"{"STATUS".ljust(7)}  "
+            f"{"ISLAND".ljust(8)}  "
+            f"{"RstTIME".ljust(7)}  "
+            f"{"XP RATE".rjust(13)} "
+            f"GRAPH (10min) -- "
+            f"TRAINING SKILL  ", 
+            "-"
+        ))
+        
         for char in players_parsed:
-            action_symbol = " "
             training_skill_is_maxed = False
             if char.training:
                 if char.training in (Skills.All, Skills.Health):
@@ -475,9 +482,7 @@ class InfoCog(Cog):
                 else:
                     t_skill = char.get_skill(char.training)
                 training_skill_is_maxed = t_skill.level == 999 and (t_skill.level_exp / t_skill.total_exp_for_level) > 0.99                   
-            if training_skill_is_maxed:
-                action_symbol = "-"
-                
+            
             rec_island = ""
             if char.training and not char.training == Skills.Sailing:
                 if not (char.in_raid or char.in_dungeon):
@@ -494,31 +499,10 @@ class InfoCog(Cog):
 
                     if (not training_skill_is_maxed) and ((not char.island or char.island.value > recommended_island_max.value) or char.island.value < recommended_island_min.value):
                         rec_island = f"Sail to {recommended_island_max.name.capitalize()}"
-                        action_symbol = "*"
             
             not_earning = ""
-            if (not char.is_resting) \
-                and (not any([y != 0 for x, y in char_exprates[char.user_name][-15:]])) \
-                and not training_skill_is_maxed:
-                not_earning = "Not earning exp"
-                action_symbol = "x"
             
-            char_actions[char.user_name] = (action_symbol, utils.strjoin(", ", not_earning, rec_island))
-
-        out_str.append(utils.fill_whitespace(
-            f"A "
-            f"{"USER NAME".ljust(24)}  "
-            f"{"C.LEVEL".ljust(7)}  "
-            f"{"STATUS".ljust(7)}  "
-            f"{"ISLAND".ljust(8)}  "
-            f"{"RstTIME".ljust(7)}  "
-            f"{"XP RATE".rjust(13)} "
-            f"GRAPH (10min) -- "
-            f"TRAINING SKILL  ", 
-            "-"
-        ))
         
-
         first = True
         for group_name, items in players_grouped.items():
             if not items:
@@ -567,17 +551,12 @@ class InfoCog(Cog):
                     else:
                         rest_time += "-"
                         
-                series = char_exprates[char.user_name]
+                series = [[x, float(y)] for x, y in char_exprates[char.user_name]]
                 graph = braille.simple_line_graph(
                     series, max_gap=30, width=26, fill_type=1, hard_min_val=1, monospace=True
                 )
                 
-                char_action = " "
-                if char_actions[char.user_name]:
-                    char_action, _ = char_actions[char.user_name]
-                
                 out_str.append(utils.fill_whitespace(
-                    f"{char_action} "
                     f"{char.user_name.ljust(24)}  "
                     f"Lv.{str(char.combat_level).ljust(4)}  "
                     f"{where.ljust(7)}  "
@@ -586,23 +565,6 @@ class InfoCog(Cog):
                     f"{(numerize(series[-1][1]) + " exp/h").rjust(13)} "
                     f"{graph} "
                     f"{what}  ", 
-                    "."
-                ))
-            out_str.append("")    
-        
-        has_required_actions = False
-        for _, a in char_actions.items():
-            if a:
-                has_required_actions = True
-                break
-        if has_required_actions:
-            out_str.append("Required actions for characters:")    
-            for char_name, (_, action) in char_actions.items():
-                if not action:
-                    continue
-                out_str.append(utils.fill_whitespace(
-                    f"{char_name.ljust(24)}  "
-                    f"{action}",
                     "."
                 ))
             out_str.append("")    
