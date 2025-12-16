@@ -33,6 +33,8 @@ from bot.chat_system import ChatManager
 import database.utils as db_utils
 from database.session import get_async_session
 
+with open('pid', 'w') as f:
+    f.write(str(os.getpid()))
 
 USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
 logger_config = {
