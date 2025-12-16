@@ -14,10 +14,11 @@ from utils import (
 
 from ..prometheus import get_prometheus_instant, get_prometheus_series
 
-from ..commands import Context, Commands, checks, parameter
+from ..commands import Context, Commands, checks, parameter, cooldown
+from ..command_enums import BucketType
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
-from ..models import Village, GameSession
+from ..models import Village, GameSession, GameMultiplier
 from .. import braille
 from ..ravenfall import Character, Skills
 
@@ -35,6 +36,8 @@ import asyncio
 import time
 import os
 from collections import defaultdict
+
+from numerize.numerize import numerize
 
 
 class InfoCog(Cog):
@@ -369,12 +372,22 @@ class InfoCog(Cog):
     @parameter("channel", aliases=["c"], converter=RFChannelConverter)
     @parameter("name_glob", aliases=['filter', 'f', "glob"], help="Filter usernames using a glob expression", converter=Glob)
     @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
+    @cooldown(1, 10, BucketType.CHANNEL)
     async def player_list(self, ctx: Context, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", invert_glob: bool = False, channel: RFChannel = 'this'):
-        players: List[Player] = await channel.get_query("select * from players")
-        total_player_count = len(players)
-        if not isinstance(players, list):
+        tasks = [
+            channel.get_query("select * from players"),
+            channel.get_query("select * from multiplier"),
+            channel.get_query("select * from village")
+        ]
+        players: List[Player]
+        multiplier: GameMultiplier
+        village: Village 
+        players, multiplier, village = await asyncio.gather(*tasks)
+        if any([x is None for x in [players, multiplier, village]]):
             await ctx.reply("Ravenfall seems to be offline!")
             return
+        
+        total_player_count = len(players)
         if not invert_glob:
             players = list(filter(lambda x : name_glob.match(x['name']), players))
         else:
@@ -383,8 +396,23 @@ class InfoCog(Cog):
         if not players:
             await ctx.reply("No players!")
             return
-        
         players_parsed = [Character(x) for x in players]
+        
+        username_to_id = {}
+        id_to_username = {}
+        char_ids = []
+        for p in players_parsed:
+            username_to_id[p.user_name] = p.id
+            id_to_username[p.id] = p.user_name
+            char_ids.append(p.id)
+        query = "sum by (player_id) (rate(rf_player_stat_experience_total{player_id=~\"%s\",session=\"%s\",stat!=\"health\"}[30s]))" \
+        % ("|".join(char_ids), channel.channel_name)
+        char_exprate_series = await get_prometheus_series(query, 10*60)
+        
+        char_exprates = {}
+        for series in char_exprate_series:
+            char_exprates[id_to_username[series['metric']['player_id']]] = [[x, float(y)] for x, y in series['values']]
+        
         match sort_by:
             case "name":
                 players_parsed.sort(key=lambda x: x.user_name)
@@ -424,28 +452,95 @@ class InfoCog(Cog):
         
         out_str.append(''.join(top_line))
         out_str.append("")
+        mult = int(multiplier['multiplier'])
+        if mult <= 1:
+            out_str.append(f"Global multiplier: {mult}x.")
+        else:
+            out_str.append(
+                f"Global multiplier: {mult} - "
+                f"Ends in: {format_seconds(multiplier['timeleft'], TimeSize.LONG)} - "
+                f"Event: {multiplier['eventname']}"
+            )
+        out_str.append(f"Boosts: {village['boost']}")
+        out_str.append(f"Current event: {channel.event_text}")
+        out_str.append("")
         
+        char_actions = {}
+        for char in players_parsed:
+            action_symbol = " "
+            training_skill_is_maxed = False
+            if char.training:
+                if char.training in (Skills.All, Skills.Health):
+                    t_skill = min(char.attack, char.defense, char.strength, key=lambda x: x.level)
+                else:
+                    t_skill = char.get_skill(char.training)
+                training_skill_is_maxed = t_skill.level == 999 and (t_skill.level_exp / t_skill.total_exp_for_level) > 0.99                   
+            if training_skill_is_maxed:
+                action_symbol = "-"
+                
+            rec_island = ""
+            if char.training and not char.training == Skills.Sailing:
+                if not (char.in_raid or char.in_dungeon):
+                    if char.training in (Skills.All, Skills.Health):
+                        skill = max(char.attack, char.defense, char.strength, key=lambda x: x.level)
+                    else:
+                        skill = char.get_skill(char.training)
+
+                    is_training_combat = skill.skill in ravenpy.fighting_skills
+                    recommended_island_min = ravenpy.get_island_for_level(skill.level)
+                    recommended_island_max = recommended_island_min
+                    if is_training_combat and skill.level < char.combat_level:
+                        recommended_island_max = max(ravenpy.get_island_for_level(char.combat_level), recommended_island_min, key=lambda x: x.value)
+
+                    if (not training_skill_is_maxed) and ((not char.island or char.island.value > recommended_island_max.value) or char.island.value < recommended_island_min.value):
+                        rec_island = f"Sail to {recommended_island_max.name.capitalize()}"
+                        action_symbol = "*"
+            
+            not_earning = ""
+            if all([y == 0 for x, y in char_exprates[char.user_name][:15]]) and not training_skill_is_maxed:
+                not_earning = "Not earning exp"
+                action_symbol = "x"
+            
+            char_actions[char.user_name] = (action_symbol, utils.strjoin(", ", not_earning, rec_island))
+
+        out_str.append(utils.fill_whitespace(
+            f"A "
+            f"{"USER NAME".ljust(24)}  "
+            f"{"C.LEVEL".ljust(7)}  "
+            f"{"STATUS".ljust(7)}  "
+            f"{"ISLAND".ljust(8)}  "
+            f"{"RstTIME".ljust(7)}  "
+            f"{"XP RATE".rjust(13)} "
+            f"GRAPH (10min) -- "
+            f"TRAINING SKILL  ", 
+            "-"
+        ))
+        
+
+        first = True
         for group_name, items in players_grouped.items():
             if not items:
                 continue
             if group_name:
-                out_str.append(f"{group_name} --- -- -- - -")
+                if first: 
+                    out_str.append("")
+                out_str.append(f"{group_name} ({len(items)}) --- -- -- - -")
+            first = False
             for char in items:
                 what = ""
 
                 stats = []
-                if not char.in_onsen:
-                    for char_stat in char.training_stats:
-                        skill_name = char_stat.skill.name
-                        enchant_levels = ""
-                        if char_stat.enchant_levels > 0:
-                            enchant_levels = f"[+{char_stat.enchant_levels}]"
-                        stats.append(utils.strjoin(" ",*(
-                            f"{skill_name} {char_stat.level}",
-                            enchant_levels, 
-                            f"({char_stat.level_exp/char_stat.total_exp_for_level:.1%})"
-                        )))
-                    what = utils.strjoin(', ', *stats)
+                for char_stat in char.training_stats:
+                    skill_name = char_stat.skill.name
+                    enchant_levels = ""
+                    if char_stat.enchant_levels > 0:
+                        enchant_levels = f"[+{char_stat.enchant_levels}]"
+                    stats.append(utils.strjoin(" ",*(
+                        f"{skill_name} {char_stat.level}",
+                        enchant_levels, 
+                        f"({char_stat.level_exp/char_stat.total_exp_for_level:.1%})"
+                    )))
+                what = utils.strjoin(', ', *stats)
 
                 where = ""
                 if char.in_raid:
@@ -464,19 +559,48 @@ class InfoCog(Cog):
                 rest_time = "0s"
                 if char.rested_time.total_seconds() > 0:
                     s = TimeSize.SMALL 
-                    rest_time = format_seconds(char.rested_time.total_seconds(),s)
+                    rest_time = format_seconds(char.rested_time.total_seconds(),s,2)
                     if char.in_onsen:
                         rest_time += "+"
                     else:
                         rest_time += "-"
-                    
+                        
+                series = char_exprates[char.user_name]
+                graph = braille.simple_line_graph(
+                    series, max_gap=30, width=26, fill_type=1, hard_min_val=1, monospace=True
+                )
+                
+                char_action = " "
+                if char_actions[char.user_name]:
+                    char_action, _ = char_actions[char.user_name]
+                
                 out_str.append(utils.fill_whitespace(
+                    f"{char_action} "
                     f"{char.user_name.ljust(24)}  "
                     f"Lv.{str(char.combat_level).ljust(4)}  "
                     f"{where.ljust(7)}  "
                     f"{where_island.ljust(8)}  "
-                    f"{rest_time.ljust(9)}  "
+                    f"{rest_time.ljust(7)}  "
+                    f"{(numerize(series[-1][1]) + " exp/h").rjust(13)} "
+                    f"{graph} "
                     f"{what}  ", 
+                    "."
+                ))
+            out_str.append("")    
+        
+        has_required_actions = False
+        for _, a in char_actions.items():
+            if a:
+                has_required_actions = True
+                break
+        if has_required_actions:
+            out_str.append("Required actions for characters:")    
+            for char_name, (_, action) in char_actions.items():
+                if not action:
+                    continue
+                out_str.append(utils.fill_whitespace(
+                    f"{char_name.ljust(24)}  "
+                    f"{action}",
                     "."
                 ))
             out_str.append("")    

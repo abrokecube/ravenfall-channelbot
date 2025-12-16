@@ -3,19 +3,20 @@ from typing import Iterable, List, Tuple
 import random
 
 # yoinked from https://505e06b2.github.io/Image-to-Braille/
-def pixels_to_char(pixels: Iterable[bool], monospace=False):
+def pixels_to_char(pixels: Iterable[bool], monospace=False, use_space=False):
     if len(pixels) != 8:
         raise ValueError(f"Expected an array of 8 bools, got length {len(pixels)}")
     shifts = [0, 1, 2, 6, 3, 4, 5, 7]
     codepoint_offset = 0
     for idx, px in enumerate(pixels):
         codepoint_offset += int(px) << shifts[idx]
-    
-    if codepoint_offset == 0 and monospace:
-        # pickles = [False] * 8
-        # pickles[random.randint(0, 7)] = True
-        # return pixels_to_char(pickles)
-        codepoint_offset = 4
+        
+    if codepoint_offset == 0:
+        if use_space:
+            return " "
+        if monospace:
+            codepoint_offset = 4
+            
     return chr(0x2800 + codepoint_offset)
 
 def interpolate_values(input_values, output_count):
@@ -90,7 +91,7 @@ def interpolate_with_gap_handling(pairs, output_count, max_gap):
     return output
 
 # Expects (timestamp, value) pairs
-def simple_line_graph(pairs: Iterable[Tuple[float, float]], width=24, height=4, min_val=None, max_val=None, hard_min_val=None, hard_max_val=None, fill_type=0, max_gap=20, monospace=False):
+def simple_line_graph(pairs: Iterable[Tuple[float, float]], width=24, height=4, min_val=None, max_val=None, hard_min_val=None, hard_max_val=None, fill_type=0, max_gap=20, monospace=False, use_space=False):
     values = [x[1] for x in pairs]
     if max_val is None:
         max_val = max(values)
@@ -138,10 +139,10 @@ def simple_line_graph(pairs: Iterable[Tuple[float, float]], width=24, height=4, 
         for a in range(0, len(columns), 2):
             col1 = columns[a][b:b+4]
             col2 = columns[a+1][b:b+4]
-            out_chars.append(pixels_to_char(col1 + col2, monospace))
+            out_chars.append(pixels_to_char(col1 + col2, monospace, use_space))
         out_chars.append("\n")
     out_str = ''.join(out_chars)
-    return out_str.strip()
+    return out_str.rstrip("\n")
 
 if __name__ == "__main__":
     test_data = []

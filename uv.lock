@@ -420,6 +420,12 @@ wheels = [
 ]
 
 [[package]]
+name = "numerize"
+version = "0.12"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/cf/c5dfa6ca5b6553f30860337020d76c582fd81b48da58982a6f2ff1f1fe40/numerize-0.12.tar.gz", hash = "sha256:5548fe72adceb2c7964998179697d80117bb117f57cd02f872cf5db40d615c04", size = 2721, upload-time = "2018-08-14T14:48:33.212Z" }
+
+[[package]]
 name = "propcache"
 version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -581,6 +587,7 @@ dependencies = [
     { name = "httpx" },
     { name = "idna" },
     { name = "multidict" },
+    { name = "numerize" },
     { name = "propcache" },
     { name = "psutil" },
     { name = "pygments" },
@@ -622,6 +629,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "idna", specifier = "==3.11" },
     { name = "multidict", specifier = "==6.7.0" },
+    { name = "numerize", specifier = ">=0.12" },
     { name = "propcache", specifier = "==0.4.1" },
     { name = "psutil", specifier = "==7.0.0" },
     { name = "pygments", specifier = "==2.19.2" },
