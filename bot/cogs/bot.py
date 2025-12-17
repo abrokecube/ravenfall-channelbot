@@ -137,7 +137,7 @@ class BotStuffCog(Cog):
                 else:
                     process_statuses["stopped"].append(name)
             out_str = []
-            for name, items in process_statuses:
+            for name, items in process_statuses.items():
                 out_str.append(f"{name}: {', '.join(items)} - ")
             response = "".join(out_str)
             await ctx.reply(response)
