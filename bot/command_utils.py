@@ -6,7 +6,18 @@ from .commands import Check, TwitchContext, Context, Converter
 from .command_exceptions import ArgumentConversionError
 import re
 import glob
+
+def strjoin(connecting_char: str, *strings: str, before_end: str | None=None, include_conn_char_before_end=False):
+    str_list = [str(x) for x in strings if x]
+    if len(str_list) > 1 and before_end is not None:
+        if include_conn_char_before_end:
+            str_list[-1] = f"{before_end}{str_list[-1]}"
+        else:
+            a = str_list.pop()
+            str_list[-1] += f"{before_end}{a}"
     
+    return connecting_char.join(str_list)
+
 class HasRole(Check):
     """Check if the user has at least one of the specified roles."""
     
@@ -63,8 +74,8 @@ class Choice(Converter):
             self.title = title
         else:
             self.title = f"Choice ({len(choices)})"
-        self.short_help = ", ".join(choices)
-        self.help = f"Choices: {self.short_help}"
+        self.short_help = f"One of the following: {strjoin(', ', *choices, before_end='or ')}"
+        self.help = self.short_help
         self.case_sensitive = case_sensitive
         self.string_map = string_map
         
