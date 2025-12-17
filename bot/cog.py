@@ -70,7 +70,7 @@ class Cog:
         return decorator
 
     @classmethod
-    def command(cls, name: Optional[str] = None, **kwargs) -> Callable[[Callable], Callable]:
+    def command(cls, name: Optional[str] = None, short_help: Optional[str] = None, help: Optional[str] = None, aliases: List[str] = [], verifier: Callable = None, hidden: bool = False,  **kwargs) -> Callable[[Callable], Callable]:
         """Decorator to register a command in the cog."""
         return cls._create_listener_decorator("command", name, **kwargs)
 

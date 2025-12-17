@@ -5,13 +5,16 @@ from ..command_exceptions import CommandError
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallchannel import RFChannel
+from ..process_watchdog_client import ProcessWatcherClient
+from aiohttp import ClientResponseError
 from utils.commands_rf import RFChannelConverter
 
 
 class BotStuffCog(Cog):
-    def __init__(self, rf_manager: RFChannelManager, **kwargs):
+    def __init__(self, rf_manager: RFChannelManager, watcher_url="http://127.0.0.1:8110", **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
+        self.watcher = ProcessWatcherClient(watcher_url)
     
     @Cog.command(name="reloadstrings")
     @parameter("all_", display_name="all", aliases=["a"])
@@ -66,6 +69,56 @@ class BotStuffCog(Cog):
         channel.monitoring_paused = False
         await channel.start()
         await ctx.reply("Channel monitoring resumed.")
+    
+    @Cog.command(name="startproc", help="Start a process")
+    @parameter(name="process_name", greedy=True)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def start_process(self, ctx: Context, process_name: str):
+        try:
+            await self.watcher.start_process(process_name)
+            await ctx.reply("Okay")
+        except ClientResponseError:
+            raise CommandError("Failed to start process")
+        
+    @Cog.command(name="stopproc", help="Stop a process")
+    @parameter(name="process_name", greedy=True)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def stop_process(self, ctx: Context, process_name: str):
+        try:
+            await self.watcher.stop_process(process_name)
+            await ctx.reply("Okas")
+        except ClientResponseError:
+            raise CommandError("Failed to stop process")
+        
+    @Cog.command(name="restartproc", help="Restart a process")
+    @parameter(name="process_name", greedy=True)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def restart_process(self, ctx: Context, process_name: str):
+        try:
+            await self.watcher.restart_process(process_name)
+            await ctx.reply("Okay")
+        except ClientResponseError:
+            raise CommandError("Failed to restart process")
+        
+        
+    @Cog.command(name="listproc", help="List all processes")
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def list_processes(self, ctx: Context):
+        try:
+            processes = await self.watcher.get_processes()
+            if not processes:
+                await ctx.reply("There are no registered processes.")
+                return
+            out_str = []
+            for name, status in processes.items():
+                if status == "Running":
+                    out_str.append(f"{name}: running")
+                else:
+                    out_str.append(f"{name}: stopped")
+            response = ", ".join(out_str)
+            await ctx.reply(response)
+        except ClientResponseError:
+            raise CommandError("Failed to get processes")
         
         
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:

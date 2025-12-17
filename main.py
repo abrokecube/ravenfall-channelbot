@@ -213,17 +213,11 @@ async def run():
         if os.getenv("COMMAND_TESTING") == "1":
             from bot.cogs.example import ExampleCog
             commands.load_cog(ExampleCog)
-            from bot.cogs.testing import TestingCog
-            commands.load_cog(TestingCog)
         else:
-            from bot.cogs.testing import TestingCog
-            commands.load_cog(TestingCog)
             from bot.cogs.game import GameCog
             commands.load_cog(GameCog, rf_manager=rf_manager)
             from bot.cogs.testing_rf import TestingRFCog
             commands.load_cog(TestingRFCog, rf_manager=rf_manager)
-            from bot.cogs.bot import BotStuffCog
-            commands.load_cog(BotStuffCog, rf_manager=rf_manager)
             from bot.cogs.redeem import RedeemCog
             commands.load_cog(RedeemCog)
             from bot.cogs.redeem_rf import RedeemRFCog
@@ -232,7 +226,11 @@ async def run():
         commands.load_cog(HelpCog, commands=commands)
         from bot.cogs.info import InfoCog
         commands.load_cog(InfoCog, rf_manager=rf_manager)
-        
+        from bot.cogs.testing import TestingCog
+        commands.load_cog(TestingCog)
+        from bot.cogs.bot import BotStuffCog
+        commands.load_cog(BotStuffCog, rf_manager=rf_manager, watcher_url=os.getenv("WATCHER_URL", "http://127.0.0.1:8110"))
+
     async def on_message(message: ChatMessage):
         # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)
         ctx = TwitchContext(message)
