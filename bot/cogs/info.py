@@ -105,7 +105,7 @@ class InfoCog(Cog):
     @Cog.command(name="rfram", help="Ravenfall RAM usage")
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def rfram(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
+    async def rfram(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
         processes: Dict[str, List[float]] = {}
         working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
         change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
@@ -171,7 +171,7 @@ class InfoCog(Cog):
         aliases=["expirate"]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def exprate(self, ctx: Context, target_user: TwitchUsername = None, channel: RFChannel = 'this'):
+    async def exprate(self, ctx: Context, target_user: TwitchUsername = None, *, channel: RFChannel = 'this'):
         if not target_user:
             target_user = ctx.author        
         query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[30s]))" % (target_user, channel.channel_name)
@@ -193,7 +193,7 @@ class InfoCog(Cog):
         aliases=["char", "show"]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def character(self, ctx: Context, target_user: TwitchUsername = None, channel: RFChannel = 'this'):
+    async def character(self, ctx: Context, target_user: TwitchUsername = None, *, channel: RFChannel = 'this'):
         if not target_user:
             target_user = ctx.author        
 
@@ -307,7 +307,7 @@ class InfoCog(Cog):
         help="Gets the town's current multiplier",
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def mult(self, ctx: Context, channel: RFChannel = 'this'):
+    async def mult(self, ctx: Context, *, channel: RFChannel = 'this'):
         multiplier = await channel.get_query("select * from multiplier")
         mult = int(multiplier['multiplier'])
         if not isinstance(multiplier, dict):

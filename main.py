@@ -214,14 +214,14 @@ async def run():
             from bot.cogs.example import ExampleCog
             commands.load_cog(ExampleCog)
         else:
-            from bot.cogs.game import GameCog
-            commands.load_cog(GameCog, rf_manager=rf_manager)
             from bot.cogs.testing_rf import TestingRFCog
             commands.load_cog(TestingRFCog, rf_manager=rf_manager)
             from bot.cogs.redeem import RedeemCog
             commands.load_cog(RedeemCog)
             from bot.cogs.redeem_rf import RedeemRFCog
             commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
+        from bot.cogs.game import GameCog
+        commands.load_cog(GameCog, rf_manager=rf_manager)
         from bot.cogs.help import HelpCog
         commands.load_cog(HelpCog, commands=commands)
         from bot.cogs.info import InfoCog

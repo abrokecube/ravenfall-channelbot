@@ -72,6 +72,13 @@ class Cog:
     @classmethod
     def command(cls, name: Optional[str] = None, short_help: Optional[str] = None, help: Optional[str] = None, aliases: List[str] = [], verifier: Callable = None, hidden: bool = False,  **kwargs) -> Callable[[Callable], Callable]:
         """Decorator to register a command in the cog."""
+        kwargs.update({
+            "short_help": short_help,
+            "help": help,
+            "aliases": aliases,
+            "verifier": verifier,
+            "hidden": hidden
+        })
         return cls._create_listener_decorator("command", name, **kwargs)
 
     @classmethod

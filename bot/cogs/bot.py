@@ -8,6 +8,7 @@ from ..ravenfallchannel import RFChannel
 from ..process_watchdog_client import ProcessWatcherClient
 from aiohttp import ClientResponseError
 from utils.commands_rf import RFChannelConverter
+from collections import defaultdict
 
 
 class BotStuffCog(Cog):
@@ -16,16 +17,16 @@ class BotStuffCog(Cog):
         self.rf_manager = rf_manager
         self.watcher = ProcessWatcherClient(watcher_url)
     
-    @Cog.command(name="reloadstrings")
+    @Cog.command(name="reload_strings", aliases=["rs", "reloadstrings"])
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def reloadstrings(self, ctx: Context, all_: bool = False, channel: RFChannel = 'this'):
-        """Reloads Ravenfall translation strings.
+    async def reload_strings(self, ctx: Context, *, all_: bool = False, channel: RFChannel = 'this'):
+        """Reloads Ravenfall bot translation strings.
         
         Args: 
             all: Reloads strings for all channels.
-            channel_name: The name of the channel to reload strings for.
+            channel: Channel to reload strings for.
         """        
         if all_:
             for _channel in self.rf_manager.channels:
@@ -38,14 +39,14 @@ class BotStuffCog(Cog):
         channel.rfloc.load_translations()
         await ctx.reply("Strings reloaded!")
     
-    @Cog.command(name="pause_monitoring")
+    @Cog.command(name="pausemon", aliases=["pausemonitoring", "pause_monitoring"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def pause_monitoring(self, ctx: Context, channel: RFChannel = 'this'):
+    async def pause_monitoring(self, ctx: Context, *, channel: RFChannel = 'this'):
         """Pause channel monitoring
         
-        Args:
-            channel: Channel to pause monitoring for
+        Args: 
+            channel: Channel to pause monitoring for.
         """
         if channel.monitoring_paused:
             await ctx.reply("Channel monitoring is already paused.")
@@ -54,14 +55,14 @@ class BotStuffCog(Cog):
         await channel.stop()
         await ctx.reply("Channel monitoring paused.")
         
-    @Cog.command(name="resumemonitoring", help="Resume channel monitoring")
+    @Cog.command(name="resumemon", aliases=["resumemonitoring", "resume_monitoring"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def resume_monitoring(self, ctx: Context, channel: RFChannel = 'this'):
+    async def resume_monitoring(self, ctx: Context, *, channel: RFChannel = 'this'):
         """Resume channel monitoring
         
         Args:
-            channel: Channel to resume monitoring for
+            channel: Channel to resume monitoring for.
         """
         if not channel.monitoring_paused:
             await ctx.reply("Channel monitoring is not paused.")
@@ -70,30 +71,45 @@ class BotStuffCog(Cog):
         await channel.start()
         await ctx.reply("Channel monitoring resumed.")
     
-    @Cog.command(name="startproc", aliases=["startprocess"], help="Start a process")
+    @Cog.command(name="startproc", aliases=["startprocess", "start_process"])
     @parameter(name="process_name", greedy=True)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def start_process(self, ctx: Context, process_name: str):
+        """Start a process
+        
+        Args:
+            process_name: A registered process name.
+        """
         try:
             await self.watcher.start_process(process_name)
             await ctx.reply("Okay")
         except ClientResponseError:
             raise CommandError("Failed to start process")
         
-    @Cog.command(name="stopproc", aliases=["stopprocess"], help="Stop a process")
+    @Cog.command(name="stopproc", aliases=["stopprocess", "stop_process"])
     @parameter(name="process_name", greedy=True)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def stop_process(self, ctx: Context, process_name: str):
+        """Stop a process
+        
+        Args:
+            process_name: A registered process name.
+        """
         try:
             await self.watcher.stop_process(process_name)
             await ctx.reply("Okay")
         except ClientResponseError:
             raise CommandError("Failed to stop process")
         
-    @Cog.command(name="restartproc", aliases=["restartprocess"], help="Restart a process")
+    @Cog.command(name="restartproc", aliases=["restartprocess", "restart_processes"])
     @parameter(name="process_name", greedy=True)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def restart_process(self, ctx: Context, process_name: str):
+        """Restart a process
+        
+        Args:
+            process_name: A registered process name.
+        """
         try:
             await self.watcher.restart_process(process_name)
             await ctx.reply("Okay")
@@ -101,36 +117,33 @@ class BotStuffCog(Cog):
             raise CommandError("Failed to restart process")
         
         
-    @Cog.command(name="listproc", aliases=["listprocess", "listprocesses"], help="List all processes")
+    @Cog.command(name="listproc", aliases=["listprocess", "listprocesses", "list_processes"])
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def list_processes(self, ctx: Context):
+        """List all registered processes."""
         try:
             processes = await self.watcher.get_processes()
             if not processes:
                 await ctx.reply("There are no registered processes.")
                 return
-            out_str = []
+            process_statuses = defaultdict(list)
             for name, status in processes.items():
                 if status == "Running":
-                    out_str.append(f"{name}: running")
+                    process_statuses["running"].append(name)
                 elif status == "Stopped (Manual)":
-                    out_str.append(f"{name}: stopped")
+                    process_statuses["stopped"].append(name)
                 elif status == "Stopped":
-                    out_str.append(f"{name}: not running")
+                    process_statuses["not running"].append(name)
                 else:
-                    out_str.append(f"{name}: stopped")
-            response = ", ".join(out_str)
+                    process_statuses["stopped"].append(name)
+            out_str = []
+            for name, items in process_statuses:
+                out_str.append(f"{name}: {', '.join(items)} - ")
+            response = "".join(out_str)
             await ctx.reply(response)
         except ClientResponseError:
             raise CommandError("Failed to get processes")
         
         
-def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
-    """Load the testing cog with the given commands instance.
-    
-    Args:
-        commands: The Commands instance to register commands with.
-        rf_manager: The RFChannelManager instance to pass to the cog.
-        **kwargs: Additional arguments to pass to the cog.
-    """
-    commands.load_cog(BotStuffCog, rf_manager=rf_manager, **kwargs)
+def setup(commands: Commands, **kwargs) -> None:
+    commands.load_cog(BotStuffCog, **kwargs)

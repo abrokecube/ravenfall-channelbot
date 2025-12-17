@@ -634,7 +634,7 @@ class RedeemRFCog(Cog):
     @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(TwitchOnly)
-    async def credits_buy(self, ctx: Context, item: Item, count: int = 1, channel: RFChannel = 'this'):
+    async def credits_buy(self, ctx: Context, item: Item, count: int = 1, *, channel: RFChannel = 'this'):
         if item.soulbound:
             await ctx.reply(f"{item.name} is soulbound and cannot be redeemed.")
             return
@@ -712,7 +712,7 @@ class RedeemRFCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def stock_coins(self, ctx: Context, channel: RFChannel = 'this'):
+    async def stock_coins(self, ctx: Context, *, channel: RFChannel = 'this'):
         count = await get_coins_count(channel)
         await ctx.reply(
             f"There {pl(count, 'is', 'are')} currently {count:,} {pl(count, 'coin', 'coins')} in stock."
@@ -729,7 +729,7 @@ class RedeemRFCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
-    async def stock_item(self, ctx: Context, item: Item, channel: RFChannel = 'this'):
+    async def stock_item(self, ctx: Context, item: Item, *, channel: RFChannel = 'this'):
         warning = ""
         if item.soulbound:
             warning = " (This item cannot be redeemed.)"
@@ -740,7 +740,7 @@ class RedeemRFCog(Cog):
     
     @Cog.command(name="stock all")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def stock_all(self, ctx: Context, channel: RFChannel = 'this'):
+    async def stock_all(self, ctx: Context, *, channel: RFChannel = 'this'):
         item_counts = await get_all_item_count(channel)
         out_str = [
             "Stock list for channel: " + channel.channel_name,
@@ -816,7 +816,7 @@ class RedeemRFCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("item_name", regex=r"^[a-zA-Z ]+$")
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def giftto(self, ctx: Context, recipient_name: TwitchUsername, item_name: str, count: int, channel: RFChannel = 'this'):
+    async def giftto(self, ctx: Context, recipient_name: TwitchUsername, item_name: str, count: int, *, channel: RFChannel = 'this'):
         if count == 0:
             count = 1
         

@@ -7,6 +7,7 @@ from utils.commands_rf import RFChannelConverter
 from ..ravenfallchannel import RFChannel
 from ..command_enums import UserRole, BucketType
 from ..command_utils import HasRole
+from ..multichat_command import send_multichat_command
 
 import asyncio
 
@@ -15,11 +16,17 @@ class GameCog(Cog):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
     
-    @Cog.command(name="update", help="Updates the town boost")
+    @Cog.command(name="updateboost", aliases=["update", "refreshboost"])
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @cooldown(1, 20, [BucketType.CHANNEL])
-    async def update(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
+    async def update(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
+        """Refreshes the town boost
+        
+        Args:
+            channel: Target channel.
+            all_: Refresh for all channels.
+        """
         channels = []
         if all_:
             channels = self.rf_manager.channels
@@ -44,7 +51,7 @@ class GameCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def rfrestartstatus(self, ctx: Context, channel: RFChannel = 'this'):
+    async def rfrestartstatus(self, ctx: Context, *, channel: RFChannel = 'this'):
         restart_task = channel.restart_task
         ch = 'locked' if channel.channel_restart_lock.locked() else 'unlocked'
         gl = 'locked' if channel.global_restart_lock.locked() else 'unlocked'
@@ -85,7 +92,7 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def rfrestarttoggle(self, ctx: Context, channel: RFChannel = 'this'):
+    async def rfrestarttoggle(self, ctx: Context, *, channel: RFChannel = 'this'):
         old_value = channel.auto_restart
         channel.auto_restart = not channel.auto_restart
         await ctx.reply(f"Auto restart is now {'enabled' if channel.auto_restart else 'disabled'}.")
@@ -104,7 +111,7 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def rfrestartcancel(self, ctx: Context, channel: RFChannel = 'this'):
+    async def rfrestartcancel(self, ctx: Context, *, channel: RFChannel = 'this'):
         if not channel.cancel_restart():
             await ctx.reply("No restart task found.")
             return
@@ -120,7 +127,7 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def rfrestartpostpone(self, ctx: Context, seconds: int = 5*60, channel: RFChannel = 'this'):
+    async def rfrestartpostpone(self, ctx: Context, seconds: int = 5*60, *, channel: RFChannel = 'this'):
         restart_task = channel.restart_task
         if restart_task is None:
             await ctx.reply("No restart task found.")
@@ -138,7 +145,7 @@ class GameCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("reason", aliases=["r"])
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def rfrestart(self, ctx: Context, seconds: int = 30, reason: str = "User restart", channel: RFChannel = 'this'):
+    async def rfrestart(self, ctx: Context, seconds: int = 30, *, reason: str = "User restart", channel: RFChannel = 'this'):
         channel.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True)
         await ctx.reply(f"Restart queued. Restarting in {seconds}s.")
 
@@ -152,7 +159,7 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def rfbotrestart(self, ctx: Context, channel: RFChannel = 'this'):
+    async def rfbotrestart(self, ctx: Context, *, channel: RFChannel = 'this'):
         await channel.restart_ravenbot()
         await ctx.reply("Okay")
     
@@ -167,7 +174,7 @@ class GameCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("all_", display_name="all", aliases=["a"])
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def togglebotmonitor(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
+    async def togglebotmonitor(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
         channel.monitoring_paused = not channel.monitoring_paused
         if all_:
             for channel_ in self.rf_manager.channels:
@@ -186,7 +193,7 @@ class GameCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("all_", display_name="all", aliases=["a"])
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def backupstate(self, ctx: Context, channel: RFChannel = 'this', all_: bool = False):
+    async def backupstate(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
         if all_:
             tasks = []
             for channel in self.rf_manager.channels:
@@ -196,6 +203,27 @@ class GameCog(Cog):
         else:
             await channel.backup_state_data_routine()
             await ctx.reply("Backed up state data for this channel.")
+            
+    @Cog.command(name="ds", help="Use one of my Dungeon scrolls", )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def ds(self, ctx: Context, *, channel: RFChannel = 'this'):
+        await send_multichat_command("?ds", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+    
+    @Cog.command(name="rs", help="Use one of my Raid scrolls", )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def ds(self, ctx: Context, *, channel: RFChannel = 'this'):
+        await send_multichat_command("?rs", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+    
+    @Cog.command(name="exps", help="Use one of my Exp Multiplier scrolls", )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def ds(self, ctx: Context, count: int = 99, *, channel: RFChannel = 'this'):
+        await send_multichat_command(f"?exps {count}", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+    
+    @Cog.command(name="fs", help="Use one of my Ferry scrolls", )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def ds(self, ctx: Context, *, channel: RFChannel = 'this'):
+        await send_multichat_command("?fs", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+    
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

@@ -31,7 +31,7 @@ class TestingRFCog(Cog):
     @Cog.command(name="debug channel", help="Get properties of a channel")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER))
-    async def debug_channel(self, ctx: Context, property: str, channel: RFChannel = 'this'):
+    async def debug_channel(self, ctx: Context, property: str, *, channel: RFChannel = 'this'):
         result = channel.__dict__.get(property, "Invalid property")
         result_text = f"{property}: {result}"
         if len(result_text) > 480:
@@ -74,7 +74,7 @@ class TestingRFCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("expr", display_name="expression", greedy=True)
     @checks(HasRole(UserRole.BOT_OWNER))
-    async def eval_rf(self, ctx: Context, expr: str, channel: RFChannel = 'this'):
+    async def eval_rf(self, ctx: Context, expr: str, *, channel: RFChannel = 'this'):
         local_ctx = {
             "rf_manager": self.rf_manager,
             "manager": self.rf_manager,
