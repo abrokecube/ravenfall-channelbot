@@ -138,8 +138,8 @@ class BotStuffCog(Cog):
                     process_statuses["stopped"].append(name)
             out_str = []
             for name, items in process_statuses.items():
-                out_str.append(f"{name}: {', '.join(items)} - ")
-            response = "".join(out_str)
+                out_str.append(f"{name}: {', '.join(items)}")
+            response = " – ".join(out_str)
             await ctx.reply(response)
         except ClientResponseError:
             raise CommandError("Failed to get processes")
