@@ -146,12 +146,14 @@ class BotStuffCog(Cog):
         
     @Cog.command(name="pull", aliases=["pullproc", "pullprocess", "pull_process"])
     @parameter(name="process_name", greedy=True)
+    @parameter(name="restart", aliases=['r'])
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def pull_process(self, ctx: Context, process_name: str):
+    async def pull_process(self, ctx: Context, process_name: str, *, restart: bool = False):
         """Runs "git pull" in a process's directory.
         
         Args:
             process_name: A registered process name.
+            restart: Restart the process if a change has happened.
         """
         try:
             result = await self.watcher.git_pull(process_name)
@@ -161,7 +163,12 @@ class BotStuffCog(Cog):
             if not latest_commit:
                 await ctx.reply("Already up to date.")
             else:
-                await ctx.reply(f"Okay (commit {latest_commit['hash'][:7]} - {latest_commit['author']}: {latest_commit['message']})")
+                commit_text = f"{latest_commit['hash'][:7]} - {latest_commit['author']}: {latest_commit['message']}"
+                if restart:
+                    await ctx.reply(f"Latest commit: {commit_text} - restarting...")
+                    await self.watcher.restart_process(process_name)
+                else:
+                    await ctx.reply(f"Okay - latest commit: {commit_text}")
         except ClientResponseError:
             raise CommandError("Failed to execute command")
 
