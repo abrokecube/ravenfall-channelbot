@@ -74,7 +74,7 @@ class Choice(Converter):
             self.title = title
         else:
             self.title = f"Choice ({len(choices)})"
-        self.short_help = f"One of the following: {strjoin(', ', *choices, before_end='or ')}"
+        self.short_help = f"One of the following: {strjoin(', ', *choices, before_end='or ', include_conn_char_before_end=True)}"
         self.help = self.short_help
         self.case_sensitive = case_sensitive
         self.string_map = string_map
