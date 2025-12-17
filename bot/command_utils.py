@@ -62,7 +62,7 @@ class Choice(Converter):
         if title:
             self.title = title
         else:
-            self.title = f"{len(choices)} options"
+            self.title = f"Choice ({len(choices)})"
         self.short_help = ", ".join(choices)
         self.help = f"Choices: {self.short_help}"
         self.case_sensitive = case_sensitive
