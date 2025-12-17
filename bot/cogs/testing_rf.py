@@ -1,3 +1,8 @@
+"""Testing and debug tools for Ravenfall-related components.
+
+Provides owner-only debug commands for inspecting manager and channel state.
+"""
+
 from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter
 from ..command_enums import UserRole, Platform
 from ..command_utils import HasRole, TwitchOnly
@@ -13,6 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class TestingRFCog(Cog):
+    """Owner-only debugging cog for RF manager and channel inspection."""
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
@@ -20,6 +26,7 @@ class TestingRFCog(Cog):
     @Cog.command(name="debug manager", help="Get properties of the RFChannelManager")
     @checks(HasRole(UserRole.BOT_OWNER))
     async def debug_manager(self, ctx: Context, property: str):
+        """Return a property value from the RFChannelManager for debugging."""
         result = self.rf_manager.__dict__.get(property, "Invalid property")
         result_text = f"{property}: {result}"
         if len(result_text) > 480:
@@ -32,6 +39,7 @@ class TestingRFCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER))
     async def debug_channel(self, ctx: Context, property: str, *, channel: RFChannel = 'this'):
+        """Return a property value from `channel` for debugging."""
         result = channel.__dict__.get(property, "Invalid property")
         result_text = f"{property}: {result}"
         if len(result_text) > 480:
@@ -75,6 +83,10 @@ class TestingRFCog(Cog):
     @parameter("expr", display_name="expression", greedy=True)
     @checks(HasRole(UserRole.BOT_OWNER))
     async def eval_rf(self, ctx: Context, expr: str, *, channel: RFChannel = 'this'):
+        """Evaluate `expr` in a restricted local context for debugging.
+
+        WARNING: owner-only and can execute arbitrary code.
+        """
         local_ctx = {
             "rf_manager": self.rf_manager,
             "manager": self.rf_manager,

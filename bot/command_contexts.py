@@ -41,12 +41,13 @@ class Context(Protocol):
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
         ...
 
-def filter_text(context: Context, text: str):
+def filter_text(context: Context, text: str, *, max_length: int | None = None):
     if context.platform_output_type == OutputMessageType.SINGLE_LINE:
         text = " - ".join(text.splitlines())
     split_text = [text]
-    if context.platform_character_limit is not None and context.platform_character_limit > 0:
-        split_text = split_by_utf16_bytes(text, context.platform_character_limit)
+    char_limit = max_length or context.platform_character_limit
+    if char_limit is not None and char_limit > 0:
+        split_text = split_by_utf16_bytes(text, char_limit)
     return split_text
 
 class TwitchContext(Context):
@@ -99,7 +100,7 @@ class TwitchContext(Context):
     
     async def reply(self, text: str) -> None:
         """Reply to the message that triggered the command."""
-        for text_ in filter_text(self, text):
+        for text_ in filter_text(self, text, max_length=500-len(self.author)-2):
             await self.data.reply(text_)
     
     async def send(self, text: str) -> None:

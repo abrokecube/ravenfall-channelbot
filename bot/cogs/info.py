@@ -1,3 +1,8 @@
+"""Info cog: town, player, and system queries.
+
+Provides commands for querying towns, players, diagnostics and metrics.
+"""
+
 from __future__ import annotations
 
 from typing import Dict, List
@@ -41,12 +46,17 @@ from numerize.numerize import numerize
 
 
 class InfoCog(Cog):
+    """Cog exposing informational queries about towns, players and system status.
+
+    Commands include character lookup, uptime, system diagnostics and metrics.
+    """
     def __init__(self, rf_manager: RFChannelManager, **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
     
-    @Cog.command(name="towns", help="Lists all towns")
+    @Cog.command(name="towns")
     async def towns(self, ctx: Context):
+        """Lists my towns."""
         out_str = []
         for idx, channel in enumerate(self.rf_manager.channels):
             village: Village = await channel.get_query('select * from village')
@@ -65,22 +75,33 @@ class InfoCog(Cog):
         out_str.append("Other Ravenfall towns - https://www.ravenfall.stream/towns")
         await ctx.reply(' ✦ '.join(out_str))
 
-    @Cog.command(name="event", help="Gets the town's current event")
+    @Cog.command(name="event")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def event(self, ctx: Context, channel: RFChannel = 'this'):
+        """Show the current town event.
+
+        Args:
+            channel: Target channel.
+        """
         await ctx.reply(channel.event_text)
 
-    @Cog.command(name="uptime", help="Gets the town's uptime")
+    @Cog.command(name="uptime")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def uptime(self, ctx: Context, channel: RFChannel = 'this'):
+    async def uptime(self, ctx: Context, *, channel: RFChannel = 'this'):
+        """Reports Ravenfall's uptime.
+
+        Args:
+            channel: Target channel.
+        """
         session: GameSession = await channel.get_query('select * from session')
         if not isinstance(session, dict):
             await ctx.reply("Ravenfall seems to be offline!")
             return
         await ctx.reply(f"Ravenfall uptime: {seconds_to_dhms(session['secondssincestart'])}")
     
-    @Cog.command(name="system", help="System info of the computer running everything")
+    @Cog.command(name="system")
     async def system(self, ctx: Context):
+        """Return system diagnostics (CPU, RAM, battery, uptime)."""
         cpu_usage = await asyncio.to_thread(psutil.cpu_percent, 1)
         cpu_freq = psutil.cpu_freq().current
         ram = psutil.virtual_memory()
@@ -106,6 +127,12 @@ class InfoCog(Cog):
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def rfram(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
+        """Show Ravenfall RAM usage for a channel or all channels.
+
+        Args:
+            channel: Target channel.
+            all_: Show usage for all channels.
+        """
         processes: Dict[str, List[float]] = {}
         working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
         change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
@@ -167,11 +194,16 @@ class InfoCog(Cog):
 
     @Cog.command(
         name="exprate", 
-        help="Gets a user's experience earn rate",
         aliases=["expirate"]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def exprate(self, ctx: Context, target_user: TwitchUsername = None, *, channel: RFChannel = 'this'):
+        """Show a user's experience earn rate (exp/hour).
+
+        Args:
+            target_user: Twitch username to query (defaults to command author).
+            channel: Target channel.
+        """
         if not target_user:
             target_user = ctx.author        
         query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[30s]))" % (target_user, channel.channel_name)
@@ -189,11 +221,16 @@ class InfoCog(Cog):
 
     @Cog.command(
         name="character", 
-        help="Gets a user's character info",
         aliases=["char", "show"]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def character(self, ctx: Context, target_user: TwitchUsername = None, *, channel: RFChannel = 'this'):
+        """Show a player's character information and training status.
+
+        Args:
+            target_user: Twitch username to query (defaults to command author).
+            channel: Target channel.
+        """
         if not target_user:
             target_user = ctx.author        
 
@@ -304,10 +341,14 @@ class InfoCog(Cog):
 
     @Cog.command(
         name="mult", 
-        help="Gets the town's current multiplier",
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def mult(self, ctx: Context, *, channel: RFChannel = 'this'):
+        """Show the current global experience multiplier for a channel.
+
+        Args:
+            channel: Target channel.
+        """
         multiplier = await channel.get_query("select * from multiplier")
         mult = int(multiplier['multiplier'])
         if not isinstance(multiplier, dict):
@@ -324,13 +365,19 @@ class InfoCog(Cog):
                 f"thanks to {multiplier['eventname']}!"
             )
             
-    @Cog.command(help="Get the top player(s) of a skill", aliases=['h', 'top_', 't'])
+    @Cog.command(aliases=['h', 'top_', 't'])
     @parameter("skill", converter=RFSkill)
-    @parameter("name_glob", aliases=['g', 'f', 'filter', 'glob'], help="Filter usernames using a glob expression", converter=Glob)
+    @parameter("name_glob", aliases=['g', 'f', 'filter', 'glob'],  converter=Glob)
     @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
     @parameter("enchanted", aliases=["e"], help="Display enchanted stats")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def highest_(self, ctx: Context, skill: str, *, name_glob: re.Pattern = '*', invert_glob: bool = False, enchanted: bool = False, channel: RFChannel = 'this'):
+        """Show the top player(s) for a given skill.
+
+        Args:
+            skill: Skill name to query.
+            channel: Target channel.
+        """
         skill = skill.lower()
         players: List[Player] = await channel.get_query("select * from players")
         if not isinstance(players, list):
@@ -366,14 +413,21 @@ class InfoCog(Cog):
             joined = strutils.strjoin(", ", *top_players, before_end=" and ")
             await ctx.reply(f"{joined} have level {top_level} {skill}!")
     
-    @Cog.command(name='playerlist', help="Lists players", aliases=['player list', 'players'])
+    @Cog.command(name='playerlist', aliases=['player list', 'players'])
     @parameter("sort_by", aliases=['s'], converter=Choice(['name', 'combatlevel', 'none']))
     @parameter("group_by", aliases=['g'], converter=Choice(['training', 'island', 'none']))
     @parameter("channel", aliases=["c"], converter=RFChannelConverter)
-    @parameter("name_glob", aliases=['filter', 'f', "glob"], help="Filter usernames using a glob expression", converter=Glob)
+    @parameter("name_glob", aliases=['filter', 'f', "glob"],  converter=Glob)
     @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
     @cooldown(1, 10, BucketType.CHANNEL)
     async def player_list(self, ctx: Context, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", invert_glob: bool = False, channel: RFChannel = 'this'):
+        """List players in the channel with optional sorting and grouping.
+
+        Args:
+            sort_by: Field to sort by.
+            group_by: Optional grouping field.
+            channel: Target channel.
+        """
         tasks = [
             channel.get_query("select * from players"),
             channel.get_query("select * from multiplier"),

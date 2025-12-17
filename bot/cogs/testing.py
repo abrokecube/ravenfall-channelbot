@@ -1,8 +1,17 @@
+"""Lightweight testing utilities and sample commands for development.
+
+Contains simple ping/hi commands and test redeems used in development.
+"""
+
 from typing import Optional, Dict, Any
 from ..commands import Context, Commands, TwitchRedeemContext, CustomRewardRedemptionStatus
 from ..cog import Cog
 
 class TestingCog(Cog):
+    """Small set of test commands and redeems for development.
+
+    Includes basic chat commands and sample redeems used in CI/manual testing.
+    """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     
@@ -16,10 +25,16 @@ class TestingCog(Cog):
 
     @Cog.command(name="hi", help="Says hi")
     async def hi(self, ctx: Context):
+        """Greet the command author.
+
+        Example:
+            !hi
+        """
         await ctx.reply(f"hi {ctx.author}")
 
     @Cog.command(name="ping", help="Pong!")
     async def ping(self, ctx: Context):
+        """Simple ping command that replies with 'Pong!'."""
         await ctx.reply("Pong!")
 
     @Cog.command()
@@ -34,6 +49,7 @@ class TestingCog(Cog):
 
     @Cog.redeem(name="Test redeem")
     async def test(self, ctx: TwitchRedeemContext):
+        """A simple test redeem that notifies and fulfills the redemption."""
         await ctx.send("I am the almighty test redeem!")
         await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
 

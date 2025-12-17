@@ -94,3 +94,70 @@ class Glob(Converter):
             return re.compile(glob.translate(arg))
         except Exception as e:
             raise ArgumentConversionError("Couldn't compile glob expression")
+
+class RangeInt(Converter):
+    def __init__(self, min_: int | None, max_: int | None):
+        super().__init__()
+        self.min = min_
+        self.max = max_
+        if min_ is not None and max_ is not None:
+            self.title = f"Number ({min_}-{max_})"
+            self.short_help = f"An integer in the range {min_} to {max_}"
+            self.help = f"A whole number in the range {min_} to {max_}"
+        elif min_ is None and max_ is not None:
+            self.title = f"Number ({max_}-)"
+            self.short_help = f"An integer less than or equal to {max_}"
+            self.help = f"A whole number less than or equal to {max_}"
+        elif min_ is not None and max_ is None:
+            self.title = f"Number ({min_}+)"
+            self.short_help = f"An integer greater than or equal to {min_}"
+            self.help = f"A whole number greater than or equal to {min_}"
+        else:
+            raise ValueError("min_ or max_ need to be a number")
+        
+    async def convert(self, ctx: Context, arg: str) -> int:
+        try:
+            number = int(arg)
+        except ValueError as e:
+            raise ArgumentConversionError("Expected an integer")
+        
+        if self.max is not None and number > self.max:
+            raise ArgumentConversionError(f"Number is out of range! Maximum value: {self.max}")
+        if self.min is not None and number < self.min:
+            raise ArgumentConversionError(f"Number is out of range! Minimum value: {self.min}")
+    
+        return number
+        
+        
+class RangeFloat(Converter):
+    def __init__(self, min_: float | None, max_: float | None):
+        super().__init__()
+        self.min = min_
+        self.max = max_
+        if min_ is not None and max_ is not None:
+            self.title = f"Decimal ({min_}-{max_})"
+            self.short_help = f"A decimal number in the range {min_} to {max_}"
+            self.help = f"A decimal number in the range {min_} to {max_}"
+        elif min_ is None and max_ is not None:
+            self.title = f"Decimal ({max_}+)"
+            self.short_help = f"A decimal number less than or equal to {max_}"
+            self.help = f"A decimal number less than or equal to {max_}"
+        elif min_ is not None and max_ is None:
+            self.title = f"Decimal ({min_}-)"
+            self.short_help = f"A decimal number greater than or equal to {min_}"
+            self.help = f"A decimal number greater than or equal to {min_}"
+        else:
+            raise ValueError("min_ or max_ need to be a number")
+        
+    async def convert(self, ctx: Context, arg: str) -> float:
+        try:
+            number = int(arg)
+        except ValueError as e:
+            raise ArgumentConversionError("Expected a number")
+        
+        if self.max is not None and number > self.max:
+            raise ArgumentConversionError(f"Number is out of range! Maximum value: {self.max}")
+        if self.min is not None and number < self.min:
+            raise ArgumentConversionError(f"Number is out of range! Minimum value: {self.min}")
+
+        return number

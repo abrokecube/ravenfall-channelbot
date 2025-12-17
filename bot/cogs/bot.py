@@ -17,7 +17,7 @@ class BotStuffCog(Cog):
         self.rf_manager = rf_manager
         self.watcher = ProcessWatcherClient(watcher_url)
     
-    @Cog.command(name="reload_strings", aliases=["rs", "reloadstrings"])
+    @Cog.command(name="reload_strings", aliases=["reloadstrings"])
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
