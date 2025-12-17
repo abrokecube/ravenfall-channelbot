@@ -70,7 +70,7 @@ class BotStuffCog(Cog):
         await channel.start()
         await ctx.reply("Channel monitoring resumed.")
     
-    @Cog.command(name="startproc", help="Start a process")
+    @Cog.command(name="startproc", aliases=["startprocess"], help="Start a process")
     @parameter(name="process_name", greedy=True)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def start_process(self, ctx: Context, process_name: str):
@@ -80,17 +80,17 @@ class BotStuffCog(Cog):
         except ClientResponseError:
             raise CommandError("Failed to start process")
         
-    @Cog.command(name="stopproc", help="Stop a process")
+    @Cog.command(name="stopproc", aliases=["stopprocess"], help="Stop a process")
     @parameter(name="process_name", greedy=True)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def stop_process(self, ctx: Context, process_name: str):
         try:
             await self.watcher.stop_process(process_name)
-            await ctx.reply("Okas")
+            await ctx.reply("Okay")
         except ClientResponseError:
             raise CommandError("Failed to stop process")
         
-    @Cog.command(name="restartproc", help="Restart a process")
+    @Cog.command(name="restartproc", aliases=["restartprocess"], help="Restart a process")
     @parameter(name="process_name", greedy=True)
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def restart_process(self, ctx: Context, process_name: str):
@@ -101,7 +101,7 @@ class BotStuffCog(Cog):
             raise CommandError("Failed to restart process")
         
         
-    @Cog.command(name="listproc", help="List all processes")
+    @Cog.command(name="listproc", aliases=["listprocess", "listprocesses"], help="List all processes")
     @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
     async def list_processes(self, ctx: Context):
         try:
@@ -113,6 +113,10 @@ class BotStuffCog(Cog):
             for name, status in processes.items():
                 if status == "Running":
                     out_str.append(f"{name}: running")
+                elif status == "Stopped (Manual)":
+                    out_str.append(f"{name}: stopped")
+                elif status == "Stopped":
+                    out_str.append(f"{name}: not running")
                 else:
                     out_str.append(f"{name}: stopped")
             response = ", ".join(out_str)
