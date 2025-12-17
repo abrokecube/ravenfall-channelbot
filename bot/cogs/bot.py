@@ -165,10 +165,10 @@ class BotStuffCog(Cog):
             else:
                 commit_text = f"{latest_commit['hash'][:7]} - {latest_commit['author']}: {latest_commit['message']}"
                 if restart:
-                    await ctx.reply(f"Latest commit: {commit_text} - restarting...")
+                    await ctx.reply(f"Latest commit: {commit_text} ✦ restarting...")
                     await self.watcher.restart_process(process_name)
                 else:
-                    await ctx.reply(f"Okay - latest commit: {commit_text}")
+                    await ctx.reply(f"Okay ✦ latest commit: {commit_text}")
         except ClientResponseError:
             raise CommandError("Failed to execute command")
 
