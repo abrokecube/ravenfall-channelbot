@@ -290,7 +290,17 @@ class GameCog(Cog):
             channel: Target channel.
         """
         await send_multichat_command("?fs", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
-    
+ 
+    @Cog.command(name="scrolls")
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def scrolls(self, ctx: Context, *, channel: RFChannel = 'this'):
+        """Lists the available scroll stock.
+
+        Args:
+            channel: Target channel.
+        """
+        await send_multichat_command("?scrolls", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+   
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the game cog with the given commands instance.

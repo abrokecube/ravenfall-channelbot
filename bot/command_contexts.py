@@ -100,12 +100,17 @@ class TwitchContext(Context):
     
     async def reply(self, text: str) -> None:
         """Reply to the message that triggered the command."""
-        for text_ in filter_text(self, text, max_length=500-len(self.author)-2):
+        for text_ in filter_text(self, text, max_length=self.platform_character_limit-len(self.author)-2):
             await self.data.reply(text_)
     
-    async def send(self, text: str) -> None:
+    async def send(self, text: str, *, me: bool = False, **kwargs) -> None:
         """Send a message to the channel."""
-        for text_ in filter_text(self, text):
+        char_limit = self.platform_character_limit
+        if me:
+            char_limit -= 4
+        for text_ in filter_text(self, text, max_length=char_limit):
+            if me:
+                text_ = f"/me {text_}"
             await self.data.chat.send_message(self.data.room.name, text_)
 
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
