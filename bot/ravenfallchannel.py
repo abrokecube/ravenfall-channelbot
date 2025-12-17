@@ -489,6 +489,19 @@ class RFChannel:
             return False
         return not self.middleman_connection_status.server_connected
 
+    async def update_boost(self):
+        village: Village = await self.get_query("select * from village")
+        if village is None:
+            return False
+        if len(village['boost'].strip()) <= 0:
+            return True
+        split = village['boost'].split()
+        boost_stat = split[0]
+        boost_value = float(split[1].rstrip("%"))
+        msg = f"{self.ravenbot_prefixes[0]}town {boost_stat.lower()}"
+        await self.send_chat_message(msg)
+        return True
+
     @routine(delta=timedelta(seconds=3), max_attempts=99999)
     async def update_mult_routine(self):
         if self.channel_restart_lock.locked():
@@ -608,9 +621,14 @@ class RFChannel:
         if old_town_level <= 1 or self.town_level <= old_town_level:
             return
 
+        if self.town_level % 10 == 0:
+            await self.update_boost()
+            await asyncio.sleep(10)
+
         await self.send_chat_message(
             f"Town level is now {self.town_level}!"
         )
+        
 
     async def game_event_notification(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
         if self.event_notifications:

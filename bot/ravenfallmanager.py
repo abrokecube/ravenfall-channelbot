@@ -260,17 +260,10 @@ class RFChannelManager:
                 async with channel.channel_restart_lock:
                     return
             while True:
-                village: Village = await channel.get_query("select * from village")
-                if village is not None:
+                if not await channel.update_boost():
+                    await asyncio.sleep(30)
+                else:
                     break
-                await asyncio.sleep(30)
-            if len(village['boost'].strip()) <= 0:
-                continue
-            split = village['boost'].split()
-            boost_stat = split[0]
-            boost_value = float(split[1].rstrip("%"))
-            msg = f"{channel.ravenbot_prefixes[0]}town {boost_stat.lower()}"
-            await channel.send_chat_message(msg)
             await asyncio.sleep(120)
 
 class ItemAlertMonitor(BatchAlertMonitor):
