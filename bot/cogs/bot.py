@@ -144,6 +144,26 @@ class BotStuffCog(Cog):
         except ClientResponseError:
             raise CommandError("Failed to get processes")
         
+    @Cog.command(name="pull", aliases=["pullproc", "pullprocess", "pull_process"])
+    @parameter(name="process_name", greedy=True)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def pull_process(self, ctx: Context, process_name: str):
+        """Runs "git pull" in a process's directory.
         
+        Args:
+            process_name: A registered process name.
+        """
+        try:
+            result = await self.watcher.git_pull(process_name)
+            if result.get("status", "") != "success":
+                raise CommandError("Git returned an error")
+            latest_commit = result.get("latest_commit", None)
+            if not latest_commit:
+                await ctx.reply("Already up to date.")
+            else:
+                await ctx.reply(f"Okay (commit {latest_commit['hash'][:7]})")
+        except ClientResponseError:
+            raise CommandError("Failed to execute command")
+
 def setup(commands: Commands, **kwargs) -> None:
     commands.load_cog(BotStuffCog, **kwargs)
