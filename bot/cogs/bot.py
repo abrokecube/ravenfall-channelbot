@@ -161,7 +161,7 @@ class BotStuffCog(Cog):
             if not latest_commit:
                 await ctx.reply("Already up to date.")
             else:
-                await ctx.reply(f"Okay (commit {latest_commit['hash'][:7]})")
+                await ctx.reply(f"Okay (commit {latest_commit['hash'][:7]} - {latest_commit['author']}: {latest_commit['message']})")
         except ClientResponseError:
             raise CommandError("Failed to execute command")
 
