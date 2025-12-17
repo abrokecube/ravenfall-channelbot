@@ -318,7 +318,7 @@ class EventListener(BaseCommand):
             if isinstance(aliases, str):
                 aliases = [aliases]
             
-            display_name = param_config.get('display_name', None) or param.name.replace("_", " ")
+            display_name = param_config.get('display_name', None) or param.name
 
             # Resolve type and check for Optional
             raw_annotation = self.type_hints.get(param.name, param.annotation)
