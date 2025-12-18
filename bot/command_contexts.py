@@ -60,7 +60,7 @@ class TwitchContext(Context):
     
     def __init__(self, msg: 'ChatMessage', twitch: 'Twitch' = None):
         # Platform-specific fields
-        self.message = msg.text
+        self.message = msg.text.replace("\U000e0000", "").replace("\u034f", "").strip()
         self.author = msg.user.name
         self.platform = Platform.TWITCH
         self.platform_allows_markdown = False
@@ -135,6 +135,7 @@ class TwitchRedeemContext(Context):
         self.platform_output_type = OutputMessageType.SINGLE_LINE
         self.data = redemption
         self.message = redemption.user_input or ""
+        self.message = self.message.replace("\U000e0000", "").replace("\u034f", "").strip()
         self.author = redemption.user_login
         self.prefix = ""
         self.invoked_with = redemption.reward.title

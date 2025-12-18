@@ -794,9 +794,7 @@ class Commands:
             if not ctx.message.startswith(prefix):
                 return
             used_prefix = prefix
-            
         content = ctx.message[len(used_prefix):]
-        content = content.replace("\U000e0000", "").strip()
         
         command_name, remaining_text = self._find_command(content)
         if not command_name or command_name not in self.dispatchers["command"].listeners:
