@@ -67,7 +67,7 @@ class HelpCog(Cog):
     @Cog.command(name="help")
     @parameter("command_name", greedy=True)
     @parameter("all_", display_name="all", aliases=['a','more', 'm'])
-    async def help(self, ctx: Context, command_name: Optional[str] = None, *, all_: bool = False, **kwargs):
+    async def help(self, ctx: Context, command_name: Optional[str] = None, all_: bool = False, **kwargs):
         """Shows help for a command or lists all commands.
 
         Args:
