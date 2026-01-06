@@ -304,26 +304,32 @@ class InfoCog(Cog):
                 )
         query = "sum(deriv(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[2m]))" % (target_user, channel.channel_name)
         data = await get_prometheus_series(query, 1)
-        data_pairs = [(x[0], float(x[1])) for x in data[0]['values']]
-        char_exp_per_h = data_pairs[-1][1]*60*60
-        train_time = ""
-        if char_exp_per_h > 0 and char.training:
+        
+        char_exp_per_h = 0.0
+        has_exp_data = False
+        if data:
+            data_pairs = [(x[0], float(x[1])) for x in data[0]['values']]
+            char_exp_per_h = data_pairs[-1][1]*60*60
+            has_exp_data = True
+            
+        training_time_exp = timedelta(weeks=9999)
+        if has_exp_data and char_exp_per_h > 0 and char.training:
             closest_stat = char.training_stats[0]
             exp_to_next_level = closest_stat.total_exp_for_level-closest_stat.level_exp
             training_time_exp = timedelta(seconds=(exp_to_next_level) / (char_exp_per_h/60/60))
-        else:
-            training_time_exp = timedelta(weeks=9999)
-        s = TimeSize.SMALL_SPACES
-        train_time_format = format_timedelta(training_time_exp, s)
-        now = datetime.now(timezone.utc)
-        if char.island and not char.in_onsen:
-            if training_time_exp.total_seconds() > 60*60*24*100:  # 99 days
-                train_time = f"Level in ∞"
-            else:
-                train_time = f"Level in {train_time_format}"
-        exp_per_hr = f""
-        if char.island and not char.in_onsen:
-            exp_per_hr = f"{char_exp_per_h:,.0f} exp/hr"
+            
+        exp_per_hr = ""
+        train_time = ""
+        if has_exp_data:
+            s = TimeSize.SMALL_SPACES
+            train_time_format = format_timedelta(training_time_exp, s)
+            if char.island and not char.in_onsen:
+                if training_time_exp.total_seconds() > 60*60*24*100:  # 99 days
+                    train_time = f"Level in ∞"
+                else:
+                    train_time = f"Level in {train_time_format}"
+            if char.island and not char.in_onsen:
+                exp_per_hr = f"{char_exp_per_h:,.0f} exp/hr"
             
         coins = f"{utils.pl(char.coins, 'coin')}"
 
