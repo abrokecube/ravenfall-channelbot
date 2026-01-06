@@ -11,7 +11,7 @@ class HelpCog(Cog):
         super().__init__(**kwargs)
         self.commands_manager = commands
 
-    async def build_command_list_single_line(self, ctx: Context = None) -> str:
+    async def build_command_list_single_line(self, ctx: Context = None, show_more=False) -> str:
         cogs_dict: Dict[str, List[Command]] = {}
         
         if self.commands_manager.cog_manager:
@@ -31,7 +31,7 @@ class HelpCog(Cog):
                 
                 # Check if command should be hidden based on checks
                 should_hide = False
-                if ctx:
+                if ctx and not show_more:
                     for check in c.checks:
                         if check.hide_in_help:
                             try:
@@ -66,11 +66,13 @@ class HelpCog(Cog):
 
     @Cog.command(name="help")
     @parameter("command_name", greedy=True)
-    async def help(self, ctx: Context, command_name: Optional[str] = None, **kwargs):
+    @parameter("all_", display_name="all", aliases=['a','more', 'm'])
+    async def help(self, ctx: Context, command_name: Optional[str] = None, *, all_: bool = False, **kwargs):
         """Shows help for a command or lists all commands.
 
         Args:
             command_name: The name of the command to show help for.
+            all_: Lists commands you don't have permission to use.
         """
         if kwargs:
             command_name += " " + " ".join([x for x in kwargs.keys()])
@@ -85,7 +87,7 @@ class HelpCog(Cog):
             else:
                 await ctx.reply(self.build_arg_info_single_line(ctx, command, parameter))
         else:
-            await ctx.reply(await self.build_command_list_single_line(ctx))
+            await ctx.reply(await self.build_command_list_single_line(ctx, show_more=all_))
 
 def setup(commands: Commands, **kwargs) -> None:
     commands.load_cog(HelpCog, commands=commands, **kwargs)
