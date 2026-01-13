@@ -229,7 +229,8 @@ async def run():
         from bot.cogs.testing import TestingCog
         commands.load_cog(TestingCog)
         from bot.cogs.bot import BotStuffCog
-        commands.load_cog(BotStuffCog, rf_manager=rf_manager, watcher_url=os.getenv("WATCHER_URL", "http://127.0.0.1:8110"))
+        watchers = os.getenv("WATCHER_URLS", "http://127.0.0.1:8110").split(",")
+        commands.load_cog(BotStuffCog, rf_manager=rf_manager, watcher_urls=watchers)
 
     async def on_message(message: ChatMessage):
         # logger.debug("%s: %s: %s", message.room.name, message.user.name, message.text)

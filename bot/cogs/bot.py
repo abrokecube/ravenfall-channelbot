@@ -12,10 +12,12 @@ from collections import defaultdict
 
 
 class BotStuffCog(Cog):
-    def __init__(self, rf_manager: RFChannelManager, watcher_url="http://127.0.0.1:8110", **kwargs):
+    def __init__(self, rf_manager: RFChannelManager, watcher_urls=["http://127.0.0.1:8110"], **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
-        self.watcher = ProcessWatcherClient(watcher_url)
+        self.watchers: list[ProcessWatcherClient] = []
+        for watcher_url in watcher_urls:
+             self.watchers.append(ProcessWatcherClient(watcher_url))
     
     @Cog.command(name="reload_strings", aliases=["reloadstrings"])
     @parameter("all_", display_name="all", aliases=["a"])
@@ -80,11 +82,16 @@ class BotStuffCog(Cog):
         Args:
             process_name: A registered process name.
         """
-        try:
-            await self.watcher.start_process(process_name)
-            await ctx.reply("Okay")
-        except ClientResponseError:
+        for watcher in self.watchers:
+            try:
+                await watcher.start_process(process_name)
+                await ctx.reply("Okay")
+                break
+            except ClientResponseError:
+                continue
+        else:
             raise CommandError("Failed to start process")
+            
         
     @Cog.command(name="stopproc", aliases=["stopprocess", "stop_process"])
     @parameter(name="process_name", greedy=True)
@@ -95,11 +102,16 @@ class BotStuffCog(Cog):
         Args:
             process_name: A registered process name.
         """
-        try:
-            await self.watcher.stop_process(process_name)
-            await ctx.reply("Okay")
-        except ClientResponseError:
+        for watcher in self.watchers:
+            try:
+                await watcher.stop_process(process_name)
+                await ctx.reply("Okay")
+                break
+            except ClientResponseError:
+                continue
+        else:
             raise CommandError("Failed to stop process")
+            
         
     @Cog.command(name="restartproc", aliases=["restartprocess", "restart_processes"])
     @parameter(name="process_name", greedy=True)
@@ -110,10 +122,14 @@ class BotStuffCog(Cog):
         Args:
             process_name: A registered process name.
         """
-        try:
-            await self.watcher.restart_process(process_name)
-            await ctx.reply("Okay")
-        except ClientResponseError:
+        for watcher in self.watchers:
+            try:
+                await watcher.restart_process(process_name)
+                await ctx.reply("Okay")
+                break
+            except ClientResponseError:
+                continue
+        else:
             raise CommandError("Failed to restart process")
         
         
@@ -122,7 +138,11 @@ class BotStuffCog(Cog):
     async def list_processes(self, ctx: Context):
         """List all registered processes."""
         try:
-            processes = await self.watcher.get_processes()
+            processes = {}
+            for watcher in self.watchers:
+                watcher_procs = await watcher.get_processes()
+                processes.update(watcher_procs)
+                
             if not processes:
                 await ctx.reply("There are no registered processes.")
                 return
@@ -155,22 +175,26 @@ class BotStuffCog(Cog):
             process_name: A registered process name.
             restart: Restart the process if a change has happened.
         """
-        try:
-            result = await self.watcher.git_pull(process_name)
-            if result.get("status", "") != "success":
-                raise CommandError("Git returned an error")
-            latest_commit = result.get("latest_commit", None)
-            if not latest_commit:
-                await ctx.reply("Already up to date.")
-            else:
-                commit_text = f"{latest_commit['hash'][:7]} - {latest_commit['author']}: {latest_commit['message']}"
-                if restart:
-                    await ctx.reply(f"Latest commit: {commit_text} ✦ restarting...")
-                    await self.watcher.restart_process(process_name)
+        for watcher in self.watchers:
+            try:
+                result = await watcher.git_pull(process_name)
+                if result.get("status", "") != "success":
+                    raise CommandError("Git returned an error")
+                latest_commit = result.get("latest_commit", None)
+                if not latest_commit:
+                    await ctx.reply("Already up to date.")
                 else:
-                    await ctx.reply(f"Okay ✦ latest commit: {commit_text}")
-        except ClientResponseError:
-            raise CommandError("Failed to execute command")
+                    commit_text = f"{latest_commit['hash'][:7]} - {latest_commit['author']}: {latest_commit['message']}"
+                    if restart:
+                        await ctx.reply(f"Latest commit: {commit_text} ✦ restarting...")
+                        await watcher.restart_process(process_name)
+                    else:
+                        await ctx.reply(f"Okay ✦ latest commit: {commit_text}")
+                break
+            except (ClientResponseError, CommandError):
+                continue
+        else:
+            raise CommandError("Failed to pull process")
 
 def setup(commands: Commands, **kwargs) -> None:
     commands.load_cog(BotStuffCog, **kwargs)
