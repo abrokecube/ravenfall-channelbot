@@ -220,8 +220,9 @@ async def run():
             commands.load_cog(RedeemCog)
             from bot.cogs.redeem_rf import RedeemRFCog
             commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
+        rfwebops = os.getenv("WEBOPS_URL", "http://pc2-mobile:7102")
         from bot.cogs.game import GameCog
-        commands.load_cog(GameCog, rf_manager=rf_manager)
+        commands.load_cog(GameCog, rf_manager=rf_manager, rf_webops_url=rfwebops)
         from bot.cogs.help import HelpCog
         commands.load_cog(HelpCog, commands=commands)
         from bot.cogs.info import InfoCog

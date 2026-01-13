@@ -9,12 +9,20 @@ from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
 from utils.format_time import format_seconds, TimeSize
-from utils.commands_rf import RFChannelConverter
+from utils.commands_rf import RFChannelConverter, RFItemConverter
 from ..ravenfallchannel import RFChannel
 from ..command_enums import UserRole, BucketType
 from ..command_utils import HasRole, RangeInt
-from ..multichat_command import send_multichat_command
+from ..command_exceptions import CommandError
+from ..multichat_command import send_multichat_command, get_char_info
+from ..rf_webops_client import WebOpsClient
+from ravenpy.ravenpy import Item
+from ravenpy import ravenpy
+from ravenpy.itemdefs import Items
+from utils.utils import upload_to_pastes
 
+import logging
+logger = logging.getLogger(__name__)
 import asyncio
 
 class GameCog(Cog):
@@ -23,9 +31,10 @@ class GameCog(Cog):
     Includes commands for restarting Ravenfall, managing monitoring and backups,
     and small utility actions such as refreshing town boosts.
     """
-    def __init__(self, rf_manager: RFChannelManager, **kwargs):
+    def __init__(self, rf_manager: RFChannelManager, rf_webops_url="http://pc2-mobile:7102", **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
+        self.rf_webops = WebOpsClient(rf_webops_url)
     
     @Cog.command(name="updateboost", aliases=["update", "refreshboost"])
     @parameter("all_", display_name="all", aliases=["a"])
@@ -300,7 +309,73 @@ class GameCog(Cog):
             channel: Target channel.
         """
         await send_multichat_command("?scrolls", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
-   
+
+    @Cog.command(name="restockscrolls")
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
+    async def restockscrolls(self, ctx: Context, item: Item, count: int, *, channel: RFChannel = 'this'):
+        """Restocks scrolls in the loyalty shop.
+
+        Args:
+            item: The scroll item to restock.
+            count: The amount to restock.
+            channel: Target channel.
+        """
+        if item.id not in (Items.ExpMultiplierScroll.value, Items.RaidScroll.value, Items.DungeonScroll.value):
+            raise CommandError("Item must be an exp, raid or dungeon scroll.")
+        chars = await get_char_info()
+        if chars['status'] != 200:
+            raise CommandError("Could not get character info.")
+        char_list = []
+        for char in chars["data"]:
+            if char["channel_id"] == channel.channel_id:
+                char_list.append({"username": char["user_name"], "id": str(char['index'])})
+        await ctx.reply(f"Restocking {count}x {item.name}, please wait...")
+        item_id_map = {
+            Items.ExpMultiplierScroll.value: "exp_multiplier_scroll",
+            Items.RaidScroll.value: "raid_scroll",
+            Items.DungeonScroll.value: "dungeon_scroll",
+        }
+        result = await self.rf_webops.redeem_items(item_id_map[item.id], count, char_list)
+        if result['status'] == "success":
+            await ctx.reply(f"Successfully restocked {sum(result['redeemed'].values())}x {item.name}.")
+        else:
+            raise CommandError("Failed to restock scrolls.")
+
+    @Cog.command(name="countloyaltypoints")
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
+    async def countloyaltypoints(self, ctx: Context, *, channel: RFChannel = 'this'):
+        """Gets the total loyalty points across characters in a channel. Will take a few minutes to count.
+        
+        Args:
+            channel: Target channel.
+        """
+        
+        chars = await get_char_info()
+        if chars['status'] != 200:
+            raise CommandError("Could not get character info.")
+        char_list = []
+        for char in chars["data"]:
+            if char["channel_id"] == channel.channel_id:
+                char_list.append(char["user_name"])
+        await ctx.reply(f"Counting loyalty points, please wait...")
+        result = await self.rf_webops.get_total_loyalty_points(char_list)
+        if result['status'] != "success":
+            raise CommandError("Failed to get loyalty points.")
+        
+        out_str = []
+        out_str.append(f"Loyalty points info for {channel.channel_name}")
+        out_str.append("")
+        for username, points in result['breakdown'].items():
+            out_str.append(f"{username}: {points:,} points")
+        out_str.append("")
+        out_str.append(f"Total: {result['total_points']:,} points")
+        out_url = await upload_to_pastes("\n".join(out_str))
+        await ctx.reply(
+            f"Total loyalty points: {result['total_points']:,} points. Breakdown: {out_url}"
+        )
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the game cog with the given commands instance.
