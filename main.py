@@ -36,7 +36,7 @@ from database.session import get_async_session
 with open('pid', 'w') as f:
     f.write(str(os.getpid()))
 
-USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
+USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS, AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS]
 logger_config = {
     'twitchAPI': {
         'filename': "twitchAPI.log",

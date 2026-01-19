@@ -516,7 +516,7 @@ village: "Village is level {townHallLevel}, it needs {remainingExp} xp to level 
 game_no_update: "There are no new version available. If you want to forcibly update then use the command one more time."
 game_version: "The streamer is currently running Ravenfall v{version}"
 
-dungeon_broken: " is available. Type !dungeon to join."
+# dungeon_broken: " is available. Type !dungeon to join."
 huts_info: "{{hutsInfo:{type0}: .*}}"
 ferry_info: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing."
 ferry_info_no_captain: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board."
@@ -525,4 +525,6 @@ players_restored: "{{playerCount:\\d+}} players restored."
 restore_failed: "Failed to restore players. See game log files for more details."
 twitch_subscription: "Welcome to the {streamerDisplayName} crew! You will now gain {tierMultiplier}x more exp on this stream!"
 permanently_suspended: "You have been permanently suspended from playing. Contact the staff for more information."
-
+command_restricted: "Only the Broadcaster and Moderators can use this command."
+ferry_scroll_used: "The ferry will now move faster for {{duration}}."
+scroll_query: "You have {{scrolls:(\\{tokenAmount\\d\\} \\{tokenName\\d\\}\\(s\\)(, | and |.$))+}}"

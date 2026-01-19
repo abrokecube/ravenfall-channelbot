@@ -184,8 +184,17 @@ class RFChannel:
                 raise e
             else:
                 logger.warning(f"Failed to send chat message for {self.channel_name}: {e}")
+    
+    async def send_announcement(self, message: str, color: str = None, ignore_error: bool = True):
+        try:
+            await self.chat.twitch.send_chat_announcement(self.channel_id, os.getenv("BOT_ID"), message, color)
+        except Exception as e:
+            if not ignore_error:
+                raise e
+            else:
+                logger.warning(f"Failed to send announcement for {self.channel_name}: {e}")
 
-    async def send_ravenbot_chat_message(self, text: str, cid: str):
+    async def send_message_as_ravenbot(self, text: str, cid: str):
         message = {
             "Identifier": "message",
             "CorrelationId": cid,
@@ -307,6 +316,10 @@ class RFChannel:
                 additional_args['requiredExp'] = level_exp
                 additional_args['currentExp'] = (level_exp - exp_left)
                 additional_args['levelPercent'] = f"{(level_exp - exp_left) / level_exp:.2%}"
+            elif key in (
+                "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count",
+                "raid_start", "raid_auto_joined", "raid_auto_joined_count"):
+                return {'block': True}
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
             if len(trans_str) == 0:
@@ -652,28 +665,27 @@ class RFChannel:
                 await self.send_chat_message(msg)
 
     async def game_event_muted_ravenbot_notification(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
-        if self._ravenbot_is_muted():
-            if old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
-                await asyncio.sleep(2)
-                players = self.dungeon['players']
-                dungeon_name = self.dungeon['name']
-                if not dungeon_name:
-                    dungeon_name = "A dungeon"
+        if old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY:
+            await asyncio.sleep(2)
+            players = self.dungeon['players']
+            dungeon_name = self.dungeon['name']
+            if not dungeon_name:
+                dungeon_name = "A dungeon"
+            if players == 0:
+                await self.send_chat_message(f"{dungeon_name} is available!")
+            else:
+                await self.send_chat_message(f"{dungeon_name} is available! {utils.pl2(players, 'player has', 'players have')} joined.")
+        elif old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
+            await asyncio.sleep(2)
+            players = self.raid['players']
+            if self.event_notifications:
+                if players > 0:
+                    await self.send_chat_message(f"{utils.pl2(players, 'player has', 'players have')} joined the raid.")
+            else:
                 if players == 0:
-                    await self.send_chat_message(f"{dungeon_name} is available!")
+                    await self.send_chat_message(f"A level {self.raid['boss']['combatlevel']} raid is available!")
                 else:
-                    await self.send_chat_message(f"{dungeon_name} is available! {utils.pl2(players, 'player has', 'players have')} joined.")
-            elif old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID:
-                await asyncio.sleep(2)
-                players = self.raid['players']
-                if self.event_notifications:
-                    if players > 0:
-                        await self.send_chat_message(f"{utils.pl2(players, 'player has', 'players have')} joined the raid.")
-                else:
-                    if players == 0:
-                        await self.send_chat_message(f"A level {self.raid['boss']['combatlevel']} raid is available!")
-                    else:
-                        await self.send_chat_message(f"A level {self.raid['boss']['combatlevel']} raid is available! {utils.pl2(players, 'player has', 'players have')} joined.")
+                    await self.send_chat_message(f"A level {self.raid['boss']['combatlevel']} raid is available! {utils.pl2(players, 'player has', 'players have')} joined.")
 
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
         if self.manager.middleman_power_saving and self.manager.middleman_connected:
