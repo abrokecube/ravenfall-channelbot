@@ -44,6 +44,7 @@ import time
 import logging
 import os
 import json
+from collections import defaultdict
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -154,6 +155,9 @@ class RFChannel:
 
         self.middleman_connection_status: middleman.ConnectionStatus = middleman.ConnectionStatus()
         
+        self.island_arrivals = defaultdict(list)  # island name -> list of names
+        self.island_last_arrival_time = defaultdict(lambda: 0)  # island name -> last arrival timestamp
+        
     async def start(self):
         if self.monitoring_paused:
             return
@@ -165,6 +169,7 @@ class RFChannel:
         self.dungeon_killswitch_routine.start()
         self.update_middleman_connection_status_routine.start()
         self.town_level_notification_routine.start()
+        self.island_arrival_grouping_routine.start()
 
     async def stop(self):
         self.update_mult_routine.cancel()
@@ -174,6 +179,7 @@ class RFChannel:
         self.dungeon_killswitch_routine.cancel()
         self.update_middleman_connection_status_routine.cancel()
         self.town_level_notification_routine.cancel()
+        self.island_arrival_grouping_routine.cancel()
 
     async def send_chat_message(self, message: str, ignore_error: bool = False, reply_id: Optional[str] = None):
         try:
@@ -316,6 +322,13 @@ class RFChannel:
                 additional_args['requiredExp'] = level_exp
                 additional_args['currentExp'] = (level_exp - exp_left)
                 additional_args['levelPercent'] = f"{(level_exp - exp_left) / level_exp:.2%}"
+            elif key == "ferry_arrived":
+                user = message['Recipent']['PlatformUserName']
+                destination = message_args[0]
+                t = time.monotonic()
+                self.island_arrivals[destination].append(user)
+                self.island_last_arrival_time[destination] = t
+                return {'block': True}
             elif key in (
                 "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count", "dungeon_countdown",
                 "raid_start", "raid_auto_joined", "raid_auto_joined_count", 
@@ -1083,6 +1096,20 @@ class RFChannel:
         if self.channel_post_restart_lock.locked():
             self.channel_post_restart_lock.release()
         return True
+    
+    @routine(delta=timedelta(seconds=0.5), max_attempts=99999)
+    async def island_arrival_grouping_routine(self):
+        t = time.monotonic()
+        for island, timestamp in self.island_last_arrival_time.items():
+            if timestamp > 0 and t - timestamp >= 0.25:
+                players = self.island_arrivals[island]
+                if len(players) > 1:
+                    player_names = utils.strjoin(', ', *[f'@{a}' for a in players], before_end='and ', include_conn_char_before_end=True)
+                    await self.send_chat_message(f"{player_names} have arrived at {island}.")
+                elif len(players) == 1:
+                    await self.send_chat_message(f"@{players[0]} has arrived at {island}.")
+                self.island_arrivals[island] = []
+                self.island_last_arrival_time[island] = 0
 
     # --- [ AUTO RAID ] ---------------------------------------
 
