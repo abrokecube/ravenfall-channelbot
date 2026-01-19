@@ -317,8 +317,9 @@ class RFChannel:
                 additional_args['currentExp'] = (level_exp - exp_left)
                 additional_args['levelPercent'] = f"{(level_exp - exp_left) / level_exp:.2%}"
             elif key in (
-                "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count",
-                "raid_start", "raid_auto_joined", "raid_auto_joined_count", "multiplier_ended"):
+                "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count", "dungeon_countdown",
+                "raid_start", "raid_auto_joined", "raid_auto_joined_count", 
+                "multiplier_ends", "multiplier_ended"):
                 return {'block': True}
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
