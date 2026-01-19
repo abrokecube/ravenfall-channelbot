@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up
 RETRY_WINDOW = 3 * 60  # Number of seconds to wait before resetting attempt counter
+MAX_DUNGEON_LENGTH = 15 * 60
 
 # Command timeout values in seconds for monitored commands
 COMMAND_TIMEOUTS = {
@@ -575,7 +576,7 @@ class RFChannel:
                     f"({dungeon['boss']['health']/boss_max_hp:.1%}) – "
                     f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,} – "
                     f"Players: {dungeon['playersalive']:,}/{dungeon['players']:,} – "
-                    f"Elapsed time: {format_seconds(dungeon['elapsed'])}"
+                    f"Elapsed time: {format_seconds(dungeon['elapsed'])} (Time limit: {format_seconds(MAX_DUNGEON_LENGTH)})"
                 )
                 event = RFChannelEvent.DUNGEON
                 if dungeon['enemiesalive'] > 0:
@@ -686,7 +687,7 @@ class RFChannel:
             return
         if not self.dungeon:
             return
-        if self.dungeon.get('elapsed', 0) > 60 * 15:  # 15 minutes
+        if self.dungeon.get('elapsed', 0) > MAX_DUNGEON_LENGTH:
             await self.send_chat_message(f"{self.ravenbot_prefixes[0]}dungeon stop")
 
     @routine(delta=timedelta(hours=5), wait_first=True, max_attempts=99999)
