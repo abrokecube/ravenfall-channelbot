@@ -576,7 +576,8 @@ class RFChannel:
                     f"({dungeon['boss']['health']/boss_max_hp:.1%}) – "
                     f"Enemies: {dungeon['enemiesalive']:,}/{dungeon['enemies']:,} – "
                     f"Players: {dungeon['playersalive']:,}/{dungeon['players']:,} – "
-                    f"Elapsed time: {format_seconds(dungeon['elapsed'])} (Time limit: {format_seconds(MAX_DUNGEON_LENGTH)})"
+                    f"Elapsed time: {format_seconds(dungeon['elapsed'])} – "
+                    f"Time limit: {format_seconds(MAX_DUNGEON_LENGTH)}"
                 )
                 event = RFChannelEvent.DUNGEON
                 if dungeon['enemiesalive'] > 0:
