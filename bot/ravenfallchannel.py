@@ -452,8 +452,8 @@ class RFChannel:
             return
         if self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
             await asyncio.sleep(0.5)
-            if message is not None:
-                await message.reply("please wait, the game is currently frozen because it is busy preparing a dungeon...")
+            if (message is not None) and self.dungeon['enemies'] < 48:
+                await message.reply(f"(Loading) Game is busy preparing a new dungeon... ({self.dungeon['enemies']}/49)")
         else:
             if message is None:
                 resend_text = content
@@ -561,7 +561,7 @@ class RFChannel:
                 else:
                     event_text = (
                         f"{dungeon_name} is being prepared... – "
-                        f"Enemies: {dungeon['enemies']:,}"
+                        f"Enemies: {dungeon['enemies']:,}/49"
                     )
                     event = RFChannelEvent.DUNGEON
                     sub_event = RFChannelSubEvent.DUNGEON_PREPARE
