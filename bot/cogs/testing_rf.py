@@ -111,6 +111,25 @@ class TestingRFCog(Cog):
             await ctx.reply("No result.")
         else:
             await ctx.reply(result_text)
+            
+    @Cog.command(name="translate", help="Translate a string")
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("string", greedy=True)
+    @checks(HasRole(UserRole.BOT_OWNER))
+    async def translate_string(self, ctx: Context, string: str, *, channel: RFChannel = 'this', **kwargs):
+        """Translate `string` using the channel's localization system."""
+        matched = channel.rfloc.identify_string(string)
+        key_name = "No match"
+        if matched:
+            key_name = matched.key
+            
+        translated = channel.rfloc.s(string, **kwargs)
+        
+        translation_status = "No replacement"
+        if key_name in channel.rfloc.translated_strings:
+            translation_status = "Translated"
+            
+        await ctx.reply(f"Key: {key_name} - {translation_status} - {translated}")
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the testing cog with the given commands instance.

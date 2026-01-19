@@ -207,6 +207,19 @@ class RavenfallLocalization:
             
         translation_string = random.choice(translation.strings)
         return matched.translate(translation_string, in_str, in_args, additional_args)
+    
+    def s(self, in_str: str, **kwargs) -> str:
+        """
+        Shorthand method to get a translated string with named arguments.
+        
+        Args:
+            in_str: The input string to translate
+            **kwargs: Named arguments for formatting
+            
+        Returns:
+            str: The translated string
+        """
+        return self.translate_string(in_str, [], additional_args=kwargs)
         
     
     def getstr(self, key: str, args: Dict[str, str] = None) -> str:

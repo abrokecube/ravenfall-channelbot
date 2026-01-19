@@ -318,7 +318,7 @@ class RFChannel:
                 additional_args['levelPercent'] = f"{(level_exp - exp_left) / level_exp:.2%}"
             elif key in (
                 "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count",
-                "raid_start", "raid_auto_joined", "raid_auto_joined_count"):
+                "raid_start", "raid_auto_joined", "raid_auto_joined_count", "multiplier_ended"):
                 return {'block': True}
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
@@ -527,12 +527,11 @@ class RFChannel:
         self.multiplier = multiplier
         if not self.current_mult:
             self.current_mult = multiplier['multiplier']
-        ravenbot_is_muted = self._ravenbot_is_muted()
         if multiplier['multiplier'] > self.current_mult:
             msg = f"{multiplier['eventname']} increased the multiplier to {int(multiplier['multiplier'])}x, ending in {format_seconds(multiplier['timeleft'], TimeSize.MEDIUM_SPACES)}!"
             await self.send_chat_message(msg)
-        elif ravenbot_is_muted and multiplier['multiplier'] < self.current_mult and multiplier['multiplier'] == 1:
-            msg = f"The exp multiplier has expired."
+        elif multiplier['multiplier'] < self.current_mult and multiplier['multiplier'] == 1:
+            msg = self.rfloc.s("The exp multiplier has expired.")
             await self.send_chat_message(msg)
         
         self.current_mult = multiplier['multiplier']

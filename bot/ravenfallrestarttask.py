@@ -39,7 +39,6 @@ WARNING_MSG_TIMES: List[Tuple[int, PreRestartEvent]] = (
     (30, PreRestartEvent.WARNING),
     (20, PreRestartEvent.PRE_RESTART)
 )
-FIRST_WARNING_IDX = 0
 
 class RFRestartTask:
     def __init__(
@@ -69,6 +68,7 @@ class RFRestartTask:
         self.label: str = label
         self.reason: RestartReason | None = reason
         self._status: RestartStatus = RestartStatus.IDLE
+        self.sent_initial_announcement = False
 
     def start(self):
         if not self.done:
@@ -116,10 +116,11 @@ class RFRestartTask:
                             except Exception as e:
                                 logger.error(f"Failed to run pre restart for {self.channel.channel_name}: {e}", exc_info=True)
                     if WARNING_MSG_TIMES[new_warning_idx][1] == PreRestartEvent.WARNING and time_left > 7 and not self.mute_countdown:
-                        if new_warning_idx == FIRST_WARNING_IDX:
+                        if not self.sent_initial_announcement:
                             await self.channel.send_announcement(
                                 f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!",
                             )
+                            self.sent_initial_announcement = True
                         else:
                             await self.channel.send_chat_message(
                                 f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!",
