@@ -1104,7 +1104,7 @@ class RFChannel:
             if timestamp > 0 and t - timestamp >= 0.25:
                 players = self.island_arrivals[island]
                 if len(players) > 1:
-                    player_names = utils.strjoin(', ', *[f'@{a}' for a in players], before_end='and ', include_conn_char_before_end=True)
+                    player_names = utils.strjoin(', ', *[f'@{a}' for a in players], before_end=' and ')
                     await self.send_chat_message(f"{player_names} have arrived at {island}.")
                 elif len(players) == 1:
                     await self.send_chat_message(f"@{players[0]} has arrived at {island}.")
