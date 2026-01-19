@@ -453,7 +453,7 @@ class RFChannel:
         if self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
             await asyncio.sleep(0.5)
             if (message is not None) and self.dungeon['enemies'] < 48:
-                await message.reply(f"(Loading) Game is busy preparing a new dungeon... ({self.dungeon['enemies']}/49)")
+                await message.reply(f"(Loading) Game is busy preparing a new dungeon... ({self.dungeon['enemies']}/49) (Use !event to check progress)")
         else:
             if message is None:
                 resend_text = content
