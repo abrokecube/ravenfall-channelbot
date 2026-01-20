@@ -384,11 +384,12 @@ class GameCog(Cog):
             total_points += points
             out_str.append(f"{char_name}: {points:,} points")
         out_str.append("")
-        out_str.append(f"Points in {channel.channel_name}: {points_in_channel:,}")
+        out_str.append(f"Points in {channel.channel_name}: {points_in_channel:,} points")
         out_str.append(f"Total: {total_points:,} points")
+        out_str.append("")
         out_url = await upload_to_pastes("\n".join(out_str))
         await ctx.reply(
-            f"In this channel: {points_in_channel,} points – Total: {result['total_points']:,} points – Breakdown: {out_url}"
+            f"In this channel: {points_in_channel:,} points – Total: {result['total_points']:,} points – Breakdown: {out_url}"
         )
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
