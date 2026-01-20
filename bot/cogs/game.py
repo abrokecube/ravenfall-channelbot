@@ -356,10 +356,12 @@ class GameCog(Cog):
         chars = await get_char_info()
         if chars['status'] != 200:
             raise CommandError("Could not get character info.")
-        char_list = []
+        channel_char_list = set()
+        char_list = set()
         for char in chars["data"]:
             if char["channel_id"] == channel.channel_id:
-                char_list.append(char["user_name"])
+                channel_char_list.add(char["user_name"])
+            char_list.add(char['user_name'])
         await ctx.reply(f"Counting loyalty points, please wait...")
         result = await self.rf_webops.get_total_loyalty_points(char_list)
         if result['status'] != "success":
@@ -368,13 +370,25 @@ class GameCog(Cog):
         out_str = []
         out_str.append(f"Loyalty points info for {channel.channel_name}")
         out_str.append("")
-        for username, points in result['breakdown'].items():
-            out_str.append(f"{username}: {points:,} points")
+        points_in_channel = 0
+        total_points = 0
+        for char_name in channel_char_list:
+            points = result['breakdown'].get(char_name, 0)
+            points_in_channel += points
+            total_points += points
+            out_str.append(f"{char_name}: {points:,} points")
         out_str.append("")
-        out_str.append(f"Total: {result['total_points']:,} points")
+        out_str.append("Characters not in this channel:")
+        for char_name in char_list - channel_char_list:
+            points = result['breakdown'].get(char_name, 0)
+            total_points += points
+            out_str.append(f"{char_name}: {points:,} points")
+        out_str.append("")
+        out_str.append(f"Points in {channel.channel_name}: {points_in_channel:,}")
+        out_str.append(f"Total: {total_points:,} points")
         out_url = await upload_to_pastes("\n".join(out_str))
         await ctx.reply(
-            f"Total loyalty points: {result['total_points']:,} points. Breakdown: {out_url}"
+            f"In this channel: {points_in_channel,} points – Total: {result['total_points']:,} points – Breakdown: {out_url}"
         )
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
