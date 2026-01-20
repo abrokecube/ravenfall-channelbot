@@ -358,7 +358,7 @@ class GameCog(Cog):
             raise CommandError("Could not get character info.")
         channel_char_list = set()
         char_list = set()
-        for char in chars["data"]:
+        for char in sorted(chars["data"], key=lambda x: x['user_name']):
             if char["channel_id"] == channel.channel_id:
                 channel_char_list.add(char["user_name"])
             char_list.add(char['user_name'])
