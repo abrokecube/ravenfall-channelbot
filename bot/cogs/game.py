@@ -374,6 +374,9 @@ class GameCog(Cog):
         total_points = 0
         for char_name in channel_char_list:
             points = result['breakdown'].get(char_name, 0)
+            if points == -1:
+                out_str.append(f"{char_name}: Failed to get points")
+                continue
             points_in_channel += points
             total_points += points
             out_str.append(f"{char_name}: {points:,} points")
@@ -381,6 +384,9 @@ class GameCog(Cog):
         out_str.append("Characters not in this channel:")
         for char_name in char_list - channel_char_list:
             points = result['breakdown'].get(char_name, 0)
+            if points == -1:
+                out_str.append(f"{char_name}: Failed to get points")
+                continue
             total_points += points
             out_str.append(f"{char_name}: {points:,} points")
         out_str.append("")
