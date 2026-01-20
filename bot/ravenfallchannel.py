@@ -305,6 +305,12 @@ class RFChannel:
             key = match.key
         message_args = message['Args']
         additional_args = {}
+        if message['Recipent']['Platform'].lower() == 'system':
+            if key in (
+                "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count", "dungeon_countdown",
+                "raid_start", "raid_auto_joined", "raid_auto_joined_count", 
+                "multiplier_ends", "multiplier_ended"):
+                return {'block': True}
         if message['Recipent']['Platform'].lower() == 'twitch':
             asyncio.create_task(self.record_character(
                 message['Recipent']['CharacterId'],
@@ -328,11 +334,6 @@ class RFChannel:
                 t = time.monotonic()
                 self.island_arrivals[destination].append(user)
                 self.island_last_arrival_time[destination] = t
-                return {'block': True}
-            elif key in (
-                "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count", "dungeon_countdown",
-                "raid_start", "raid_auto_joined", "raid_auto_joined_count", 
-                "multiplier_ends", "multiplier_ended"):
                 return {'block': True}
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
