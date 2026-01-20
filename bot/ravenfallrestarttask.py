@@ -170,7 +170,7 @@ class RFRestartTask:
                 logger.error(f"Error checking restart pause events for {self.channel.channel_name}: {e}", exc_info=True)
                 event_type = "error"
 
-            if (time_left > WARNING_MSG_TIMES[0][0] + 5) and not self._paused:
+            if (time_left > WARNING_MSG_TIMES[0][0]) and not self._paused:
                 continue
 
             if not event_type:
