@@ -363,7 +363,7 @@ class GameCog(Cog):
                 channel_char_list.add(char["user_name"])
             char_list.add(char['user_name'])
         await ctx.reply(f"Counting loyalty points, please wait...")
-        result = await self.rf_webops.get_total_loyalty_points(char_list)
+        result = await self.rf_webops.get_total_loyalty_points(tuple(char_list))
         if result['status'] != "success":
             raise CommandError("Failed to get loyalty points.")
         
