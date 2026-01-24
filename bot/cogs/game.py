@@ -35,6 +35,7 @@ class GameCog(Cog):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
         self.rf_webops = WebOpsClient(rf_webops_url)
+        self.web_op_lock = asyncio.Lock()
     
     @Cog.command(name="updateboost", aliases=["update", "refreshboost"])
     @parameter("all_", display_name="all", aliases=["a"])
@@ -322,6 +323,9 @@ class GameCog(Cog):
             count: The amount to restock.
             channel: Target channel.
         """
+        if self.web_op_lock.locked():
+            raise CommandError("There is currently an ongoing operation. Try again later.")
+        
         if item.id not in (Items.ExpMultiplierScroll.value, Items.RaidScroll.value, Items.DungeonScroll.value):
             raise CommandError("Item must be an exp, raid or dungeon scroll.")
         chars = await get_char_info()
@@ -337,7 +341,11 @@ class GameCog(Cog):
             Items.RaidScroll.value: "raid_scroll",
             Items.DungeonScroll.value: "dungeon_scroll",
         }
-        result = await self.rf_webops.redeem_items(item_id_map[item.id], count, char_list)
+        try:
+            with self.web_op_lock:
+                result = await self.rf_webops.redeem_items(item_id_map[item.id], count, char_list)
+        except asyncio.TimeoutError:
+            raise CommandError("Task timed out.")
         if result['status'] == "success":
             await ctx.reply(f"Successfully restocked {sum(result['redeemed'].values())}x {item.name}.")
         else:
@@ -352,18 +360,24 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
-        
+        if self.web_op_lock.locked():
+            raise CommandError("There is currently an ongoing operation. Try again later.")
+
         chars = await get_char_info()
         if chars['status'] != 200:
             raise CommandError("Could not get character info.")
         channel_char_list = set()
         char_list = set()
-        for char in sorted(chars["data"], key=lambda x: x['user_name']):
+        for char in chars["data"]:
             if char["channel_id"] == channel.channel_id:
                 channel_char_list.add(char["user_name"])
             char_list.add(char['user_name'])
         await ctx.reply(f"Counting loyalty points, please wait...")
-        result = await self.rf_webops.get_total_loyalty_points(tuple(char_list))
+        try:
+            with self.web_op_lock:
+                result = await self.rf_webops.get_total_loyalty_points(tuple(char_list))
+        except asyncio.TimeoutError:
+            raise CommandError("Task timed out.")
         if result['status'] != "success":
             raise CommandError("Failed to get loyalty points.")
         

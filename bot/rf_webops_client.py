@@ -17,7 +17,7 @@ class WebOpsClient:
             "quantity": quantity,
             "characters": characters
         }
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60*15)) as session:
             async with session.post(url, json=payload) as response:
                 if response.status != 200:
                     text = await response.text()
@@ -32,7 +32,7 @@ class WebOpsClient:
         payload = {
             "usernames": usernames
         }
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60*15)) as session:
             async with session.post(url, json=payload) as response:
                 if response.status != 200:
                     text = await response.text()
