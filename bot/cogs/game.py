@@ -328,13 +328,29 @@ class GameCog(Cog):
         
         if item.id not in (Items.ExpMultiplierScroll.value, Items.RaidScroll.value, Items.DungeonScroll.value):
             raise CommandError("Item must be an exp, raid or dungeon scroll.")
+        
+        use_all_users = False
+        if item.id == Items.ExpMultiplierScroll.value:
+            use_all_users = True
+            
         chars = await get_char_info()
         if chars['status'] != 200:
             raise CommandError("Could not get character info.")
+        
         char_list = []
+        users_used = set()
         for char in chars["data"]:
-            if char["channel_id"] == channel.channel_id:
-                char_list.append({"username": char["user_name"], "id": str(char['index'])})
+            username = char["user_name"]
+            if char["channel_id"] == channel.channel_id and not username in users_used:
+                char_list.append({"username": username, "id": str(char['index'])})
+                users_used.add(username)
+        if use_all_users:
+            for char in chars["data"]:
+                username = char["user_name"]
+                if not username in users_used:
+                    char_list.append({"username": username, "id": str(char['index'])})
+                    users_used.add(username)
+
         await ctx.reply(f"Restocking {count}x {item.name}, please wait...")
         item_id_map = {
             Items.ExpMultiplierScroll.value: "exp_multiplier_scroll",
