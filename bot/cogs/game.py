@@ -342,7 +342,7 @@ class GameCog(Cog):
             Items.DungeonScroll.value: "dungeon_scroll",
         }
         try:
-            with self.web_op_lock:
+            async with self.web_op_lock:
                 result = await self.rf_webops.redeem_items(item_id_map[item.id], count, char_list)
         except asyncio.TimeoutError:
             raise CommandError("Task timed out.")
@@ -374,7 +374,7 @@ class GameCog(Cog):
             char_list.add(char['user_name'])
         await ctx.reply(f"Counting loyalty points, please wait...")
         try:
-            with self.web_op_lock:
+            async with self.web_op_lock:
                 result = await self.rf_webops.get_total_loyalty_points(tuple(char_list))
         except asyncio.TimeoutError:
             raise CommandError("Task timed out.")
