@@ -806,7 +806,8 @@ class RFChannel:
             uptime = game_session['secondssincestart']
         if uptime is None:
             logger.warning(f"{self.channel_name} seems to be offline...")
-            self.queue_restart(5, label="Ravenfall seems to be offline...", reason=RestartReason.UNRESPONSIVE)
+            await self.send_chat_message("Ravenfall may have crashed...")
+            self.queue_restart(2, label="Ravenfall seems to be offline...", reason=RestartReason.UNRESPONSIVE)
             return
 
         if not self.auto_restart:
