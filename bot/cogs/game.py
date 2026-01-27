@@ -361,7 +361,7 @@ class GameCog(Cog):
             raise CommandError(f"There is currently an active ferry boost, ending in {format_seconds(f['boost']['remainingtime'], size=TimeSize.LONG, include_zero=False)}.")
         await send_multichat_command("?fs", "0", channel.channel_name, channel.channel_id, channel.channel_name)
  
-    @Cog.command(name="scrolls")
+    @Cog.command(name="channelscrolls", aliases=['sharedscrolls'])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def scrolls(self, ctx: Context, *, channel: RFChannel = 'this'):
         """Lists the available scroll stock.
