@@ -20,10 +20,12 @@ from ravenpy.ravenpy import Item
 from ravenpy import ravenpy
 from ravenpy.itemdefs import Items
 from utils.utils import upload_to_pastes
+from ..models import RFChannelEvent, GameMultiplier
 
 import logging
 logger = logging.getLogger(__name__)
 import asyncio
+from datetime import datetime, timezone
 
 class GameCog(Cog):
     """Cog providing game control commands.
@@ -31,10 +33,11 @@ class GameCog(Cog):
     Includes commands for restarting Ravenfall, managing monitoring and backups,
     and small utility actions such as refreshing town boosts.
     """
-    def __init__(self, rf_manager: RFChannelManager, rf_webops_url="http://pc2-mobile:7102", **kwargs):
+    def __init__(self, rf_manager: RFChannelManager, ravennest: ravenpy.RavenNest, rf_webops_url="http://pc2-mobile:7102", **kwargs):
         super().__init__(**kwargs)
         self.rf_manager = rf_manager
         self.rf_webops = WebOpsClient(rf_webops_url)
+        self.ravennest = ravennest
         self.web_op_lock = asyncio.Lock()
     
     @Cog.command(name="updateboost", aliases=["update", "refreshboost"])
@@ -267,6 +270,10 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
+        if channel.event == RFChannelEvent.DUNGEON:
+            raise CommandError("There is currently an active dungeon")
+        if channel.event == RFChannelEvent.RAID:
+            raise CommandError("There is currently an active raid")
         await send_multichat_command("?ds", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
     
     @Cog.command(name="rs")
@@ -277,6 +284,10 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
+        if channel.event == RFChannelEvent.DUNGEON:
+            raise CommandError("There is currently an active dungeon")
+        if channel.event == RFChannelEvent.RAID:
+            raise CommandError("There is currently an active raid")
         await send_multichat_command("?rs", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
     
     @Cog.command(name="exps")
@@ -289,6 +300,46 @@ class GameCog(Cog):
             count: Number of exp scrolls to use.
             channel: Target channel.
         """
+        tasks = [
+            channel.get_query("select * from multiplier"),
+            self.ravennest.get_global_mult()
+        ]
+        m_client, m_server = await asyncio.gather(*tasks, return_exceptions=True)
+        m_client: GameMultiplier
+        m_server: ravenpy.ExpMult
+        if (isinstance(m_client, Exception)):
+            raise CommandError("Ravenfall is offline. Try again later.")
+        if (isinstance(m_server, Exception)):
+            raise CommandError("RavenNest is offline. Try again later.")
+        
+        if m_server.multiplier > 1:
+            s_duration = (m_server.end_time - m_server.start_time).total_seconds()
+            s_remaining = (m_server.end_time - datetime.now(tz=timezone.utc)).total_seconds()
+        else:
+            s_duration = 0
+            s_remaining = 0
+            
+        if m_client["multiplier"] > 1:
+            c_duration = m_client["duration"]
+            c_remaining = m_client["timeleft"]
+        else:
+            c_duration = 0
+            c_remaining = 0
+        
+        if c_duration >= s_duration:
+            duration = c_duration
+            remaining = c_remaining
+            multiplier_value = m_client['multiplier']
+        else:
+            duration = s_duration
+            remaining = s_remaining
+            multiplier_value = m_server.multiplier
+            
+        if multiplier_value == 100:
+            raise CommandError("Multiplier is already maxed.")
+        elif multiplier_value > 1 and remaining / duration < 0.8:
+            raise CommandError("Wait for the current multiplier to expire before using this command again.")
+        
         await send_multichat_command(f"?exps {count}", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
     
     @Cog.command(name="fs")
@@ -299,6 +350,13 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
+        try:
+            f = await channel.get_query("select * from ferry")
+        except Exception:
+            raise CommandError("Ravenfall is offline. Try again later.")
+        
+        if f['boost']['isactive']:
+            raise CommandError(f"There is currently an active ferry boost, ending in {format_seconds(f['boost']['remainingtime'], size=TimeSize.LONG, include_zero=False)}.")
         await send_multichat_command("?fs", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
  
     @Cog.command(name="scrolls")

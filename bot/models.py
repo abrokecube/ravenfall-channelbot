@@ -101,8 +101,13 @@ class FerryCaptain(TypedDict):
     name: str
     sailinglevel: int
 
+class FerryBoost(TypedDict):
+    isactive: bool
+    remainingtime: float
+
 class Ferry(TypedDict):
     destination: str
+    boost: FerryBoost
     players: int
     captain: FerryCaptain
 

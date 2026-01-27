@@ -32,10 +32,10 @@ class Context(Protocol):
     platform_character_limit: int
     data: Any
     
-    async def reply(self, text: str) -> None:
+    async def reply(self, text: str, **kwargs) -> None:
         ...
 
-    async def send(self, text: str) -> None:
+    async def send(self, text: str, **kwargs) -> None:
         ...
 
     def get_bucket_key(self, bucket_type: BucketType) -> Any:

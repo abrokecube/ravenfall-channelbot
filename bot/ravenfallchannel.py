@@ -11,7 +11,7 @@ import aiohttp
 from datetime import timedelta
 
 from .models import (
-    Player, Village, Dungeon, Raid, GameMultiplier, GameSession,
+    Player, Village, Dungeon, Raid, GameMultiplier, GameSession, Ferry,
     RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
@@ -335,6 +335,21 @@ class RFChannel:
                 self.island_arrivals[destination].append(user)
                 self.island_last_arrival_time[destination] = t
                 return {'block': True}
+            elif key in ("ferry_info", "ferry_info_no_captain", "ferry_info_no_captain_island"):
+                ferry: Ferry = await self.get_query('select * from ferry')
+                
+                f_destination = ""
+                if ferry['destination']:
+                    f_destination = f"sailing towards {ferry['destination']}"
+                f_players = f'with {utils.pl(ferry['players'], 'player')} on board.'
+                f_captain = ''
+                if ferry['captain']['name']:
+                    f_captain = f"{ferry['captain']['name']} is the captain with {ferry['captain']['sailinglevel']} sailing."
+                f_boost = ''
+                if ferry['boost']['isactive']:
+                    f_boost = f"A speed boost is active, ending in {format_seconds(ferry['boost']['remainingtime'], TimeSize.LONG, include_zero=False)}."
+                message['Format'] = utils.strjoin(' ', "The ferry is", f_destination, f_players, f_captain, f_boost)
+                message['Args'] = []
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
             if len(trans_str) == 0:
