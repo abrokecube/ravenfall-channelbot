@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 # Compiled regex patterns for string matching and translation
 MATCH_DEF_TOKENIZER: Pattern = re.compile(r"{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<parsed>[a-zA-Z_0-9]+(:((?:(?!}})).)+)?)}}|(?P<nothing>[^{}]*)")
 TRANSLATE_TOKENIZER: Pattern = re.compile(r'{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<eval>((?:(?!}})).)+)}}|(?P<nothing>[^{}]*)')
-RE_ESCAPE: Pattern = re.compile(r'("[^"\\]*(?:\\.[^"\\]*)*")')
 FSTRINGS: Pattern = re.compile(r'{([a-zA-Z_0-9]+)}')
 
 class StringArgType(Enum):
@@ -275,7 +274,7 @@ class Match:
         self.key = key
         self.match_string = match_string
         self.arguments: List[StringArg] = []
-        regex_str_build = []
+        regex_str_build = ['^']
         orig_str_build = []
         has_regex = False
         for mo in MATCH_DEF_TOKENIZER.finditer(match_string):
@@ -283,7 +282,7 @@ class Match:
             value = mo.groupdict()[kind]
             match kind:
                 case "nothing":
-                    regex_str_build.append(RE_ESCAPE.sub(r'\\\1', value))
+                    regex_str_build.append(re.escape(value))
                     orig_str_build.append(value)
                 case "parsed":
                     name = value
@@ -303,13 +302,14 @@ class Match:
                     self.arguments.append(
                         StringArg(value, StringArgType.GIVEN)
                     )
-                    regex_str_build.append(RE_ESCAPE.sub(r'\\\1', "{%s}" % value))
+                    regex_str_build.append(re.escape(value))
                     orig_str_build.append("{%s}" % value)
                 case _:
                     logger.error("Unexpected match group in string pattern")
                     assert False, "Unexpected match group in string pattern"
         self.regex = None
         if has_regex:
+            regex_str_build.append("$")
             self.regex = re.compile("".join(regex_str_build))
             self.match_string = "".join(orig_str_build)
             # print(self.regex)
@@ -390,6 +390,9 @@ class Match:
         #     str_b = str_a.format_map(mapped_args)
         #     str_a, str_b = (str_b, str_a)
         return str_b
+    
+    def __repr__(self):
+        return f"Match({self.key})"
 
 
 class BotString:
