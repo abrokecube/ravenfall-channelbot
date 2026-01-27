@@ -528,8 +528,8 @@ scroll_query: "You have {{scrolls:(\\{tokenAmount\\d\\} \\{tokenName\\d\\}\\(s\\
 
 # holy fuck
 ferry_info_players: "The ferry is currently sailing with {{playerCount:\\d+}} players on board."
-ferry_info_destination_players: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board."
-ferry_info_destination_players_captain: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing."
 ferry_info_players_boost: "The ferry is currently sailing with {{playerCount:\\d+}} players on board. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
+ferry_info_destination_players: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board."
 ferry_info_destination_players_boost: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
+ferry_info_destination_players_captain: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing."
 ferry_info_destination_players_captain_boost: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
