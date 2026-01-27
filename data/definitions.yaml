@@ -518,9 +518,6 @@ game_version: "The streamer is currently running Ravenfall v{version}"
 
 # dungeon_broken: " is available. Type !dungeon to join."
 huts_info: "{{hutsInfo:{type0}: .*}}"
-ferry_info: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing."
-ferry_info_no_captain: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board."
-ferry_info_no_captain_island: "The ferry is currently sailing with {{playerCount:\\d+}} players on board."
 players_restored: "{{playerCount:\\d+}} players restored."
 restore_failed: "Failed to restore players. See game log files for more details."
 twitch_subscription: "Welcome to the {streamerDisplayName} crew! You will now gain {tierMultiplier}x more exp on this stream!"
@@ -528,3 +525,11 @@ permanently_suspended: "You have been permanently suspended from playing. Contac
 command_restricted: "Only the Broadcaster and Moderators can use this command."
 ferry_scroll_used: "The ferry will now move faster for {{duration}}."
 scroll_query: "You have {{scrolls:(\\{tokenAmount\\d\\} \\{tokenName\\d\\}\\(s\\)(, | and |.$))+}}"
+
+# holy fuck
+ferry_info_players: "The ferry is currently sailing with {{playerCount:\\d+}} players on board."
+ferry_info_destination_players: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board."
+ferry_info_destination_players_captain: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing."
+ferry_info_players_boost: "The ferry is currently sailing with {{playerCount:\\d+}} players on board. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
+ferry_info_destination_players_boost: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
+ferry_info_destination_players_captain_boost: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
