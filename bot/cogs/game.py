@@ -340,6 +340,8 @@ class GameCog(Cog):
         elif multiplier_value > 1 and remaining / duration < 0.8:
             raise CommandError("Wait for the current multiplier to expire before using this command again.")
         
+        count = min(count, 100 - multiplier_value)
+        
         await send_multichat_command(f"?exps {count}", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
     
     @Cog.command(name="fs")
