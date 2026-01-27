@@ -274,7 +274,7 @@ class GameCog(Cog):
             raise CommandError("There is currently an active dungeon")
         if channel.event == RFChannelEvent.RAID:
             raise CommandError("There is currently an active raid")
-        await send_multichat_command("?ds", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+        await send_multichat_command("?ds", "0", channel.channel_name, channel.channel_id, channel.channel_name)
     
     @Cog.command(name="rs")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
@@ -288,7 +288,7 @@ class GameCog(Cog):
             raise CommandError("There is currently an active dungeon")
         if channel.event == RFChannelEvent.RAID:
             raise CommandError("There is currently an active raid")
-        await send_multichat_command("?rs", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+        await send_multichat_command("?rs", "0", channel.channel_name, channel.channel_id, channel.channel_name)
     
     @Cog.command(name="exps")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
@@ -342,7 +342,7 @@ class GameCog(Cog):
         
         count = min(count, 100 - multiplier_value)
         
-        await send_multichat_command(f"?exps {count}", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+        await send_multichat_command(f"?exps {count}", "0", channel.channel_name, channel.channel_id, channel.channel_name)
     
     @Cog.command(name="fs")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
@@ -359,7 +359,7 @@ class GameCog(Cog):
         
         if f['boost']['isactive']:
             raise CommandError(f"There is currently an active ferry boost, ending in {format_seconds(f['boost']['remainingtime'], size=TimeSize.LONG, include_zero=False)}.")
-        await send_multichat_command("?fs", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+        await send_multichat_command("?fs", "0", channel.channel_name, channel.channel_id, channel.channel_name)
  
     @Cog.command(name="scrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
