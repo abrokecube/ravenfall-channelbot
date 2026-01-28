@@ -1,0 +1,126 @@
+# test_matched_string: 
+#  - "{scrollCount} scrolls? {multAmount} multiplier? Wowee! I love using {{pl(scrollCount, 'my scroll', 'all of my {scrollCount} scrolls', False)}}! {ffstringTest}"
+#  - "among us"
+
+
+raid_auto_joined: null  # will prevent the message from being sent to chat
+
+
+dungeon_auto_joined: null
+dungeon_countdown: null
+player_joined: hiii Welcome to Ravenfall!
+join_welcome_first_time: hiii Welcome to Ravenfall!
+equip_shield_and_twohanded: You cannot equip a shield while having a two-handed weapon equipped.
+player_inspect_url:  # Will pick one response randomly
+  - Stare https://www.ravenfall.stream/inspect/{characterId}
+  - Looking https://www.ravenfall.stream/inspect/{characterId}
+multiplier_ends: null
+multiplier_ended: 
+ - catAsk exp scrolls please (multiplier expired)
+ - The Church of Neuro needs YOU! Type !exp to donate scrolls!
+ - my multiplier expired Sadge
+raid_start_code: NOWAY A level {raidLevel} raid boss has appeared! Help fight him by typing '!raid code', find the code on stream.
+raid_start: null
+# raid_start: 
+#  - aga ALERT raid! Type !raid to aga !
+#  - big ABOBA raid! Type !raid to help defeat it!
+#  - bmc has appeared! Type !raid to help defeat him!
+#  - A nwero has appeared! Type !raid to help defeat her!
+#  - The almighty eliv has appeared! Type !raid to help defeat her!
+#  - A level {raidLevel} iuh has appeared! Type !raid to help defeat them!
+#  - A level {raidLevel} niuh has appeared! Type !raid to help defeat them!
+#  - A level {raidLevel} eiuh has appeared! Type !raid to help defeat them!
+#  - A level {raidLevel} buh has appeared! Type !raid to help defeat them!
+#  - A level {raidLevel} guh has appeared! Type !raid to help defeat them!
+#  - "Type !raid to meow !"
+
+island_on_ferry_dest: ⛵ You're currently on the ferry, disembarking at '{destination}'.
+island_on_ferry: ⛵ You're currently on the ferry.
+island: 🏝️ You're on {islandName}.
+island_dungeon: ☠️ You're currently in the dungeon.
+island_dungeon_2: ☠️ You are currently inside the dungeon.
+island_war: ⚔️ You're currently in a streamer raid war.
+island_stuck: Uh Oh . Your character may be stuck.
+
+rested: KURU You're rested and gain {expBoost}x more exp for {restedTime}!
+resting: 
+ - Life You're currently resting and will have {expBoost}x more exp for {restedTime}
+ - Bedge You're currently resting and will have {expBoost}x more exp for {restedTime}
+ - Boolin You're currently resting and will have {expBoost}x more exp for {restedTime}
+onsen_wrong_island: Erm Resting areas are available on Kyo, Heim, Atria and Eldara only. You're currently on {islandName}.
+
+join_welcome: 
+  - hiii Welcome to Ravenfall!
+  - peepoArrive Welcome to Ravenfall!
+leave: 
+  - byeee You have left the game.
+  - peepoLeave You have left the game.
+
+training_nothing: You're not training anything. Use !train <skill name> to start training!
+huts_update: null
+
+multiplier_maxed: neuroPray we're currently not accepting donations at the moment. (the max multiplier has been reached)
+multiplier_many_scrolls_used: neuroPray thank you for your generous donation of {scrollCount} {{pl(scrollCount, 'scroll', 'scrolls')}}. everyone will now gain {multiplier}x exp.
+multiplier_one_scroll_used: neuroPray thank you for your donation. now gaining {multiplier}x exp.
+multiplier_fail_no_scrolls: NoBitches no scrolls? (redeem some under loyalty on the website).
+multiplier_fail_error: uuh Unable to use any scrolls at this time, game may be out of sync. Try again later.
+multiplier_fail_error_logged: uuh Unable to use any scrolls at this time, game may be out of sync. Try again later. Error has been logged.
+
+game_version: Running Ravenfall v{version}!
+bot_ravenfall_connected: YES Connected to Ravenfall!
+
+bot_reloaded_strings: "KURU Reloaded strings!"
+
+dungeon_broken: null
+# dungeon_broken: 
+#   - ALERTT is that a dungeon? Type !dungeon to join.
+#   - A dungeon is now available. Type !dungeon to join.
+#   - Type !dungeon NOW !!!!!! (unless you're auto joining)
+#   - Type !dungeon NOW !!!!!! (unless you're auto joining)
+#   - This is a dungeon. Type !dungeon.
+#   - This is a dungeon. Type !dungeon.
+#   - A dungeon is now available. Type !dungeon to join.
+#   - huh a dungeon. type !dungeon
+#   - huh a dungeon. type !dungeon
+#   - Dungeon. Type !dungeon to join.
+#   - Dungeon. Type !dungeon to join.
+#   - Your Mom's Basement is available. Type !dungeon to join. ( GOODONE )
+
+ferry_info_players: "The ferry is currently sailing with {playerCount} {{pl(playerCount, 'player', 'players')}} on board."
+ferry_info_destination_players: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board."
+ferry_info_destination_players_captain: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. {{unping(ferryCaptain)}} is the captain with {captainLevel} sailing."
+
+ferry_info_players_boost: "The ferry is currently sailing with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. A {ferryBoost}x boost is active, ending in {ferryBoostDuration}."
+ferry_info_destination_players_boost: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. A {ferryBoost}x boost is active, ending in {ferryBoostDuration}."
+ferry_info_destination_players_captain_boost: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. {{unping(ferryCaptain)}} is the captain with {captainLevel} sailing. A {ferryBoost}x boost is active, ending in {ferryBoostDuration}."
+
+huts_info: "{{unping(fill(hutsInfo))}}"
+highest_skill: "{{unping(player)}} has the highest level {skillName} with level {level}."
+players_restored: "{playerCount} {{pl(playerCount, 'player returns', 'players return')}} to the mines."
+raid_failed: null
+# raid_failed: 
+#   - The raid failed!
+#   - Deadge No one killed the raid boss.
+#   - The raid boss got away!
+#   - uuh where did the raiders go (raid failed)
+ferry_train_sail: 
+  - Life You are now sailing towards the sun.
+auto_dungeon_status_none: "You are not set to automatically join any dungeons."
+auto_raid_status_none: "You are not set to automatically join any raids."
+auto_dungeon_joined: null
+dungeon_failed: null
+
+permanently_suspended: "peepoJail You have been permanently suspended from playing. Contact the staff for more information."
+
+disenchant_success: Removed enchantment from {oldItemName}
+enchant_success: "Enchanted {oldItemName} into {newItemName}. Cooldown: {cooldown}"
+enchant_replace: "Replaced {oldItemName} with {newItemName}. Cooldown: {cooldown}"
+enchant_cooldown_clear: "Cleared cooldown for {totalCost} coins"
+enchant_stats: "Stats: {enchantmentStats}"
+enchant_cooldown_active: "Cooldown: {timeLeft}. Cost to clear: {totalCost} coins ({pricePerSecond} coins/s)"
+
+village_updated: "Updated village target. Active boosts: {activeBoosts}"
+village_boost_no_boost: "Current town level: {townHallLevel} ({levelPercent}) {currentExp} / {requiredExp} EXP – Active boosts: None"
+village_boost: "Current town level: {townHallLevel} ({levelPercent}) {currentExp} / {requiredExp} EXP – Active boosts: {activeBoosts}"
+
+twitch_subscription: you're cool
