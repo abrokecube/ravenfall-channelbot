@@ -193,7 +193,7 @@ class RFChannel:
     
     async def send_announcement(self, message: str, color: str = None, ignore_error: bool = True):
         try:
-            await self.chat.twitch.send_chat_announcement(self.channel_id, os.getenv("BOT_ID"), message, color)
+            await self.chat.twitch.send_chat_announcement(self.channel_id, os.getenv("BOT_USER_ID"), message, color)
         except Exception as e:
             if not ignore_error:
                 raise e
@@ -487,7 +487,7 @@ class RFChannel:
             if message is None:
                 resend_text = content
             else:
-                resend_text = message.text if message.user.id == os.getenv("BOT_ID") else None
+                resend_text = message.text if message.user.id == os.getenv("BOT_USER_ID") else None
             self.monitor_ravenbot_response(command, timeout=timeout, resend_text=resend_text)
                         
     async def wait_for_ravenbot_command(self, command: str, timeout: float = 10.0) -> Optional[RavenBotMessage]:
@@ -744,7 +744,7 @@ class RFChannel:
         try:
             await backup_file_with_date_async(
                 f"{os.getenv('RAVENFALL_SANDBOXED_FOLDER').replace('{box}', self.sandboxie_box).rstrip('\\/')}\\state-data.json",
-                int(os.getenv('BACKUP_RETENTION_COUNT'))
+                int(os.getenv('STATE_DATA_BACKUP_RETENTION_COUNT'))
             )
             logger.info(f"Backed up state data for {self.channel_name}")
         except Exception as e:

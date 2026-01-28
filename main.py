@@ -112,7 +112,7 @@ async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
             save_new_tokens = False
 
     while True:
-        twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
+        twitch = await Twitch(os.getenv("TWITCH_APP_ID"), os.getenv("TWITCH_APP_SECRET"))
         if access_token is None:
             auth = UserAuthenticator(twitch, USER_SCOPE, True)
             print(f"Please authenticate with the Twitch account: {user_name or user_id}")
@@ -160,7 +160,7 @@ async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
         else:
             return access_token, refresh_token
 async def get_twitch_auth_instance(user_id: Union[int, str], user_name: str = None) -> Twitch:
-    twitch = await Twitch(os.getenv("TWITCH_CLIENT"), os.getenv("TWITCH_SECRET"))
+    twitch = await Twitch(os.getenv("TWITCH_APP_ID"), os.getenv("TWITCH_APP_SECRET"))
     access_token, refresh_token = await get_tokens(user_id, user_name)
     await twitch.set_user_authentication(access_token, USER_SCOPE, refresh_token)
     return twitch
@@ -174,7 +174,7 @@ async def run():
     
     await update_schema()
     
-    twitch = await get_twitch_auth_instance(os.getenv("BOT_ID"))
+    twitch = await get_twitch_auth_instance(os.getenv("BOT_USER_ID"))
     rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     asyncio.create_task(rf.login())
 
@@ -248,7 +248,7 @@ async def run():
         logger.info("Bot is ready for work")
         chat.register_event(ChatEvent.MESSAGE, on_message)
         
-        server = SomeEndpoints(rf_manager, chat_manager, os.getenv("SERVER_HOST", "0.0.0.0"), os.getenv("SERVER_PORT", 8080))
+        server = SomeEndpoints(rf_manager, chat_manager, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), os.getenv("PRIVATE_SERVER_PORT", 8080))
         await server.start()
 
     chat.register_event(ChatEvent.READY, on_ready)
