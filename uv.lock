@@ -257,18 +257,6 @@ wheels = [
 ]
 
 [[package]]
-name = "gotify"
-version = "0.6.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httpx" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/60/e5/f7d6b37c70adce7533a93aadd9624a67ab79323766c8b3978a6653f16ea8/gotify-0.6.0.tar.gz", hash = "sha256:47bdc0332143cd5c251e284ffa487467429c624a1d40aefb013774f6f4dd4b7d", size = 22832, upload-time = "2023-10-22T14:06:18.411Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/73/2e/a8eb9b07219346c1f87ff5fb810898a8de3eeeed758aa620cd43a53a2fc1/gotify-0.6.0-py3-none-any.whl", hash = "sha256:184faec76de78279c5acd6e21dfefd11223d74a816b607f1063ac22df40641b2", size = 10974, upload-time = "2023-10-22T14:06:16.972Z" },
-]
-
-[[package]]
 name = "greenlet"
 version = "3.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -580,7 +568,6 @@ dependencies = [
     { name = "docstring-parser" },
     { name = "enum-tools" },
     { name = "frozenlist" },
-    { name = "gotify" },
     { name = "greenlet" },
     { name = "h11" },
     { name = "httpcore" },
@@ -622,7 +609,6 @@ requires-dist = [
     { name = "docstring-parser", specifier = ">=0.17.0" },
     { name = "enum-tools", specifier = "==0.13.0" },
     { name = "frozenlist", specifier = "==1.8.0" },
-    { name = "gotify", specifier = "==0.6.0" },
     { name = "greenlet", specifier = "==3.2.3" },
     { name = "h11", specifier = "==0.16.0" },
     { name = "httpcore", specifier = "==1.0.9" },
