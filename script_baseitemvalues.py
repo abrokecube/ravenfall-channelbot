@@ -8,7 +8,7 @@ from typing import List, Tuple, Optional
 load_dotenv()
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
+    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     await rf.login()
     await rf.refresh_items()
 

@@ -175,7 +175,7 @@ async def run():
     await update_schema()
     
     twitch = await get_twitch_auth_instance(os.getenv("BOT_ID"))
-    rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
+    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     asyncio.create_task(rf.login())
 
     chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])

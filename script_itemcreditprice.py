@@ -90,7 +90,7 @@ with open("data/base_item_values.json", "r", encoding="utf-8") as f:
     base_item_values = json.load(f)
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
+    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     await rf.login()
     await rf.refresh_items()
     # Compute values for craftable items: 95% of the sum of ingredient sell prices

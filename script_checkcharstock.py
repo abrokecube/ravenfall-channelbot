@@ -19,7 +19,7 @@ IN_ITEM_LIST = "./output/root_ingredients.json"
 
 async def main():
     item_list = json.loads(Path(IN_ITEM_LIST).read_text(encoding="utf-8"))
-    rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
+    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     await rf.login()
     await rf.refresh_items()
 

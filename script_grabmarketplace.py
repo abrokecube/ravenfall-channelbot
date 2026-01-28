@@ -12,7 +12,7 @@ import bot.multichat_command as mc
 OUT_CSV_FILE = "./output/marketplace_items.csv"
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("API_USER"), os.getenv("API_PASS"))
+    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     await rf.login()
     
     chars = await mc.get_char_info()
