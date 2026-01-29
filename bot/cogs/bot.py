@@ -22,7 +22,7 @@ class BotStuffCog(Cog):
     @Cog.command(name='sourcecode', aliases=["github", "source"])
     async def github_link(self, ctx: Context):
         """https://github.com/abrokecube/ravenfall-channelbot"""
-        await ctx.reply("GitHub: https://github.com/abrokecube/ravenfall-channelbot")
+        await ctx.reply("Source code on GitHub: https://github.com/abrokecube/ravenfall-channelbot")
     
     @Cog.command(name="reload_strings", aliases=["reloadstrings"])
     @parameter("all_", display_name="all", aliases=["a"])
