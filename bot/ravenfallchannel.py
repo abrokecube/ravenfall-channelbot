@@ -158,6 +158,8 @@ class RFChannel:
         self.island_arrivals = defaultdict(list)  # island name -> list of names
         self.island_last_arrival_time = defaultdict(lambda: 0)  # island name -> last arrival timestamp
         
+        self.update_events_routine_first_iteration = True
+        
     async def start(self):
         if self.monitoring_paused:
             return
@@ -624,10 +626,13 @@ class RFChannel:
         self.event_text = event_text
         self.event = event
         self.sub_event = sub_event
-        asyncio.create_task(self.game_event_notification(sub_event, old_sub_event))
-        asyncio.create_task(self.game_event_muted_ravenbot_notification(sub_event, old_sub_event))
+        if not self.update_events_routine_first_iteration:
+            asyncio.create_task(self.game_event_notification(sub_event, old_sub_event))
+            asyncio.create_task(self.game_event_muted_ravenbot_notification(sub_event, old_sub_event))
         asyncio.create_task(self.game_event_wake_ravenbot(sub_event))
         asyncio.create_task(self.game_event_fetch_auto_raids(old_sub_event, sub_event))
+        
+        self.update_events_routine_first_iteration = False
     
     @routine(delta=timedelta(seconds=46), max_attempts=99999)
     async def town_level_notification_routine(self):
