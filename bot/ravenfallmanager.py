@@ -268,7 +268,7 @@ class RFChannelManager:
 
 class ItemAlertMonitor(BatchAlertMonitor):
     def __init__(self, rfmanager: RFChannelManager):
-        super().__init__(interval=30, timeout=7*60, alert_interval=60*60, name='ItemAlertMonitor')
+        super().__init__(interval=30, timeout=3*60, alert_interval=60*60, name='ItemAlertMonitor')
         self.rfmanager = rfmanager
         self.last_counts = {}
         
