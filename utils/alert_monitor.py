@@ -3,6 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional, Dict
 from dataclasses import dataclass
+from utils.format_time import format_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,8 @@ class AlertMonitor(ABC):
                     is_good = False
                     reason = f"Check failed with error: {e}"
 
+                now = asyncio.get_running_loop().time()
+                
                 if is_good:
                     # Condition is good (True)
                     if self._is_alerting:
@@ -154,15 +157,14 @@ class AlertMonitor(ABC):
                         except Exception as e:
                             logger.error(f"[{self.name}] Error in resolve_alert: {e}", exc_info=True)
                     elif self._first_failure_time is not None:
-                        logger.info(f"[{self.name}] Condition returned to normal before alert triggered.")
+                        elapsed = now - self._first_failure_time
+                        logger.info(f"[{self.name}] Condition returned to normal before alert triggered after {format_seconds(elapsed)}.")
                     
                     self._first_failure_time = None
                     self._last_alert_time = None
                     self._is_alerting = False
                 else:
                     # Condition is bad (False)
-                    now = asyncio.get_running_loop().time()
-                    
                     if self._first_failure_time is None:
                         self._first_failure_time = now
                         # Timer starts
@@ -359,7 +361,8 @@ class BatchAlertMonitor(ABC):
                             except Exception as e:
                                 logger.error(f"[{self.name}] Error in resolve_alert for '{name}': {e}", exc_info=True)
                         elif state.first_failure_time is not None:
-                            logger.info(f"[{self.name}] Condition '{name}' returned to normal before alert triggered.")
+                            elapsed = now - state.first_failure_time
+                            logger.info(f"[{self.name}] Condition '{name}' returned to normal before alert triggered after {format_seconds(elapsed)}.")
                         
                         state.first_failure_time = None
                         state.last_alert_time = None
