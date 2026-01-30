@@ -26,9 +26,9 @@ If all dependencies are set up, you can run the bot by executing `uv run main.py
 - [ravenfall-multichat-server](https://github.com/abrokecube/ravenfall-multichat-server)
     - Fetches data of my other characters for use with item redeems, shared scrolls, determining game sync status
     - Allows the bot to chat through my other accounts
-- [ravenfall-webops](https://github.com/abrokecube/ravenfall-webops)
+- [ravenfall-webops](https://github.com/abrokecube/ravenfall-webops) (not required for operation)
     - `restockscrolls` and `countloyaltypoints` commands
-- [watchdog](https://github.com/abrokecube/watchdog)
+- [watchdog](https://github.com/abrokecube/watchdog) (not required for operation)
     - for `startproc`, `stopproc`, `restartproc`, `listproc`, and `pull`
 
 ### Node exporter config
