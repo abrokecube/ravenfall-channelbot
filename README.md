@@ -61,5 +61,5 @@ See [`channels_example.json`](/channels_example.json) for an example file. This 
 `middleman_connection_id`    | ID used to identify message sources from the middleman. In the format `<client ip>_<client port>_<server port>`
 `ravenfall_loc_strings_path` | Path to a `.yaml` containing translation strings. See [definitions.yaml](data/definitions.yaml) for a list of keys, and [example_translation_strings.yaml](data/example_translation_strings.yaml) for example translations.
 `auto_restore_raids`         | Do not use this. Sends `!auto raid on` on behalf of users in the town that have already enabled auto raids. Was used when auto raid status was broken and didn't get restored on game restart.
-`channel_points_redeems`     | Listen for channel point redeems. Setting this to `false` disables redeems.
+`channel_points_redeems`     | Listen for channel point redeems. Setting this to `false` will stop the bot from responding to redeems.
 `pause_monitoring`           | Stops Ravenfall monitoring
