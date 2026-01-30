@@ -117,9 +117,14 @@ class RFRestartTask:
                                 logger.error(f"Failed to run pre restart for {self.channel.channel_name}: {e}", exc_info=True)
                     if WARNING_MSG_TIMES[new_warning_idx][1] == PreRestartEvent.WARNING and time_left > 7 and not self.mute_countdown:
                         if not self.sent_initial_announcement:
-                            await self.channel.send_announcement(
-                                f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!",
-                            )
+                            if self.label:
+                                await self.channel.send_announcement(
+                                    f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}! Reason: {self.label}",
+                                )
+                            else:
+                                await self.channel.send_announcement(
+                                    f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}",
+                                )
                             self.sent_initial_announcement = True
                         else:
                             await self.channel.send_chat_message(
