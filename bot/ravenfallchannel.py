@@ -811,8 +811,7 @@ class RFChannel:
             uptime = game_session['secondssincestart']
         if uptime is None:
             logger.warning(f"{self.channel_name} seems to be offline...")
-            await self.send_chat_message("Ravenfall may have crashed...")
-            self.queue_restart(2, label="Ravenfall seems to be offline...", reason=RestartReason.UNRESPONSIVE)
+            self.queue_restart(2, label="Ravenfall may have crashed...", reason=RestartReason.UNRESPONSIVE)
             return
 
         if not self.auto_restart:
@@ -1051,7 +1050,7 @@ class RFChannel:
                 await self.send_chat_message(resp_restart_ravenfall)
                 restart_task = self.queue_restart(
                     time_to_restart=10,  # Start restart in 10 seconds
-                    label="RavenBot is unresponsive",
+                    label="Ravenfall is not responding",
                     reason=RestartReason.UNRESPONSIVE
                 )
                 await restart_task.wait()

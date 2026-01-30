@@ -178,7 +178,7 @@ class RFChannelManager:
             if channel.multiplier['multiplier'] != self.global_multiplier:
                 logger.debug(f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}")
                 if channel.restart_task and channel.restart_task.get_time_left() > 120:
-                    channel.queue_restart(120, label="multiplier mismatch", reason=RestartReason.MULTIPLIER_DESYNC)
+                    channel.queue_restart(90, label="Town is desynced; multiplier is not updating", reason=RestartReason.MULTIPLIER_DESYNC)
                 r = await send_multichat_command(
                     text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
                     user_id=channel.channel_id,
@@ -289,7 +289,7 @@ class ItemAlertMonitor(BatchAlertMonitor):
         if reason == "No item gain":
             channel = self.rfmanager.get_channel(channel_name=name)
             if not channel.monitoring_paused:
-                channel.queue_restart(90, label="no item gain", reason=RestartReason.ITEM_DESYNC)
+                channel.queue_restart(90, label="Town is desynced; items stopped getting rewarded", reason=RestartReason.ITEM_DESYNC)
     
     async def resolve_alert(self, name):
         pass

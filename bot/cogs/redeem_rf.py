@@ -957,7 +957,7 @@ class RedeemRFCog(Cog):
         if channel is None:
             return
 
-        task = channel.queue_restart(30, reason=RestartReason.USER)
+        task = channel.queue_restart(30, label="Restart triggered manually", reason=RestartReason.USER)
         if task:
             await ctx.send("Ravenfall will restart in 30 seconds!") 
             await ctx.fulfill()
