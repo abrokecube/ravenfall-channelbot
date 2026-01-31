@@ -10,11 +10,12 @@ from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
 from utils.format_time import format_seconds, TimeSize
 from utils.commands_rf import RFChannelConverter, RFItemConverter
+from utils.utils import pl
 from ..ravenfallchannel import RFChannel
 from ..command_enums import UserRole, BucketType
 from ..command_utils import HasRole, RangeInt
 from ..command_exceptions import CommandError
-from ..multichat_command import send_multichat_command, get_char_info
+from ..multichat_command import send_multichat_command, get_char_info, get_scroll_counts
 from ..rf_webops_client import WebOpsClient
 from ravenpy.ravenpy import Item
 from ravenpy import ravenpy
@@ -26,6 +27,8 @@ import logging
 logger = logging.getLogger(__name__)
 import asyncio
 from datetime import datetime, timezone
+from typing import Dict
+
 
 class GameCog(Cog):
     """Cog providing game control commands.
@@ -270,6 +273,9 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
+        scrolls = await get_scroll_counts(channel.channel_id)
+        if scrolls["data"]["channel"]["Dungeon Scroll"] == 0:
+            raise CommandError("Currently out of dungeon scrolls.")
         if channel.event == RFChannelEvent.DUNGEON:
             raise CommandError("There is currently an active dungeon")
         if channel.event == RFChannelEvent.RAID:
@@ -284,6 +290,9 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
+        scrolls = await get_scroll_counts(channel.channel_id)
+        if scrolls["data"]["channel"]["Raid Scroll"] == 0:
+            raise CommandError("Currently out of raid scrolls.")
         if channel.event == RFChannelEvent.DUNGEON:
             raise CommandError("There is currently an active dungeon")
         if channel.event == RFChannelEvent.RAID:
@@ -300,6 +309,7 @@ class GameCog(Cog):
             count: Number of exp scrolls to use.
             channel: Target channel.
         """
+        
         tasks = [
             channel.get_query("select * from multiplier"),
             self.ravennest.get_global_mult()
@@ -311,7 +321,12 @@ class GameCog(Cog):
             raise CommandError("Ravenfall is offline. Try again later.")
         if (isinstance(m_server, Exception)):
             raise CommandError("RavenNest is offline. Try again later.")
-        
+
+        scrolls = await get_scroll_counts(channel.channel_id)
+        scrolls_remaining = scrolls["data"]["total"]["Exp Multiplier Scroll"]
+        if scrolls_remaining == 0:
+            raise CommandError("Currently out of exp multiplier scrolls.")
+
         if m_server.multiplier > 1:
             s_duration = (m_server.end_time - m_server.start_time).total_seconds()
             s_remaining = (m_server.end_time - datetime.now(tz=timezone.utc)).total_seconds()
@@ -341,6 +356,8 @@ class GameCog(Cog):
             raise CommandError("Wait for the current multiplier to expire before using this command again.")
         
         count = min(count, 100 - multiplier_value)
+        if count < scrolls_remaining:
+            raise CommandError("There are not enough scrolls in stock.")
         
         await send_multichat_command(f"?exps {count}", "0", channel.channel_name, channel.channel_id, channel.channel_name)
     
@@ -357,6 +374,10 @@ class GameCog(Cog):
         except Exception:
             raise CommandError("Ravenfall is offline. Try again later.")
         
+        scrolls = await get_scroll_counts(channel.channel_id)
+        if scrolls["data"]["channel"]["Ferry Scroll"] == 0:
+            raise CommandError("Currently out of ferry scrolls.")
+        
         if f['boost']['isactive']:
             raise CommandError(f"There is currently an active ferry boost, ending in {format_seconds(f['boost']['remainingtime'], size=TimeSize.LONG, include_zero=False)}.")
         await send_multichat_command("?fs", "0", channel.channel_name, channel.channel_id, channel.channel_name)
@@ -369,7 +390,19 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
-        await send_multichat_command("?scrolls", channel.channel_id, channel.channel_name, channel.channel_id, channel.channel_name)
+        scrolls = await get_scroll_counts(channel.channel_id)
+        scroll_names = {
+            "Raid Scroll": "channel",
+            "Dungeon Scroll": "channel",
+            "Exp Multiplier Scroll": "total",
+            "Ferry Scroll": "channel",
+        }
+        scroll_list = []
+        for name, scope in scroll_names.items():
+            count = scrolls["data"][scope][name]
+            scroll_list.append(f"{pl(count, name)}")
+        await ctx.reply(f"Available channel scrolls: {', '.join(scroll_list)}")
+
 
     @Cog.command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)

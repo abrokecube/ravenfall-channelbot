@@ -128,6 +128,21 @@ class CharItemsResponse(TypedDict):
     data: List[CharItems]
     error: Optional[str]
 
+ScrollCounts = TypedDict('ScrollCounts', {
+    "Exp Multiplier Scroll": int,
+    "Ferry Scroll": int,
+    "Raid Scroll": int,
+    "Dungeon Scroll": int
+})
+
+class Scrolls(TypedDict):
+    channel: ScrollCounts
+    total: ScrollCounts
+
+class ScrollsResponse(TypedDict):
+    status: int
+    data: Scrolls
+
 async def get_desync_info() -> DesyncResponse:
     """Fetch desync information from the server.
     
@@ -222,3 +237,21 @@ async def get_char_coins(channel_id: str) -> CharCoinsResponse:
             "status": 500,
             "error": f"Failed to fetch: {str(e)}"
         }
+
+async def get_scroll_counts(channel_id: str) -> ScrollsResponse:
+    url = f"{BASE_URL}/get_scrolls/{channel_id}"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response_data = await response.json()
+                return {
+                    "status": response.status,
+                    "data": response_data
+                }
+    except Exception as e:
+        return {
+            "status": 500,
+            "error": f"Failed to fetch: {str(e)}"
+        }
+
