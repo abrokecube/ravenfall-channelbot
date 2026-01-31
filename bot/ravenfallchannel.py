@@ -846,7 +846,8 @@ class RFChannel:
         run_post_restart: bool = True,
         silent: bool = False,
         *, 
-        reset_attempts: bool = True
+        reset_attempts: bool = True,
+        restart_task: RFRestartTask = None
     ):
         if reset_attempts:
             self.ravenfall_restart_attempts = 0
@@ -860,7 +861,10 @@ class RFChannel:
         await self.global_restart_lock.acquire()
         logger.info(f"Restarting Ravenfall for {self.channel_name}")
         if not silent:
-            await self.send_chat_message("Restarting Ravenfall...")
+            msg = "Restarting Ravenfall..."
+            if restart_task and (not restart_task.sent_reason) and restart_task.label:
+                msg += f" Reason: {restart_task.label}"
+            await self.send_chat_message(msg)
         code, text = await restart_process(
             self.sandboxie_box, 
             "Ravenfall.exe", 

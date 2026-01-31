@@ -69,6 +69,7 @@ class RFRestartTask:
         self.reason: RestartReason | None = reason
         self._status: RestartStatus = RestartStatus.IDLE
         self.sent_initial_announcement = False
+        self.sent_reason = False
 
     def start(self):
         if not self.done:
@@ -116,20 +117,18 @@ class RFRestartTask:
                             except Exception as e:
                                 logger.error(f"Failed to run pre restart for {self.channel.channel_name}: {e}", exc_info=True)
                     if WARNING_MSG_TIMES[new_warning_idx][1] == PreRestartEvent.WARNING and time_left > 7 and not self.mute_countdown:
+                        msg = f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
+                        if (not self.sent_reason) and self.label:
+                            msg += f" Reason: {self.label}"
+                            
                         if not self.sent_initial_announcement:
-                            if self.label:
-                                await self.channel.send_announcement(
-                                    f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}! Reason: {self.label}",
-                                )
-                            else:
-                                await self.channel.send_announcement(
-                                    f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}",
-                                )
+                            await self.channel.send_announcement(msg)
                             self.sent_initial_announcement = True
                         else:
-                            await self.channel.send_chat_message(
-                                f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!",
-                            )
+                            await self.channel.send_chat_message(msg)
+                            
+                        if not self.sent_reason:
+                            self.sent_reason = True
                 warning_idx = new_warning_idx
         await self._execute()
 
@@ -202,7 +201,8 @@ class RFRestartTask:
         try:
             await self.channel._restart_ravenfall(
                 run_pre_restart=False,
-                run_post_restart=True
+                run_post_restart=True,
+                restart_task=self
             )
         except Exception as e:
             logger.error(f"Failed to restart Ravenfall for {self.channel.channel_name}: {e}", exc_info=True)
