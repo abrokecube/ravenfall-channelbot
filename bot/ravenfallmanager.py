@@ -15,16 +15,18 @@ from datetime import timedelta, datetime, timezone
 import time
 from .ravenfallrestarttask import RestartReason
 from utils.alert_monitor import BatchAlertMonitor
+from .commands import Commands
 
 import os
 
 logger = logging.getLogger(__name__)
 
 class RFChannelManager:
-    def __init__(self, config: dict, chat: Chat, rfapi: RavenNest):
+    def __init__(self, config: dict, chat: Chat, rfapi: RavenNest, bot: Commands):
         self.config = config
         self.rfapi = rfapi
         self.chat = chat
+        self.bot = bot
         self.channels: List[RFChannel] = []
         self.channel_id_to_channel: Dict[str, RFChannel] = {}
         self.channel_name_to_channel: Dict[str, RFChannel] = {}

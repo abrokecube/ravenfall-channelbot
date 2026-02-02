@@ -241,7 +241,7 @@ async def run():
 
     async def on_ready(ready_event: EventData):
         global rf_manager
-        rf_manager = RFChannelManager(channels, chat, rf)
+        rf_manager = RFChannelManager(channels, chat, rf, commands)
         if not os.getenv("DISABLE_RAVENFALL_INTEGRATION", "").lower() in ("1", "true"):
             await rf_manager.start()
         load_cogs()

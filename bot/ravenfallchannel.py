@@ -102,6 +102,8 @@ class RFChannel:
         self.channel_name: str = config['channel_name'].lower()
         self.rf_query_url: str = config['rf_query_url'].rstrip('/')
         
+        self.twitch = manager.bot.twitches.get(self.channel_id)
+        
         # Optional fields with defaults
         self.ravenbot_prefixes: tuple = config.get('ravenbot_prefix', ('!',))
         self.custom_town_msg: str = config.get('custom_town_msg', '')
@@ -874,15 +876,15 @@ class RFChannel:
         for _ in range(30):
             await asyncio.sleep(1)
             if self.event == expected_event:
+                self.scroll_queue.popleft()
+                await self.save_scroll_queue()
                 if next_scroll.reward_id:
-                    await self.chat.twitch.update_redemption_status(
+                    await self.twitch.update_redemption_status(
                         self.channel_id,
                         next_scroll.reward_id,
                         next_scroll.reward_redemption_id,
                         CustomRewardRedemptionStatus.FULFILLED
                     )
-                self.scroll_queue.popleft()
-                await self.save_scroll_queue()
                 return
         logging.warning(f"Scroll queue: Expected event {expected_event} did not occur")
         
