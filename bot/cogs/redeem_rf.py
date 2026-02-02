@@ -1145,6 +1145,18 @@ class RedeemRFCog(Cog):
             f"{total} {pl(total, 'scroll', 'scrolls')} {pl(total, 'is', 'are')} in the queue. "
             f"Contents: {', '.join(queue_content_text)}"
         )
+        
+    @Cog.command(aliases=['csq', 'trimscrollqueue', 'tsq'])
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
+    async def clearscrollqueue(self, ctx: Context, start_pos: int = 0, *, channel: RFChannel = 'this'):
+        len_before = channel.get_scroll_queue_length()
+        await channel.remove_scrolls_from_queue(start_pos)
+        len_after = channel.get_scroll_queue_length()
+        removed = len_before - len_after
+        await ctx.reply(
+            f"{removed} {pl(removed, 'scroll', 'scrolls')} were removed from the queue."
+        )
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the redeem RF cog with the given commands instance.

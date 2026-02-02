@@ -928,6 +928,18 @@ class RFChannel:
         self.scroll_queue.append(queue_obj)
         await self.save_scroll_queue()
         
+    async def remove_scrolls_from_queue(self, start_pos: int):
+        while len(self.scroll_queue) > start_pos:
+            item = self.scroll_queue.pop()
+            if item.reward_id:
+                await self.twitch.update_redemption_status(
+                    self.channel_id,
+                    item.reward_id,
+                    item.reward_redemption_id,
+                    CustomRewardRedemptionStatus.CANCELED
+                )
+        await self.save_scroll_queue()
+
         
     # --- [ AUTO RESTART ] ---------------------------------------
 
