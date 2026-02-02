@@ -12,7 +12,8 @@ from datetime import timedelta
 
 from .models import (
     Player, Village, Dungeon, Raid, GameMultiplier, GameSession, Ferry,
-    RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent
+    RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent,
+    ScrollType, QueuedScroll
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
 from .middleman import send_to_client, send_to_server_and_wait_response
@@ -24,6 +25,8 @@ from .ravenfallloc import RavenfallLocalization
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from .exceptions import OutOfStockError
+from .command_contexts import TwitchRedeemContext
+from .command_enums import CustomRewardRedemptionStatus
 from bot import middleman
 from database.session import get_async_session
 from database.models import AutoRaidStatus, Character, User
@@ -160,18 +163,36 @@ class RFChannel:
         self.island_last_arrival_time = defaultdict(lambda: 0)  # island name -> last arrival timestamp
         
         self.update_events_routine_first_iteration = True
-        self.scroll_queue: deque[int] = deque()
+        self.scroll_queue: deque[QueuedScroll] = deque()
         
     async def save_scroll_queue(self):
+        encoded = []
+        for item in self.scroll_queue:
+            encoded.append({
+                "scroll": item.scroll.value,
+                "reward_id": item.reward_id,
+                "reward_redemption_id": item.reward_redemption_id
+            })
         async with get_async_session() as session:
-            await db_utils.update_scroll_queue(session, self.channel_id, list(self.scroll_queue))
+            await db_utils.update_scroll_queue(session, self.channel_id, encoded)
+    
+    async def load_scroll_queue(self):
+        encoded = []
+        async with get_async_session() as session:
+            encoded = await db_utils.get_scroll_queue(session, self.channel_id) or []
+        decoded = []
+        for item in encoded:
+            decoded.append(QueuedScroll(
+                scroll=ScrollType(item['scroll']),
+                reward_id=item['reward_id'],
+                reward_redemption_id=item['reward_redemption_id']
+            ))
         
     async def start(self):
         if self.monitoring_paused:
             return
         
-        async with get_async_session() as session:
-            self.scroll_queue = deque(await db_utils.get_scroll_queue(session, self.channel_id) or [])
+        await self.load_scroll_queue()        
 
         await self.chat.join_room(self.channel_name)
         self.update_mult_routine.start()
@@ -834,12 +855,12 @@ class RFChannel:
         command = ''
         expected_event = RFChannelEvent.NONE
         next_scroll = self.scroll_queue[0]
-        if next_scroll == 1:
+        if next_scroll.scroll == ScrollType.RAID:
             stock = scrolls['data']['channel']['Raid Scroll']
             name = 'raid'
             command = '?rs'
             expected_event = RFChannelEvent.RAID
-        elif next_scroll == 2:
+        elif next_scroll.scroll == ScrollType.DUNGEON:
             stock = scrolls['data']['channel']['Dungeon Scroll']
             name = 'dungeon'
             command = '?ds'
@@ -853,6 +874,13 @@ class RFChannel:
         for _ in range(30):
             await asyncio.sleep(1)
             if self.event == expected_event:
+                if next_scroll.reward_id:
+                    await self.chat.twitch.update_redemption_status(
+                        self.channel_id,
+                        next_scroll.reward_id,
+                        next_scroll.reward_redemption_id,
+                        CustomRewardRedemptionStatus.FULFILLED
+                    )
                 self.scroll_queue.popleft()
                 await self.save_scroll_queue()
                 return
@@ -862,31 +890,39 @@ class RFChannel:
         return len(self.scroll_queue)
     
     def get_scroll_count_in_queue(self, scroll: Literal['dungeon', 'raid']):
-        scroll_id = 0
+        scroll_id = ScrollType.NONE
         if scroll == 'dungeon':
-            scroll_id = 2
+            scroll_id = ScrollType.DUNGEON
         elif scroll == 'raid':
-            scroll_id = 1
+            scroll_id = ScrollType.RAID
         else:
             raise ValueError("Scroll must be 'dungeon' or 'raid")
-        return self.scroll_queue.count(scroll_id)
+        count = 0
+        for item in self.scroll_queue:
+            if item.scroll == scroll_id:
+                count += 1
+        return count
     
-    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid']):
+    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid'], redeem_ctx: TwitchRedeemContext = None):
         scrolls = await get_scroll_counts(self.channel_id)
         stock = 0
-        scroll_id = 0
+        scroll_id = ScrollType.NONE
         if scroll == 'dungeon':
             stock = scrolls['data']['channel']['Dungeon Scroll']
-            scroll_id = 2
+            scroll_id = ScrollType.DUNGEON
         elif scroll == 'raid':
             stock = scrolls['data']['channel']['Raid Scroll']
-            scroll_id = 1
+            scroll_id = ScrollType.RAID
         else:
             raise ValueError("Scroll must be 'dungeon' or 'raid")
-        amount_in_queue = self.scroll_queue.count(scroll_id)
+        amount_in_queue = self.get_scroll_count_in_queue(scroll)
         if amount_in_queue >= stock:
             raise OutOfStockError(amount_in_queue, stock, f"Out of {scroll.capitalize()} scrolls!")
-        self.scroll_queue.append(scroll_id)
+        if redeem_ctx:
+            queue_obj = QueuedScroll(scroll_id, redeem_ctx.redemption.reward.id, redeem_ctx.redemption.id)
+        else:
+            queue_obj = QueuedScroll(scroll_id, None, None)
+        self.scroll_queue.append(queue_obj)
         await self.save_scroll_queue()
         
         

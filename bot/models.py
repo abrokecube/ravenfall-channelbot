@@ -1,6 +1,8 @@
-from typing import TypedDict, Dict, Literal, Union, NamedTuple, Optional, List
+from __future__ import annotations
+from typing import TypedDict, Dict, Literal, Union, NamedTuple, Optional, List, TYPE_CHECKING
 from uuid import UUID
 from enum import Enum
+from dataclasses import dataclass
 
 class TownBoost(NamedTuple):
     skill: str
@@ -175,3 +177,15 @@ class RFMiddlemanMessage(TypedDict):
     connection_id: str
     timestamp: str
     message: RavenfallMessage | RavenBotMessage
+    
+class ScrollType(Enum):
+    NONE = 0
+    RAID = 1
+    DUNGEON = 2
+
+@dataclass
+class QueuedScroll:
+    scroll: ScrollType
+    reward_id: str | None
+    reward_redemption_id: str | None
+    

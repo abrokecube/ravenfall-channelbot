@@ -1001,11 +1001,10 @@ class RedeemRFCog(Cog):
             return
         
         try:
-            await channel.add_scroll_to_queue('dungeon')
+            await channel.add_scroll_to_queue('dungeon', ctx)
         except OutOfStockError:
             raise CommandError("We are out of dungeon scrolls. Your points have been refunded.")
         await ctx.send("Added a Dungeon Scroll to the queue.")
-        await ctx.fulfill()
 
     @Cog.redeem(name="Queue Raid scroll")
     async def queue_raid(self, ctx: TwitchRedeemContext):
@@ -1023,11 +1022,10 @@ class RedeemRFCog(Cog):
             return
 
         try:
-            await channel.add_scroll_to_queue('raid')
+            await channel.add_scroll_to_queue('raid', ctx)
         except OutOfStockError:
             raise CommandError("We are out of raid scrolls. Your points have been refunded.")
         await ctx.send("Added a Raid Scroll to the queue.")
-        await ctx.fulfill()
     
     @Cog.command(aliases=['queue_scroll', 'qs', 'queuescrolls', 'queue_scrolls'])
     @cooldown(1, 15, [BucketType.CHANNEL])
