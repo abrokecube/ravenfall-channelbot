@@ -204,8 +204,17 @@ async def update_schema():
                         if column.default.is_scalar:
                             # Properly quote string literals in SQL
                             default_value = column.default.arg
-                            if isinstance(default_value, str):
+                            
+                            is_json = False
+                            if isinstance(column.type, JSON):
+                                is_json = True
+                            
+                            if is_json:
+                                import json
+                                default_value = f"'{json.dumps(default_value)}'"
+                            elif isinstance(default_value, str):
                                 default_value = f"'{default_value}'"
+                            
                             default = f"DEFAULT {default_value}"
                         elif column.default.is_callable:
                             default = f"DEFAULT {column.default.arg()}"
