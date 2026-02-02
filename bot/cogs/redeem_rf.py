@@ -1009,6 +1009,7 @@ class RedeemRFCog(Cog):
         except OutOfStockError:
             raise CommandError("We are out of dungeon scrolls. Your points have been refunded.")
         
+        await ctx.send("Added a Dungeon Scroll to the queue.")
         if queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID)):
             await ctx.cancel()
             return
@@ -1032,6 +1033,7 @@ class RedeemRFCog(Cog):
         except OutOfStockError:
             raise CommandError("We are out of raid scrolls. Your points have been refunded.")
         
+        await ctx.send("Added a Raid Scroll to the queue.")
         if queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID)):
             await ctx.cancel()
             return
