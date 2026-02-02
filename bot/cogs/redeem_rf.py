@@ -5,7 +5,7 @@ integrated with Ravenfall.
 """
 
 from bot.ravenfallchannel import RFChannel
-from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter, cooldown
+from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter, cooldown, Cooldown
 from ..command_enums import UserRole, Platform, CustomRewardRedemptionStatus, BucketType
 from ..command_utils import HasRole, TwitchOnly, RangeInt, Choice
 from ..command_exceptions import CommandError
@@ -458,6 +458,8 @@ class RedeemRFCog(Cog):
         else:
             logger.error("item_values.json not found")
         self.idle_points.start()
+        
+        self.lurk_cd = Cooldown(1, 10, [BucketType.CHANNEL])
 
     @routine(delta=timedelta(seconds=15), wait_remainder=True, max_attempts=99999)
     async def idle_points(self):
@@ -597,7 +599,9 @@ class RedeemRFCog(Cog):
 
     @Cog.redeem(name="Lurking!")
     async def lurking(self, ctx: TwitchRedeemContext):
-        await ctx.send("Thanks for lurking!")
+        if self.lurk_cd.get_retry_after(ctx) <= 0:
+            await ctx.send("Thanks for lurking!")
+            self.lurk_cd.update_rate_limit(ctx)
         await self.send_item_credits_redeem(ctx, ctx.redemption.reward.cost, quiet=True)
 
     @Cog.redeem(name="Get 100 item credits")
