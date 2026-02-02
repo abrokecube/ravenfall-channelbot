@@ -802,8 +802,13 @@ class RFChannel:
         await self.send_chat_message(welcome_msg)
         cd.update_rate_limit()
         
-    @routine(delta=timedelta(seconds=3), max_attempts=99999)
+    @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def scroll_queue_routine(self):
+        if self.channel_restart_lock.locked():
+            async with self.channel_restart_lock:
+                pass
+            await asyncio.sleep(60)
+            return
         if self.event != RFChannelEvent.NONE:
             return
         if len(self.scroll_queue) == 0:
@@ -830,14 +835,24 @@ class RFChannel:
             logging.info(f"Out of {name} scrolls! Skipping queue entry...")
             return
         await send_multichat_command(command, "0", self.channel_name, self.channel_id, self.channel_name)
-        for _ in range(5):
-            await asyncio.sleep(3)
+        for _ in range(30):
+            await asyncio.sleep(1)
             if self.event == expected_event:
                 return
         logging.warning(f"Scroll queue: Expected event {expected_event} did not occur")
         
     def get_scroll_queue_length(self):
         return len(self.scroll_queue)
+    
+    def get_scroll_count_in_queue(self, scroll: Literal['dungeon', 'raid']):
+        scroll_id = 0
+        if scroll == 'dungeon':
+            scroll_id = 2
+        elif scroll == 'raid':
+            scroll_id = 1
+        else:
+            raise ValueError("Scroll must be 'dungeon' or 'raid")
+        return self.scroll_queue.count(scroll_id)
     
     async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid']):
         scrolls = await get_scroll_counts(self.channel_id)

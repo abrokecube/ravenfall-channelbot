@@ -987,8 +987,16 @@ class RedeemRFCog(Cog):
             await ctx.cancel()
             return
         
+        queue_size = 0
+        queue_size += channel.get_scroll_count_in_queue('dungeon') * 5
+        queue_size += channel.get_scroll_count_in_queue('raid') * 1
+        if queue_size >= 25:
+            await ctx.cancel()
+            await ctx.reply("The queue is currently full. Your points have been refunded.")
+        
         try:
             await channel.add_scroll_to_queue('dungeon')
+            await ctx.send("Added a Dungeon Scroll to the queue.")
         except OutOfStockError:
             raise CommandError("We are out of dungeon scrolls. Your points have been refunded.")
 
@@ -998,9 +1006,17 @@ class RedeemRFCog(Cog):
         if channel is None:
             await ctx.cancel()
             return
-        
+
+        queue_size = 0
+        queue_size += channel.get_scroll_count_in_queue('dungeon') * 5
+        queue_size += channel.get_scroll_count_in_queue('raid') * 1
+        if queue_size >= 25:
+            await ctx.cancel()
+            await ctx.reply("The queue is currently full. Your points have been refunded.")
+
         try:
             await channel.add_scroll_to_queue('raid')
+            await ctx.send("Added a Raid Scroll to the queue.")
         except OutOfStockError:
             raise CommandError("We are out of raid scrolls. Your points have been refunded.")
 

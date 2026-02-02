@@ -275,7 +275,7 @@ class GameCog(Cog):
         """
         queue_len = channel.get_scroll_queue_length()
         if queue_len > 0:
-            raise CommandError(f"There {pl2(queue_len, 'is', 'are', False)} currently {queue_len} {pl(queue_len, 'scrolls')} in the queue. Wait until the queue is empty.")
+            raise CommandError(f"There {pl2(queue_len, 'is', 'are', False)} currently {pl(queue_len, 'scrolls')} in the queue. Wait until the queue is empty.")
         scrolls = await get_scroll_counts(channel.channel_id)
         if scrolls["data"]["channel"]["Dungeon Scroll"] == 0:
             raise CommandError("Currently out of dungeon scrolls.")
@@ -295,7 +295,7 @@ class GameCog(Cog):
         """
         queue_len = channel.get_scroll_queue_length()
         if queue_len > 0:
-            raise CommandError(f"There {pl2(queue_len, 'is', 'are', False)} currently {queue_len} {pl(queue_len, 'scrolls')} in the queue. Wait until the queue is empty.")
+            raise CommandError(f"There {pl2(queue_len, 'is', 'are', False)} currently {pl(queue_len, 'scrolls')} in the queue. Wait until the queue is empty.")
         scrolls = await get_scroll_counts(channel.channel_id)
         if scrolls["data"]["channel"]["Raid Scroll"] == 0:
             raise CommandError("Currently out of raid scrolls.")
