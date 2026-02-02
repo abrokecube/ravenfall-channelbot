@@ -356,7 +356,7 @@ class GameCog(Cog):
             raise CommandError("Wait for the current multiplier to expire before using this command again.")
         
         count = min(count, 100 - multiplier_value)
-        if count < scrolls_remaining:
+        if count > scrolls_remaining:
             raise CommandError("There are not enough scrolls in stock.")
         
         await send_multichat_command(f"?exps {count}", "0", channel.channel_name, channel.channel_id, channel.channel_name)
