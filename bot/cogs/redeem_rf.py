@@ -1001,7 +1001,7 @@ class RedeemRFCog(Cog):
             raise CommandError("We are out of dungeon scrolls. Your points have been refunded.")
 
     @Cog.redeem(name="Queue Raid scroll")
-    async def queue_dungeon(self, ctx: TwitchRedeemContext):
+    async def queue_raid(self, ctx: TwitchRedeemContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()
