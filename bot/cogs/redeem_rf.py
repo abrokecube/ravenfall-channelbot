@@ -1037,14 +1037,13 @@ class RedeemRFCog(Cog):
         streak = 0
         for item in list(channel.scroll_queue) + [0]:
             if item == last:
-                last = item
                 streak += 1
                 continue
-            if item == 1:
+            if last == 1:
                 queue_content_text.append(
                     f"{streak}x Raid"
                 )
-            elif item == 2:
+            elif last == 2:
                 queue_content_text.append(
                     f"{streak}x Dungeon"
                 )
