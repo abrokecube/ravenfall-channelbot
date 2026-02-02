@@ -1048,7 +1048,7 @@ class RedeemRFCog(Cog):
                 queue_content_text.append(
                     f"{streak}x Dungeon"
                 )
-            streak = 0
+            streak = 1
             last = item
             
         if queue_size == 0:
