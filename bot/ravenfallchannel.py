@@ -943,7 +943,7 @@ class RFChannel:
                     CustomRewardRedemptionStatus.CANCELED
                 )
             if item.credits_spent != 0:
-                with get_async_session() as session:
+                async with get_async_session() as session:
                     await db_utils.add_credits(session, item.user_id, item.credits_spent, "Scroll refund")
         await self.save_scroll_queue()
 
