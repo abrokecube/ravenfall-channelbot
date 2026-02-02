@@ -25,7 +25,8 @@ dungeon_scroll_used_joined: "You have used a Dungeon Scroll and joined the dunge
 dungeon_scroll_used: "You have used a Dungeon Scroll."
 dungeon_spawned: '{{dungeonName:.*}} is available. Type !dungeon to join.'
 dungeon_auto_joined: '{playerNames} have automatically joined the dungeon!'
-dungeon_countdown: '{seconds}s until dungeon starts.'
+dungeon_countdown_minutes_seconds: '{minutes}m{seconds}s until dungeon starts.'
+dungeon_countdown_seconds: '{seconds}s until dungeon starts.'
 dungeon_finished_with_treasure: "Victorious!! The dungeon boss was slain and yielded {{itemCount:\\d+}} item treasures!"
 dungeon_failed: 'The dungeon has ended without any surviving players.'
 dungeon_active: 'There is already an active dungeon.'
