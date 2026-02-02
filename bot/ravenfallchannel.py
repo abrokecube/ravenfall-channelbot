@@ -189,6 +189,7 @@ class RFChannel:
                 reward_id=item['reward_id'],
                 reward_redemption_id=item['reward_redemption_id']
             ))
+        self.scroll_queue = deque(decoded)
         
     async def start(self):
         if self.monitoring_paused:
