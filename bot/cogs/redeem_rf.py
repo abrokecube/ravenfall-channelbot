@@ -14,7 +14,7 @@ from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
 from ..exceptions import OutOfStockError
-from ..models import ScrollType
+from ..models import ScrollType, RFChannelEvent
 from utils.commands_rf import RFChannelConverter, TwitchUsername, RFItemConverter
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
@@ -998,8 +998,7 @@ class RedeemRFCog(Cog):
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
         if queue_size + DUNGEON_SCROLL_SIZE > MAX_QUEUE_SIZE:
             await ctx.cancel()
-            await ctx.reply("The queue does not have enough space for a Dungeon Scroll. Your points have been refunded.")
-            return
+            raise CommandError("The queue does not have enough space for a Dungeon Scroll. Your points have been refunded.")
         
         try:
             await channel.add_scroll_to_queue('dungeon', ctx)
@@ -1022,8 +1021,7 @@ class RedeemRFCog(Cog):
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
         if queue_size + RAID_SCROLL_SIZE > MAX_QUEUE_SIZE:
             await ctx.cancel()
-            await ctx.reply("The queue does not have enough space for a Raid Scroll. Your points have been refunded.")
-            return
+            raise CommandError("The queue does not have enough space for a Raid Scroll. Your points have been refunded.")
 
         try:
             await channel.add_scroll_to_queue('raid', ctx)
