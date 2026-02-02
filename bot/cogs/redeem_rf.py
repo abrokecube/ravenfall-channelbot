@@ -1123,8 +1123,8 @@ class RedeemRFCog(Cog):
         queue_content_text = []
         last = ScrollType.NONE
         streak = 0
-        for item in list(channel.scroll_queue) + [0]:
-            if item.scroll == last:
+        for item in [x.scroll for x in channel.scroll_queue] + [ScrollType.NONE]:
+            if item == last:
                 streak += 1
                 continue
             if last == ScrollType.RAID:
@@ -1136,7 +1136,7 @@ class RedeemRFCog(Cog):
                     f"{streak}x Dungeon"
                 )
             streak = 1
-            last = item.scroll
+            last = item
             
         if total == 0:
             await ctx.reply("The queue is empty.")
