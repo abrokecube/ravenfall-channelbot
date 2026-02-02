@@ -1029,7 +1029,7 @@ class RedeemRFCog(Cog):
         await ctx.send("Added a Raid Scroll to the queue.")
         await ctx.fulfill()
     
-    @Cog.command()
+    @Cog.command(aliases=['queue_scroll', 'qs', 'queuescrolls', 'queue_scrolls'])
     @cooldown(1, 15, [BucketType.CHANNEL])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("scroll_type", aliases=["type", "t"], converter=Choice(['dungeon', 'raid']))
@@ -1117,7 +1117,7 @@ class RedeemRFCog(Cog):
         
         await ctx.reply(msg)
 
-    @Cog.command()
+    @Cog.command(aliases=['scroll_queue', 'sq'])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def scrollqueue(self, ctx: Context, *, channel: RFChannel = 'this'):
         total = channel.get_scroll_queue_length()
