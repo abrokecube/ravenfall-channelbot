@@ -1053,10 +1053,10 @@ class RedeemRFCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("scroll_type", aliases=["type", "t"], converter=Choice(['dungeon', 'raid']))
     async def queuescroll(self, ctx: Context, scroll_type: str, count: int = 1, *, channel: RFChannel = 'this'):
-        """Queue a scroll to be used
+        """Queue one or more scrolls to be used
         
         Args:
-            scroll_type: The type of scroll to queue (dungeon or raid)
+            scroll_type: The type of scroll to queue
             channel: The channel to queue the scroll in
         """
         if channel is None:
@@ -1108,22 +1108,39 @@ class RedeemRFCog(Cog):
                 total_cost = to_add * cost
 
         added_count = 0
+        queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
+        queue_was_empty = queue_is_empty
         try:
             for _ in range(to_add):
-                await channel.add_scroll_to_queue(scroll_type, None, ctx.data.user.id, cost)
+                if queue_is_empty:
+                    await channel.add_scroll_to_queue(scroll_type)
+                    queue_is_empty = False
+                else:
+                    await channel.add_scroll_to_queue(scroll_type, None, ctx.data.user.id, cost)
                 added_count += 1
         except OutOfStockError:
              pass
              
         if added_count == 0:
-            await ctx.reply(f"We are out of {scroll_type} scrolls.")
-            return
+            raise CommandError(f"We are out of {scroll_type} scrolls.")
 
-        final_cost = added_count * cost
-        async with get_async_session() as session:
-            trans_id = await add_credits(session, ctx.data.user.id, -final_cost, f"Queued {scroll_type} scroll x{added_count}")
+        if queue_was_empty:
+            final_cost = (added_count-1) * cost
+        else:
+            final_cost = added_count * cost
+            
+        trans_id = None
+        if final_cost > 0:
+            async with get_async_session() as session:
+                trans_id = await add_credits(session, ctx.data.user.id, -final_cost, f"Queued {scroll_type} scroll x{added_count}")
         
-        msg = f"Added {added_count} {scroll_type.capitalize()} {pl(added_count, 'Scroll', 'Scrolls')} to the queue. {final_cost} item credits were deducted. (ID: {trans_id})"
+        msg = f"Added {added_count} {scroll_type.capitalize()} {pl(added_count, 'Scroll', 'Scrolls')} to the queue."
+        
+        if final_cost > 0:
+            msg += f" {final_cost} item credits were deducted. (ID: {trans_id})"
+        else:
+            msg += f" No item credits were deducted."
+            
         if added_count < count:
             if max_queue_add < count and added_count == max_queue_add:
                  msg += " (Queue is full)"
