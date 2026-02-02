@@ -756,12 +756,14 @@ class Commands:
         
     
     async def on_redeem_error(self, ctx: TwitchRedeemContext, redeem: TwitchRedeem, error: Exception):
-        await ctx.send(f"❌ An error occurred. Points will be refunded.")
+        if isinstance(error, CommandError):
+            await ctx.send(f"❌ {error.message}")
+        else:
+            await ctx.send(f"❌ An error occurred. Points will be refunded.")
         try:
             await ctx.update_status(CustomRewardRedemptionStatus.CANCELED)
         except Exception as e:
             logging.error("Couldnt refund", exc_info=True)
-            await ctx.send(f"❌ Couldn't refund points.")
         
     def _find_command(self, text: str) -> tuple[str, str]:
         # text_lower = text.lower()
