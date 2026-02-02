@@ -1004,13 +1004,18 @@ class RedeemRFCog(Cog):
             await ctx.cancel()
             raise CommandError("The queue does not have enough space for a Dungeon Scroll. Your points have been refunded.")
         
+        queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
+        
         try:
-            await channel.add_scroll_to_queue('dungeon', ctx)
+            if queue_is_empty:
+                await channel.add_scroll_to_queue('dungeon')
+            else:
+                await channel.add_scroll_to_queue('dungeon', ctx)
         except OutOfStockError:
             raise CommandError("We are out of dungeon scrolls. Your points have been refunded.")
         
         await ctx.send("Added a Dungeon Scroll to the queue.")
-        if queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID)):
+        if queue_is_empty:
             await ctx.cancel()
             return
         
@@ -1028,13 +1033,18 @@ class RedeemRFCog(Cog):
             await ctx.cancel()
             raise CommandError("The queue does not have enough space for a Raid Scroll. Your points have been refunded.")
 
+        queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
+
         try:
-            await channel.add_scroll_to_queue('raid', ctx)
+            if queue_is_empty:
+                await channel.add_scroll_to_queue('raid')
+            else:
+                await channel.add_scroll_to_queue('raid', ctx)
         except OutOfStockError:
             raise CommandError("We are out of raid scrolls. Your points have been refunded.")
         
         await ctx.send("Added a Raid Scroll to the queue.")
-        if queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID)):
+        if queue_is_empty:
             await ctx.cancel()
             return
             
