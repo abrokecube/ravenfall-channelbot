@@ -43,6 +43,9 @@ from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
+RAID_SCROLL_SIZE = 1
+DUNGEON_SCROLL_SIZE = 5
+
 @dataclass
 class RavenfallResponse:
     response: RavenfallMessage
@@ -988,11 +991,12 @@ class RedeemRFCog(Cog):
             return
         
         queue_size = 0
-        queue_size += channel.get_scroll_count_in_queue('dungeon') * 5
-        queue_size += channel.get_scroll_count_in_queue('raid') * 1
+        queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
+        queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
         if queue_size >= 25:
             await ctx.cancel()
             await ctx.reply("The queue is currently full. Your points have been refunded.")
+            return
         
         try:
             await channel.add_scroll_to_queue('dungeon')
@@ -1008,18 +1012,52 @@ class RedeemRFCog(Cog):
             return
 
         queue_size = 0
-        queue_size += channel.get_scroll_count_in_queue('dungeon') * 5
-        queue_size += channel.get_scroll_count_in_queue('raid') * 1
+        queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
+        queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
         if queue_size >= 25:
             await ctx.cancel()
             await ctx.reply("The queue is currently full. Your points have been refunded.")
+            return
 
         try:
             await channel.add_scroll_to_queue('raid')
             await ctx.send("Added a Raid Scroll to the queue.")
         except OutOfStockError:
             raise CommandError("We are out of raid scrolls. Your points have been refunded.")
-
+        
+    @Cog.command()
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def scrollqueue(self, ctx: Context, *, channel: RFChannel = 'this'):
+        queue_size = 0
+        queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
+        queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
+        
+        queue_content_text = []
+        last = 0
+        streak = 0
+        for item in list(channel.scroll_queue) + [0]:
+            if item == last:
+                last = item
+                streak += 1
+                continue
+            if item == 1:
+                queue_content_text.append(
+                    f"{streak}x Raid"
+                )
+            elif item == 2:
+                queue_content_text.append(
+                    f"{streak}x Dungeon"
+                )
+            streak = 0
+            last = item
+            
+        if queue_size == 0:
+            await ctx.reply("The queue is empty.")
+            return
+        await ctx.reply(
+            f"Queue size is currently {queue_size} {pl(queue_size, 'unit', 'units')}. "
+            f"Contents: {', '.join(queue_content_text)}"
+        )
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
     """Load the redeem RF cog with the given commands instance.
