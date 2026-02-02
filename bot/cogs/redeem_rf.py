@@ -45,7 +45,7 @@ from sqlalchemy import select
 logger = logging.getLogger(__name__)
 
 RAID_SCROLL_SIZE = 1
-DUNGEON_SCROLL_SIZE = 5
+DUNGEON_SCROLL_SIZE = 8
 MAX_QUEUE_SIZE = 25
 NON_MOD_MAX_BATCH_SCROLLS = 5
 
