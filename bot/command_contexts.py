@@ -21,6 +21,9 @@ class Context(Protocol):
     message: str
     full_message: str
     author: str
+    author_id: str
+    room_name: str
+    room_id: str
     roles: List[UserRole]
     prefix: str
     invoked_with: str
@@ -62,6 +65,9 @@ class TwitchContext(Context):
         # Platform-specific fields
         self.message = msg.text.replace("\U000e0000", "").replace("\u034f", "").strip()
         self.author = msg.user.name
+        self.author_id = msg.user.id
+        self.room_name = msg.room.name
+        self.room_id = msg.room.room_id
         self.platform = Platform.TWITCH
         self.platform_allows_markdown = False
         self.platform_output_type = OutputMessageType.SINGLE_LINE
@@ -115,11 +121,11 @@ class TwitchContext(Context):
 
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
         if bucket_type == BucketType.USER:
-            return self.data.user.id
+            return self.author_id
         elif bucket_type == BucketType.CHANNEL:
-            return self.data.room.room_id
+            return self.room_id
         elif bucket_type == BucketType.GUILD:
-            return self.data.room.room_id # Twitch doesn't have guilds, map to channel
+            return self.room_id
         elif bucket_type == BucketType.DEFAULT or bucket_type == BucketType.GLOBAL:
             return None # Global bucket
         return None
@@ -137,6 +143,9 @@ class TwitchRedeemContext(Context):
         self.message = redemption.user_input or ""
         self.message = self.message.replace("\U000e0000", "").replace("\u034f", "").strip()
         self.author = redemption.user_login
+        self.author_id = redemption.user_id
+        self.room_name = redemption.broadcaster_user_login
+        self.room_id = redemption.broadcaster_user_id
         self.prefix = ""
         self.invoked_with = redemption.reward.title
         self.command = None
@@ -157,11 +166,11 @@ class TwitchRedeemContext(Context):
 
     def get_bucket_key(self, bucket_type: BucketType) -> Any:
         if bucket_type == BucketType.USER:
-            return self.redemption.user_id
+            return self.author_id
         elif bucket_type == BucketType.CHANNEL:
-            return self.redemption.broadcaster_user_id
+            return self.room_id
         elif bucket_type == BucketType.GUILD:
-            return self.redemption.broadcaster_user_id
+            return self.room_id
         elif bucket_type == BucketType.DEFAULT or bucket_type == BucketType.GLOBAL:
             return None
         return None
@@ -193,6 +202,9 @@ class ServerContext(Context):
     def __init__(self, message: 'ServerChatMessage', chat_manager: 'ServerChatManager'):
         self.message = message.content
         self.author = message.author
+        self.author_id = message.user_id
+        self.room_name = message.room_name
+        self.room_id = message.room_name
         self.prefix = ""
         self.invoked_with = ""
         self.command = None
@@ -227,7 +239,7 @@ class ServerContext(Context):
         if bucket_type == BucketType.USER:
             return self.author
         elif bucket_type == BucketType.CHANNEL:
-            return self.data.room_name
+            return self.room_name
         elif bucket_type == BucketType.GUILD:
-            return self.data.room_name
+            return self.room_name
         return None
