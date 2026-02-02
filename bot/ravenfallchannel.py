@@ -812,7 +812,7 @@ class RFChannel:
         
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def scroll_queue_routine(self):
-        if update_events_routine_first_iteration:
+        if self.update_events_routine_first_iteration:
             return
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
