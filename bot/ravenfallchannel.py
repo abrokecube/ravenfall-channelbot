@@ -812,7 +812,7 @@ class RFChannel:
             async with self.channel_post_restart_lock:
                 pass
             return
-        if self.restart_task and self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5:
+        if self.restart_task and (not self.restart_task.finished()) and (self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5):
             return
         if self.event != RFChannelEvent.NONE:
             return
