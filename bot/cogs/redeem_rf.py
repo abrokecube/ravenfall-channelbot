@@ -5,8 +5,8 @@ integrated with Ravenfall.
 """
 
 from bot.ravenfallchannel import RFChannel
-from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter
-from ..command_enums import UserRole, Platform, CustomRewardRedemptionStatus
+from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter, cooldown
+from ..command_enums import UserRole, Platform, CustomRewardRedemptionStatus, BucketType
 from ..command_utils import HasRole, TwitchOnly, RangeInt, Choice
 from ..command_exceptions import CommandError
 from ..cog import Cog
@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 RAID_SCROLL_SIZE = 1
 DUNGEON_SCROLL_SIZE = 5
 MAX_QUEUE_SIZE = 25
+NON_MOD_MAX_BATCH_SCROLLS = 5
 
 @dataclass
 class RavenfallResponse:
@@ -994,9 +995,9 @@ class RedeemRFCog(Cog):
         queue_size = 0
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
-        if queue_size >= MAX_QUEUE_SIZE:
+        if queue_size + DUNGEON_SCROLL_SIZE > MAX_QUEUE_SIZE:
             await ctx.cancel()
-            await ctx.reply("The queue is currently full. Your points have been refunded.")
+            await ctx.reply("The queue does not have enough space for a Dungeon Scroll. Your points have been refunded.")
             return
         
         try:
@@ -1016,9 +1017,9 @@ class RedeemRFCog(Cog):
         queue_size = 0
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
-        if queue_size >= MAX_QUEUE_SIZE:
+        if queue_size + RAID_SCROLL_SIZE > MAX_QUEUE_SIZE:
             await ctx.cancel()
-            await ctx.reply("The queue is currently full. Your points have been refunded.")
+            await ctx.reply("The queue does not have enough space for a Raid Scroll. Your points have been refunded.")
             return
 
         try:
@@ -1029,9 +1030,10 @@ class RedeemRFCog(Cog):
         await ctx.fulfill()
     
     @Cog.command()
+    @cooldown(1, 15, [BucketType.CHANNEL])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("scroll_type", aliases=["type", "t"], converter=Choice(['dungeon', 'raid']))
-    async def queuescroll(self, ctx: Context, scroll_type: str, *, channel: RFChannel = 'this'):
+    async def queuescroll(self, ctx: Context, scroll_type: str, count: int = 1, *, channel: RFChannel = 'this'):
         """Queue a scroll to be used
         
         Args:
@@ -1044,43 +1046,76 @@ class RedeemRFCog(Cog):
 
         scroll_type = scroll_type.lower()
         cost = 0
+        scroll_size = 0
         
         if scroll_type == 'dungeon':
             cost = 20
+            scroll_size = DUNGEON_SCROLL_SIZE
         elif scroll_type == 'raid':
             cost = 12
+            scroll_size = RAID_SCROLL_SIZE
             
         queue_size = 0
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
         
-        if queue_size >= MAX_QUEUE_SIZE:
-             await ctx.reply("The queue is currently full.")
-             return
+        available_space = MAX_QUEUE_SIZE - queue_size
+        if available_space < scroll_size:
+             raise CommandError(f"The queue does not have enough space for a {scroll_type.capitalize()} Scroll.")
+         
+        user_maximum = 99
+        if not any(role in ctx.roles for role in [UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR]):
+            user_maximum = NON_MOD_MAX_BATCH_SCROLLS
+
+        max_queue_add = available_space // scroll_size
+        max_user_add = user_maximum // scroll_size
+        max_can_add = min(max_queue_add, max_user_add)
+        
+        to_add = min(count, max_can_add)
+        total_cost = to_add * cost
 
         async with get_async_session() as session:
             balance = await get_user_credits(session, ctx.data.user.id)
-            if balance < cost:
-                await ctx.reply(
-                    f"You do not have enough credits to queue a {scroll_type.capitalize()} Scroll. "
-                    f"You have {balance:,} {pl(balance, 'credit', 'credits')}. "
-                    f"You need {cost:,} {pl(cost, 'credit', 'credits')}."
-                )
-                return
+            if balance < total_cost:
+                can_afford = balance // cost
+                if can_afford == 0:
+                    raise CommandError(
+                        f"You do not have enough credits to queue a {scroll_type.capitalize()} Scroll. "
+                        f"You have {balance:,} {pl(balance, 'credit', 'credits')}. "
+                        f"You need {cost:,} {pl(cost, 'credit', 'credits')}."
+                    )
+                # Adjust to what they can afford
+                to_add = can_afford
+                total_cost = to_add * cost
 
+        added_count = 0
         try:
-            await channel.add_scroll_to_queue(scroll_type)
+            for _ in range(to_add):
+                await channel.add_scroll_to_queue(scroll_type)
+                added_count += 1
         except OutOfStockError:
-             await ctx.reply(f"We are out of {scroll_type} scrolls.")
-             return
+             pass
              
+        if added_count == 0:
+            await ctx.reply(f"We are out of {scroll_type} scrolls.")
+            return
+
+        final_cost = added_count * cost
         async with get_async_session() as session:
-            trans_id = await add_credits(session, ctx.data.user.id, -cost, f"Queued {scroll_type} scroll")
-            
-        await ctx.reply(
-            f"Added a {scroll_type.capitalize()} Scroll to the queue. "
-            f"{cost} item credits were deducted. (ID: {trans_id})"
-        )
+            trans_id = await add_credits(session, ctx.data.user.id, -final_cost, f"Queued {scroll_type} scroll x{added_count}")
+        
+        msg = f"Added {added_count} {scroll_type.capitalize()} {pl(added_count, 'Scroll', 'Scrolls')} to the queue. {final_cost} item credits were deducted. (ID: {trans_id})"
+        if added_count < count:
+            if max_queue_add < count and added_count == max_queue_add:
+                 msg += " (Queue is full)"
+            elif max_user_add < count and added_count == max_user_add:
+                 msg += f" (Limit {max_user_add} at a time)"
+            elif balance < (count * cost) and added_count == (balance // cost):
+                 msg += " (Not enough credits)"
+            else:
+                 msg += " (Ran out of stock)"
+        
+        await ctx.reply(msg)
 
     @Cog.command()
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
