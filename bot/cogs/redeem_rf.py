@@ -8,10 +8,12 @@ from bot.ravenfallchannel import RFChannel
 from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter
 from ..command_enums import UserRole, Platform, CustomRewardRedemptionStatus
 from ..command_utils import HasRole, TwitchOnly, RangeInt
+from ..command_exceptions import CommandError
 from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
+from ..exceptions import OutOfStockError
 from utils.commands_rf import RFChannelConverter, TwitchUsername, RFItemConverter
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
@@ -607,6 +609,7 @@ class RedeemRFCog(Cog):
     @Cog.redeem(name="Get 15,000 item credits")
     async def item_credits_15_000(self, ctx: TwitchRedeemContext):
         await self.send_item_credits_redeem(ctx, 15000)
+        
 
     @Cog.command(
         name="credits balance",
@@ -955,6 +958,7 @@ class RedeemRFCog(Cog):
     async def restart_ravenfall(self, ctx: TwitchRedeemContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
         if channel is None:
+            await ctx.cancel()
             return
 
         task = channel.queue_restart(30, label="Restart triggered manually", reason=RestartReason.USER)
@@ -969,11 +973,36 @@ class RedeemRFCog(Cog):
     async def restart_ravenbot(self, ctx: TwitchRedeemContext):
         channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
         if channel is None:
+            await ctx.cancel()
             return
 
         await ctx.send("Restarting RavenBot...")
         await channel.restart_ravenbot()
         await ctx.send("Done!")
+
+    @Cog.redeem(name="Queue Dungeon scroll")
+    async def queue_dungeon(self, ctx: TwitchRedeemContext):
+        channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
+        if channel is None:
+            await ctx.cancel()
+            return
+        
+        try:
+            await channel.add_scroll_to_queue('dungeon')
+        except OutOfStockError:
+            raise CommandError("We are out of dungeon scrolls. Your points have been refunded.")
+
+    @Cog.redeem(name="Queue Raid scroll")
+    async def queue_dungeon(self, ctx: TwitchRedeemContext):
+        channel = self.rf_manager.get_channel(channel_id=ctx.redemption.broadcaster_user_id)
+        if channel is None:
+            await ctx.cancel()
+            return
+        
+        try:
+            await channel.add_scroll_to_queue('raid')
+        except OutOfStockError:
+            raise CommandError("We are out of raid scrolls. Your points have been refunded.")
 
 
 def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:

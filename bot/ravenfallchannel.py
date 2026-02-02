@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING
+from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING, Literal
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,11 +18,12 @@ from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessag
 from .middleman import send_to_client, send_to_server_and_wait_response
 from .ravenfallrestarttask import RFRestartTask, RestartReason
 from .cooldown import Cooldown, CooldownBucket
-from .multichat_command import send_multichat_command
+from .multichat_command import send_multichat_command, get_scroll_counts
 from .messageprocessor import RavenMessage, MessageMetadata
 from .ravenfallloc import RavenfallLocalization
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
+from .exceptions import OutOfStockError
 from bot import middleman
 from database.session import get_async_session
 from database.models import AutoRaidStatus, Character, User
@@ -44,7 +45,7 @@ import time
 import logging
 import os
 import json
-from collections import defaultdict
+from collections import defaultdict, deque
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -159,6 +160,7 @@ class RFChannel:
         self.island_last_arrival_time = defaultdict(lambda: 0)  # island name -> last arrival timestamp
         
         self.update_events_routine_first_iteration = True
+        self.scroll_queue: deque[int] = deque()
         
     async def start(self):
         if self.monitoring_paused:
@@ -172,6 +174,7 @@ class RFChannel:
         self.update_middleman_connection_status_routine.start()
         self.town_level_notification_routine.start()
         self.island_arrival_grouping_routine.start()
+        self.scroll_queue_routine.start()
 
     async def stop(self):
         self.update_mult_routine.cancel()
@@ -182,6 +185,7 @@ class RFChannel:
         self.update_middleman_connection_status_routine.cancel()
         self.town_level_notification_routine.cancel()
         self.island_arrival_grouping_routine.cancel()
+        self.scroll_queue_routine.cancel()
 
     async def send_chat_message(self, message: str, ignore_error: bool = False, reply_id: Optional[str] = None):
         try:
@@ -797,6 +801,59 @@ class RFChannel:
         })
         await self.send_chat_message(welcome_msg)
         cd.update_rate_limit()
+        
+    @routine(delta=timedelta(seconds=3), max_attempts=99999)
+    async def scroll_queue_routine(self):
+        if self.event != RFChannelEvent.NONE:
+            return
+        scrolls = await get_scroll_counts(self.channel_id)
+        stock = 0
+        name = ''
+        command = ''
+        expected_event = RFChannelEvent.NONE
+        next_scroll = self.scroll_queue.popleft()
+        if next_scroll == 1:
+            stock = scrolls['data']['channel']['Raid Scroll']
+            name = 'raid'
+            command = '?rs'
+            expected_event = RFChannelEvent.RAID
+        elif next_scroll == 2:
+            stock = scrolls['data']['channel']['Dungeon Scroll']
+            name = 'dungeon'
+            command = '?ds'
+            expected_event = RFChannelEvent.DUNGEON
+        else:
+            return
+        if stock <= 0:
+            logging.info(f"Out of {name} scrolls! Skipping queue entry...")
+            return
+        await send_multichat_command(command, "0", self.channel_name, self.channel_id, self.channel_name)
+        for _ in range(5):
+            await asyncio.sleep(3)
+            if self.event == expected_event:
+                return
+        logging.warning(f"Scroll queue: Expected event {expected_event} did not occur")
+        
+    def get_scroll_queue_length(self):
+        return len(self.scroll_queue)
+    
+    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid']):
+        scrolls = await get_scroll_counts(self.channel_id)
+        stock = 0
+        scroll_id = 0
+        if scroll == 'dungeon':
+            stock = scrolls['data']['channel']['Dungeon Scroll']
+            scroll_id = 2
+        elif scroll == 'raid':
+            stock = scrolls['data']['channel']['Raid Scroll']
+            scroll_id = 1
+        else:
+            raise ValueError("Scroll must be 'dungeon' or 'raid")
+        amount_in_queue = self.scroll_queue.count(scroll_id)
+        if amount_in_queue >= stock:
+            raise OutOfStockError(amount_in_queue, stock, f"Out of {scroll.capitalize()} scrolls!")
+        self.scroll_queue.append(scroll_id)
+        
         
     # --- [ AUTO RESTART ] ---------------------------------------
 

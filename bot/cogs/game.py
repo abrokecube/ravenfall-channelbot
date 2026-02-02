@@ -10,7 +10,7 @@ from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
 from utils.format_time import format_seconds, TimeSize
 from utils.commands_rf import RFChannelConverter, RFItemConverter
-from utils.utils import pl
+from utils.utils import pl, pl2
 from ..ravenfallchannel import RFChannel
 from ..command_enums import UserRole, BucketType
 from ..command_utils import HasRole, RangeInt
@@ -273,6 +273,9 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
+        queue_len = channel.get_scroll_queue_length()
+        if queue_len > 0:
+            raise CommandError(f"There {pl2(queue_len, 'is', 'are', False)} currently {queue_len} {pl(queue_len, 'scrolls')} in the queue. Wait until the queue is empty.")
         scrolls = await get_scroll_counts(channel.channel_id)
         if scrolls["data"]["channel"]["Dungeon Scroll"] == 0:
             raise CommandError("Currently out of dungeon scrolls.")
@@ -290,6 +293,9 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
+        queue_len = channel.get_scroll_queue_length()
+        if queue_len > 0:
+            raise CommandError(f"There {pl2(queue_len, 'is', 'are', False)} currently {queue_len} {pl(queue_len, 'scrolls')} in the queue. Wait until the queue is empty.")
         scrolls = await get_scroll_counts(channel.channel_id)
         if scrolls["data"]["channel"]["Raid Scroll"] == 0:
             raise CommandError("Currently out of raid scrolls.")
