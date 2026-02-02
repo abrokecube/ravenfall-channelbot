@@ -1030,10 +1030,7 @@ class RedeemRFCog(Cog):
     @Cog.command()
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def scrollqueue(self, ctx: Context, *, channel: RFChannel = 'this'):
-        queue_size = 0
-        queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
-        queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
-        
+        total = channel.get_scroll_queue_length()
         queue_content_text = []
         last = 0
         streak = 0
@@ -1052,11 +1049,11 @@ class RedeemRFCog(Cog):
             streak = 1
             last = item
             
-        if queue_size == 0:
+        if total == 0:
             await ctx.reply("The queue is empty.")
             return
         await ctx.reply(
-            f"Queue size is currently {queue_size} {pl(queue_size, 'unit', 'units')}. "
+            f"{total} {pl(total, 'scroll', 'scrolls')} {pl(total, 'is', 'are')} in the queue. "
             f"Contents: {', '.join(queue_content_text)}"
         )
 
