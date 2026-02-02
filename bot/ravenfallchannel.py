@@ -806,6 +806,8 @@ class RFChannel:
     async def scroll_queue_routine(self):
         if self.event != RFChannelEvent.NONE:
             return
+        if len(self.scroll_queue) == 0:
+            return
         scrolls = await get_scroll_counts(self.channel_id)
         stock = 0
         name = ''
