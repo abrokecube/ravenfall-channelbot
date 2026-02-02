@@ -16,7 +16,7 @@ from .models import (
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
 from .middleman import send_to_client, send_to_server_and_wait_response
-from .ravenfallrestarttask import RFRestartTask, RestartReason
+from .ravenfallrestarttask import RFRestartTask, RestartReason, WARNING_MSG_TIMES
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command, get_scroll_counts
 from .messageprocessor import RavenMessage, MessageMetadata
@@ -804,10 +804,15 @@ class RFChannel:
         
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def scroll_queue_routine(self):
+        if self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5:
+            return
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
                 pass
-            await asyncio.sleep(60)
+            return
+        if self.channel_post_restart_lock.locked():
+            async with self.channel_post_restart_lock:
+                pass
             return
         if self.event != RFChannelEvent.NONE:
             return
