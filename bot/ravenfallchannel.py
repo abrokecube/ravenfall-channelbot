@@ -804,8 +804,6 @@ class RFChannel:
         
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def scroll_queue_routine(self):
-        if self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5:
-            return
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
                 pass
@@ -813,6 +811,8 @@ class RFChannel:
         if self.channel_post_restart_lock.locked():
             async with self.channel_post_restart_lock:
                 pass
+            return
+        if self.restart_task and self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5:
             return
         if self.event != RFChannelEvent.NONE:
             return
