@@ -188,4 +188,6 @@ class QueuedScroll:
     scroll: ScrollType
     reward_id: str | None
     reward_redemption_id: str | None
+    user_id: str
+    credits_spent: int
     

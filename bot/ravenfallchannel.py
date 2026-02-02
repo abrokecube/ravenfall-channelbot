@@ -173,7 +173,9 @@ class RFChannel:
             encoded.append({
                 "scroll": item.scroll.value,
                 "reward_id": item.reward_id,
-                "reward_redemption_id": item.reward_redemption_id
+                "reward_redemption_id": item.reward_redemption_id,
+                "user_id": item.user_id,
+                "credits_spent": item.credits_spent
             })
         async with get_async_session() as session:
             await db_utils.update_scroll_queue(session, self.channel_id, encoded)
@@ -187,7 +189,9 @@ class RFChannel:
             decoded.append(QueuedScroll(
                 scroll=ScrollType(item['scroll']),
                 reward_id=item['reward_id'],
-                reward_redemption_id=item['reward_redemption_id']
+                reward_redemption_id=item['reward_redemption_id'],
+                user_id=item['user_id'],
+                credits_spent=item['credits_spent']
             ))
         self.scroll_queue = deque(decoded)
         
@@ -906,7 +910,7 @@ class RFChannel:
                 count += 1
         return count
     
-    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid'], redeem_ctx: TwitchRedeemContext = None):
+    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid'], redeem_ctx: TwitchRedeemContext = None, user_id: str = None, credits_spent: int = 0):
         scrolls = await get_scroll_counts(self.channel_id)
         stock = 0
         scroll_id = ScrollType.NONE
@@ -922,9 +926,9 @@ class RFChannel:
         if amount_in_queue >= stock:
             raise OutOfStockError(amount_in_queue, stock, f"Out of {scroll.capitalize()} scrolls!")
         if redeem_ctx:
-            queue_obj = QueuedScroll(scroll_id, redeem_ctx.redemption.reward.id, redeem_ctx.redemption.id)
+            queue_obj = QueuedScroll(scroll_id, redeem_ctx.redemption.reward.id, redeem_ctx.redemption.id, user_id, credits_spent)
         else:
-            queue_obj = QueuedScroll(scroll_id, None, None)
+            queue_obj = QueuedScroll(scroll_id, None, None, user_id, credits_spent)
         self.scroll_queue.append(queue_obj)
         await self.save_scroll_queue()
         
@@ -938,6 +942,9 @@ class RFChannel:
                     item.reward_redemption_id,
                     CustomRewardRedemptionStatus.CANCELED
                 )
+            if item.credits_spent != 0:
+                with get_async_session() as session:
+                    await db_utils.add_credits(session, item.user_id, item.credits_spent, "Scroll refund")
         await self.save_scroll_queue()
 
         

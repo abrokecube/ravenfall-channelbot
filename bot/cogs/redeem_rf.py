@@ -1090,7 +1090,7 @@ class RedeemRFCog(Cog):
         added_count = 0
         try:
             for _ in range(to_add):
-                await channel.add_scroll_to_queue(scroll_type)
+                await channel.add_scroll_to_queue(scroll_type, None, ctx.data.user.id, cost)
                 added_count += 1
         except OutOfStockError:
              pass
