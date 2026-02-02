@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 RAID_SCROLL_SIZE = 1
 DUNGEON_SCROLL_SIZE = 5
+MAX_QUEUE_SIZE = 25
 
 @dataclass
 class RavenfallResponse:
@@ -993,7 +994,7 @@ class RedeemRFCog(Cog):
         queue_size = 0
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
-        if queue_size >= 25:
+        if queue_size >= MAX_QUEUE_SIZE:
             await ctx.cancel()
             await ctx.reply("The queue is currently full. Your points have been refunded.")
             return
@@ -1015,7 +1016,7 @@ class RedeemRFCog(Cog):
         queue_size = 0
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
-        if queue_size >= 25:
+        if queue_size >= MAX_QUEUE_SIZE:
             await ctx.cancel()
             await ctx.reply("The queue is currently full. Your points have been refunded.")
             return
@@ -1053,7 +1054,7 @@ class RedeemRFCog(Cog):
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
         
-        if queue_size >= 25:
+        if queue_size >= MAX_QUEUE_SIZE:
              await ctx.reply("The queue is currently full.")
              return
 
