@@ -162,9 +162,17 @@ class RFChannel:
         self.update_events_routine_first_iteration = True
         self.scroll_queue: deque[int] = deque()
         
+    async def save_scroll_queue(self):
+        async with get_async_session() as session:
+            await db_utils.update_scroll_queue(session, self.channel_id, list(self.scroll_queue))
+        
     async def start(self):
         if self.monitoring_paused:
             return
+        
+        async with get_async_session() as session:
+            self.scroll_queue = deque(await db_utils.get_scroll_queue(session, self.channel_id) or [])
+
         await self.chat.join_room(self.channel_name)
         self.update_mult_routine.start()
         self.update_events_routine.start()
@@ -804,6 +812,8 @@ class RFChannel:
         
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def scroll_queue_routine(self):
+        if update_events_routine_first_iteration:
+            return
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
                 pass
@@ -823,7 +833,7 @@ class RFChannel:
         name = ''
         command = ''
         expected_event = RFChannelEvent.NONE
-        next_scroll = self.scroll_queue.popleft()
+        next_scroll = self.scroll_queue[0]
         if next_scroll == 1:
             stock = scrolls['data']['channel']['Raid Scroll']
             name = 'raid'
@@ -843,6 +853,8 @@ class RFChannel:
         for _ in range(30):
             await asyncio.sleep(1)
             if self.event == expected_event:
+                self.scroll_queue.popleft()
+                await self.save_scroll_queue()
                 return
         logging.warning(f"Scroll queue: Expected event {expected_event} did not occur")
         
@@ -875,6 +887,7 @@ class RFChannel:
         if amount_in_queue >= stock:
             raise OutOfStockError(amount_in_queue, stock, f"Out of {scroll.capitalize()} scrolls!")
         self.scroll_queue.append(scroll_id)
+        await self.save_scroll_queue()
         
         
     # --- [ AUTO RESTART ] ---------------------------------------

@@ -308,3 +308,11 @@ async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: i
         await session.flush()
         return transaction.id
     return -1
+
+async def get_scroll_queue(session: AsyncSession, channel_id: Union[int, str]) -> list[int]:
+    channel = await get_channel(session, id=channel_id)
+    return channel.scroll_queue
+
+async def update_scroll_queue(session: AsyncSession, channel_id: Union[int, str], queue: list[int]):
+    channel = await get_channel(session, id=channel_id)
+    channel.scroll_queue = queue
