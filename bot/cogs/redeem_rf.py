@@ -14,6 +14,7 @@ from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
 from ..exceptions import OutOfStockError
+from ..models import ScrollType
 from utils.commands_rf import RFChannelConverter, TwitchUsername, RFItemConverter
 from bot.multichat_command import get_char_coins, get_char_items
 from bot.message_templates import RavenBotTemplates
@@ -1120,22 +1121,22 @@ class RedeemRFCog(Cog):
     async def scrollqueue(self, ctx: Context, *, channel: RFChannel = 'this'):
         total = channel.get_scroll_queue_length()
         queue_content_text = []
-        last = 0
+        last = ScrollType.NONE
         streak = 0
         for item in list(channel.scroll_queue) + [0]:
-            if item == last:
+            if item.scroll == last:
                 streak += 1
                 continue
-            if last == 1:
+            if last == ScrollType.RAID:
                 queue_content_text.append(
                     f"{streak}x Raid"
                 )
-            elif last == 2:
+            elif last == ScrollType.DUNGEON:
                 queue_content_text.append(
                     f"{streak}x Dungeon"
                 )
             streak = 1
-            last = item
+            last = item.scroll
             
         if total == 0:
             await ctx.reply("The queue is empty.")
