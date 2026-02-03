@@ -37,12 +37,6 @@ async def send_multichat_command(
     Returns:
         dict: The JSON response from the server
     """
-    if not COMMAND_SERVER_HOST or not COMMAND_SERVER_PORT:
-        logger.error("MULTICHAT_COMMAND_SERVER_HOST or MULTICHAT_COMMAND_SERVER_PORT is not set")
-        return {
-            "status": 500,
-            "error": "MULTICHAT_COMMAND_SERVER_HOST or MULTICHAT_COMMAND_SERVER_PORT is not set"
-        }
     url = f"{BASE_URL}/command"
     payload = {
         "text": text,
@@ -67,6 +61,62 @@ async def send_multichat_command(
             "status": 500,
             "error": f"Failed to send command: {str(e)}"
         }
+        
+async def track_item_use(
+    user_name: str,
+    char_index: int,
+    item_id: str,
+    amount: int,
+) -> Dict[str, Any]:
+    url = f"{BASE_URL}/track_item_use"
+    payload = {
+        "user_name": user_name,
+        "char_index": char_index,
+        "item_id": item_id,
+        "amount": amount
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as response:
+                response_data = await response.json()
+                return {
+                    "status": response.status,
+                    "data": response_data
+                }
+    except Exception as e:
+        logger.error(f"Failed to send command: {str(e)}", exc_info=True)
+        return {
+            "status": 500,
+            "error": f"Failed to send command: {str(e)}"
+        }
+
+async def track_coin_use(
+    user_name: str,
+    char_index: int,
+    item_id: str,
+    amount: int,
+) -> Dict[str, Any]:
+    url = f"{BASE_URL}/track_item_use"
+    payload = {
+        "user_name": user_name,
+        "char_index": char_index,
+        "amount": amount
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as response:
+                response_data = await response.json()
+                return {
+                    "status": response.status,
+                    "data": response_data
+                }
+    except Exception as e:
+        logger.error(f"Failed to send command: {str(e)}", exc_info=True)
+        return {
+            "status": 500,
+            "error": f"Failed to send command: {str(e)}"
+        }
+
 
 class DesyncInfo(TypedDict):
     towns: Dict[str, float]  # Channel ID to desync data mapping
@@ -105,6 +155,7 @@ class CharInfoResponse(TypedDict):
 class CharCoins(TypedDict):
     twitch_id: str
     user_name: str
+    char_index: int
     coins: int
 
 class CharCoinsResponse(TypedDict):
@@ -121,6 +172,7 @@ class CharItem(TypedDict):
 class CharItems(TypedDict):
     twitch_id: str
     user_name: str
+    char_index: int
     items: List[CharItem]
 
 class CharItemsResponse(TypedDict):
