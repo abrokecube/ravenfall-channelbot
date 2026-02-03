@@ -92,13 +92,11 @@ async def track_item_use(
 
 async def track_coin_use(
     user_name: str,
-    char_index: int,
     amount: int,
 ) -> Dict[str, Any]:
     url = f"{BASE_URL}/track_item_use"
     payload = {
         "user_name": user_name,
-        "char_index": char_index,
         "amount": amount
     }
     try:

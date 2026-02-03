@@ -309,9 +309,9 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
                 coins_to_send = int(response.response["Args"][1])
             if coins_to_send > 0:
                 try:
-                    await track_coin_use(user["user_name"], user["char_index"], coins_to_send)
+                    await track_coin_use(user["user_name"], coins_to_send)
                 except Exception as e:
-                    logger.warning(f"Could not track coin use: {user['user_name']}:{user['char_index']} {coins_to_send}x coin")
+                    logger.warning(f"Could not track coin use: {user['user_name']} {coins_to_send}x coin")
             coins_remaining -= coins_to_send
             one_coin_successful = True
 
