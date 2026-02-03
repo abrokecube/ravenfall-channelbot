@@ -16,7 +16,7 @@ from ..ravenfallloc import pl
 from ..exceptions import OutOfStockError
 from ..models import ScrollType, RFChannelEvent
 from utils.commands_rf import RFChannelConverter, TwitchUsername, RFItemConverter
-from bot.multichat_command import get_char_coins, get_char_items
+from bot.multichat_command import get_char_coins, get_char_items, track_item_use, track_coin_use
 from bot.message_templates import RavenBotTemplates
 from database.session import get_async_session
 from database.utils import get_formatted_sender_data, add_credits, get_user_credits, get_channel
@@ -307,6 +307,11 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
                 coins_to_send = 1
             else:
                 coins_to_send = int(response.response["Args"][1])
+            if coins_to_send > 0:
+                try:
+                    await track_coin_use(user["user_name"], user["char_index"], coins_to_send)
+                except Exception as e:
+                    logger.warning(f"Could not track coin use: {user['user_name']}:{user['char_index']} {coins_to_send}x coin")
             coins_remaining -= coins_to_send
             one_coin_successful = True
 
@@ -347,6 +352,7 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                     total_items += user_item["amount"]
                     user_items.append({
                         "user_name": user["user_name"],
+                        "char_index": user["char_index"],
                         "amount": user_item["amount"],
                     })
                     break
@@ -435,6 +441,11 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                     items_sent = int(response.response["Args"][0])
                 else:
                     items_sent = 0
+            if items_sent > 0:
+                try:
+                    await track_item_use(user_item['user_name'], user_item['char_index'], item.id, items_sent)
+                except Exception as e:
+                    logger.warning(f"Could not track item use: {user_item['user_name']}:{user_item['char_index']} - {items_sent}x {item.name}")
             items_remaining -= items_sent
             one_item_successful = True
 
