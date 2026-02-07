@@ -385,9 +385,9 @@ class RFChannel:
                     paste_out.append("")
                     paste_out.extend(loots)
                     paste_url = await utils.upload_to_pastes('\n'.join(paste_out))
-                    await self.send_chat_message(f"{', '.join(loots[:3])} – More: {paste_url}")
+                    await self.send_chat_message(f"{', '.join(loots[:3])} ✦ More: {paste_url}", reply_id=message['CorrelationId'])
                 else:
-                    await self.send_chat_message(f"{', '.join(loots)}")
+                    await self.send_chat_message(f"{', '.join(loots)}", reply_id=message['CorrelationId'])
                 return {'block': True}
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
