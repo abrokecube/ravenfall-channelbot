@@ -381,7 +381,10 @@ class RFChannel:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
             if len(trans_str) == 0:
                 return {'block': True}
-            trans_strs = split_by_utf16_bytes(trans_str, 500)
+            max_length = 500
+            recipient_name = message['Recipent']['PlatformUserName']
+            max_length -= len(recipient_name) + 2
+            trans_strs = split_by_utf16_bytes(trans_str, max_length)
             if len(trans_strs) > 1:
                 asyncio.create_task(self.send_split_msgs(message, trans_strs))
                 return {'block': True}
