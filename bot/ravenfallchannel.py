@@ -8,7 +8,7 @@ from twitchAPI.chat import Chat, ChatMessage
 from ravenpy import RavenNest, experience_for_level
 import aiohttp
 
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from .models import (
     Player, Village, Dungeon, Raid, GameMultiplier, GameSession, Ferry,
@@ -376,6 +376,18 @@ class RFChannel:
                 t = time.monotonic()
                 self.island_arrivals[destination].append(user)
                 self.island_last_arrival_time[destination] = t
+                return {'block': True}
+            elif key == "loot":
+                loots = message['Format'].split(". ")
+                if len(loots) > 3:
+                    paste_out = []
+                    paste_out.append(f"Loot gained by {message['Recipent']['PlatformUserName']} ({datetime.now(timezone.utc).strftime('%d %B %Y %H:%M:%S UTC')})")
+                    paste_out.append("")
+                    paste_out.extend(loots)
+                    paste_url = await utils.upload_to_pastes('\n'.join(paste_out))
+                    await self.send_chat_message(f"{', '.join(loots[:3])} – More: {paste_url}")
+                else:
+                    await self.send_chat_message(f"{', '.join(loots)}")
                 return {'block': True}
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
