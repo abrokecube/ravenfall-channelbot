@@ -378,7 +378,7 @@ class RFChannel:
                 self.island_last_arrival_time[destination] = t
                 return {'block': True}
             elif key == "loot":
-                loots = message['Format'].split(". ")
+                loots = [x.strip() for x in message['Format'].split(". ")]
                 if len(loots) > 3:
                     paste_out = []
                     paste_out.append(f"Loot gained by {message['Recipent']['PlatformUserName']} ({datetime.now(timezone.utc).strftime('%d %B %Y %H:%M:%S UTC')})")
