@@ -200,6 +200,17 @@ class BotStuffCog(Cog):
                 continue
         else:
             raise CommandError("Failed to pull process")
+        
+    @Cog.command(name="reloadwatchdog")
+    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
+    async def reload_watchdog_conf(self, ctx: Context):
+        for watcher in self.watchers:
+            try:
+                await watcher.reload_config()
+            except Exception:
+                continue
+        await ctx.reply("Okay")
+    
 
 def setup(commands: Commands, **kwargs) -> None:
     commands.load_cog(BotStuffCog, **kwargs)

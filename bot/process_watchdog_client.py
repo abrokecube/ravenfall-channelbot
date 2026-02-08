@@ -34,3 +34,9 @@ class ProcessWatcherClient:
             async with session.post(f"{self.base_url}/processes/{name}/git-pull") as response:
                 response.raise_for_status()
                 return await response.json()
+
+    async def reload_config(self) -> Dict[str, Any]:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{self.base_url}/config/reload") as response:
+                response.raise_for_status()
+                return await response.json()
