@@ -893,7 +893,7 @@ class RFChannel:
             logging.info(f"Out of {name} scrolls! Skipping queue entry...")
             return
         await send_multichat_command(command, "0", self.channel_name, self.channel_id, self.channel_name)
-        for _ in range(30):
+        for _ in range(10):
             await asyncio.sleep(1)
             if self.event == expected_event:
                 self.scroll_queue.popleft()
