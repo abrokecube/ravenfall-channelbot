@@ -1060,7 +1060,6 @@ class RedeemRFCog(Cog):
             return
             
     @Cog.command(aliases=['queue_scroll', 'qs', 'queuescrolls', 'queue_scrolls'])
-    @cooldown(1, 15, [BucketType.CHANNEL])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("scroll_type", aliases=["type", "t"], converter=Choice(['dungeon', 'raid']))
     async def queuescroll(self, ctx: Context, scroll_type: str, count: int = 1, *, channel: RFChannel = 'this'):
