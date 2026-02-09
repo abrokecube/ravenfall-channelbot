@@ -907,6 +907,14 @@ class RFChannel:
                     )
                 return
         logging.warning(f"Scroll queue: Expected event {expected_event} did not occur")
+    
+    def get_seconds_until_restart(self):
+        if not (self.restart_task and (not self.restart_task.finished())):
+            return 999999
+        return self.restart_task.get_time_left()
+    
+    def is_restarting(self):
+        return self.channel_restart_lock.locked()
         
     def get_scroll_queue_length(self):
         return len(self.scroll_queue)

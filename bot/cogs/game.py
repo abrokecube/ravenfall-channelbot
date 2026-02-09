@@ -279,6 +279,10 @@ class GameCog(Cog):
         scrolls = await get_scroll_counts(channel.channel_id)
         if scrolls["data"]["channel"]["Dungeon Scroll"] == 0:
             raise CommandError("Currently out of dungeon scrolls.")
+        if channel.is_restarting():
+            raise CommandError("Ravenfall is restarting")
+        if channel.get_seconds_until_restart() <= 60:
+            raise CommandError("Ravenfall will restart soon")
         if channel.event == RFChannelEvent.DUNGEON:
             raise CommandError("There is currently an active dungeon")
         if channel.event == RFChannelEvent.RAID:
@@ -299,6 +303,10 @@ class GameCog(Cog):
         scrolls = await get_scroll_counts(channel.channel_id)
         if scrolls["data"]["channel"]["Raid Scroll"] == 0:
             raise CommandError("Currently out of raid scrolls.")
+        if channel.is_restarting():
+            raise CommandError("Ravenfall is restarting")
+        if channel.get_seconds_until_restart() <= 60:
+            raise CommandError("Ravenfall will restart soon")
         if channel.event == RFChannelEvent.DUNGEON:
             raise CommandError("There is currently an active dungeon")
         if channel.event == RFChannelEvent.RAID:
