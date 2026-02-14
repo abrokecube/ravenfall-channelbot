@@ -102,7 +102,7 @@ class RFChannel:
         self.channel_name: str = config['channel_name'].lower()
         self.rf_query_url: str = config['rf_query_url'].rstrip('/')
         
-        self.twitch = manager.bot.twitches.get(self.channel_id)
+        self.twitch = manager.twitches.get(self.channel_id)
         
         # Optional fields with defaults
         self.ravenbot_prefixes: tuple = config.get('ravenbot_prefix', ('!',))

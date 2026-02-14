@@ -33,55 +33,55 @@ class SomeEndpoints:
         metrics = await self.metrics_manager.get_metrics()
         return web.Response(text=metrics, content_type='text/plain')
 
-    async def handle_stream(self, request: web.Request):
-        ws = web.WebSocketResponse()
-        await ws.prepare(request)
-        await self.chat_manager.register_websocket(ws)
+    # async def handle_stream(self, request: web.Request):
+    #     ws = web.WebSocketResponse()
+    #     await ws.prepare(request)
+    #     await self.chat_manager.register_websocket(ws)
 
-        try:
-            async for _ in ws:
-                pass
-        finally:
-            await self.chat_manager.unregister_websocket(ws)
+    #     try:
+    #         async for _ in ws:
+    #             pass
+    #     finally:
+    #         await self.chat_manager.unregister_websocket(ws)
 
-        return ws
+    #     return ws
 
-    async def handle_history(self, request: web.Request):
-        room_name = request.match_info['room']
-        room = self.chat_manager.get_room(room_name)
-        history = await room.get_history()
+    # async def handle_history(self, request: web.Request):
+    #     room_name = request.match_info['room']
+    #     room = self.chat_manager.get_room(room_name)
+    #     history = await room.get_history()
         
-        data = []
-        for msg in history:
-            m_dict = {
-                'id': msg.id,
-                'room': msg.room_name,
-                'content': msg.content,
-                'author': msg.author,
-                'timestamp': msg.timestamp.isoformat()
-            }
-            data.append(m_dict)
+    #     data = []
+    #     for msg in history:
+    #         m_dict = {
+    #             'id': msg.id,
+    #             'room': msg.room_name,
+    #             'content': msg.content,
+    #             'author': msg.author,
+    #             'timestamp': msg.timestamp.isoformat()
+    #         }
+    #         data.append(m_dict)
             
-        return web.json_response(data)
+    #     return web.json_response(data)
 
-    async def handle_send(self, request: web.Request):
-        room_name = request.match_info['room']
-        try:
-            data = await request.json()
-            author = data.get('author', 'Anonymous')
-            content = data.get('content')
-            reply_to_id = data.get('reply_to_id')
-            auth_key = data.get('auth_key')
+    # async def handle_send(self, request: web.Request):
+    #     room_name = request.match_info['room']
+    #     try:
+    #         data = await request.json()
+    #         author = data.get('author', 'Anonymous')
+    #         content = data.get('content')
+    #         reply_to_id = data.get('reply_to_id')
+    #         auth_key = data.get('auth_key')
             
-            if not content:
-                return web.Response(status=400, text="Missing content")
+    #         if not content:
+    #             return web.Response(status=400, text="Missing content")
 
-            msg = await self.chat_manager.send_message(room_name, author, content, reply_to_id, auth_key)
+    #         msg = await self.chat_manager.send_message(room_name, author, content, reply_to_id, auth_key)
             
-            return web.json_response({
-                'status': 'ok',
-                'message_id': msg.id
-            })
-        except Exception as e:
-            LOGGER.error(f"Error sending message: {e}")
-            return web.Response(status=500, text=str(e))
+    #         return web.json_response({
+    #             'status': 'ok',
+    #             'message_id': msg.id
+    #         })
+    #     except Exception as e:
+    #         LOGGER.error(f"Error sending message: {e}")
+    #         return web.Response(status=500, text=str(e))

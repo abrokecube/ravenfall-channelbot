@@ -4,7 +4,7 @@ from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent, Village
 from .multichat_command import send_multichat_command, get_desync_info, get_total_item_count
 from . import middleman
 from .messageprocessor import MessageProcessor, RavenMessage, MessageMetadata, ClientInfo
-from twitchAPI.chat import Chat, ChatMessage
+from twitchAPI.chat import Chat, ChatMessage, Twitch
 from ravenpy import RavenNest, ExpMult
 import asyncio
 import aiohttp
@@ -22,11 +22,11 @@ import os
 logger = logging.getLogger(__name__)
 
 class RFChannelManager:
-    def __init__(self, config: dict, chat: Chat, rfapi: RavenNest, bot: Commands):
+    def __init__(self, config: dict, chat: Chat, rfapi: RavenNest, twitches: dict[str, Twitch]):
         self.config = config
         self.rfapi = rfapi
         self.chat = chat
-        self.bot = bot
+        self.twitches = twitches
         self.channels: List[RFChannel] = []
         self.channel_id_to_channel: Dict[str, RFChannel] = {}
         self.channel_name_to_channel: Dict[str, RFChannel] = {}
