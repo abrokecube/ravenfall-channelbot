@@ -1,5 +1,5 @@
 from ..commands import Context, Commands
-from ..cog import Cog
+from ..commands_old.cog import Cog
 from ..ravenfallmanager import RFChannelManager
 
 class MinimalCog(Cog):

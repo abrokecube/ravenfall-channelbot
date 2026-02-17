@@ -1,12 +1,20 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Set, Dict, Callable, Awaitable
 import logging
+import dataclasses
 
 if TYPE_CHECKING:
     from .listeners import BaseListener
-    from .events import BaseEvent, MessageEvent
     from .global_context import GlobalContext
-from .listeners import BaseListener, GenericListener, CommandListener
+from .events import (
+    BaseEvent, 
+    MessageEvent
+)
+from .listeners import (
+    BaseListener,
+    GenericListener, 
+    CommandListener
+)
 from .events import CommandEvent
 from .enums import EventCategory, Dispatcher, BucketType
 from .exceptions import (
@@ -19,12 +27,24 @@ from .exceptions import (
     CheckFailure,
     VerificationFailure,
     ArgumentError,
+    CommandError,
     ListenerError
 )
+from .command_parser import CommandArgs
 from utils.format_time import format_seconds, TimeSize
 from .cooldown import Cooldown
 
 LOGGER = logging.getLogger(__name__)
+
+TEXT_REPLACEMENTS = {
+    "\U000e0000": None,
+    "\u034f": None
+}
+TEXT_TRANS = str.maketrans(TEXT_REPLACEMENTS)
+def filter_text(text: str):
+    text = text.translate(TEXT_REPLACEMENTS)
+    text = text.strip()
+    return text
 
 class BaseDispatcher:
     def __init__(self):
@@ -132,12 +152,14 @@ class CommandDispatcher(BaseDispatcher):
                 return
 
             command = self.listeners[command_name]
+            copied_msg_event = dataclasses.replace(event, text=filter_text(event.text))
 
             new_event = CommandEvent(
-                message=event,
+                message=copied_msg_event,
                 prefix=used_prefix,
                 invoked_with=content[:len(command_name)],
-                parameters_text=remaining_text
+                parameters_text=remaining_text,
+                parsed_args=CommandArgs(remaining_text)
             )
         else:
             new_event = event
@@ -148,38 +170,42 @@ class CommandDispatcher(BaseDispatcher):
             LOGGER.error(f"Error occurred during command invocation: {error}", exc_info=True)
             if not respond_to_errors:
                 raise error
-            
-            usage_text = command.get_usage_text(new_event.prefix, new_event.invoked_with)
-            if isinstance(error, ListenerOnCooldown):
-                if error.cooldown.per >= 60 and self.error_cooldown.get_retry_after(event) <= 0:
-                    await event.reply(f"❌ Listener '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}.")
-                    self.error_cooldown.update_rate_limit(event)
-            elif isinstance(error, MissingRequiredArgumentError):
-                await event.reply(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
-            elif isinstance(error, EmptyFlagValueError):
-                await event.reply(f"❌ Expected a value for argument '{error.parameter.name}' (type: {error.parameter.type_title})")
-            elif isinstance(error, ArgumentConversionError):
-                if error.message:
-                    out_text = f"❌ Error in argument '{error.parameter.name}': {error.message}"
-                else:
-                    out_text = f"❌ Error turning '{error.value}' ({error.parameter.name}) into {error.parameter.type_title}"
-                await event.reply(out_text)
-            elif isinstance(error, UnknownArgumentError):
-                await event.reply(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
-            elif isinstance(error, UnknownFlagError):
-                await event.reply(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
-            elif isinstance(error, CheckFailure):
-                if self.error_cooldown.get_retry_after(event) <= 0:
-                    await event.reply(f"❌ {error.message}")
-                    self.error_cooldown.update_rate_limit(event)
-            elif isinstance(error, VerificationFailure):
-                await event.reply(f"❌ {error.message}")
-            elif isinstance(error, ArgumentError):
-                await event.reply(f"❌ {error.message}")
-            elif isinstance(error, ListenerError):
-                await event.reply(f"❌ {error.message}")
+            await self.on_command_error(global_context, new_event, command, error)
+                
+    async def on_command_error(self, g_ctx: GlobalContext, event: CommandEvent, command: CommandListener, error: Exception):
+        usage_text = command.get_usage_text(event.prefix, event.invoked_with)
+        if isinstance(error, ListenerOnCooldown):
+            if error.cooldown.per >= 60 and self.error_cooldown.get_retry_after(event) <= 0:
+                await event.message.reply(f"❌ Listener '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}.")
+                self.error_cooldown.update_rate_limit(event)
+        elif isinstance(error, MissingRequiredArgumentError):
+            await event.message.reply(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
+        elif isinstance(error, EmptyFlagValueError):
+            await event.message.reply(f"❌ Expected a value for argument '{error.parameter.name}' (type: {error.parameter.type_title})")
+        elif isinstance(error, ArgumentConversionError):
+            if error.message:
+                out_text = f"❌ Error in argument '{error.parameter.name}': {error.message}"
             else:
-                await event.reply(f"❌ An unknown error occurred")
+                out_text = f"❌ Error turning '{error.value}' ({error.parameter.name}) into {error.parameter.type_title}"
+            await event.message.reply(out_text)
+        elif isinstance(error, UnknownArgumentError):
+            await event.message.reply(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
+        elif isinstance(error, UnknownFlagError):
+            await event.message.reply(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
+        elif isinstance(error, CheckFailure):
+            if self.error_cooldown.get_retry_after(event) <= 0:
+                await event.message.reply(f"❌ {error.message}")
+                self.error_cooldown.update_rate_limit(event)
+        elif isinstance(error, VerificationFailure):
+            await event.message.reply(f"❌ {error.message}")
+        elif isinstance(error, ArgumentError):
+            await event.message.reply(f"❌ {error.message}")
+        elif isinstance(error, CommandError):
+            await event.message.reply(f"❌ {error.message}")
+        elif isinstance(error, ListenerError):
+            await event.message.reply(f"❌ {error.message}")
+        else:
+            await event.message.reply(f"❌ An unknown error occurred")
                 
     async def get_prefix(self, global_context: GlobalContext, event: MessageEvent):
         return "!"

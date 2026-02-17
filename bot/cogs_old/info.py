@@ -21,7 +21,7 @@ from ..prometheus import get_prometheus_instant, get_prometheus_series
 
 from ..commands import Context, Commands, checks, parameter, cooldown
 from ..command_enums import BucketType
-from ..cog import Cog
+from ..commands_old.cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..models import Village, GameSession, GameMultiplier
 from .. import braille

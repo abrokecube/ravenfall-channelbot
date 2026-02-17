@@ -15,7 +15,6 @@ from datetime import timedelta, datetime, timezone
 import time
 from .ravenfallrestarttask import RestartReason
 from utils.alert_monitor import BatchAlertMonitor
-from .commands import Commands
 
 import os
 

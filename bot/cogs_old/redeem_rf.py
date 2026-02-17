@@ -9,7 +9,7 @@ from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, ch
 from ..command_enums import UserRole, Platform, CustomRewardRedemptionStatus, BucketType
 from ..command_utils import HasRole, TwitchOnly, RangeInt, Choice
 from ..command_exceptions import CommandError
-from ..cog import Cog
+from ..commands_old.cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl

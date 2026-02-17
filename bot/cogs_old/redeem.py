@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter
 from ..command_enums import UserRole, Platform
 from ..command_utils import HasRole, TwitchOnly
-from ..cog import Cog
+from ..commands_old.cog import Cog
 
 class RedeemCog(Cog):
     """Cog exposing simple reward management commands for Twitch channels."""

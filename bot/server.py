@@ -16,9 +16,9 @@ class SomeEndpoints:
         self.app = web.Application()
         self.app.add_routes([
             web.get('/metrics', self.handle_metrics),
-            web.get('/api/chat/stream', self.handle_stream),
-            web.get('/api/chat/rooms/{room}/history', self.handle_history),
-            web.post('/api/chat/rooms/{room}/send', self.handle_send),
+            # web.get('/api/chat/stream', self.handle_stream),
+            # web.get('/api/chat/rooms/{room}/history', self.handle_history),
+            # web.post('/api/chat/rooms/{room}/send', self.handle_send),
         ])
         self.metrics_manager = MetricsManager(self.rfmanager)
 

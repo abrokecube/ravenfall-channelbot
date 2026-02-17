@@ -9,8 +9,6 @@ from database.models import ChatMessage
 from database.session import get_async_session
 from sqlalchemy import select
 
-from .command_contexts import ServerContext
-
 if TYPE_CHECKING:
     from .commands import Commands
 

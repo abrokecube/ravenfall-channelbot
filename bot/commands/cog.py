@@ -14,7 +14,6 @@ class Cog:
             d = event_manager.dispatchers.get(getattr(attr, "_listener_expected_dispatcher", None), None)
             if not d:
                 continue
-            setattr(attr, "_listener_from_cog", True)
             self.listeners.append(d._func_listener(attr))
         
     async def setup(self):

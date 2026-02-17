@@ -2,7 +2,7 @@ from ..commands import Context, TwitchContext, Commands, checks, parameter
 from ..command_enums import UserRole, Platform
 from ..command_utils import HasRole
 from ..command_exceptions import CommandError
-from ..cog import Cog
+from ..commands_old.cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallchannel import RFChannel
 from ..process_watchdog_client import ProcessWatcherClient

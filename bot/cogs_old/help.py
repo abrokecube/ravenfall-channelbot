@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional, List, Dict
-from ..cog import Cog
+from ..commands_old.cog import Cog
 from ..commands import Context, Commands, Command, parameter
 from utils.strutils import strjoin
 from docstring_parser import parse

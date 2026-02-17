@@ -5,7 +5,7 @@ Contains simple ping/hi commands and test redeems used in development.
 
 from typing import Optional, Dict, Any
 from ..commands import Context, Commands, TwitchRedeemContext, CustomRewardRedemptionStatus
-from ..cog import Cog
+from ..commands_old.cog import Cog
 
 class TestingCog(Cog):
     """Small set of test commands and redeems for development.

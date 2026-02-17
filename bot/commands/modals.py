@@ -14,6 +14,10 @@ class MetaFilter(NamedTuple):
     platforms: list[EventSource]
     platforms_exclusive: bool  # only include the listed platforms
 
+class ChatRoomCapabilities(NamedTuple):
+    multiline: bool
+    max_message_length: int
+
 @dataclass
 class Parameter:
     name: str

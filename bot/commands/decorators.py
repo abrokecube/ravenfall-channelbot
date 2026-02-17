@@ -1,21 +1,12 @@
-from typing import List, Callable
+from typing import List, Callable, Type
 from .enums import EventCategory, EventSource, Dispatcher, BucketType
 from .modals import MetaFilter
 from .cooldown import Cooldown
 from .converters import BaseConverter
+from .checks import BaseCheck, FunctionCheck
+from .events import BaseEvent
 
-def cooldown(rate: int, per: float, type: BucketType | List[BucketType] = BucketType.USER):
-    """Decorator to apply a cooldown to a command.
-    
-    Args:
-        rate: Number of uses allowed.
-        per: Time period in seconds.
-        type: The bucket type for the cooldown.
-    """
-    def decorator(func):
-        func._listener_cooldown = Cooldown(rate, per, type)
-        return func
-    return decorator
+# Definitions
 
 def on_message(*, platforms: list[EventSource] | None=None):
     def decorator(func):
@@ -48,6 +39,21 @@ def command(
             [], False
         )
         func._listener_expected_dispatcher = Dispatcher.Command
+        return func
+    return decorator
+
+# Add-ons
+
+def cooldown(rate: int, per: float, type: BucketType | List[BucketType] = BucketType.USER):
+    """Decorator to apply a cooldown to a command.
+    
+    Args:
+        rate: Number of uses allowed.
+        per: Time period in seconds.
+        type: The bucket type for the cooldown.
+    """
+    def decorator(func):
+        func._listener_cooldown = Cooldown(rate, per, type)
         return func
     return decorator
 
@@ -93,3 +99,26 @@ def verification(verifier_func):
         return func
     return decorator
 
+CheckFunc = Callable[[BaseEvent], bool]
+def checks(*predicates: CheckFunc | BaseCheck | Type[BaseCheck]):
+    """Decorator to add checks to a command.
+    
+    Args:
+        *predicates: One or more functions or Check classes/instances.
+    """
+    def decorator(func):
+        if not hasattr(func, '_command_checks'):
+            func._listener_command_checks = []
+        
+        processed_checks = []
+        for p in predicates:
+            if isinstance(p, type) and issubclass(p, BaseCheck):
+                processed_checks.append(p())
+            elif isinstance(p, BaseCheck):
+                processed_checks.append(p)
+            else:
+                processed_checks.append(FunctionCheck(p))
+                
+        func._listener_command_checks.extend(processed_checks)
+        return func
+    return decorator

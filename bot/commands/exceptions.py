@@ -10,7 +10,12 @@ class ListenerError(Exception):
     def __init__(self, message: str = "Listener error"):
         self.message = message
         super().__init__(self.message)
-
+        
+class CommandError(ListenerError):
+    """Raised when a non-fatal error occurs in a command"""
+    def __init__(self, message: str = "Command error"):
+        super().__init__(message)
+        
 class CheckFailure(ListenerError):
     """Raised when a listener check fails."""
     def __init__(self, message: str = "Check failed"):

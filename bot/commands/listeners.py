@@ -5,11 +5,11 @@ import inspect
 
 if TYPE_CHECKING:
     from .events import BaseEvent, MessageEvent, CommandEvent
-    from .global_context import GlobalContext
     from .cooldown import Cooldown
-    from .checks import Check
+    from .checks import BaseCheck
     from .converters import BaseConverter
     from .cog import Cog
+from .global_context import GlobalContext
 from .modals import MetaFilter, Parameter, ParameterKind, BUILTIN_TYPE_DOCS, Flag
 from .enums import Dispatcher
 from .exceptions import (
@@ -24,6 +24,7 @@ from .exceptions import (
     UnknownArgumentError,
     CheckFailure
 )
+
 import asyncio
 import docstring_parser
 import logging
@@ -89,14 +90,20 @@ class GenericListener(BaseListener):
 class CommandListener(GenericListener):
     def __init__(
         self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], cog: 'Cog' = None,
-        cooldown = None, name: str = None, checks: list[Check] = None, verifier: Callable = None, 
+        cooldown = None, name: str = None, checks: list[BaseCheck] = None, verifier: Callable = None, 
         aliases: list[str] = [], hidden: bool = False, 
         help: str = None, short_help: str = None, title: str = None
         ):
         super().__init__(func, cog, cooldown)
+        self.expected_dispatcher = Dispatcher.Command
+        
         self.verifier: Callable = getattr(func, '_listener_command_verifier', verifier)
-        checks.extend(getattr(func, '_listener_command_checks', []))
-        self.checks = checks
+        
+        self.checks = []
+        if checks:
+            self.checks.extend(checks)
+        self.checks.extend(getattr(func, '_listener_command_checks', []))
+        
         self.name = name or func.__name__
         self.aliases = []
         self._id = self.name
@@ -137,12 +144,14 @@ class CommandListener(GenericListener):
         
         doc_params = {p.arg_name: p.description for p in doc.params}
 
+        self.pass_global_ctx = False
         # Process parameters
         # Skip 'self' (if bound) and 'ctx'
         sig_params = list(self.signature.parameters.values())
         if sig_params and sig_params[0].name == 'self':
             sig_params.pop(0)
         if sig_params and (sig_params[0].name == 'g_ctx' or sig_params[0].annotation == GlobalContext):
+            self.pass_global_ctx = True
             sig_params.pop(0)
         if sig_params and (sig_params[0].name in ['event', 'ctx'] or sig_params[0].annotation == CommandEvent or 'Event' in str(sig_params[0].annotation)):
             sig_params.pop(0)
@@ -240,7 +249,7 @@ class CommandListener(GenericListener):
                 self.arg_mappings[alias] = param.name
 
     async def check_for_match(self, event: CommandEvent) -> bool:
-        event.invoked_with == self.name
+        return False
 
     async def _run_checks(self, ctx: CommandEvent):
         for check in self.checks:
@@ -332,7 +341,7 @@ class CommandListener(GenericListener):
         # Separate positional args and flags from ctx.args
         positional_args = []
         named_args = {}
-        parsed_args = CommandArgs(ctx.parameters_text)
+        parsed_args = ctx.parsed_args
 
         # Check if we have a VAR_KEYWORD parameter
         has_var_keyword = any(p.kind == ParameterKind.VAR_KEYWORD for p in self.parameters)
@@ -465,8 +474,7 @@ class CommandListener(GenericListener):
             kwargs = {**kwargs, **parsed_kwargs}
         await self._run_verification(event, *args, **kwargs)
         
-        from_cog = getattr(self.func, "_listener_from_cog", False)
-        if from_cog:
+        if not self.pass_global_ctx:
             result = self.func(event, *args, **kwargs)
             if asyncio.iscoroutine(result):
                 await result
@@ -518,104 +526,3 @@ class CommandListener(GenericListener):
         response = strjoin(' – ', name_and_usage, description, restrictions, aliases, cooldowns)
         return response
 
-DELIMETERS = ('=', ':')
-RE_FLAG = re.compile(r'[-a-zA-Z]{2}[a-zA-Z]+[:=]+.+|-[a-zA-Z]\b|--[a-zA-Z_]+\b')
-
-class CommandArgs:
-    def __init__(self, text: str):
-        self.text = text
-        
-        self.args: list[str | Flag] = []  # args are in order of appearance
-        self.flags: list[Flag] = []  # flags are in order of appearance
-        self.grouped_args: list[str] = []  # consecutive non-flag args joined by space
-        self._parse()
-
-    def _parse(self):
-        if not self.text.strip():
-            return
-        
-        in_quotes = None  # None if not in quotes, otherwise the quote char (' or ")
-        current = []
-        args: list[str] = []
-        i = 0
-        n = len(self.text)
-        
-        while i < n:
-            char = self.text[i]
-            
-            # Handle quotes
-            if char in ('"', "'"):
-                if i > 0 and self.text[i-1] == '\\':
-                    # Escaped quote, add to current and remove the backslash
-                    current[-1] = char
-                elif in_quotes is None:
-                    # Start of quoted string
-                    current.append('"')
-                    in_quotes = char
-                elif char == in_quotes:
-                    # End of quoted string
-                    current.append('"')
-                    in_quotes = None
-                else:
-                    # Nested quotes of different type, add to current
-                    current.append(char)
-            elif char.isspace() and in_quotes is None:
-                if current:
-                    args.append(''.join(current))
-                    current = []
-            else:
-                current.append(char)
-                
-            i += 1
-                
-        if current:
-            args.append(''.join(current))
-        
-        for arg in args:
-            delimiter_char = None
-            has_delimiter = False
-            for delimiter in DELIMETERS:
-                if delimiter in arg:
-                    has_delimiter = True
-                    delimiter_char = delimiter
-                    break
-            is_quoted = arg[0] == '"' and arg[-1] == '"'
-            if RE_FLAG.match(arg):
-                flag_name: str = arg.lstrip('-')
-                flag_value: str | None = True
-                if has_delimiter:
-                    if delimiter_char in flag_name:
-                        flag_name, flag_value = flag_name.split(delimiter_char, 1)
-                if isinstance(flag_value, str) and flag_value[0] == '"' and flag_value[-1] == '"':
-                    flag_value = flag_value[1:-1]
-                flag = Flag(flag_name, flag_value)
-                self.flags.append(flag)
-                self.args.append(flag)
-            else:
-                if is_quoted:
-                    arg = arg[1:-1]
-                self.args.append(arg)
-
-        # Build grouped_args by joining consecutive non-flag args with spaces,
-        # using flags as separators (flags are not included in grouped_args)
-        grouped: list[str] = []
-        current_group: list[str] = []
-        for item in self.args:
-            if isinstance(item, Flag):
-                if current_group:
-                    grouped.append(' '.join(current_group))
-                    current_group = []
-            else:
-                current_group.append(item)
-        if current_group:
-            grouped.append(' '.join(current_group))
-        self.grouped_args = grouped
-
-    def get_flag(self, name: str | list[str], case_sensitive: bool = False, default: str | None = None) -> Flag | None:
-        names = name if isinstance(name, list) else [name]
-        for flag in self.flags:
-            if case_sensitive and flag.name in names:
-                return flag
-            elif not case_sensitive and flag.name.lower() in [n.lower() for n in names]:
-                return flag
-        return Flag(name, default)

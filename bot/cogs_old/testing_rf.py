@@ -6,7 +6,7 @@ Provides owner-only debug commands for inspecting manager and channel state.
 from ..commands import Context, Commands, TwitchRedeemContext, TwitchContext, checks, parameter
 from ..command_enums import UserRole, Platform
 from ..command_utils import HasRole, TwitchOnly
-from ..cog import Cog
+from ..commands_old.cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallchannel import RFChannel
 from utils.commands_rf import RFChannelConverter

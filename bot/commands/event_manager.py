@@ -116,6 +116,7 @@ class EventManager:
         return new_cog_cls
         
     async def process_event(self, event: BaseEvent):
+        LOGGER.debug(f"Processing event {event}")
         sent_to_dispatcher = False
         for dispatcher in self.dispatchers.values():
             if event.category in dispatcher.categories:
@@ -123,7 +124,7 @@ class EventManager:
                     await dispatcher.dispatch(self.global_context, event)
                     sent_to_dispatcher = True
                 except Exception as e:
-                    pass
+                    LOGGER.error(f"Exception while sending event to dispatcher: {e}", exc_info=True)
         if not sent_to_dispatcher:
             LOGGER.warning(f"A matching dispatcher for event \"{event}\" was not found.")
     

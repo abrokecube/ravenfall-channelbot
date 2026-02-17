@@ -5,7 +5,7 @@ Ravenfall servers and in-channel actions.
 """
 
 from ..commands import Context, Commands, checks, parameter, cooldown
-from ..cog import Cog
+from ..commands_old.cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
 from utils.format_time import format_seconds, TimeSize
