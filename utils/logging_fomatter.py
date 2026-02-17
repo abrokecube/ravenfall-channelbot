@@ -61,7 +61,7 @@ def setup_logging(
             elif isinstance(config, dict):
                 # Advanced case with custom configuration
                 log_files[logger_name] = {
-                    'filename': config.get('filename', f'{logger_name}.log'),
+                    'filename': config.get('filename', None),
                     'level': config.get('level', logging.DEBUG),
                     'console_level': config.get('console_level', level)  # Default to root level
                 }
@@ -118,6 +118,8 @@ def setup_logging(
     # Set up file handlers for configured loggers
     for logger_name, config in log_files.items():
         filename = config['filename']
+        if not filename:
+            continue
         
         # Create or get existing file handler for this filename
         if filename not in file_handlers:
@@ -183,6 +185,8 @@ def setup_logging(
     # Log to all configured log files, but only once per unique file
     for logger_name, config in log_files.items():
         filename = config['filename']
+        if not filename:
+            continue
         if filename not in logged_files:
             logger = logging.getLogger(logger_name)
             logger.debug(startup_msg)

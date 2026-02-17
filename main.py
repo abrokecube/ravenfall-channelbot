@@ -36,8 +36,24 @@ from database.session import get_async_session
 with open('pid', 'w') as f:
     f.write(str(os.getpid()))
 
-USER_SCOPE = [AuthScope.CHAT_READ, AuthScope.CHAT_EDIT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS, AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS]
+TWITCH_APP_SCOPES = [
+    AuthScope.USER_WRITE_CHAT
+]
+TWITCH_BOT_USER_SCOPES = [
+    AuthScope.CHAT_READ,
+    AuthScope.CHAT_EDIT,
+    AuthScope.USER_BOT,
+    AuthScope.USER_WRITE_CHAT,
+]
+TWITCH_CHANNEL_SCOPES = [
+    AuthScope.CHANNEL_MANAGE_REDEMPTIONS,
+    AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS,
+    AuthScope.CHANNEL_BOT
+]
 logger_config = {
+    'asyncio': {
+        'console_level': logging.INFO,
+    },
     'twitchAPI': {
         'filename': "twitchAPI.log",
         'console_level': logging.INFO,
@@ -82,7 +98,6 @@ logger_config = {
         'filename': 'commands.log',
         'console_level': logging.INFO,
     }
-
 }
 setup_logging(level=logging.DEBUG, loggers_config=logger_config)
 logger = logging.getLogger(__name__)
@@ -95,10 +110,10 @@ for channel in channels:
     if 'command_prefix' not in channel:
         channel['command_prefix'] = '!'
 
-rf_manager = None
+rf_manager: RFChannelManager = None
 
 async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
-    async def get_tokens(user_id: int, user_name: str = None) -> Tuple[str, str]:
+    async def get_twitch_auth_instance(user_id: int | str, user_name: str = None, scopes: List[AuthScope] = TWITCH_CHANNEL_SCOPES) -> Twitch:
         save_new_tokens = True
         async with get_async_session() as session:
             access_token, refresh_token = await db_utils.get_tokens(session, user_id)
@@ -106,9 +121,10 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
                 save_new_tokens = False
 
         while True:
-            twitch = await Twitch(os.getenv("TWITCH_APP_ID"), os.getenv("TWITCH_APP_SECRET"))
+            twitch = await Twitch(os.getenv("TWITCH_APP_ID"), os.getenv("TWITCH_APP_SECRET"), target_app_auth_scope=TWITCH_APP_SCOPES)
             if access_token is None:
-                auth = UserAuthenticator(twitch, USER_SCOPE, True)
+                auth = UserAuthenticator(twitch, scopes, True)
+                print(f"Auth scopes: {', '.join([x.value for x in scopes])}")
                 print(f"Please authenticate with the Twitch account: {user_name or user_id}")
                 result = await auth.authenticate(use_browser=False)
                 if result is not None:
@@ -117,7 +133,7 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
                     continue
 
             try:
-                await twitch.set_user_authentication(access_token, USER_SCOPE, refresh_token)
+                await twitch.set_user_authentication(access_token, scopes, refresh_token)
                 user = None
                 if save_new_tokens:
                     user = await helper.first(twitch.get_users())
@@ -144,7 +160,7 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
             
             if user is not None:
                 if user.id == str(user_id):
-                    return access_token, refresh_token
+                    return twitch
                 else:
                     print("Token does not match user, please try again")
                     access_token = None
@@ -152,17 +168,62 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
                     save_new_tokens = True
                     continue
             else:
-                return access_token, refresh_token
-            
-    async def get_twitch_auth_instance(user_id: Union[int, str], user_name: str = None) -> Twitch:
-        twitch = await Twitch(os.getenv("TWITCH_APP_ID"), os.getenv("TWITCH_APP_SECRET"))
-        access_token, refresh_token = await get_tokens(user_id, user_name)
-        await twitch.set_user_authentication(access_token, USER_SCOPE, refresh_token)
-        return twitch
-    
-    
-    
+                return twitch
+                
+    logger.info("Getting twitch info")
+    twitch = await get_twitch_auth_instance(os.getenv("BOT_USER_ID"), scopes=TWITCH_BOT_USER_SCOPES)
 
+    logger.info("Initializing twitch chat instance")
+    chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
+    twitch_user = await helper.first(twitch.get_users())
+    
+    global_ctx.bot_twitch = twitch
+    global_ctx.twitch_chat = chat
+    
+    twitch_source = TwitchAPIEventSource(chat, twitch, {}, twitch_user)
+    event_manager.add_event_source(twitch_source)
+    
+    async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionAddEvent):
+        await twitch_source.on_channel_point_redemption(redemption.event)
+        
+    async def on_message(message: ChatMessage):
+        global rf_manager
+        await twitch_source.on_message(message)
+        if rf_manager:
+            await rf_manager.event_twitch_message(message)
+
+    async def on_ready(ready_event: EventData):
+        logger.info("Twitch chat is ready")
+        chat.register_event(ChatEvent.MESSAGE, on_message)
+        
+    chat.register_event(ChatEvent.READY, on_ready)
+
+    chat.start()
+        
+    twitches: Dict[str, Twitch] = {}
+    twitch_source.channel_twitches = twitches
+    global_ctx.channel_twitches = twitches
+    
+    twitch_eventsubs = []
+    global_ctx._twitch_channel_eventsubs = twitch_eventsubs
+    
+    logger.info("Subscribing to twitch eventsub")
+    for channel in channels:
+        if channel.get("channel_points_redeems", False):
+            channel_twitch = await get_twitch_auth_instance(channel['channel_id'], channel['channel_name'], TWITCH_CHANNEL_SCOPES)
+            twitches[channel['channel_id']] = channel_twitch
+            eventsub = EventSubWebsocket(channel_twitch)
+            eventsub.start()
+            try:
+                await eventsub.listen_channel_points_custom_reward_redemption_add(
+                    channel['channel_id'],
+                    redemption_callback,
+                )
+                logger.info(f"Listening for redeems in {channel['channel_name']}")
+                twitch_eventsubs.append(eventsub)
+            except Exception as e:
+                logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}", exc_info=True)
+                await eventsub.stop()    
 
 class MyCmdDispatcher(CommandDispatcher):
     def __init__(self):
@@ -185,104 +246,66 @@ async def run():
     rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     asyncio.create_task(rf.login())
     
-    logger.info("Getting twitch info")
-    twitch = await get_twitch_auth_instance(os.getenv("BOT_USER_ID"))
-
-    logger.info("Initializing twitch chat instance")
-    chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
-
     # internal_chat = ChatManager()
     logger.info("Initializing event system")
 
-    twitch_user = await helper.first(twitch.get_users())
-
-    global_ctx = GlobalContext(chat)
+    global_ctx = GlobalContext()
     event_manager = EventManager(global_ctx)
     command_dispatcher = MyCmdDispatcher()
     event_manager.add_dispatcher(command_dispatcher)
-    twitch_source = TwitchAPIEventSource(chat, twitch, {}, twitch_user)
-    event_manager.add_event_source(twitch_source)
 
-    async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionAddEvent):
-        await twitch_source.on_channel_point_redemption(redemption.event)
+    from bot.cogs.testing import TestingCog
+    await event_manager.add_cog(TestingCog)
+    # if os.getenv("COMMAND_TESTING") == "1":
+    #     from bot.cogs.example import ExampleCog
+    #     commands.load_cog(ExampleCog)
+    # else:
+    #     from bot.cogs.testing_rf import TestingRFCog
+    #     commands.load_cog(TestingRFCog, rf_manager=rf_manager)
+    #     from bot.cogs.redeem import RedeemCog
+    #     commands.load_cog(RedeemCog)
+    #     from bot.cogs.redeem_rf import RedeemRFCog
+    #     commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
+    # rfwebops = os.getenv("WEBOPS_URL", "http://pc2-mobile:7102")
+    # from bot.cogs.game import GameCog
+    # commands.load_cog(GameCog, rf_manager=rf_manager, rf_webops_url=rfwebops, ravennest=rf)
+    # from bot.cogs.help import HelpCog
+    # commands.load_cog(HelpCog, commands=commands)
+    # from bot.cogs.info import InfoCog
+    # commands.load_cog(InfoCog, rf_manager=rf_manager)
+    # from bot.cogs.testing import TestingCog
+    # commands.load_cog(TestingCog)
+    # from bot.cogs.bot import BotStuffCog
+    # watchers = os.getenv("WATCHER_URLS", "http://127.0.0.1:8110").split(",")
+    # commands.load_cog(BotStuffCog, rf_manager=rf_manager, watcher_urls=watchers)
 
-    twitch_eventsubs = []
-    twitches = {}
-    logger.info("Subscribing to twitch eventsub")
-    for channel in channels:
-        if channel.get("channel_points_redeems", False):
-            channel_twitch = await get_twitch_auth_instance(channel['channel_id'], channel['channel_name'])
-            twitches[channel['channel_id']] = channel_twitch
-            eventsub = EventSubWebsocket(channel_twitch)
-            eventsub.start()
-            try:
-                await eventsub.listen_channel_points_custom_reward_redemption_add(
-                    channel['channel_id'],
-                    redemption_callback,
-                )
-                logger.info(f"Listening for redeems in {channel['channel_name']}")
-                twitch_eventsubs.append(eventsub)
-            except Exception as e:
-                logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}", exc_info=True)
-                await eventsub.stop()
+    await setup_twitch(global_ctx, event_manager)
 
-    async def on_message(message: ChatMessage):
-        await twitch_source.on_message(message)
-        await rf_manager.event_twitch_message(message)
+    rf_manager = RFChannelManager(channels, global_ctx.twitch_chat, rf, global_ctx.channel_twitches)
+    if not os.getenv("DISABLE_RAVENFALL_INTEGRATION", "").lower() in ("1", "true"):
+        await rf_manager.start()
 
-    async def on_ready(ready_event: EventData):
-        global rf_manager
-        rf_manager = RFChannelManager(channels, chat, rf, twitches)
-        if not os.getenv("DISABLE_RAVENFALL_INTEGRATION", "").lower() in ("1", "true"):
-            await rf_manager.start()
-        await load_cogs()
-        logger.info("Bot is ready for work")
-        chat.register_event(ChatEvent.MESSAGE, on_message)
-        
-        server = SomeEndpoints(rf_manager, None, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), os.getenv("PRIVATE_SERVER_PORT", 8080))
-        await server.start()
-
-    chat.register_event(ChatEvent.READY, on_ready)
-
-    chat.start()
-
-    async def load_cogs():
-        from bot.cogs.testing import TestingCog
-        await event_manager.add_cog(TestingCog)
-        # if os.getenv("COMMAND_TESTING") == "1":
-        #     from bot.cogs.example import ExampleCog
-        #     commands.load_cog(ExampleCog)
-        # else:
-        #     from bot.cogs.testing_rf import TestingRFCog
-        #     commands.load_cog(TestingRFCog, rf_manager=rf_manager)
-        #     from bot.cogs.redeem import RedeemCog
-        #     commands.load_cog(RedeemCog)
-        #     from bot.cogs.redeem_rf import RedeemRFCog
-        #     commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
-        # rfwebops = os.getenv("WEBOPS_URL", "http://pc2-mobile:7102")
-        # from bot.cogs.game import GameCog
-        # commands.load_cog(GameCog, rf_manager=rf_manager, rf_webops_url=rfwebops, ravennest=rf)
-        # from bot.cogs.help import HelpCog
-        # commands.load_cog(HelpCog, commands=commands)
-        # from bot.cogs.info import InfoCog
-        # commands.load_cog(InfoCog, rf_manager=rf_manager)
-        # from bot.cogs.testing import TestingCog
-        # commands.load_cog(TestingCog)
-        # from bot.cogs.bot import BotStuffCog
-        # watchers = os.getenv("WATCHER_URLS", "http://127.0.0.1:8110").split(",")
-        # commands.load_cog(BotStuffCog, rf_manager=rf_manager, watcher_urls=watchers)
-        pass
+    rf_manager = RFChannelManager(channels, global_ctx.twitch_chat, rf, global_ctx.channel_twitches)
+    server = SomeEndpoints(rf_manager, None, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), os.getenv("PRIVATE_SERVER_PORT", 8080))
+    await server.start()
 
     try:
         while True:
             await asyncio.sleep(9999)
     except asyncio.CancelledError:
         logger.info("Bot is shutting down")
-        chat.stop()
-        for eventsub in twitch_eventsubs:
-            await eventsub.stop()
-        await rf_manager.stop()
-        await twitch.close()
+        global_ctx.twitch_chat.stop()
+        tasks = []
+        for twitch in global_ctx.channel_twitches.values():
+            tasks.append(twitch.close())
+        for eventsub in global_ctx._twitch_channel_eventsubs:
+            tasks.append(eventsub.stop())
+        tasks.append(rf_manager.stop())
+        tasks.append(global_ctx.bot_twitch.close())
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for r in results:
+            if isinstance(r, Exception):
+                logging.error(f"Error occurred while shutting down: {r}")
 
 if __name__ == "__main__":
     asyncio.run(run())

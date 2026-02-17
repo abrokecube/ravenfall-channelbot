@@ -74,7 +74,7 @@ class TwitchMessageEvent(MessageEvent):
         max_message_length=500
     )
 
-    async def send(self, text: str, *, me: bool = False, use_http: bool = False):
+    async def send(self, text: str, *, me: bool = False, use_http: bool = True):
         char_limit = self.room_capabilities.max_message_length
         if me:
             char_limit -= 4
@@ -84,16 +84,17 @@ class TwitchMessageEvent(MessageEvent):
             if not use_http:
                 await self.twitch_chat.send_message(self.room_name, text_)
             else:
-                await self.bot_twitch.send_chat_message(
+                await self.channel_twitch.send_chat_message(
                     self.room_id, self.bot_user_id, text_
                 )
 
-    async def reply(self, text: str, *, use_http: bool = False):
-        for text_ in filter_text(self, text, max_length=self.room_capabilities.max_message_length-len(self.author_login)-2):
+    async def reply(self, text: str, *, use_http: bool = True):
+        char_limit = self.room_capabilities.max_message_length - len(self.author_login) - 2
+        for text_ in filter_text(self, text, max_length=char_limit):
             if not use_http:
                 await self.twitch_chat.send_message(self.room_name, text_, self.id)
             else:
-                await self.bot_twitch.send_chat_message(
+                await self.channel_twitch.send_chat_message(
                     self.room_id, self.bot_user_id, text_, self.id
                 )
 
@@ -120,5 +121,5 @@ class TwitchRedemptionEvent(TwitchMessageEvent):
     async def cancel(self):
         await self.update_status(TwitchCustomRewardRedemptionStatus.CANCELED)
         
-    async def reply(self, text, *, use_http = False):
+    async def reply(self, text, *, use_http = True):
         await self.send(f"@{self.author_login} ")
