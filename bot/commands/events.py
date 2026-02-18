@@ -1,6 +1,9 @@
 from __future__ import annotations
 from typing import List, Dict, Any, TYPE_CHECKING, Set
 from dataclasses import dataclass, field
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 from .enums import EventCategory, EventSource, UserRole, TwitchCustomRewardRedemptionStatus
 from .modals import ChatRoomCapabilities
@@ -74,29 +77,40 @@ class TwitchMessageEvent(MessageEvent):
         max_message_length=500
     )
 
-    async def send(self, text: str, *, me: bool = False, use_http: bool = True):
+    async def _send_irc(self, text, *, reply_id: str = None):
+        await self.twitch_chat.send_message(self.room_name, text, reply_id)
+        
+    async def _send_http(self, text, *, reply_id: str = None):
+        await self.channel_twitch.send_chat_message(
+            self.room_id, self.bot_user_id, text, reply_id
+        )
+    async def _send(self, text: str, *, use_http: bool = True, reply_id: str = None):
+        methods = []
+        if use_http:
+            methods = [self._send_http, self._send_irc]
+        else:
+            methods = [self._send_irc, self._send_http]
+        for m in methods:
+            try:
+                await m(text, reply_id=reply_id)
+                break
+            except Exception as e:
+                LOGGER.warning("Failed to send message", exc_info=True)
+                continue
+
+    async def send(self, text: str, *, me: bool = False, use_http: bool = True, reply_id: str = None):
         char_limit = self.room_capabilities.max_message_length
         if me:
             char_limit -= 4
         for text_ in filter_text(self, text, max_length=char_limit):
             if me:
                 text_ = f"/me {text_}"
-            if not use_http:
-                await self.twitch_chat.send_message(self.room_name, text_)
-            else:
-                await self.channel_twitch.send_chat_message(
-                    self.room_id, self.bot_user_id, text_
-                )
+            await self._send(text_, use_http=use_http, reply_id=reply_id)
 
     async def reply(self, text: str, *, use_http: bool = True):
         char_limit = self.room_capabilities.max_message_length - len(self.author_login) - 2
         for text_ in filter_text(self, text, max_length=char_limit):
-            if not use_http:
-                await self.twitch_chat.send_message(self.room_name, text_, self.id)
-            else:
-                await self.channel_twitch.send_chat_message(
-                    self.room_id, self.bot_user_id, text_, self.id
-                )
+            await self._send(text_, use_http=use_http, reply_id=self.id)
 
 @dataclass(kw_only=True)
 class TwitchRedemptionEvent(TwitchMessageEvent):

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Awaitable, Dict
+from typing import TYPE_CHECKING, Callable, Awaitable, Dict, Set
 if TYPE_CHECKING:
     from .event_manager import EventManager
 
@@ -23,19 +23,25 @@ if TYPE_CHECKING:
     from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionAddEvent, ChannelPointsCustomRewardRedemptionData
 
 class TwitchAPIEventSource(BaseEventSource):
-    def __init__(self, chat: Chat, bot_twitch: Twitch, channel_twitches: Dict[str, Twitch], bot_user: TwitchUser):
+    def __init__(
+        self, chat: Chat, bot_twitch: Twitch,
+        channel_twitches: Dict[str, Twitch],
+        bot_user: TwitchUser, bot_admin_uids: Set[str]):
         super().__init__()
         self.event_platform = EventSource.Twitch
         self.chat: Chat = chat
         self.bot_twitch: Twitch = bot_twitch
         self.bot_user: TwitchUser = bot_user
         self.channel_twitches: Dict[str, Twitch] = channel_twitches
+        self.bot_admin_uids = bot_admin_uids
     
     def register_events(self, chat: Chat):
         chat.register_event(ChatEvent.MESSAGE, self.on_message)
     
     def _get_user_roles(self, user: ChatUser, room_id: str):
         roles = set()
+        if user.id in self.bot_admin_uids:
+            roles.add(UserRole.BOT_ADMINISTRATOR)
         if user.id == room_id:
             roles.add(UserRole.ADMINISTRATOR)
         if user.lead_mod:
@@ -43,6 +49,7 @@ class TwitchAPIEventSource(BaseEventSource):
         if user.mod:
             roles.add(UserRole.MODERATOR)
         roles.add(UserRole.USER)
+        return roles
     
     async def on_message(self, message: ChatMessage):
         await self.send_event(TwitchMessageEvent(

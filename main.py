@@ -180,7 +180,8 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
     global_ctx.bot_twitch = twitch
     global_ctx.twitch_chat = chat
     
-    twitch_source = TwitchAPIEventSource(chat, twitch, {}, twitch_user)
+    twitch_admin_uids = set((os.getenv("BOT_USER_ID"), os.getenv("OWNER_TWITCH_ID")))
+    twitch_source = TwitchAPIEventSource(chat, twitch, {}, twitch_user, twitch_admin_uids)
     event_manager.add_event_source(twitch_source)
     
     async def redemption_callback(redemption: ChannelPointsCustomRewardRedemptionAddEvent):
@@ -256,6 +257,10 @@ async def run():
 
     from bot.cogs.testing import TestingCog
     await event_manager.add_cog(TestingCog)
+    from bot.cogs.example import ExampleCog
+    await event_manager.add_cog(ExampleCog)
+    from bot.cogs.help import HelpCog
+    await event_manager.add_cog(HelpCog)
     # if os.getenv("COMMAND_TESTING") == "1":
     #     from bot.cogs.example import ExampleCog
     #     commands.load_cog(ExampleCog)

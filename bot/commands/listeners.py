@@ -7,9 +7,9 @@ if TYPE_CHECKING:
     from .events import BaseEvent, MessageEvent, CommandEvent
     from .cooldown import Cooldown
     from .checks import BaseCheck
-    from .converters import BaseConverter
     from .cog import Cog
 from .global_context import GlobalContext
+from .converters import BaseConverter
 from .modals import MetaFilter, Parameter, ParameterKind, BUILTIN_TYPE_DOCS, Flag
 from .enums import Dispatcher
 from .exceptions import (
@@ -90,8 +90,8 @@ class GenericListener(BaseListener):
 class CommandListener(GenericListener):
     def __init__(
         self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], cog: 'Cog' = None,
-        cooldown = None, name: str = None, checks: list[BaseCheck] = None, verifier: Callable = None, 
-        aliases: list[str] = [], hidden: bool = False, 
+        name: str = None, aliases: list[str] = [], cooldown = None, checks: list[BaseCheck] = None,
+        verifier: Callable = None, hidden: bool = False, 
         help: str = None, short_help: str = None, title: str = None
         ):
         super().__init__(func, cog, cooldown)
@@ -99,13 +99,16 @@ class CommandListener(GenericListener):
         
         self.verifier: Callable = getattr(func, '_listener_command_verifier', verifier)
         
-        self.checks = []
+        self.checks: list[BaseCheck] = []
         if checks:
             self.checks.extend(checks)
         self.checks.extend(getattr(func, '_listener_command_checks', []))
         
         self.name = name or func.__name__
         self.aliases = []
+        if aliases:
+            self.aliases.extend(aliases)
+        
         self._id = self.name
         
         doc = docstring_parser.parse(func.__doc__ or "")
@@ -251,10 +254,10 @@ class CommandListener(GenericListener):
     async def check_for_match(self, event: CommandEvent) -> bool:
         return False
 
-    async def _run_checks(self, ctx: CommandEvent):
+    async def _run_checks(self, g_ctx: GlobalContext, ctx: CommandEvent):
         for check in self.checks:
             try:
-                check_result = check.check(ctx)
+                check_result = check.check(g_ctx, ctx)
                 if asyncio.iscoroutine(check_result):
                     check_result = await check_result
                 
@@ -265,7 +268,8 @@ class CommandListener(GenericListener):
             except CheckFailure:
                 raise
             except Exception as e:
-                raise CheckFailure(f"Check raised an error: {e}")
+                raise e
+                # raise (f"Check raised an error: {e}")
         return True
 
     async def _run_verification(self, event: CommandEvent, *args, **kwargs):
@@ -283,7 +287,7 @@ class CommandListener(GenericListener):
             except VerificationFailure:
                 raise
             except Exception as e:
-                raise VerificationFailure("There was an error during verification")
+                raise VerificationFailure("An unknown error occurred")
         return True
 
     async def _convert_argument(self, ctx: CommandEvent, value: str | Any, param: Parameter) -> Any:
@@ -466,7 +470,7 @@ class CommandListener(GenericListener):
         return args, kwargs
 
     async def invoke(self, global_ctx, event, *args, **kwargs):
-        await self._run_checks(event)
+        await self._run_checks(global_ctx, event)
         await self._check_cooldown(event)
         if self.parameters:
             parsed_args, parsed_kwargs = await self._parse_arguments(event)

@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .cooldown import Cooldown
-    from .modals import Parameter, ParameterKind
+from .modals import Parameter, ParameterKind
+
 
 class ListenerError(Exception):
     """Base exception for listener-related errors."""

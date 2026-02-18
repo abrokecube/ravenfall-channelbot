@@ -25,7 +25,8 @@ from ..commands.decorators import (
     cooldown
 )
 from ..commands.checks import (
-    HasRole
+    HasRole,
+    MinPermissionLevel
 )
 from ..commands.enums import UserRole, BucketType
 
@@ -65,7 +66,7 @@ class ExampleCog(Cog):
     #     """Example of a simple redeem without parameters."""
     #     await ctx.message.send(f"{ctx.author} says: Stay hydrated! (args: {args})")
     
-    @command(name="echo")
+    @command(name="echo", aliases=['echo1', 'agecko'])
     async def echo(self, ctx: CommandEvent, message: str):
         """Echo a message back to the user.
         
@@ -92,7 +93,7 @@ class ExampleCog(Cog):
         await ctx.message.reply(f"{a} × {b} = {result}")
     
     @command(name="divide")
-    @checks(HasRole(UserRole.BOT_ADMINISTRATOR))
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
     async def divide(self, ctx: CommandEvent, numerator: float, denominator: float):
         """Divide two numbers.
         
@@ -121,12 +122,11 @@ class ExampleCog(Cog):
             !greet
             !greet @borkedcube
         """
-        target = username or ctx.author
+        target = username or ctx.message.author_name
         await ctx.message.reply(f"Hello, {target}! 👋")
     
     @command(name="setcolor")
-    @parameter('color', converter=Color)
-    async def setcolor(self, ctx: CommandEvent, color: str):
+    async def setcolor(self, ctx: CommandEvent, color: Color):
         """Set your favorite color.
                     
         Examples:
@@ -141,7 +141,7 @@ class ExampleCog(Cog):
             return "Amount must be greater than 0."
         if amount < 0:
             return "Amount must be positive."
-        if user == ctx.author:
+        if user in [ctx.message.author_login, ctx.message.author_name]:
             return "You cannot transfer coins to yourself."
         return True
 
@@ -160,7 +160,7 @@ class ExampleCog(Cog):
 
 
     @command(name="modcommand")
-    @checks(HasRole(UserRole.BOT_ADMINISTRATOR, UserRole.ADMINISTRATOR, UserRole.MODERATOR))
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
     async def modcommand(self, ctx: CommandEvent):
         """A command only moderators and the bot owner can use.
         

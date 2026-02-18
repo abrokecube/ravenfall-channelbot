@@ -33,7 +33,7 @@ def command(
             "verifier": verifier,
             "hidden": hidden
         })
-        func._listener_command = kwargs
+        func._listener_init_params = kwargs
         func._listener_meta_filter = MetaFilter(
             (EventCategory.Message,), True,
             [], False

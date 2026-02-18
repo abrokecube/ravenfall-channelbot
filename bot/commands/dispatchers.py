@@ -53,11 +53,16 @@ class BaseDispatcher:
         self.listeners: Dict[str, BaseListener] = {}
         self.categories: Set[EventCategory] = set([EventCategory.Generic])
         
+    def _func_to_listener(self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
+        name = func.__name__
+        init_params = getattr(func, "_listener_init_params", {})
+        listener: BaseListener = self._func_listener(listener, **init_params)
+        listener._id = name
+        return listener
+        
     def add_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
         if not isinstance(listener, BaseListener):
-            name = f"{listener.__name__}_func"
-            listener = self._func_listener(listener)
-            listener._id = name
+            listener = self._func_to_listener(listener)
         if listener._id in self.listeners:
             raise ValueError(f"Listener with id '{listener._id}' already exists!")
         if listener.expected_dispatcher != self._id:
@@ -66,7 +71,7 @@ class BaseDispatcher:
     
     def remove_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
         if not isinstance(listener, BaseListener):
-            listener_id = f"{listener.__name__}_func"
+            listener_id = listener.__name__
         else:
             listener_id = listener._id
         if not listener_id in self.listeners:
@@ -98,35 +103,74 @@ class SimpleDispatcher(BaseDispatcher):
         ])
         
 class CommandDispatcher(BaseDispatcher):
-    def __init__(self):
+    def __init__(self, case_sensitive: bool = False):
         super().__init__()
         self._id = Dispatcher.Command
         self._func_listener = CommandListener
         self.categories = set([EventCategory.Message])
         self.listeners: Dict[str, CommandListener] = {}
+        self.listeners_and_aliases: Dict[str, CommandListener] = {}
         self.error_cooldown = Cooldown(1, 5, [BucketType.USER, BucketType.CHANNEL])
+        self.case_sensitive = case_sensitive
 
-    def add_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
+    def add_listener(self, listener: CommandListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
         if not isinstance(listener, BaseListener):
-            listener = self._func_listener(listener)
-        if listener._id in self.listeners:
-            raise ValueError(f"Command '{listener._id}' already exists!")
+            listener = self._func_to_listener(listener)
         if listener.expected_dispatcher != self._id:
             raise ValueError(f"Listener {listener} cannot be assigned to this dispatcher!")
-        self.listeners[listener._id] = listener
+        
+        name: str = listener._id
+        aliases: List[str] = listener.aliases.copy()
+        if not self.case_sensitive:
+            name = name.lower()
+            aliases = [a.lower() for a in aliases]
+        
+        if name in self.listeners:
+            other = self.listeners[name]
+            raise ValueError(f"Command name '{name}' ({listener.cog.__qualname__}) is taken by command '{other._id}' ({other.cog.__qualname__})")
+        if name in self.listeners_and_aliases:
+            other = self.listeners_and_aliases[name]
+            raise ValueError(f"Command name '{name}' ({listener.cog.__qualname__}) is taken by an alias of '{other._id}' ({other.cog.__qualname__})")
+        for alias in aliases:
+            if alias in self.listeners:
+                other = self.listeners[alias]
+                raise ValueError(f"Command alias '{alias}' of command '{name}' ({listener.cog.__qualname__}) is taken by command '{other._id}' ({other.cog.__qualname__})")
+            if alias in self.listeners_and_aliases:
+                other = self.listeners_and_aliases[alias]
+                raise ValueError(f"Command alias '{alias}' of command '{name}' ({listener.cog.__qualname__}) is taken by an alias of '{other._id}' ({other.cog.__qualname__})")
+            
+        self.listeners[name] = listener
+        self.listeners_and_aliases[name] = listener
+        for alias in aliases:
+            self.listeners_and_aliases[alias] = listener
     
-    def remove_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
+    def remove_listener(self, listener: CommandListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
+        name: str = ""
+        aliases: List[str] = []
         if not isinstance(listener, BaseListener):
-            listener_id = f"{listener.__name__}"
+            name = listener.__name__
         else:
-            listener_id = listener._id
-        if not listener_id in self.listeners:
-            raise ValueError(f"Listener with id '{listener._id}' doesn't exist!")
-        self.listeners.pop(listener._id)
+            name = listener._id
+            aliases = listener.aliases.copy()
+            
+        if not self.case_sensitive:
+            name = name.lower()
+            aliases = [a.lower() for a in aliases]
+            
+        if not name in self.listeners:
+            raise ValueError(f"Dispatcher '{self.__qualname__}' does not have a listener with the name '{listener._id}'")
+            
+        self.listeners.pop(name)
+        self.listeners_and_aliases.pop(name)
+        for alias in aliases:
+            self.listeners_and_aliases.pop(alias)
 
     def _find_command(self, text: str) -> tuple[str, str]:
-        for cmd in sorted(self.listeners.keys(), key=len, reverse=True):
-            if text == cmd or text.startswith(cmd + ' '):
+        norm_text = text
+        if not self.case_sensitive:
+            norm_text = text.lower()
+        for cmd in sorted(self.listeners_and_aliases.keys(), key=len, reverse=True):
+            if norm_text == cmd or norm_text.startswith(cmd + ' '):
                 return cmd, text[len(cmd):].strip()
         return None, text
 
@@ -148,10 +192,10 @@ class CommandDispatcher(BaseDispatcher):
             content = event.text[len(used_prefix):]
             
             command_name, remaining_text = self._find_command(content)
-            if not command_name or command_name not in self.listeners:
+            if not command_name or command_name not in self.listeners_and_aliases:
                 return
 
-            command = self.listeners[command_name]
+            command = self.listeners_and_aliases[command_name]
             copied_msg_event = dataclasses.replace(event, text=filter_text(event.text))
 
             new_event = CommandEvent(

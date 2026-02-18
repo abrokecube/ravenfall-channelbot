@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from utils.utils import strjoin
 
 if TYPE_CHECKING:
-    from events import MessageEvent
+    from .listeners import CommandListener
 
 class MetaFilter(NamedTuple):
     categories: list[EventCategory]
@@ -35,7 +35,7 @@ class Parameter:
     type_short_help: str = None
     type_help: str = None
     help: str | None = None
-    # command: 'Command' = None
+    command: CommandListener = None
     regex: str = None
     
     def get_parameter_display(self, invoked_name: str = None) -> str:
@@ -125,3 +125,4 @@ BUILTIN_TYPE_DOCS = {
         'help': 'A boolean value (true/false, yes/no, on/off).'
     }
 }
+

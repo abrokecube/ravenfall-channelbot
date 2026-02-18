@@ -14,7 +14,10 @@ class Cog:
             d = event_manager.dispatchers.get(getattr(attr, "_listener_expected_dispatcher", None), None)
             if not d:
                 continue
-            self.listeners.append(d._func_listener(attr))
+            init_params = getattr(attr, "_listener_init_params", {})
+            new_listener = d._func_listener(attr, **init_params)
+            self.listeners.append(new_listener)
+            new_listener.cog = self
         
     async def setup(self):
         """Called when cog is being added"""

@@ -38,6 +38,23 @@ class UserRole(StrEnum):
     ADMINISTRATOR = 'admin'
     MODERATOR = 'moderator'
     USER = 'user'
+    
+    def level(self) -> int:
+        return USER_ROLE_HIERARCHY_VALUES.get(self, 0)
+
+USER_ROLE_HIERARCHY = (
+    UserRole.BOT_ADMINISTRATOR,
+    UserRole.ADMINISTRATOR,
+    UserRole.MODERATOR,
+    UserRole.USER
+)
+USER_ROLE_HIERARCHY_VALUES: dict[UserRole, int] = {}
+for i, u in enumerate(reversed(USER_ROLE_HIERARCHY)):
+    if isinstance(u, tuple):
+        for su in u:
+            USER_ROLE_HIERARCHY_VALUES[su] = i
+    else:
+        USER_ROLE_HIERARCHY_VALUES[u] = i
 
 class TwitchCustomRewardRedemptionStatus(Enum):
     UNFULFILLED = 'UNFULFILLED'

@@ -68,7 +68,7 @@ class EventManager:
             raise ValueError(f"Cog {cog_cls.__name__} is already loaded.")
             
         cog_instance = cog_cls(self, **kwargs)
-        self.cogs[cog_cls] = cog_instance
+        self.cogs[cog_cls.__name__] = cog_instance
         
         for listener in cog_instance.listeners:
             self.add_listener(listener)
@@ -79,7 +79,7 @@ class EventManager:
         if cog_cls not in self.cogs:
             raise ValueError(f"Cog {cog_cls.__name__} is not loaded.")
             
-        cog_instance = self.cogs[cog_cls]
+        cog_instance = self.cogs[cog_cls.__name__]
         
         await cog_instance.stop()
         
@@ -89,7 +89,7 @@ class EventManager:
             except ValueError:
                 pass
                 
-        del self.cogs[cog_cls]
+        del self.cogs[cog_cls.__name__]
 
     async def reload_cog(self, cog_cls: Type[Cog]) -> Type[Cog]:
         import importlib
