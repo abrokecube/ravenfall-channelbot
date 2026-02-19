@@ -977,12 +977,12 @@ class RedeemRFCog(Cog):
             return
         
         async with get_async_session() as session:
-            trans_id = await add_credits(session, user.id, amount, f"Added by {ctx.author}")
+            trans_id = await add_credits(session, user.id, amount, f"Added by {ctx.message.author_login}")
             await ctx.message.reply(f"Gave {amount:,} {pl(amount, 'credit', 'credits')} to {recipient_name}. (ID: {trans_id})")
 
 
     @on_twitch_redeem(lambda e: e.redeem_name == "Restart Ravenfall")
-    async def restart_ravenfall(self, ctx: TwitchRedemptionEvent):
+    async def restart_ravenfall(self, ctx: TwitchRedemptionEvent, result: bool):
         channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()
@@ -997,7 +997,7 @@ class RedeemRFCog(Cog):
             await ctx.cancel()
             
     @on_twitch_redeem(lambda e: e.redeem_name == "Restart RavenBot")
-    async def restart_ravenbot(self, ctx: TwitchRedemptionEvent):
+    async def restart_ravenbot(self, ctx: TwitchRedemptionEvent, result: bool):
         channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()
@@ -1008,7 +1008,7 @@ class RedeemRFCog(Cog):
         await ctx.send("Done!")
 
     @on_twitch_redeem(lambda e: e.redeem_name == "Queue Dungeon scroll")
-    async def queue_dungeon(self, ctx: TwitchRedemptionEvent):
+    async def queue_dungeon(self, ctx: TwitchRedemptionEvent, result: bool):
         channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()
@@ -1037,7 +1037,7 @@ class RedeemRFCog(Cog):
             return
         
     @on_twitch_redeem(lambda e: e.redeem_name == "Queue Raid scroll")
-    async def queue_raid(self, ctx: TwitchRedemptionEvent):
+    async def queue_raid(self, ctx: TwitchRedemptionEvent, result: bool):
         channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()

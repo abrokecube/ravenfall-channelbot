@@ -201,7 +201,7 @@ class InfoCog(Cog):
             channel: Target channel.
         """
         if not target_user:
-            target_user = ctx.author        
+            target_user = ctx.message.author_login        
         query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[30s]))" % (target_user, channel.channel_name)
         data = await get_prometheus_series(query, 10*60)
         if len(data) == 0:
@@ -228,7 +228,7 @@ class InfoCog(Cog):
             channel: Target channel.
         """
         if not target_user:
-            target_user = ctx.author        
+            target_user = ctx.message.author_login        
 
         player_info = await channel.get_query("select * from players where name = \'%s\'" % target_user)
         if isinstance(player_info, dict) and player_info:

@@ -60,12 +60,7 @@ class Color(BaseConverter):
 
 class ExampleCog(Cog):
     """Example cog showcasing new command features."""
-    
-    # @Cog.redeem(name="test redeem")
-    # async def hydrate_redeem(self, ctx: TwitchRedeemCommandEvent, *args):
-    #     """Example of a simple redeem without parameters."""
-    #     await ctx.message.send(f"{ctx.author} says: Stay hydrated! (args: {args})")
-    
+        
     @command(name="echo", aliases=['echo1', 'agecko'])
     async def echo(self, ctx: CommandEvent, message: str):
         """Echo a message back to the user.
