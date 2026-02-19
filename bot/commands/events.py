@@ -130,7 +130,7 @@ class TwitchRedemptionEvent(TwitchMessageEvent):
                     status
                 )
             except TwitchResourceNotFound:
-                LOGGER.warning("Redemption resource was already used")
+                LOGGER.warning(f"Redemption resource was already used ({self.redeem_name}: {self.redeem_id})")
         else:
             # logger.warning(f"Redemption is not in the UNFULFILLED state (current: {self.redemption.status})")
             pass

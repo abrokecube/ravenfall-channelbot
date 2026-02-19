@@ -279,6 +279,8 @@ async def run():
     from bot.cogs.bot import BotStuffCog
     watchers = os.getenv("WATCHER_URLS", "http://127.0.0.1:8110").split(",")
     await event_manager.add_cog(BotStuffCog, watcher_urls=watchers)
+    from bot.cogs.debug import DebugCog
+    await event_manager.add_cog(DebugCog)
 
     await setup_twitch(global_ctx, event_manager)
 

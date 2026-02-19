@@ -129,7 +129,7 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15):
         TimeoutError: If no response was received within `timeout` seconds.
     """
     response = await send_to_server_and_wait_response(channel.middleman_connection_id, message, timeout=timeout)
-    if not response["success"]:
+    if not response.get("success", False):
         logger.error(f"Could not talk to Ravenfall: {response}")
         raise CouldNotSendMessageError("Could not talk to Ravenfall")
     if response["timeout"]:
@@ -298,7 +298,7 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
                     )
                 )
             except Exception as e:
-                logger.info(f"Failed to send coins to {target_user_name} from {user['user_name']}: {send_exception}", exc_info=True)
+                logger.error(f"Failed to send coins to {target_user_name} from {user['user_name']}: {send_exception}", exc_info=True)
                 response = None
                 send_exception = e
 
@@ -484,6 +484,8 @@ class RedeemRFCog(Cog):
 
     @routine(delta=timedelta(seconds=15), wait_remainder=True, max_attempts=99999)
     async def idle_points(self):
+        if not self.global_context.ravenfall_manager:
+            return
         for ch in self.global_context.ravenfall_manager.channels:
             chars: List[Player] = await ch.get_query("select * from players")
             if not chars:

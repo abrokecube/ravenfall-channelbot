@@ -81,7 +81,17 @@ class BaseDispatcher:
         if not listener_id in self.listeners:
             raise ValueError(f"Listener with id '{listener._id}' doesn't exist!")
         self.listeners.pop(listener._id)
-        
+    
+    async def _invoke_listener(self, listener: BaseListener, g_ctx: GlobalContext, event: BaseEvent, *args, **kwargs):
+        try:
+            await listener.invoke(g_ctx, event, *args, **kwargs)
+        except Exception as error:
+            if not isinstance(error, ListenerError):
+                LOGGER.error(f"Error in {listener.func.__name__} occurred during command invocation: {error}", exc_info=True)
+            else:
+                LOGGER.error(f"Error in {listener.func.__name__} handled during command invocation: {error}")
+            await self.on_invoke_error(g_ctx, event, error)
+    
     async def dispatch(self, global_context: GlobalContext, event: BaseEvent):
         for l in self.listeners.values():
             match_result = False
@@ -90,12 +100,8 @@ class BaseDispatcher:
             except Exception as e:
                 LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
             
-            try:
-                if match_result:
-                    await l.invoke(global_context, event)
-            except Exception as e:
-                LOGGER.error(f"Error occurred during listener invocation: {e}", exc_info=True)
-                await self.on_invoke_error(global_context, event, e)
+            if match_result:
+                await self._invoke_listener(l, global_context, event)
                 
     async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception):
         pass
@@ -118,12 +124,8 @@ class SimpleDispatcher(BaseDispatcher):
             except Exception as e:
                 LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
             
-            try:
-                if match_result:
-                    await l.invoke(global_context, event, match_result)
-            except Exception as e:
-                LOGGER.error(f"Error occurred during listener invocation: {e}", exc_info=True)
-                await self.on_invoke_error(global_context, event, e)
+            if match_result:
+                await self._invoke_listener(l, global_context, event, match_result)
 
 class TwitchRedeemDispatcher(SimpleDispatcher):
     def __init__(self):
