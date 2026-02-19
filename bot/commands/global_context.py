@@ -6,6 +6,9 @@ if TYPE_CHECKING:
     from twitchAPI.chat import Chat
     from twitchAPI.twitch import Twitch
     from twitchAPI.eventsub.websocket import EventSubWebsocket
+    
+    from bot.ravenfallmanager import RFChannelManager
+    from ravenpy import RavenNest
 
 @dataclass
 class GlobalContext:
@@ -13,4 +16,8 @@ class GlobalContext:
     bot_twitch: Twitch = None
     channel_twitches: Dict[str, Twitch] = field(default_factory=dict)  # channel id -> Twitch
     _twitch_channel_eventsubs: List[EventSubWebsocket] = field(default_factory=list)
+    
+    ravennest: RavenNest = None
+    ravenfall_manager: RFChannelManager = None
+    
     

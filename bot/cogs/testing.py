@@ -43,20 +43,20 @@ class TestingCog(Cog):
     #     """
     #     await ctx.reply(f"hi {ctx.author}")
 
-    # @Cog.command(name="ping", help="Pong!")
-    # async def ping(self, ctx: CommandEvent):
-    #     """Simple ping command that replies with 'Pong!'."""
-    #     await ctx.reply("Pong!")
+    @command(name="ping", help="Pong!")
+    async def ping(self, ctx: CommandEvent):
+        """Simple ping command that replies with 'Pong!'."""
+        await ctx.message.reply("Pong!")
 
-    # @Cog.command()
-    # async def roles(self, ctx: CommandEvent):
-    #     """Show your current roles.
+    @command()
+    async def roles(self, ctx: CommandEvent):
+        """Show your current roles.
         
-    #     Examples:
-    #         !roles
-    #     """
-    #     role_names = [role.value for role in ctx.roles]
-    #     await ctx.reply(f"Your roles: {', '.join(role_names)}")
+        Examples:
+            !roles
+        """
+        role_names = [role.value for role in ctx.message.author_roles]
+        await ctx.message.reply(f"Your roles: {', '.join(role_names)}")
 
     # @Cog.redeem(name="Test redeem")
     # async def test(self, ctx: TwitchRedeemCommandEvent):

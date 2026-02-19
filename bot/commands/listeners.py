@@ -108,9 +108,7 @@ class LambdaListener(GenericListener):
     async def check_for_match(self, event):
         if not isinstance(event, self.event_types):
             return False
-        if not self.match_fn(event):
-            return False
-        return True
+        return self.match_fn(event)
 
 class CommandListener(GenericListener):
     def __init__(
@@ -312,55 +310,76 @@ class CommandListener(GenericListener):
                 raise VerificationFailure("An unknown error occurred")
         return True
 
-    async def _convert_argument(self, ctx: CommandEvent, value: str | Any, param: Parameter) -> Any:
+    async def _convert_argument(self, ctx: CommandEvent, value: str | Any, param: Parameter, g_ctx: GlobalContext = None) -> Any:
         if value is None:
             return value
         
         if param.annotation == inspect.Parameter.empty:
             return value
             
-        type_ = param.converter
+        conv_obj = param.converter
         
         # Check for custom converter
-        if hasattr(type_, 'convert') and inspect.iscoroutinefunction(type_.convert):
+        if hasattr(conv_obj, 'convert'):
             if value == True:
                 raise EmptyFlagValueError(param)
             if not isinstance(value, str):
-                if type(value) is type(type_):
+                if type(value) is type(conv_obj):
                     return value
             try:
-                return await type_.convert(ctx, value)
+                # Inspect the convert method's signature to determine parameters
+                convert_method = getattr(conv_obj, 'convert')
+                # sig = inspect.signature(convert_method)
+                # params = list(sig.parameters.values())
+                
+                # if params and params[0].name in ('self', 'cls'):
+                #     params.pop(0)
+                
+                # if len(params) >= 2:
+                #     first_param = params[0]
+                    
+                #     if first_param.annotation == 'GlobalContext':
+                #         result = convert_method(g_ctx, ctx, value)
+                #     else:
+                #         result = convert_method(ctx, value)
+                # else:
+                #     result = convert_method(ctx, value)
+                
+                result = convert_method(g_ctx, ctx, value)
+                if asyncio.iscoroutine(result):
+                    return await result
+                return result
             except ArgumentConversionError as e:
                 raise ArgumentConversionError(e.message, value, param)
             except Exception as e:
                 raise ArgumentConversionError(None, value, param, e)
                         
-        if type_ is bool:
+        if conv_obj is bool:
             if isinstance(value, bool):
                 return value
             return value.lower() in ('true', 'yes', '1', 'on')
-        elif type_ is int:
+        elif conv_obj is int:
             try:
                 return int(value)
             except ValueError as e:
                 raise ArgumentConversionError("Expected an integer", value, param, e)
-        elif type_ is float:
+        elif conv_obj is float:
             try:
                 return float(value)
             except ValueError as e:
                 raise ArgumentConversionError("Expected a number", value, param, e)
-        elif type_ is str:
+        elif conv_obj is str:
             if value == True:
                 raise EmptyFlagValueError(param)
             return value
         else:
             # Attempt to call the type as a constructor
             try:
-                return type_(value)
+                return conv_obj(value)
             except Exception as e:
-                raise ArgumentConversionError(f"Could not convert to {type_.__name__}", value, param, e)    
+                raise ArgumentConversionError(f"Could not convert to {conv_obj.__name__}", value, param, e)    
 
-    async def _parse_arguments(self, ctx: CommandEvent) -> tuple[list, dict]:
+    async def _parse_arguments(self, ctx: CommandEvent, g_ctx: GlobalContext) -> tuple[list, dict]:
         args = []
         kwargs = {}
         
@@ -400,7 +419,7 @@ class CommandListener(GenericListener):
             # 1. Handle VAR_POSITIONAL (*args)
             if param.kind == ParameterKind.VAR_POSITIONAL:
                 for arg in positional_args[positional_index:]:
-                    converted = await self._convert_argument(ctx, arg, param)
+                    converted = await self._convert_argument(ctx, arg, param, g_ctx)
                     args.append(converted)
                 positional_index = len(positional_args)
                 continue
@@ -408,7 +427,7 @@ class CommandListener(GenericListener):
             # 2. Handle VAR_KEYWORD (**kwargs)
             if param.kind == ParameterKind.VAR_KEYWORD:
                 for name, value in list(named_args.items()):
-                    converted = await self._convert_argument(ctx, value, param)
+                    converted = await self._convert_argument(ctx, value, param, g_ctx)
                     kwargs[name] = converted
                     del named_args[name]
                 continue
@@ -420,14 +439,14 @@ class CommandListener(GenericListener):
                 val = named_args[param_name]
                 del named_args[param_name]
                 
-                converted = await self._convert_argument(ctx, val, param)
+                converted = await self._convert_argument(ctx, val, param, g_ctx)
                 kwargs[param_name] = converted
                 continue
             
             # If KEYWORD_ONLY and not in named_args (checked above)
             if param.kind == ParameterKind.KEYWORD_ONLY:
                 if param.default != inspect.Parameter.empty:
-                    converted = await self._convert_argument(ctx, param.default, param)
+                    converted = await self._convert_argument(ctx, param.default, param, g_ctx)
                     kwargs[param_name] = converted
                 elif param.is_optional:
                     kwargs[param_name] = None
@@ -467,7 +486,7 @@ class CommandListener(GenericListener):
                     val = current_val
                     positional_index += tokens_consumed
                 
-                converted = await self._convert_argument(ctx, val, param)
+                converted = await self._convert_argument(ctx, val, param, g_ctx)
                 
                 # Decide where to put it
                 if param.kind == ParameterKind.POSITIONAL_ONLY:
@@ -477,7 +496,7 @@ class CommandListener(GenericListener):
             else:
                 # Not provided positionally
                 if param.default != inspect.Parameter.empty:
-                    converted = await self._convert_argument(ctx, param.default, param)
+                    converted = await self._convert_argument(ctx, param.default, param, g_ctx)
                     kwargs[param_name] = converted
                 elif param.is_optional:
                     kwargs[param_name] = None
@@ -495,7 +514,7 @@ class CommandListener(GenericListener):
         await self._run_checks(global_ctx, event)
         await self._check_cooldown(event)
         if self.parameters:
-            parsed_args, parsed_kwargs = await self._parse_arguments(event)
+            parsed_args, parsed_kwargs = await self._parse_arguments(event, global_ctx)
             args = (*args, *parsed_args)
             kwargs = {**kwargs, **parsed_kwargs}
         await self._run_verification(event, *args, **kwargs)

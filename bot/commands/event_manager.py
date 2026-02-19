@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 from .enums import Dispatcher, EventCategory
 from .dispatchers import SimpleDispatcher
 from .listeners import BaseListener
+import asyncio
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class EventManager:
         self.dispatchers: Dict[Dispatcher, BaseDispatcher] = {
             Dispatcher.Generic: SimpleDispatcher()
         }
-        self.cogs: Dict[Type[Cog], Cog] = {}
+        self.cogs: Dict[str, Cog] = {}
         self.global_context: GlobalContext = global_context
         
     def add_event_source(self, source: BaseEventSource):
@@ -76,20 +77,28 @@ class EventManager:
             
         await cog_instance.setup()
         
-    async def remove_cog(self, cog_cls: Type[Cog]):
-        if cog_cls not in self.cogs:
-            raise ValueError(f"Cog {cog_cls.__name__} is not loaded.")
+    async def remove_cog(self, cog_cls: Type[Cog] | str):
+        if isinstance(cog_cls, str):
+            cog_name = cog_cls
+        else:
+            cog_name = cog_cls.__name__
             
-        cog_instance = self.cogs[cog_cls.__name__]
-        
-        await cog_instance.stop()
+        if cog_name not in self.cogs:
+            raise ValueError(f"Cog {cog_cls.__name__} is not loaded.")
+                
+        cog_instance = self.cogs[cog_name]
         
         for listener in cog_instance.listeners:
             try:
                 self.remove_listener(listener)
             except ValueError:
                 pass
-                
+
+        try:
+            await cog_instance.stop()
+        except Exception as e:
+            LOGGER.error(f"Error occured while stopping cog: {e}", exc_info=True)
+                   
         del self.cogs[cog_cls.__name__]
 
     async def reload_cog(self, cog_cls: Type[Cog]) -> Type[Cog]:
@@ -133,3 +142,8 @@ class EventManager:
             except Exception as e:
                 LOGGER.error(f"Exception while sending event to dispatcher: {e}", exc_info=True)
     
+    async def stop_all(self):
+        tasks = []
+        for cog in self.cogs.keys():
+            tasks.append(self.remove_cog(cog))
+        await asyncio.gather(*tasks, return_exceptions=True)

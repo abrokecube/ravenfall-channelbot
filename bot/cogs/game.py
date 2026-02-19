@@ -4,17 +4,26 @@ Provides restart, monitoring, backup and utility commands used to manage
 Ravenfall servers and in-channel actions.
 """
 
-from ..commands import Context, Commands, checks, parameter, cooldown
-from ..commands_old.cog import Cog
+from ..commands.events import CommandEvent
+from ..commands.global_context import GlobalContext
+from ..commands.checks import MinPermissionLevel
+from ..commands.converters import RangeInt, RFChannelConverter, RFItemConverter
+from ..commands.decorators import command, checks, parameter, cooldown
+from ..commands.cog import Cog
+from ..commands.enums import UserRole, BucketType
+from ..commands.exceptions import CommandError
+# from ..commands import CommandEvent, Commands, checks, parameter, cooldown
+# from ..commands_old.cog import Cog
+# from ..command_enums import UserRole, BucketType
+# from ..command_utils import HasRole, RangeInt
+# from ..command_exceptions import CommandError
+
+from ..ravenfallchannel import RFChannel
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
+
 from utils.format_time import format_seconds, TimeSize
-from utils.commands_rf import RFChannelConverter, RFItemConverter
 from utils.utils import pl, pl2
-from ..ravenfallchannel import RFChannel
-from ..command_enums import UserRole, BucketType
-from ..command_utils import HasRole, RangeInt
-from ..command_exceptions import CommandError
 from ..multichat_command import send_multichat_command, get_char_info, get_scroll_counts
 from ..rf_webops_client import WebOpsClient
 from ravenpy.ravenpy import Item
@@ -36,18 +45,16 @@ class GameCog(Cog):
     Includes commands for restarting Ravenfall, managing monitoring and backups,
     and small utility actions such as refreshing town boosts.
     """
-    def __init__(self, rf_manager: RFChannelManager, ravennest: ravenpy.RavenNest, rf_webops_url="http://pc2-mobile:7102", **kwargs):
-        super().__init__(**kwargs)
-        self.rf_manager = rf_manager
+    def __init__(self, event_manager, rf_webops_url="http://pc2-mobile:7102"):
+        super().__init__(event_manager)
         self.rf_webops = WebOpsClient(rf_webops_url)
-        self.ravennest = ravennest
         self.web_op_lock = asyncio.Lock()
     
-    @Cog.command(name="updateboost", aliases=["update", "refreshboost"])
+    @command(name="updateboost", aliases=["update", "refreshboost"])
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @cooldown(1, 20, [BucketType.CHANNEL])
-    async def update(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
+    async def update(self, ctx: CommandEvent, *, channel: RFChannel = 'this', all_: bool = False):
         """Refreshes the town boost
         
         Args:
@@ -56,7 +63,7 @@ class GameCog(Cog):
         """
         channels = []
         if all_:
-            channels = self.rf_manager.channels
+            channels = self.global_context.ravenfall_manager.channels
         else:
             channels = [channel]
 
@@ -67,7 +74,7 @@ class GameCog(Cog):
             tasks.append(channel_.send_chat_message(msg_text))
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    @Cog.command(
+    @command(
         name="rfrestartstatus",
         aliases=[
             'restartstatus', 
@@ -77,7 +84,7 @@ class GameCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def rfrestartstatus(self, ctx: Context, *, channel: RFChannel = 'this'):
+    async def rfrestartstatus(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Reports the current Ravenfall restart task.
         
         Args:
@@ -88,14 +95,14 @@ class GameCog(Cog):
         gl = 'locked' if channel.global_restart_lock.locked() else 'unlocked'
 
         if restart_task is None:
-            await ctx.reply("No restart task found.")
+            await ctx.message.reply("No restart task found.")
             return
         if restart_task.finished():
-            await ctx.reply(f"Last restart task finished. (status: {restart_task.get_status().value}, ch: {ch}, gl: {gl})")
+            await ctx.message.reply(f"Last restart task finished. (status: {restart_task.get_status().value}, ch: {ch}, gl: {gl})")
             return
         time_left = restart_task.get_time_left()
         if time_left <= 0:
-            await ctx.reply(f"A restart is currently in progress. (status: {restart_task.get_status().value}, ch: {ch}, gl: {gl})")
+            await ctx.message.reply(f"A restart is currently in progress. (status: {restart_task.get_status().value}, ch: {ch}, gl: {gl})")
             return
         task_label = restart_task.label
         out_text = f"Time left until restart: {format_seconds(time_left, TimeSize.LONG, 2, False)}."
@@ -108,9 +115,9 @@ class GameCog(Cog):
                 out_text += f" (paused: {restart_task.pause_event_name})"
             else:
                 out_text += f" (paused)"
-        await ctx.reply(out_text)
+        await ctx.message.reply(out_text)
 
-    @Cog.command(
+    @command(
         name="rfrestarttoggle",
         aliases=[
             'rfrestartauto',
@@ -121,8 +128,8 @@ class GameCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def rfrestarttoggle(self, ctx: Context, *, channel: RFChannel = 'this'):
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfrestarttoggle(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Toggles the auto restart scheduler.
         
         Args:
@@ -130,13 +137,13 @@ class GameCog(Cog):
         """
         old_value = channel.auto_restart
         channel.auto_restart = not channel.auto_restart
-        await ctx.reply(f"Auto restart is now {'enabled' if channel.auto_restart else 'disabled'}.")
+        await ctx.message.reply(f"Auto restart is now {'enabled' if channel.auto_restart else 'disabled'}.")
         if old_value == True:
             restart_task = channel.restart_task
             if restart_task and restart_task.reason == RestartReason.AUTO:
                 restart_task.cancel()
 
-    @Cog.command(
+    @command(
         name="rfrestartcancel",
         aliases=[
             'rf restart cancel',
@@ -144,19 +151,19 @@ class GameCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def rfrestartcancel(self, ctx: Context, *, channel: RFChannel = 'this'):
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfrestartcancel(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Cancels the current restart task.
         
         Args:
             channel: Target channel.
         """
         if not channel.cancel_restart():
-            await ctx.reply("No restart task found.")
+            await ctx.message.reply("No restart task found.")
             return
-        await ctx.reply("Restart task cancelled.")
+        await ctx.message.reply("Restart task cancelled.")
 
-    @Cog.command(
+    @command(
         name='rfrestartpostpone',
         help='Postpones a restart task',
         aliases=[
@@ -165,8 +172,8 @@ class GameCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def rfrestartpostpone(self, ctx: Context, seconds: int = 5*60, *, channel: RFChannel = 'this'):
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    async def rfrestartpostpone(self, ctx: CommandEvent, seconds: int = 5*60, *, channel: RFChannel = 'this'):
         """Postpones the current restart task.
         
         Args:
@@ -174,12 +181,12 @@ class GameCog(Cog):
         """
         restart_task = channel.restart_task
         if restart_task is None:
-            await ctx.reply("No restart task found.")
+            await ctx.message.reply("No restart task found.")
             return
         restart_task.postpone(seconds)
-        await ctx.reply(f"Restart task postponed by {seconds} seconds.")
+        await ctx.message.reply(f"Restart task postponed by {seconds} seconds.")
 
-    @Cog.command(
+    @command(
         name='rfrestart',
         aliases=[
             'rf restart',
@@ -187,17 +194,17 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("reason", aliases=["r"])
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def rfrestart(self, ctx: Context, seconds: int = 30, *, reason: str = "User restart", channel: RFChannel = 'this'):
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    async def rfrestart(self, ctx: CommandEvent, seconds: int = 30, *, reason: str = "User restart", channel: RFChannel = 'this'):
         """Creates a new restart task.
         
         Args:
             channel: Target channel.
         """
         channel.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True)
-        await ctx.reply(f"Restart queued. Restarting in {seconds}s.")
+        await ctx.message.reply(f"Restart queued. Restarting in {seconds}s.")
 
-    @Cog.command(
+    @command(
         name="rfbotrestart",
         aliases=[
             'rf bot restart',
@@ -205,17 +212,17 @@ class GameCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def rfbotrestart(self, ctx: Context, *, channel: RFChannel = 'this'):
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    async def rfbotrestart(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Restarts RavenBot.
         
         Args:
             channel: Target channel.
         """
         await channel.restart_ravenbot()
-        await ctx.reply("Okay")
+        await ctx.message.reply("Okay")
     
-    @Cog.command(
+    @command(
         name='togglebotmonitor',
         help='Toggles the bot monitoring',
         aliases=[
@@ -225,8 +232,8 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("all_", display_name="all", aliases=["a"])
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def togglebotmonitor(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def togglebotmonitor(self, ctx: CommandEvent, *, channel: RFChannel = 'this', all_: bool = False):
         """Toggles the RavenBot monitor.
         
         Args:
@@ -234,13 +241,13 @@ class GameCog(Cog):
         """
         channel.monitoring_paused = not channel.monitoring_paused
         if all_:
-            for channel_ in self.rf_manager.channels:
+            for channel_ in self.global_context.ravenfall_manager.channels:
                 channel_.monitoring_paused = channel.monitoring_paused
-            await ctx.reply("RavenBot monitoring is now " + ("PAUSED" if channel.monitoring_paused else "RESUMED") + " for all channels.")
+            await ctx.message.reply("RavenBot monitoring is now " + ("PAUSED" if channel.monitoring_paused else "RESUMED") + " for all channels.")
         else:
-            await ctx.reply("RavenBot monitoring is now " + ("PAUSED" if channel.monitoring_paused else "RESUMED") + " for this channel.")
+            await ctx.message.reply("RavenBot monitoring is now " + ("PAUSED" if channel.monitoring_paused else "RESUMED") + " for this channel.")
 
-    @Cog.command(
+    @command(
         name='backupstate',
         aliases=[
             'backup state',
@@ -248,8 +255,8 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("all_", display_name="all", aliases=["a"])
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN))
-    async def backupstate(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def backupstate(self, ctx: CommandEvent, *, channel: RFChannel = 'this', all_: bool = False):
         """Creates a copy of the current state_data.json.
         
         Args:
@@ -257,17 +264,17 @@ class GameCog(Cog):
         """
         if all_:
             tasks = []
-            for channel in self.rf_manager.channels:
+            for channel in self.global_context.ravenfall_manager.channels:
                 tasks.append(channel.backup_state_data_routine())
             await asyncio.gather(*tasks)
-            await ctx.reply("Backed up all state data.")
+            await ctx.message.reply("Backed up all state data.")
         else:
             await channel.backup_state_data_routine()
-            await ctx.reply("Backed up state data for this channel.")
+            await ctx.message.reply("Backed up state data for this channel.")
             
-    @Cog.command(name="ds")
+    @command(name="ds")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def ds(self, ctx: Context, *, channel: RFChannel = 'this'):
+    async def ds(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Use one of my Dungeon scrolls.
 
         Args:
@@ -289,9 +296,9 @@ class GameCog(Cog):
             raise CommandError("There is currently an active raid")
         await send_multichat_command("?ds", "0", "", channel.channel_id, channel.channel_name)
     
-    @Cog.command(name="rs")
+    @command(name="rs")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def rs(self, ctx: Context, *, channel: RFChannel = 'this'):
+    async def rs(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Uses one of my Raid scrolls.
 
         Args:
@@ -313,10 +320,10 @@ class GameCog(Cog):
             raise CommandError("There is currently an active raid")
         await send_multichat_command("?rs", "0", "", channel.channel_id, channel.channel_name)
     
-    @Cog.command(name="exps")
+    @command(name="exps")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("count", converter=RangeInt(1, 99))
-    async def exps(self, ctx: Context, count: int = 99, *, channel: RFChannel = 'this'):
+    async def exps(self, ctx: CommandEvent, count: int = 99, *, channel: RFChannel = 'this'):
         """Uses my exp multiplier scroll(s).
 
         Args:
@@ -326,7 +333,7 @@ class GameCog(Cog):
         
         tasks = [
             channel.get_query("select * from multiplier"),
-            self.ravennest.get_global_mult()
+            self.global_context.ravennest.get_global_mult()
         ]
         m_client, m_server = await asyncio.gather(*tasks, return_exceptions=True)
         m_client: GameMultiplier
@@ -377,9 +384,9 @@ class GameCog(Cog):
         
         await send_multichat_command(f"?exps {count}", "0", "", channel.channel_id, channel.channel_name)
     
-    @Cog.command(name="fs")
+    @command(name="fs")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def fs(self, ctx: Context, *, channel: RFChannel = 'this'):
+    async def fs(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Use one of my ferry scrolls.
 
         Args:
@@ -398,9 +405,9 @@ class GameCog(Cog):
             raise CommandError(f"There is currently an active ferry boost, ending in {format_seconds(f['boost']['remainingtime'], size=TimeSize.LONG, include_zero=False)}.")
         await send_multichat_command("?fs", "0", "", channel.channel_id, channel.channel_name)
  
-    @Cog.command(name="channelscrolls", aliases=['sharedscrolls'])
+    @command(name="channelscrolls", aliases=['sharedscrolls'])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def scrolls(self, ctx: Context, *, channel: RFChannel = 'this'):
+    async def scrolls(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Lists the available scroll stock.
 
         Args:
@@ -417,14 +424,14 @@ class GameCog(Cog):
         for name, scope in scroll_names.items():
             count = scrolls["data"][scope][name]
             scroll_list.append(f"{pl(count, name)}")
-        await ctx.reply(f"Available channel scrolls: {', '.join(scroll_list)}")
+        await ctx.message.reply(f"Available channel scrolls: {', '.join(scroll_list)}")
 
 
-    @Cog.command(name="restockscrolls")
+    @command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def restockscrolls(self, ctx: Context, item: Item, count: int, *, channel: RFChannel = 'this'):
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    async def restockscrolls(self, ctx: CommandEvent, item: Item, count: int, *, channel: RFChannel = 'this'):
         """Restocks scrolls in the loyalty shop.
 
         Args:
@@ -460,7 +467,7 @@ class GameCog(Cog):
                     char_list.append({"username": username, "id": str(char['index'])})
                     users_used.add(username)
 
-        await ctx.reply(f"Restocking {count}x {item.name}, please wait...")
+        await ctx.message.reply(f"Restocking {count}x {item.name}, please wait...")
         item_id_map = {
             Items.ExpMultiplierScroll.value: "exp_multiplier_scroll",
             Items.RaidScroll.value: "raid_scroll",
@@ -472,14 +479,14 @@ class GameCog(Cog):
         except asyncio.TimeoutError:
             raise CommandError("Task timed out.")
         if result['status'] == "success":
-            await ctx.reply(f"Successfully restocked {sum(result['redeemed'].values())}x {item.name}.")
+            await ctx.message.reply(f"Successfully restocked {sum(result['redeemed'].values())}x {item.name}.")
         else:
             raise CommandError("Failed to restock scrolls.")
 
-    @Cog.command(name="countloyaltypoints")
+    @command(name="countloyaltypoints")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @checks(HasRole(UserRole.BOT_OWNER, UserRole.ADMIN, UserRole.MODERATOR))
-    async def countloyaltypoints(self, ctx: Context, *, channel: RFChannel = 'this'):
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    async def countloyaltypoints(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Gets the total loyalty points across characters in a channel. Will take a few minutes to count.
         
         Args:
@@ -497,7 +504,7 @@ class GameCog(Cog):
             if char["channel_id"] == channel.channel_id:
                 channel_char_list.add(char["user_name"])
             char_list.add(char['user_name'])
-        await ctx.reply(f"Counting loyalty points, please wait...")
+        await ctx.message.reply(f"Counting loyalty points, please wait...")
         try:
             async with self.web_op_lock:
                 result = await self.rf_webops.get_total_loyalty_points(tuple(char_list))
@@ -533,16 +540,7 @@ class GameCog(Cog):
         out_str.append(f"Total: {total_points:,} points")
         out_str.append("")
         out_url = await upload_to_pastes("\n".join(out_str))
-        await ctx.reply(
+        await ctx.message.reply(
             f"In this channel: {points_in_channel:,} points – Total: {result['total_points']:,} points – Breakdown: {out_url}"
         )
 
-def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
-    """Load the game cog with the given commands instance.
-    
-    Args:
-        commands: The Commands instance to register commands with.
-        rf_manager: The RFChannelManager instance to pass to the cog.
-        **kwargs: Additional arguments to pass to the cog.
-    """
-    commands.load_cog(GameCog, rf_manager=rf_manager, **kwargs)

@@ -1,7 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, NamedTuple, Any, List, Dict
 if TYPE_CHECKING:
-    from events import CommandEvent
+    from ..commands.global_context import GlobalContext
+from .events import CommandEvent, TwitchMessageEvent
+
+from ravenpy import ravenpy
+from ravenpy.ravenpy import Item as RFItem
+    
 from utils.utils import strjoin
 from .exceptions import ArgumentConversionError
 
@@ -12,8 +17,8 @@ class BaseConverter:
     short_help: str = None
     help: str = None
 
-    @classmethod
-    async def convert(cls, event: CommandEvent, arg: str) -> Any:
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, event: CommandEvent, arg: str) -> Any:
         raise NotImplementedError
 
 class Choice(BaseConverter):
@@ -49,7 +54,7 @@ class Choice(BaseConverter):
         self.case_sensitive = case_sensitive
         self.string_map = string_map
         
-    async def convert(self, ctx: CommandEvent, arg: str) -> str:
+    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> str:
         if not arg in self.string_map:
             raise ArgumentConversionError(f"Choice '{arg}' is not a valid option. Valid choices: {self.short_help}")
         return self.string_map[arg]
@@ -62,7 +67,8 @@ class Regex(BaseConverter):
     short_help = "A python regular expression"
     help = "A python regular expression"
     
-    async def convert(ctx: CommandEvent, arg: str) -> re.Pattern:
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> re.Pattern:
         try:
             return re.compile(arg)
         except Exception as e:
@@ -73,7 +79,8 @@ class Glob(BaseConverter):
     short_help = "A glob pattern"
     help = "A glob pattern"
     
-    async def convert(ctx: CommandEvent, arg: str) -> re.Pattern:
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> re.Pattern:
         try:
             return re.compile(glob.translate(arg))
         except Exception as e:
@@ -99,7 +106,7 @@ class RangeInt(BaseConverter):
         else:
             raise ValueError("min_ or max_ need to be a number")
         
-    async def convert(self, ctx: CommandEvent, arg: str) -> int:
+    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> int:
         try:
             number = int(arg)
         except ValueError as e:
@@ -132,7 +139,7 @@ class RangeFloat(BaseConverter):
         else:
             raise ValueError("min_ or max_ need to be a number")
         
-    async def convert(self, ctx: CommandEvent, arg: str) -> float:
+    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> float:
         try:
             number = int(arg)
         except ValueError as e:
@@ -144,3 +151,91 @@ class RangeFloat(BaseConverter):
             raise ArgumentConversionError(f"Number is out of range! Minimum value: {self.min}")
 
         return number
+
+if TYPE_CHECKING:
+    from bot.ravenfallmanager import RFChannelManager
+    from bot.ravenfallchannel import RFChannel
+
+class RFChannelConverter(BaseConverter):
+    title = "RFChannel"
+    short_help = "A Ravenfall channel name"
+    help = "A Ravenfall channel monitored by the bot."
+
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> RFChannel:
+        if arg == 'this':
+            if isinstance(ctx.message, TwitchMessageEvent):
+                query = ctx.message.room_name
+            else:
+                raise ArgumentConversionError("A channel must be specified.")
+        else:
+            query = arg
+        channel_by_name = g_ctx.ravenfall_manager.get_channel(channel_name=query)
+        channel_by_id = g_ctx.ravenfall_manager.get_channel(channel_id=query)
+        channel = channel_by_name or channel_by_id
+        if channel is None:
+            if arg == 'this':
+                raise ArgumentConversionError("A channel must be specified.")
+            else:
+                raise ArgumentConversionError(f"Ravenfall channel '{arg}' not found.")
+        return channel
+
+
+class RFItemConverter(BaseConverter):
+    title = "Item"
+    short_help = "An item name"
+    help = "An item name"
+    
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> RFItem:
+        item_search_results = ravenpy.search_item(arg, limit=1)
+        if not item_search_results:
+            raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
+        if item_search_results[0][1] < 85:
+            raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
+        return item_search_results[0][0]
+
+tw_username_re = re.compile(r"^@?[a-zA-Z0-9][\w]{2,24}$")
+tw_username_f_re = re.compile(r"^@?[a-zA-Z0-9/|][\w/|]{2,24}$")
+def is_twitch_username(text: str, pre_filter=False):
+    if pre_filter:
+        return bool(tw_username_f_re.match(text))
+    else:
+        return bool(tw_username_re.match(text))
+
+class TwitchUsername(BaseConverter):
+    title = "Twitch username"
+    short_help = "A valid Twitch username"
+    help = "A valid Twitch username"
+    
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str):
+        is_valid = is_twitch_username(arg)
+        if not is_valid:
+            raise ArgumentConversionError("Not a valid username.")
+        return arg.lstrip("@").replace("\U000e0000", '').replace("|","").replace("/","")
+
+class _RFSkill(Choice):
+    def __init__(self, case_sensitive=False):
+        definition = {
+            "Attack": ['atk', 'att'],
+            "Defense": ['def'],
+            "Strength": ['str'],
+            "Health": ['hp'],
+            "Woodcutting": ['wood', 'chop', 'wdc', 'chomp'],
+            "Mining": ['mine', 'min'],
+            "Crafting": ['craft'],
+            "Cooking": ['cook', "ckn"],
+            "Farming": ['farm', 'fm'],
+            "Slayer": ['slay'],
+            "Magic": [],
+            "Ranged": ["range"],
+            "Sailing": ['sail'],
+            "Healing": ['heal'],
+            "Gathering": ["gath"],
+            "Alchemy": ["brew", "alch"],
+            "CombatLevel": ["combat"]
+        }
+        super().__init__(definition, "Ravenfall skill", case_sensitive)
+
+RFSkill = _RFSkill()

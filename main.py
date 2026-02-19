@@ -256,36 +256,29 @@ async def run():
     event_manager.add_dispatcher(command_dispatcher)
     twitch_redeem_dispatcher = TwitchRedeemDispatcher()
     event_manager.add_dispatcher(twitch_redeem_dispatcher)
+    
+    global_ctx.ravennest = rf
 
-    from bot.cogs.testing import TestingCog
-    await event_manager.add_cog(TestingCog)
-    from bot.cogs.example import ExampleCog
-    await event_manager.add_cog(ExampleCog)
     from bot.cogs.help import HelpCog
     await event_manager.add_cog(HelpCog)
     
-    # if os.getenv("COMMAND_TESTING") == "1":
-    #     from bot.cogs.example import ExampleCog
-    #     commands.load_cog(ExampleCog)
-    # else:
-    #     from bot.cogs.testing_rf import TestingRFCog
-    #     commands.load_cog(TestingRFCog, rf_manager=rf_manager)
-    #     from bot.cogs.redeem import RedeemCog
-    #     commands.load_cog(RedeemCog)
-    #     from bot.cogs.redeem_rf import RedeemRFCog
-    #     commands.load_cog(RedeemRFCog, rf_manager=rf_manager)
-    # rfwebops = os.getenv("WEBOPS_URL", "http://pc2-mobile:7102")
-    # from bot.cogs.game import GameCog
-    # commands.load_cog(GameCog, rf_manager=rf_manager, rf_webops_url=rfwebops, ravennest=rf)
-    # from bot.cogs.help import HelpCog
-    # commands.load_cog(HelpCog, commands=commands)
-    # from bot.cogs.info import InfoCog
-    # commands.load_cog(InfoCog, rf_manager=rf_manager)
-    # from bot.cogs.testing import TestingCog
-    # commands.load_cog(TestingCog)
-    # from bot.cogs.bot import BotStuffCog
-    # watchers = os.getenv("WATCHER_URLS", "http://127.0.0.1:8110").split(",")
-    # commands.load_cog(BotStuffCog, rf_manager=rf_manager, watcher_urls=watchers)
+    if os.getenv("COMMAND_TESTING") == "1":
+        from bot.cogs.testing import TestingCog
+        await event_manager.add_cog(TestingCog)
+        from bot.cogs.example import ExampleCog
+        await event_manager.add_cog(ExampleCog)
+    from bot.cogs.redeem import RedeemCog
+    await event_manager.add_cog(RedeemCog)
+    from bot.cogs.redeem_rf import RedeemRFCog
+    await event_manager.add_cog(RedeemRFCog)
+    rfwebops = os.getenv("WEBOPS_URL", "http://pc2-mobile:7102")
+    from bot.cogs.game import GameCog
+    await event_manager.add_cog(GameCog, rf_webops_url=rfwebops)
+    from bot.cogs.info import InfoCog
+    await event_manager.add_cog(InfoCog)
+    from bot.cogs.bot import BotStuffCog
+    watchers = os.getenv("WATCHER_URLS", "http://127.0.0.1:8110").split(",")
+    await event_manager.add_cog(BotStuffCog, watcher_urls=watchers)
 
     await setup_twitch(global_ctx, event_manager)
 
@@ -293,7 +286,8 @@ async def run():
     if not os.getenv("DISABLE_RAVENFALL_INTEGRATION", "").lower() in ("1", "true"):
         await rf_manager.start()
 
-    rf_manager = RFChannelManager(channels, global_ctx.twitch_chat, rf, global_ctx.channel_twitches)
+    global_ctx.ravenfall_manager = rf_manager
+
     server = SomeEndpoints(rf_manager, None, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), os.getenv("PRIVATE_SERVER_PORT", 8080))
     await server.start()
 
@@ -310,6 +304,7 @@ async def run():
             tasks.append(eventsub.stop())
         tasks.append(rf_manager.stop())
         tasks.append(global_ctx.bot_twitch.close())
+        tasks.append(event_manager.stop_all())
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for r in results:
             if isinstance(r, Exception):

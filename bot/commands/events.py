@@ -7,6 +7,7 @@ LOGGER = logging.getLogger(__name__)
 
 from .enums import EventCategory, EventSource, UserRole, TwitchCustomRewardRedemptionStatus
 from .modals import ChatRoomCapabilities
+from twitchAPI.type import TwitchResourceNotFound
 from utils.strutils import split_by_utf16_bytes
 
 @dataclass(kw_only=True)
@@ -121,12 +122,15 @@ class TwitchRedemptionEvent(TwitchMessageEvent):
     
     async def update_status(self, status: TwitchCustomRewardRedemptionStatus):
         if self.data.status == "unfulfilled":
-            await self.channel_twitch.update_redemption_status(
-                self.data.broadcaster_user_id,
-                self.data.reward.id,
-                self.data.id,
-                status
-            )
+            try:
+                await self.channel_twitch.update_redemption_status(
+                    self.data.broadcaster_user_id,
+                    self.data.reward.id,
+                    self.data.id,
+                    status
+                )
+            except TwitchResourceNotFound:
+                LOGGER.warning("Redemption resource was already used")
         else:
             # logger.warning(f"Redemption is not in the UNFULFILLED state (current: {self.redemption.status})")
             pass

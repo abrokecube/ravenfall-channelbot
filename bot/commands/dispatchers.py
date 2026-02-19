@@ -249,7 +249,10 @@ class CommandDispatcher(BaseDispatcher):
         try:
             await command.invoke(global_context, new_event)
         except Exception as error:
-            LOGGER.error(f"Error occurred during command invocation: {error}", exc_info=True)
+            if not isinstance(error, ListenerError):
+                LOGGER.error(f"Error occurred during command invocation: {error}", exc_info=True)
+            else:
+                LOGGER.error(f"Error handled during command invocation: {error}")
             if not respond_to_errors:
                 raise error
             await self.on_invoke_error(global_context, new_event, command, error)

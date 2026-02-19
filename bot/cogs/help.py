@@ -10,10 +10,14 @@ from ..commands.dispatchers import CommandDispatcher
 from ..commands.decorators import (
     command, parameter
 )
+from ..commands.exceptions import CheckFailure
 from utils.strutils import strjoin
 from docstring_parser import parse
 import inspect
 from collections import defaultdict
+
+import logging
+LOGGER = logging.getLogger(__name__)
 
 class HelpCog(Cog):
     async def build_command_list_single_line(self, ctx: CommandEvent = None, show_more=False) -> str:
@@ -40,16 +44,18 @@ class HelpCog(Cog):
                     for check in c.checks:
                         if check.hide_in_help:
                             try:
-                                check_result = check.check(ctx)
+                                check_result = check.check(self.global_context, ctx)
                                 if inspect.isawaitable(check_result):
                                     check_result = await check_result
                                 
                                 if isinstance(check_result, str) or not check_result:
                                     should_hide = True
                                     break
-                            except:
+                            except CheckFailure:
                                 should_hide = True
                                 break
+                            except Exception as e:
+                                LOGGER.warning(f"Check failed to execute: {e}", exc_info=True)
                 
                 if not should_hide:
                     visible_cmds.append(c.name)

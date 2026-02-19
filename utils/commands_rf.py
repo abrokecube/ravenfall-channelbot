@@ -17,7 +17,7 @@ class RFChannelConverter(Converter):
     title = "RFChannel"
     short_help = "A Ravenfall channel name"
     help = "A Ravenfall channel monitored by the bot."
-    
+        
     async def convert(ctx: Context, arg: str) -> RFChannel:
         if not hasattr(ctx.command.cog, 'rf_manager'):
             raise ValueError("RFChannelConverter requires an rf_manager property in the cog.")
