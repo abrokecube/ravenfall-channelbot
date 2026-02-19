@@ -263,10 +263,10 @@ async def run():
     await event_manager.add_cog(HelpCog)
     
     if os.getenv("COMMAND_TESTING") == "1":
-        from bot.cogs.testing import TestingCog
-        await event_manager.add_cog(TestingCog)
         from bot.cogs.example import ExampleCog
         await event_manager.add_cog(ExampleCog)
+    from bot.cogs.testing import TestingCog
+    await event_manager.add_cog(TestingCog)
     from bot.cogs.redeem import RedeemCog
     await event_manager.add_cog(RedeemCog)
     from bot.cogs.redeem_rf import RedeemRFCog
