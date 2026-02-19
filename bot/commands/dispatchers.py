@@ -15,7 +15,10 @@ from .listeners import (
     GenericListener, 
     CommandListener
 )
-from .events import CommandEvent
+from .events import (
+    CommandEvent,
+    TwitchRedemptionEvent
+)
 from .enums import EventCategory, Dispatcher, BucketType
 from .exceptions import (
     ListenerOnCooldown,
@@ -56,7 +59,8 @@ class BaseDispatcher:
     def _func_to_listener(self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
         name = func.__name__
         init_params = getattr(func, "_listener_init_params", {})
-        listener: BaseListener = self._func_listener(listener, **init_params)
+        listener_cls = getattr(func, "_listener_class", None) or self._func_listener
+        listener: BaseListener = listener_cls(listener, **init_params)
         listener._id = name
         return listener
         
@@ -80,17 +84,21 @@ class BaseDispatcher:
         
     async def dispatch(self, global_context: GlobalContext, event: BaseEvent):
         for l in self.listeners.values():
-            matches = False
+            match_result = False
             try:
-                matches = await l.check_for_match(event)
+                match_result = await l.check_for_match(event)
             except Exception as e:
                 LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
             
             try:
-                if matches:
+                if match_result:
                     await l.invoke(global_context, event)
             except Exception as e:
                 LOGGER.error(f"Error occurred during listener invocation: {e}", exc_info=True)
+                await self.on_invoke_error(global_context, event, e)
+                
+    async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception):
+        pass
             
 class SimpleDispatcher(BaseDispatcher):
     def __init__(self):
@@ -101,7 +109,37 @@ class SimpleDispatcher(BaseDispatcher):
             EventCategory.Generic, EventCategory.Message, EventCategory.RavenBotMessage,
             EventCategory.RavenfallMessage
         ])
+
+    async def dispatch(self, global_context: GlobalContext, event: BaseEvent):
+        for l in self.listeners.values():
+            match_result = False
+            try:
+                match_result = await l.check_for_match(event)
+            except Exception as e:
+                LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
+            
+            try:
+                if match_result:
+                    await l.invoke(global_context, event, match_result)
+            except Exception as e:
+                LOGGER.error(f"Error occurred during listener invocation: {e}", exc_info=True)
+                await self.on_invoke_error(global_context, event, e)
+
+class TwitchRedeemDispatcher(SimpleDispatcher):
+    def __init__(self):
+        super().__init__()
+        self._id = Dispatcher.TwitchRedeem
         
+    async def on_invoke_error(self, global_context, event: TwitchRedemptionEvent, error):
+        if isinstance(error, CommandError):
+            await event.send(f"❌ {error.message.rstrip('.')}. Your points will be refunded.")
+        else:
+            await event.send(f"❌ An error occurred. Points will be refunded.")
+        try:
+            await event.cancel()
+        except Exception as e:
+            logging.error("Failed to refund points", exc_info=True)
+
 class CommandDispatcher(BaseDispatcher):
     def __init__(self, case_sensitive: bool = False):
         super().__init__()
@@ -214,9 +252,9 @@ class CommandDispatcher(BaseDispatcher):
             LOGGER.error(f"Error occurred during command invocation: {error}", exc_info=True)
             if not respond_to_errors:
                 raise error
-            await self.on_command_error(global_context, new_event, command, error)
+            await self.on_invoke_error(global_context, new_event, command, error)
                 
-    async def on_command_error(self, g_ctx: GlobalContext, event: CommandEvent, command: CommandListener, error: Exception):
+    async def on_invoke_error(self, g_ctx: GlobalContext, event: CommandEvent, command: CommandListener, error: Exception):
         usage_text = command.get_usage_text(event.prefix, event.invoked_with)
         if isinstance(error, ListenerOnCooldown):
             if error.cooldown.per >= 60 and self.error_cooldown.get_retry_after(event) <= 0:

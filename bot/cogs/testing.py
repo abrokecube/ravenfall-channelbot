@@ -5,9 +5,9 @@ Contains simple ping/hi commands and test redeems used in development.
 
 from typing import Optional, Dict, Any
 from ..commands.cog import Cog
-from ..commands.events import CommandEvent
+from ..commands.events import CommandEvent, TwitchRedemptionEvent
 from ..commands.exceptions import CommandError
-from ..commands.decorators import command
+from ..commands.decorators import command, on_match, on_twitch_redeem
 
 class TestingCog(Cog):
     """Small set of test commands and redeems for development.
@@ -25,6 +25,14 @@ class TestingCog(Cog):
     @command(name="test_error_listener", help="Test error command")
     async def test_error_listener(self, ctx: CommandEvent):
         raise CommandError("Test error but cool")
+    
+    @on_twitch_redeem(lambda e: e.redeem_name.lower() == "test redeem")
+    async def test_redeem(self, ctx: TwitchRedemptionEvent, match_result: bool):
+        await ctx.reply(f"Test redeem text: {ctx.text}")
+
+    @on_twitch_redeem(lambda e: e.redeem_name.lower() == "test error redeem")
+    async def test_error_redeem(self, ctx: TwitchRedemptionEvent, match_result: bool):
+        raise CommandError("boom i exploded")
 
     # @Cog.command(name="hi", help="Says hi")
     # async def hi(self, ctx: CommandEvent):

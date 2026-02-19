@@ -19,6 +19,7 @@ class Dispatcher(IntEnum):
     Base = auto()
     Generic = auto()
     Command = auto()
+    TwitchRedeem = auto()
 
 class BucketType(IntEnum):
     USER = auto()

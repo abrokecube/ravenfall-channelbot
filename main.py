@@ -22,7 +22,7 @@ import ravenpy
 from bot.commands.global_context import GlobalContext
 from bot.commands.event_sources import TwitchAPIEventSource
 from bot.commands.event_manager import EventManager
-from bot.commands.dispatchers import CommandDispatcher
+from bot.commands.dispatchers import CommandDispatcher, TwitchRedeemDispatcher
 
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
@@ -254,6 +254,8 @@ async def run():
     event_manager = EventManager(global_ctx)
     command_dispatcher = MyCmdDispatcher()
     event_manager.add_dispatcher(command_dispatcher)
+    twitch_redeem_dispatcher = TwitchRedeemDispatcher()
+    event_manager.add_dispatcher(twitch_redeem_dispatcher)
 
     from bot.cogs.testing import TestingCog
     await event_manager.add_cog(TestingCog)
@@ -261,6 +263,7 @@ async def run():
     await event_manager.add_cog(ExampleCog)
     from bot.cogs.help import HelpCog
     await event_manager.add_cog(HelpCog)
+    
     # if os.getenv("COMMAND_TESTING") == "1":
     #     from bot.cogs.example import ExampleCog
     #     commands.load_cog(ExampleCog)

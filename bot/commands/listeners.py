@@ -43,35 +43,43 @@ class BaseListener:
     async def check_for_match(self, event: BaseEvent) -> bool:
         return True
     
-    async def invoke(self, global_ctx: GlobalContext, event: BaseEvent) -> None:
-        from_cog = getattr(self.func, "_listener_from_cog", False)
-        if from_cog:
-            if inspect.isawaitable(self.func):
-                await self.func(event)
+    async def _run_func(self, global_ctx: GlobalContext, event: BaseEvent, *args, **kwargs):
+        try:
+            if self.cog is not None:
+                result = self.func(event, *args, **kwargs)
+                if asyncio.iscoroutine(result):
+                    await result
             else:
-                self.func(event)
-        else:
-            if inspect.isawaitable(self.func):
-                await self.func(global_ctx, event)
-            else:
-                self.func(global_ctx, event)
+                result = self.func(global_ctx, event, *args, **kwargs)
+                if asyncio.iscoroutine(result):
+                    await result
+        except Exception as e:
+            await self.on_func_exception(global_ctx, event, e, *args, **kwargs)
+            raise e
+                
+    async def invoke(self, global_ctx: GlobalContext, event: BaseEvent, *args, **kwargs) -> None:
+        await self._run_func(global_ctx, event, *args, **kwargs)
+        
+    async def on_func_exception(self, global_ctx: GlobalContext, event: BaseEvent, error: Exception, *args, **kwargs) -> None:
+        pass
 
 class GenericListener(BaseListener):
     def __init__(
         self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], cog: Cog = None,
-        cooldown: Cooldown | None = None
+        cooldown: Cooldown | None = None, 
+        expected_dispatcher: Dispatcher = Dispatcher.Generic
         ):
         super().__init__(func, cog)
-        self.expected_dispatcher: Dispatcher = Dispatcher.Generic
+        self.expected_dispatcher: Dispatcher = getattr(func, '_listener_dispatcher', expected_dispatcher)
         self.meta_filter: MetaFilter = getattr(func, '_listener_meta_filter', MetaFilter([], False, [], False))
         self.cooldown: Cooldown | None = getattr(func, '_listener_cooldown', cooldown)
 
     async def check_for_match(self, event: BaseEvent):
-        matches_categories = event.category in self.meta_filter.categories
-        if not self.meta_filter.categories_exclusive:
+        matches_categories = event.categories in self.meta_filter.categories
+        if not self.meta_filter.invert_categories:
             matches_categories = not matches_categories
         matches_platforms = event.platform in self.meta_filter.platforms
-        if not self.meta_filter.platforms_exclusive:
+        if not self.meta_filter.invert_platforms:
             matches_platforms = not matches_platforms
         return matches_categories and matches_platforms
 
@@ -83,20 +91,36 @@ class GenericListener(BaseListener):
             self.cooldown.update_rate_limit(event)
         return True
     
-    async def invoke(self, global_ctx, event):
+    async def invoke(self, global_ctx, event, match_result: Any):
         await self._check_cooldown(event)
-        return await super().invoke(global_ctx, event)
+        await self._run_func(global_ctx, event, match_result)
+
+class LambdaListener(GenericListener):
+    def __init__(self, func, cog = None, cooldown = None,
+        event_types: list[type[BaseEvent]] = [],
+        match_fn: Callable[[BaseEvent], bool] = lambda x: True,
+        expected_dispatcher: Dispatcher = Dispatcher.Generic
+        ):
+        super().__init__(func, cog, cooldown, expected_dispatcher)
+        self.event_types: tuple[type[BaseEvent]] = tuple(event_types)
+        self.match_fn: Callable[[BaseEvent], bool] = match_fn
+        
+    async def check_for_match(self, event):
+        if not isinstance(event, self.event_types):
+            return False
+        if not self.match_fn(event):
+            return False
+        return True
 
 class CommandListener(GenericListener):
     def __init__(
         self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], cog: 'Cog' = None,
         name: str = None, aliases: list[str] = [], cooldown = None, checks: list[BaseCheck] = None,
         verifier: Callable = None, hidden: bool = False, 
-        help: str = None, short_help: str = None, title: str = None
+        help: str = None, short_help: str = None, title: str = None,
+        expected_dispatcher: Dispatcher = Dispatcher.Command
         ):
-        super().__init__(func, cog, cooldown)
-        self.expected_dispatcher = Dispatcher.Command
-        
+        super().__init__(func, cog, cooldown, expected_dispatcher)
         self.verifier: Callable = getattr(func, '_listener_command_verifier', verifier)
         
         self.checks: list[BaseCheck] = []
@@ -147,14 +171,12 @@ class CommandListener(GenericListener):
         
         doc_params = {p.arg_name: p.description for p in doc.params}
 
-        self.pass_global_ctx = False
         # Process parameters
         # Skip 'self' (if bound) and 'ctx'
         sig_params = list(self.signature.parameters.values())
         if sig_params and sig_params[0].name == 'self':
             sig_params.pop(0)
         if sig_params and (sig_params[0].name == 'g_ctx' or sig_params[0].annotation == GlobalContext):
-            self.pass_global_ctx = True
             sig_params.pop(0)
         if sig_params and (sig_params[0].name in ['event', 'ctx'] or sig_params[0].annotation == CommandEvent or 'Event' in str(sig_params[0].annotation)):
             sig_params.pop(0)
@@ -477,15 +499,7 @@ class CommandListener(GenericListener):
             args = (*args, *parsed_args)
             kwargs = {**kwargs, **parsed_kwargs}
         await self._run_verification(event, *args, **kwargs)
-        
-        if not self.pass_global_ctx:
-            result = self.func(event, *args, **kwargs)
-            if asyncio.iscoroutine(result):
-                await result
-        else:
-            result = self.func(global_ctx, event, *args, **kwargs)
-            if asyncio.iscoroutine(result):
-                await result
+        await self._run_func(global_ctx, event, *args, **kwargs)
 
     def get_usage_text(self, prefix: str, invoked_name: str = None):
         if not invoked_name:

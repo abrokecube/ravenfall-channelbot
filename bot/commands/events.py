@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict, Any, TYPE_CHECKING, Set
+from typing import List, Dict, Any, TYPE_CHECKING, Set, Tuple
 from dataclasses import dataclass, field
 import logging
 
@@ -11,13 +11,13 @@ from utils.strutils import split_by_utf16_bytes
 
 @dataclass(kw_only=True)
 class BaseEvent:
-    category: EventCategory
+    categories: Tuple[EventCategory]
     platform: EventSource = EventSource.Unknown
     data: Dict
 
 @dataclass(kw_only=True)
 class MessageEvent(BaseEvent):
-    category: EventCategory = EventCategory.Message
+    categories: List[EventCategory] = (EventCategory.Message, EventCategory.Generic)
     platform: EventSource = EventSource.Unknown
     text: str
     id: str
@@ -31,7 +31,6 @@ class MessageEvent(BaseEvent):
     bot_user_login: str
     bot_user_name: str
     bot_user_id: str
-    
 
     async def send(self, text: str, **kwargs):
         pass
@@ -114,9 +113,12 @@ class TwitchMessageEvent(MessageEvent):
 
 @dataclass(kw_only=True)
 class TwitchRedemptionEvent(TwitchMessageEvent):
-    category: EventCategory = EventCategory.Generic
+    categories: List[EventCategory] = (EventCategory.Generic,)
     data: ChannelPointsCustomRewardRedemptionData
-
+    redeem_name: str
+    redeem_id: str
+    redeem_cost: str
+    
     async def update_status(self, status: TwitchCustomRewardRedemptionStatus):
         if self.data.status == "unfulfilled":
             await self.channel_twitch.update_redemption_status(
@@ -136,4 +138,5 @@ class TwitchRedemptionEvent(TwitchMessageEvent):
         await self.update_status(TwitchCustomRewardRedemptionStatus.CANCELED)
         
     async def reply(self, text, *, use_http = True):
-        await self.send(f"@{self.author_login} ")
+        return await super().send(f"@{self.author_login} {text}", use_http=use_http)
+

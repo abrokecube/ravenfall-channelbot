@@ -4,22 +4,56 @@ from .modals import MetaFilter
 from .cooldown import Cooldown
 from .converters import BaseConverter
 from .checks import BaseCheck, FunctionCheck
-from .events import BaseEvent
+from .events import BaseEvent, TwitchRedemptionEvent
+from .listeners import LambdaListener, GenericListener
 
-# Definitions
+# Matchers
 
-def on_message(*, platforms: list[EventSource] | None=None):
+def _meta_filter_decorator(
+    meta_filter: MetaFilter,
+    listener_cls: type[GenericListener] = GenericListener, 
+    dispatcher_type: Dispatcher = Dispatcher.Generic):
     def decorator(func):
-        _sources = []
-        if platforms:
-            _sources = tuple(platforms)
-        func._listener_meta_filter = MetaFilter(
-            (EventCategory.Message,), True, 
-            _sources, bool(platforms)            
-        )
-        func._listener_expected_dispatcher = Dispatcher.Generic
+        func._listener_meta_filter = meta_filter
+        func._listener_dispatcher = dispatcher_type
+        func._listener_class = listener_cls
         return func
     return decorator
+
+def _lambda_filter_decorator(
+    event_types: list[type[BaseEvent]], 
+    match_fn: Callable[[BaseEvent], bool], 
+    listener_cls: type[LambdaListener] = LambdaListener, 
+    dispatcher_type: Dispatcher = Dispatcher.Generic):
+    def decorator(func):
+        func._listener_init_params = {
+            "event_types": event_types,
+            "match_fn": match_fn
+        }
+        func._listener_dispatcher = dispatcher_type
+        func._listener_class = listener_cls
+        return func
+    return decorator
+
+def on_message(*, platforms: list[EventSource] | None=None):
+    _sources = []
+    if platforms:
+        _sources = tuple(platforms)
+    meta_filter = MetaFilter(
+        (EventCategory.Message,), True, 
+        _sources, bool(platforms)            
+    )
+    return _meta_filter_decorator(meta_filter)
+
+def on_match(event_types: type[BaseEvent] | list[type[BaseEvent]], match_fn: Callable[[BaseEvent], bool]):
+    if not isinstance(event_types, list):
+        event_types = [event_types]
+    return _lambda_filter_decorator(event_types, match_fn)
+
+def on_twitch_redeem(match_fn: Callable[[TwitchRedemptionEvent], bool]):
+    return _lambda_filter_decorator(
+        [TwitchRedemptionEvent], match_fn, dispatcher_type=Dispatcher.TwitchRedeem
+    )
 
 def command(
     name: str | None = None, short_help: str | None = None, help: str | None = None,
@@ -38,7 +72,7 @@ def command(
             (EventCategory.Message,), True,
             [], False
         )
-        func._listener_expected_dispatcher = Dispatcher.Command
+        func._listener_dispatcher = Dispatcher.Command
         return func
     return decorator
 

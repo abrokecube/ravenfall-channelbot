@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Dict, Callable, Awaitable, Type
+from collections import defaultdict
 import logging
 if TYPE_CHECKING:
     from .event_sources import BaseEventSource
@@ -8,7 +9,7 @@ if TYPE_CHECKING:
     from .global_context import GlobalContext
     from .cog import Cog
     
-from .enums import Dispatcher
+from .enums import Dispatcher, EventCategory
 from .dispatchers import SimpleDispatcher
 from .listeners import BaseListener
 
@@ -49,7 +50,7 @@ class EventManager:
         if isinstance(listener, BaseListener):
             expd_dispatcher = listener.expected_dispatcher
         else:
-            expd_dispatcher = getattr(listener, "_listener_expected_dispatcher", Dispatcher.Generic)
+            expd_dispatcher = getattr(listener, "_listener_dispatcher", Dispatcher.Generic)
         if not expd_dispatcher in self.dispatchers:
             raise ValueError(f"No dispatcher exists for listener {listener}")
         self.dispatchers[expd_dispatcher].add_listener(listener)
@@ -58,7 +59,7 @@ class EventManager:
         if isinstance(listener, BaseListener):
             expd_dispatcher = listener.expected_dispatcher
         else:
-            expd_dispatcher = getattr(listener, "_listener_expected_dispatcher", Dispatcher.Generic)
+            expd_dispatcher = getattr(listener, "_listener_dispatcher", Dispatcher.Generic)
         if not expd_dispatcher in self.dispatchers:
             raise ValueError(f"No dispatcher exists for listener {listener}")
         self.dispatchers[expd_dispatcher].remove_listener(listener)
@@ -117,14 +118,18 @@ class EventManager:
         
     async def process_event(self, event: BaseEvent):
         LOGGER.debug(f"Processing event {event}")
-        sent_to_dispatcher = False
-        for dispatcher in self.dispatchers.values():
-            if event.category in dispatcher.categories:
-                try:
-                    await dispatcher.dispatch(self.global_context, event)
-                    sent_to_dispatcher = True
-                except Exception as e:
-                    LOGGER.error(f"Exception while sending event to dispatcher: {e}", exc_info=True)
-        if not sent_to_dispatcher:
+        
+        matching_dispatchers: Dict[BaseDispatcher, None] = {}
+        for category in event.categories:
+            for dispatcher in self.dispatchers.values():
+                if category in dispatcher.categories:
+                    matching_dispatchers[dispatcher] = None
+        if not matching_dispatchers:
             LOGGER.warning(f"A matching dispatcher for event \"{event}\" was not found.")
+            
+        for dispatcher in matching_dispatchers.keys():
+            try:
+                await dispatcher.dispatch(self.global_context, event)
+            except Exception as e:
+                LOGGER.error(f"Exception while sending event to dispatcher: {e}", exc_info=True)
     

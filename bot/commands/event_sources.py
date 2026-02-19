@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from twitchAPI.twitch import Twitch, TwitchUser
     from twitchAPI.chat import Chat, ChatMessage, ChatUser
     from twitchAPI.type import ChatEvent
-    from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionAddEvent, ChannelPointsCustomRewardRedemptionData
+    from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
 
 class TwitchAPIEventSource(BaseEventSource):
     def __init__(
@@ -86,6 +86,9 @@ class TwitchAPIEventSource(BaseEventSource):
             bot_user_name=self.bot_user.display_name,
             bot_twitch=self.bot_twitch,
             channel_twitch=self.channel_twitches.get(redemption.broadcaster_user_id),
-            twitch_chat=self.chat
+            twitch_chat=self.chat,
+            redeem_name=redemption.reward.title,
+            redeem_id=redemption.reward.id,
+            redeem_cost=redemption.reward.cost
         ))
     

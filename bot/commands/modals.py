@@ -10,9 +10,9 @@ if TYPE_CHECKING:
 
 class MetaFilter(NamedTuple):
     categories: list[EventCategory]
-    categories_exclusive: bool  # only include the listed categories
+    invert_categories: bool  # only include the listed categories
     platforms: list[EventSource]
-    platforms_exclusive: bool  # only include the listed platforms
+    invert_platforms: bool  # only include the listed platforms
 
 class ChatRoomCapabilities(NamedTuple):
     multiline: bool
