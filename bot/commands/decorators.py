@@ -95,7 +95,7 @@ def parameter(
     name: str, aliases: str | List[str] = [],
     greedy: bool = False, hidden: bool = False,
     help: str = None, regex: str = None,
-    display_name: str = None, converter: BaseConverter = None
+    display_name: str = None, converter: BaseConverter | type[BaseConverter] | None = None
     ):
     """Decorator to configure a command parameter.
     

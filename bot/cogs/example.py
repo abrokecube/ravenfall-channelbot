@@ -58,6 +58,16 @@ class Color(BaseConverter):
             raise ArgumentConversionError(f"Unknown color: {arg}. Valid colors: {', '.join(cls.COLORS.keys())}")
         return Color(name_lower, cls.COLORS[name_lower])
 
+async def transfer_verify(ctx: CommandEvent, amount: int, user: str):
+    # aga = 10 / 0 # This line was problematic and removed
+    if amount == 0:
+        return "Amount must be greater than 0."
+    if amount < 0:
+        return "Amount must be positive."
+    if user in [ctx.message.author_login, ctx.message.author_name]:
+        return "You cannot transfer coins to yourself."
+    return True
+
 class ExampleCog(Cog):
     """Example cog showcasing new command features."""
         
@@ -130,16 +140,6 @@ class ExampleCog(Cog):
         """
         await ctx.message.reply(f"Set your color to {color.name} ({color.hex_code})")
     
-    async def transfer_verify(ctx: CommandEvent, amount: int, user: str):
-        # aga = 10 / 0 # This line was problematic and removed
-        if amount == 0:
-            return "Amount must be greater than 0."
-        if amount < 0:
-            return "Amount must be positive."
-        if user in [ctx.message.author_login, ctx.message.author_name]:
-            return "You cannot transfer coins to yourself."
-        return True
-
     @command(name="transfer", help="Transfer currency to another user")
     @verification(transfer_verify)
     @parameter("amount", help="Amount to transfer")
