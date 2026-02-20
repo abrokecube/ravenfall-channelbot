@@ -16,19 +16,19 @@ from utils import (
     strutils, utils
 )
 
+from ..commands.cog import Cog
+from ..commands.events import CommandEvent
+from ..commands.decorators import command, parameter, cooldown
+from ..commands.enums import BucketType
+from ..commands.converters import Glob, RFChannelConverter, TwitchUsername, RFSkill, Choice
 
 from ..prometheus import get_prometheus_instant, get_prometheus_series
 
-from ..commands import Context, Commands, checks, parameter, cooldown
-from ..command_enums import BucketType
-from ..cog import Cog
 from ..ravenfallmanager import RFChannelManager
 from ..models import Village, GameSession, GameMultiplier
 from .. import braille
 from ..ravenfall import Character, Skills
 
-from utils.commands_rf import RFChannelConverter, TwitchUsername, RFSkill, Choice
-from ..command_utils import Glob
 from ..ravenfallchannel import RFChannel
 from ..models import Player
 import re
@@ -50,15 +50,11 @@ class InfoCog(Cog):
 
     Commands include character lookup, uptime, system diagnostics and metrics.
     """
-    def __init__(self, rf_manager: RFChannelManager, **kwargs):
-        super().__init__(**kwargs)
-        self.rf_manager = rf_manager
-    
-    @Cog.command(name="towns")
-    async def towns(self, ctx: Context):
+    @command(name="towns")
+    async def towns(self, ctx: CommandEvent):
         """Lists my towns."""
         out_str = []
-        for idx, channel in enumerate(self.rf_manager.channels):
+        for idx, channel in enumerate(self.global_context.ravenfall_manager.channels):
             village: Village = await channel.get_query('select * from village')
             if not isinstance(village, dict):
                 continue
@@ -73,21 +69,21 @@ class InfoCog(Cog):
                 asdf += f" {channel.custom_town_msg}"
             out_str.append(asdf)
         out_str.append("Other Ravenfall towns - https://www.ravenfall.stream/towns")
-        await ctx.reply(' ✦ '.join(out_str))
+        await ctx.message.reply(' ✦ '.join(out_str))
 
-    @Cog.command(name="event")
+    @command(name="event")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def event(self, ctx: Context, channel: RFChannel = 'this'):
+    async def event(self, ctx: CommandEvent, channel: RFChannel = 'this'):
         """Show the current town event.
 
         Args:
             channel: Target channel.
         """
-        await ctx.reply(channel.event_text)
+        await ctx.message.reply(channel.event_text)
 
-    @Cog.command(name="uptime")
+    @command(name="uptime")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def uptime(self, ctx: Context, *, channel: RFChannel = 'this'):
+    async def uptime(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Reports Ravenfall's uptime.
 
         Args:
@@ -95,12 +91,12 @@ class InfoCog(Cog):
         """
         session: GameSession = await channel.get_query('select * from session')
         if not isinstance(session, dict):
-            await ctx.reply("Ravenfall seems to be offline!")
+            await ctx.message.reply("Ravenfall seems to be offline!")
             return
-        await ctx.reply(f"Ravenfall uptime: {seconds_to_dhms(session['secondssincestart'])}")
+        await ctx.message.reply(f"Ravenfall uptime: {seconds_to_dhms(session['secondssincestart'])}")
     
-    @Cog.command(name="system")
-    async def system(self, ctx: Context):
+    @command(name="system")
+    async def system(self, ctx: CommandEvent):
         """Return system diagnostics (CPU, RAM, battery, uptime)."""
         cpu_usage = await asyncio.to_thread(psutil.cpu_percent, 1)
         cpu_freq = psutil.cpu_freq().current
@@ -115,7 +111,7 @@ class InfoCog(Cog):
             battery_time_left = format_seconds(battery.secsleft)
             battery_text = f"Battery: {battery_percent}%, {battery_plugged} ({battery_time_left} left)"
         uptime = time.time() - psutil.boot_time()
-        await ctx.reply(strutils.strjoin(
+        await ctx.message.reply(strutils.strjoin(
             " – ", 
             f"CPU: {cpu_usage/100:.1%}, {cpu_freq:.0f} MHz",
             f"RAM: {bytes_to_human_readable(ram_usage)}/{bytes_to_human_readable(ram_total)}",
@@ -123,10 +119,10 @@ class InfoCog(Cog):
             f"Uptime: {seconds_to_dhms(uptime)}"
         ))
 
-    @Cog.command(name="rfram", help="Ravenfall RAM usage")
+    @command(name="rfram", help="Ravenfall RAM usage")
     @parameter("all_", display_name="all", aliases=["a"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def rfram(self, ctx: Context, *, channel: RFChannel = 'this', all_: bool = False):
+    async def rfram(self, ctx: CommandEvent, *, channel: RFChannel = 'this', all_: bool = False):
         """Show Ravenfall RAM usage for a channel or all channels.
 
         Args:
@@ -138,19 +134,19 @@ class InfoCog(Cog):
         change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
         working_set_series = await get_prometheus_series("windows_process_working_set_private_bytes{process='Ravenfall'}", 60*10)
         tasks = []
-        for ch in self.rf_manager.channels:
+        for ch in self.global_context.ravenfall_manager.channels:
             shellcmd = (
                 f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
             )
             tasks.append(runshell(shellcmd))
         responses: List[str | None] = await asyncio.gather(*tasks)
         if None in responses:
-            await ctx.reply("Could not get data")
+            await ctx.message.reply("Could not get data")
             return
         pid_lists = [x.splitlines() for code, x in responses]
         box_pids = {}
-        for i in range(len(self.rf_manager.channels)):
-            box_pids[self.rf_manager.channels[i].channel_name] = pid_lists[i]
+        for i in range(len(self.global_context.ravenfall_manager.channels)):
+            box_pids[self.global_context.ravenfall_manager.channels[i].channel_name] = pid_lists[i]
         for metric in working_set:
             m = metric['metric']
             name = m['process_id']
@@ -181,23 +177,23 @@ class InfoCog(Cog):
                 out_str.append(
                     f"{name} - {bytes_to_human_readable(bytes_used)} ({s}{bytes_to_human_readable(change)}/s)"
                 )
-            await ctx.reply(f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes")
+            await ctx.message.reply(f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes")
         else:
             bytes_used, change, series = processes_named[channel.channel_name]
             graph = braille.simple_line_graph(
                 series, max_gap=30, width=26, fill_type=1, hard_min_val=1
             )
-            await ctx.reply(
+            await ctx.message.reply(
                 f"[{graph}] Ravenfall is using {bytes_to_human_readable(bytes_used)} of memory; "
                 f"changed by {bytes_to_human_readable(change)}/s over 3 mins. (Graph: 10 minutes)"
             )
 
-    @Cog.command(
+    @command(
         name="exprate", 
         aliases=["expirate"]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def exprate(self, ctx: Context, target_user: TwitchUsername = None, *, channel: RFChannel = 'this'):
+    async def exprate(self, ctx: CommandEvent, target_user: TwitchUsername = None, *, channel: RFChannel = 'this'):
         """Show a user's experience earn rate (exp/hour).
 
         Args:
@@ -205,26 +201,26 @@ class InfoCog(Cog):
             channel: Target channel.
         """
         if not target_user:
-            target_user = ctx.author        
+            target_user = ctx.message.author_login        
         query = "sum(rate(rf_player_stat_experience_total{player_name=\"%s\",session=\"%s\",stat!=\"health\"}[30s]))" % (target_user, channel.channel_name)
         data = await get_prometheus_series(query, 10*60)
         if len(data) == 0:
-            await ctx.reply("No data recorded. Your character may not be in this town right now.")
+            await ctx.message.reply("No data recorded. Your character may not be in this town right now.")
             return
         data_pairs = [(x[0], float(x[1])) for x in data[0]['values']]
         graph = braille.simple_line_graph(
             data_pairs, max_gap=30, width=26, min_val=1, fill_type=1
         )
-        await ctx.reply(
+        await ctx.message.reply(
             f"[{graph}] Earning {data_pairs[-1][1]*60*60:,.0f} exp/h (graph: last 10 minutes)"
         )
 
-    @Cog.command(
+    @command(
         name="character", 
         aliases=["char", "show"]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def character(self, ctx: Context, target_user: TwitchUsername = None, *, channel: RFChannel = 'this'):
+    async def character(self, ctx: CommandEvent, target_user: TwitchUsername = None, *, channel: RFChannel = 'this'):
         """Show a player's character information and training status.
 
         Args:
@@ -232,13 +228,13 @@ class InfoCog(Cog):
             channel: Target channel.
         """
         if not target_user:
-            target_user = ctx.author        
+            target_user = ctx.message.author_login        
 
         player_info = await channel.get_query("select * from players where name = \'%s\'" % target_user)
         if isinstance(player_info, dict) and player_info:
             char = Character(player_info)
         else:
-            await ctx.reply("You are not currently playing.")
+            await ctx.message.reply("You are not currently playing.")
             return
         ferry_info = await channel.get_query("select * from ferry")
 
@@ -343,13 +339,13 @@ class InfoCog(Cog):
         out_msgs = utils.strjoin(" ", user_name, out_str)
         if train_time:
             out_msgs = utils.strjoin('', out_msgs, f" | Training time is estimated")
-        await ctx.reply(out_msgs)
+        await ctx.message.reply(out_msgs)
 
-    @Cog.command(
+    @command(
         name="mult", 
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def mult(self, ctx: Context, *, channel: RFChannel = 'this'):
+    async def mult(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
         """Show the current global experience multiplier for a channel.
 
         Args:
@@ -358,26 +354,26 @@ class InfoCog(Cog):
         multiplier = await channel.get_query("select * from multiplier")
         mult = int(multiplier['multiplier'])
         if not isinstance(multiplier, dict):
-            await ctx.reply("Ravenfall seems to be offline!")
+            await ctx.message.reply("Ravenfall seems to be offline!")
             return
         if mult <= 1:
-            await ctx.reply(
+            await ctx.message.reply(
                 f"Current global exp multiplier is {mult}×."
             )
         else:
-            await ctx.reply(
+            await ctx.message.reply(
                 f"Current global exp multiplier is {mult}×, "
                 f"ending in {format_seconds(multiplier['timeleft'], TimeSize.LONG)}, "
                 f"thanks to {multiplier['eventname']}!"
             )
             
-    @Cog.command(aliases=['h', 'top_', 't'])
+    @command(aliases=['h', 'top_', 't'])
     @parameter("skill", converter=RFSkill)
     @parameter("name_glob", aliases=['g', 'f', 'filter', 'glob'],  converter=Glob)
     @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
     @parameter("enchanted", aliases=["e"], help="Display enchanted stats")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def highest_(self, ctx: Context, skill: str, *, name_glob: re.Pattern = '*', invert_glob: bool = False, enchanted: bool = False, channel: RFChannel = 'this'):
+    async def highest_(self, ctx: CommandEvent, skill: str, *, name_glob: re.Pattern = '*', invert_glob: bool = False, enchanted: bool = False, channel: RFChannel = 'this'):
         """Show the top player(s) for a given skill.
 
         Args:
@@ -387,7 +383,7 @@ class InfoCog(Cog):
         skill = skill.lower()
         players: List[Player] = await channel.get_query("select * from players")
         if not isinstance(players, list):
-            await ctx.reply("Ravenfall seems to be offline!")
+            await ctx.message.reply("Ravenfall seems to be offline!")
             return
         if not invert_glob:
             players = list(filter(lambda x : name_glob.match(x['name']), players))
@@ -395,7 +391,7 @@ class InfoCog(Cog):
             players = list(filter(lambda x : not bool(name_glob.match(x['name'])), players))
             
         if not players:
-            await ctx.reply("No players!")
+            await ctx.message.reply("No players!")
             return
         a = "level"
         if enchanted:
@@ -411,22 +407,22 @@ class InfoCog(Cog):
                 break
         
         if len(top_players) == 0 or top_level == 0:
-            await ctx.reply(f"Nobody has trained {skill}!")
+            await ctx.message.reply(f"Nobody has trained {skill}!")
         elif len(top_players) == 1:
-            await ctx.reply(f"{top_players[0]} has level {top_level} {skill}!")
+            await ctx.message.reply(f"{top_players[0]} has level {top_level} {skill}!")
         else:
             top_players.sort()
             joined = strutils.strjoin(", ", *top_players, before_end=" and ")
-            await ctx.reply(f"{joined} have level {top_level} {skill}!")
+            await ctx.message.reply(f"{joined} have level {top_level} {skill}!")
     
-    @Cog.command(name='playerlist', aliases=['player list', 'players'])
+    @command(name='playerlist', aliases=['player list', 'players'])
     @parameter("sort_by", aliases=['s'], converter=Choice(['name', 'combatlevel', 'none']))
     @parameter("group_by", aliases=['g'], converter=Choice(['training', 'island', 'none']))
     @parameter("channel", aliases=["c"], converter=RFChannelConverter)
     @parameter("name_glob", aliases=['filter', 'f', "glob"],  converter=Glob)
     @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
     @cooldown(1, 10, BucketType.CHANNEL)
-    async def player_list(self, ctx: Context, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", invert_glob: bool = False, channel: RFChannel = 'this'):
+    async def player_list(self, ctx: CommandEvent, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", invert_glob: bool = False, channel: RFChannel = 'this'):
         """List players in the channel with optional sorting and grouping.
 
         Args:
@@ -444,7 +440,7 @@ class InfoCog(Cog):
         village: Village 
         players, multiplier, village = await asyncio.gather(*tasks)
         if any([x is None for x in [players, multiplier, village]]):
-            await ctx.reply("Ravenfall seems to be offline!")
+            await ctx.message.reply("Ravenfall seems to be offline!")
             return
         
         total_player_count = len(players)
@@ -454,7 +450,7 @@ class InfoCog(Cog):
             players = list(filter(lambda x : not bool(name_glob.match(x['name'])), players))
         filtered_player_count = len(players)
         if not players:
-            await ctx.reply("No players!")
+            await ctx.message.reply("No players!")
             return
         players_parsed = [Character(x) for x in players]
         
@@ -684,17 +680,7 @@ class InfoCog(Cog):
             )
         out_str.append("")    
         url = await utils.upload_to_pastes("\n".join(out_str))
-        await ctx.reply(
+        await ctx.message.reply(
             f"{player_count_text}: {url}"
         )
 
-
-def setup(commands: Commands, rf_manager: RFChannelManager, **kwargs) -> None:
-    """Load the testing cog with the given commands instance.
-    
-    Args:
-        commands: The Commands instance to register commands with.
-        rf_manager: The RFChannelManager instance to pass to the cog.
-        **kwargs: Additional arguments to pass to the cog.
-    """
-    commands.load_cog(InfoCog, rf_manager=rf_manager, **kwargs)

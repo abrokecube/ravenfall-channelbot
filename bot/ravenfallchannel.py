@@ -25,8 +25,8 @@ from .ravenfallloc import RavenfallLocalization
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from .exceptions import OutOfStockError
-from .command_contexts import TwitchRedeemContext
-from .command_enums import CustomRewardRedemptionStatus
+from .commands.events import TwitchRedemptionEvent
+from .commands.enums import TwitchCustomRewardRedemptionStatus
 from bot import middleman
 from database.session import get_async_session
 from database.models import AutoRaidStatus, Character, User
@@ -102,7 +102,7 @@ class RFChannel:
         self.channel_name: str = config['channel_name'].lower()
         self.rf_query_url: str = config['rf_query_url'].rstrip('/')
         
-        self.twitch = manager.bot.twitches.get(self.channel_id)
+        self.twitch = manager.twitches.get(self.channel_id)
         
         # Optional fields with defaults
         self.ravenbot_prefixes: tuple = config.get('ravenbot_prefix', ('!',))
@@ -903,7 +903,7 @@ class RFChannel:
                         self.channel_id,
                         next_scroll.reward_id,
                         next_scroll.reward_redemption_id,
-                        CustomRewardRedemptionStatus.FULFILLED
+                        TwitchCustomRewardRedemptionStatus.FULFILLED
                     )
                 return
         logging.warning(f"Scroll queue: Expected event {expected_event} did not occur")
@@ -933,7 +933,7 @@ class RFChannel:
                 count += 1
         return count
     
-    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid'], redeem_ctx: TwitchRedeemContext = None, user_id: str = None, credits_spent: int = 0):
+    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid'], redeem_ctx: TwitchRedemptionEvent = None, user_id: str = None, credits_spent: int = 0):
         scrolls = await get_scroll_counts(self.channel_id)
         stock = 0
         scroll_id = ScrollType.NONE
@@ -949,7 +949,7 @@ class RFChannel:
         if amount_in_queue >= stock:
             raise OutOfStockError(amount_in_queue, stock, f"Out of {scroll.capitalize()} scrolls!")
         if redeem_ctx:
-            queue_obj = QueuedScroll(scroll_id, redeem_ctx.redemption.reward.id, redeem_ctx.redemption.id, user_id, credits_spent)
+            queue_obj = QueuedScroll(scroll_id, redeem_ctx.data.reward.id, redeem_ctx.data.id, user_id, credits_spent)
         else:
             queue_obj = QueuedScroll(scroll_id, None, None, user_id, credits_spent)
         self.scroll_queue.append(queue_obj)
@@ -963,7 +963,7 @@ class RFChannel:
                     self.channel_id,
                     item.reward_id,
                     item.reward_redemption_id,
-                    CustomRewardRedemptionStatus.CANCELED
+                    TwitchCustomRewardRedemptionStatus.CANCELED
                 )
             if item.credits_spent != 0:
                 async with get_async_session() as session:

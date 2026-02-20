@@ -1,52 +1,27 @@
-from typing import TYPE_CHECKING, List, Dict
+from __future__ import annotations
+from typing import TYPE_CHECKING, NamedTuple, Any, List, Dict
 if TYPE_CHECKING:
-    from .commands import UserRole
+    from ..commands.global_context import GlobalContext
+from .events import CommandEvent, TwitchMessageEvent
 
-from .commands import Check, TwitchContext, Context, Converter
-from .command_exceptions import ArgumentConversionError
-import re
-import glob
-
-def strjoin(connecting_char: str, *strings: str, before_end: str | None=None, include_conn_char_before_end=False):
-    str_list = [str(x) for x in strings if x]
-    if len(str_list) > 1 and before_end is not None:
-        if include_conn_char_before_end:
-            str_list[-1] = f"{before_end}{str_list[-1]}"
-        else:
-            a = str_list.pop()
-            str_list[-1] += f"{before_end}{a}"
+from ravenpy import ravenpy
+from ravenpy.ravenpy import Item as RFItem
     
-    return connecting_char.join(str_list)
+from utils.utils import strjoin
+from .exceptions import ArgumentConversionError
 
-class HasRole(Check):
-    """Check if the user has at least one of the specified roles."""
-    
-    def __init__(self, *required_roles: 'UserRole'):
-        self.required_roles = required_roles
-        role_names = ', '.join(role.name.lower().replace("_", " ") for role in required_roles)
-        self.title = role_names
-        self.short_help = role_names
-        self.hide_in_help = True
-        if len(required_roles) == 1:
-            self.help = f"Requires the {role_names} role."
-        else:
-            self.help = f"Requires one of the following roles: {role_names}."
-    
-    async def check(self, ctx) -> bool:
-        if not any(role in ctx.roles for role in self.required_roles):
-            return f"You do not have permission to use this command."
-        return True
+class BaseConverter:
+    """To display a custom error message when conversion fails,
+    raise command_exceptions.ArgumentConversionError in the convert method."""
+    title: str = None
+    short_help: str = None
+    help: str = None
 
-class TwitchOnly(Check):
-    title = "Twitch only"
-    help = "Can only be run in Twitch"
-    
-    async def check(self, ctx: Context):
-        if not isinstance(ctx, TwitchContext):
-            return "This command can only be run on Twitch."
-        return True
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, event: CommandEvent, arg: str) -> Any:
+        raise NotImplementedError
 
-class Choice(Converter):
+class Choice(BaseConverter):
     def __init__(self, definition: List[str] | Dict[str, List[str]], title=None, case_sensitive=False):
         super().__init__()
         string_map = {}
@@ -79,34 +54,39 @@ class Choice(Converter):
         self.case_sensitive = case_sensitive
         self.string_map = string_map
         
-    async def convert(self, ctx: Context, arg: str) -> str:
+    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> str:
         if not arg in self.string_map:
             raise ArgumentConversionError(f"Choice '{arg}' is not a valid option. Valid choices: {self.short_help}")
         return self.string_map[arg]
-        
-class Regex(Converter):
+
+import re
+import glob 
+
+class Regex(BaseConverter):
     title = "Regex"
     short_help = "A python regular expression"
     help = "A python regular expression"
     
-    async def convert(ctx: Context, arg: str) -> re.Pattern:
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> re.Pattern:
         try:
             return re.compile(arg)
         except Exception as e:
             raise ArgumentConversionError("Couldn't compile regex")
-    
-class Glob(Converter):
+
+class Glob(BaseConverter):
     title = "Glob"
     short_help = "A glob pattern"
     help = "A glob pattern"
     
-    async def convert(ctx: Context, arg: str) -> re.Pattern:
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> re.Pattern:
         try:
             return re.compile(glob.translate(arg))
         except Exception as e:
             raise ArgumentConversionError("Couldn't compile glob expression")
-
-class RangeInt(Converter):
+        
+class RangeInt(BaseConverter):
     def __init__(self, min_: int | None, max_: int | None):
         super().__init__()
         self.min = min_
@@ -126,7 +106,7 @@ class RangeInt(Converter):
         else:
             raise ValueError("min_ or max_ need to be a number")
         
-    async def convert(self, ctx: Context, arg: str) -> int:
+    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> int:
         try:
             number = int(arg)
         except ValueError as e:
@@ -138,9 +118,8 @@ class RangeInt(Converter):
             raise ArgumentConversionError(f"Number is out of range! Minimum value: {self.min}")
     
         return number
-        
-        
-class RangeFloat(Converter):
+
+class RangeFloat(BaseConverter):
     def __init__(self, min_: float | None, max_: float | None):
         super().__init__()
         self.min = min_
@@ -160,7 +139,7 @@ class RangeFloat(Converter):
         else:
             raise ValueError("min_ or max_ need to be a number")
         
-    async def convert(self, ctx: Context, arg: str) -> float:
+    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> float:
         try:
             number = int(arg)
         except ValueError as e:
@@ -172,3 +151,91 @@ class RangeFloat(Converter):
             raise ArgumentConversionError(f"Number is out of range! Minimum value: {self.min}")
 
         return number
+
+if TYPE_CHECKING:
+    from bot.ravenfallmanager import RFChannelManager
+    from bot.ravenfallchannel import RFChannel
+
+class RFChannelConverter(BaseConverter):
+    title = "RFChannel"
+    short_help = "A Ravenfall channel name"
+    help = "A Ravenfall channel monitored by the bot."
+
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> RFChannel:
+        if arg == 'this':
+            if isinstance(ctx.message, TwitchMessageEvent):
+                query = ctx.message.room_name
+            else:
+                raise ArgumentConversionError("A channel must be specified.")
+        else:
+            query = arg
+        channel_by_name = g_ctx.ravenfall_manager.get_channel(channel_name=query)
+        channel_by_id = g_ctx.ravenfall_manager.get_channel(channel_id=query)
+        channel = channel_by_name or channel_by_id
+        if channel is None:
+            if arg == 'this':
+                raise ArgumentConversionError("A channel must be specified.")
+            else:
+                raise ArgumentConversionError(f"Ravenfall channel '{arg}' not found.")
+        return channel
+
+
+class RFItemConverter(BaseConverter):
+    title = "Item"
+    short_help = "An item name"
+    help = "An item name"
+    
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> RFItem:
+        item_search_results = ravenpy.search_item(arg, limit=1)
+        if not item_search_results:
+            raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
+        if item_search_results[0][1] < 85:
+            raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
+        return item_search_results[0][0]
+
+tw_username_re = re.compile(r"^@?[a-zA-Z0-9][\w]{2,24}$")
+tw_username_f_re = re.compile(r"^@?[a-zA-Z0-9/|][\w/|]{2,24}$")
+def is_twitch_username(text: str, pre_filter=False):
+    if pre_filter:
+        return bool(tw_username_f_re.match(text))
+    else:
+        return bool(tw_username_re.match(text))
+
+class TwitchUsername(BaseConverter):
+    title = "Twitch username"
+    short_help = "A valid Twitch username"
+    help = "A valid Twitch username"
+    
+    @staticmethod
+    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str):
+        is_valid = is_twitch_username(arg)
+        if not is_valid:
+            raise ArgumentConversionError("Not a valid username.")
+        return arg.lstrip("@").replace("\U000e0000", '').replace("|","").replace("/","")
+
+class _RFSkill(Choice):
+    def __init__(self, case_sensitive=False):
+        definition = {
+            "Attack": ['atk', 'att'],
+            "Defense": ['def'],
+            "Strength": ['str'],
+            "Health": ['hp'],
+            "Woodcutting": ['wood', 'chop', 'wdc', 'chomp'],
+            "Mining": ['mine', 'min'],
+            "Crafting": ['craft'],
+            "Cooking": ['cook', "ckn"],
+            "Farming": ['farm', 'fm'],
+            "Slayer": ['slay'],
+            "Magic": [],
+            "Ranged": ["range"],
+            "Sailing": ['sail'],
+            "Healing": ['heal'],
+            "Gathering": ["gath"],
+            "Alchemy": ["brew", "alch"],
+            "CombatLevel": ["combat"]
+        }
+        super().__init__(definition, "Ravenfall skill", case_sensitive)
+
+RFSkill = _RFSkill()

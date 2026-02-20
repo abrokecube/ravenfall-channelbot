@@ -1,41 +1,47 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from .command_enums import ParameterKind
 
 if TYPE_CHECKING:
-    from .commands import Parameter, Cooldown
+    from .cooldown import Cooldown
+from .modals import Parameter, ParameterKind
 
-class CommandError(Exception):
-    """Base exception for command-related errors."""
-    def __init__(self, message: str = "Command error"):
+
+class ListenerError(Exception):
+    """Base exception for listener-related errors."""
+    def __init__(self, message: str = "Listener error"):
         self.message = message
         super().__init__(self.message)
-
-class CheckFailure(CommandError):
-    """Raised when a command check fails."""
+        
+class CommandError(ListenerError):
+    """Raised when a non-fatal error occurs in a command"""
+    def __init__(self, message: str = "Command error"):
+        super().__init__(message)
+        
+class CheckFailure(ListenerError):
+    """Raised when a listener check fails."""
     def __init__(self, message: str = "Check failed"):
         super().__init__(message)
 
-class VerificationFailure(CommandError):
-    """Raised when a command verification fails."""
+class VerificationFailure(ListenerError):
+    """Raised when a listener verification fails."""
     def __init__(self, message: str = "Verification failed"):
         super().__init__(message)
 
-class CommandOnCooldown(CommandError):
-    """Raised when a command is on cooldown."""
+class ListenerOnCooldown(ListenerError):
+    """Raised when a listener is on cooldown."""
     def __init__(self, cooldown: Cooldown, retry_after: float):
         self.retry_after = retry_after
         self.cooldown = cooldown
-        super().__init__(f"Command is on cooldown. Try again in {retry_after:.2f}s")
+        super().__init__(f"Listener is on cooldown. Try again in {retry_after:.2f}s")
 
-class CommandRegistrationError(CommandError):
-    """Raised when there's an error registering a command or redeem."""
-    def __init__(self, name: str, item_type: str = "Command"):
+class ListenerRegistrationError(ListenerError):
+    """Raised when there's an error registering a listener or redeem."""
+    def __init__(self, name: str, item_type: str = "Listener"):
         self.display_name = name
         self.item_type = item_type
         super().__init__(f"{item_type} '{name}' already exists")
 
-class ArgumentError(CommandError):
+class ArgumentError(ListenerError):
     """Base exception for argument parsing errors."""
     pass
 
