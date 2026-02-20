@@ -110,7 +110,7 @@ for channel in channels:
     if 'command_prefix' not in channel:
         channel['command_prefix'] = '!'
 
-rf_manager: RFChannelManager
+rf_manager: RFChannelManager = None
 
 async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
     async def get_twitch_auth_instance(user_id: int | str, user_name: Optional[str] = None, scopes: List[AuthScope] = TWITCH_CHANNEL_SCOPES) -> Twitch:

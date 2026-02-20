@@ -4,11 +4,11 @@ Provides restart, monitoring, backup and utility commands used to manage
 Ravenfall servers and in-channel actions.
 """
 
-from ..commands.events import CommandEvent
+from ..commands.events import CommandEvent, MessageEvent
 from ..commands.global_context import GlobalContext
 from ..commands.checks import MinPermissionLevel
 from ..commands.converters import RangeInt, RFChannelConverter, RFItemConverter
-from ..commands.decorators import command, checks, parameter, cooldown
+from ..commands.decorators import command, checks, parameter, cooldown, on_message
 from ..commands.cog import Cog
 from ..commands.enums import UserRole, BucketType
 from ..commands.exceptions import CommandError
@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 import asyncio
 from datetime import datetime, timezone
 from typing import Dict
+
+import re
 
 
 class GameCog(Cog):
@@ -425,7 +427,10 @@ class GameCog(Cog):
             count = scrolls["data"][scope][name]
             scroll_list.append(f"{pl(count, name)}")
         await ctx.message.reply(f"Available channel scrolls: {', '.join(scroll_list)}")
-
+        
+    @on_message(lambda e: re.match(r"^\?(rs|ds|exps|fs|scrolls)", e.text, re.IGNORECASE))
+    async def scrolls_aliases(self, ctx: MessageEvent, result: re.Match):
+        await self.event_manager.execute_text(ctx.text[1:], ctx)
 
     @command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)

@@ -102,6 +102,19 @@ class Flag:
 
     def __repr__(self):
         return f"Flag({self.name}, {self.value})"
+    
+class CommandResponse(NamedTuple):
+    text: str
+    args: tuple[Any]
+    kwargs: dict[str, Any]
+
+class CommandExecutionResult(NamedTuple):
+    responses: List[CommandResponse]
+    error: Exception | None
+    
+class CommandDispatchResult(NamedTuple):
+    listener: CommandListener | None
+    error: Exception | None
 
 BUILTIN_TYPE_DOCS = {
     str: {

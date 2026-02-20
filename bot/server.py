@@ -1,7 +1,6 @@
 from aiohttp import web
 from .prom_metrics import MetricsManager
 from .ravenfallmanager import RFChannelManager
-from .chat_system import ChatManager
 import logging
 import json
 

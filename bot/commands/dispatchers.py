@@ -33,6 +33,7 @@ from .exceptions import (
     CommandError,
     ListenerError
 )
+from .modals import CommandDispatchResult
 from .command_parser import CommandArgs
 from utils.format_time import format_seconds, TimeSize
 from .cooldown import Cooldown
@@ -214,9 +215,15 @@ class CommandDispatcher(BaseDispatcher):
                 return cmd, text[len(cmd):].strip()
         return None, text
 
-    async def dispatch(self, global_context: GlobalContext, event: MessageEvent | CommandEvent, respond_to_errors: bool = True):
-        if isinstance(event, MessageEvent):
-            prefix = await self.get_prefix(global_context, event)
+    async def dispatch(
+        self, global_context: GlobalContext, event: MessageEvent | CommandEvent, 
+        respond_to_errors: bool = True, no_prefix: bool = False
+        ) -> CommandDispatchResult:
+        if isinstance(event, MessageEvent):            
+            if no_prefix:
+                prefix = ""
+            else:
+                prefix = await self.get_prefix(global_context, event)
             used_prefix = ""
             if isinstance(prefix, list):
                 for p in prefix:
@@ -224,22 +231,21 @@ class CommandDispatcher(BaseDispatcher):
                         used_prefix = p
                         break
                 else:
-                    return
+                    return CommandDispatchResult(None, None)
             else:
                 if not event.text.startswith(prefix):
-                    return
+                    return CommandDispatchResult(None, None)
                 used_prefix = prefix
             content = event.text[len(used_prefix):]
             
             command_name, remaining_text = self._find_command(content)
             if not command_name or command_name not in self.listeners_and_aliases:
-                return
+                return CommandDispatchResult(None, None)
 
             command = self.listeners_and_aliases[command_name]
-            copied_msg_event = dataclasses.replace(event, text=filter_text(event.text))
 
             new_event = CommandEvent(
-                message=copied_msg_event,
+                message=event,
                 prefix=used_prefix,
                 invoked_with=content[:len(command_name)],
                 parameters_text=remaining_text,
@@ -250,6 +256,7 @@ class CommandDispatcher(BaseDispatcher):
 
         try:
             await command.invoke(global_context, new_event)
+            return CommandDispatchResult(command, None)
         except Exception as error:
             if not isinstance(error, ListenerError):
                 LOGGER.error(f"Error occurred during command invocation: {error}", exc_info=True)
@@ -258,6 +265,8 @@ class CommandDispatcher(BaseDispatcher):
             if not respond_to_errors:
                 raise error
             await self.on_invoke_error(global_context, new_event, command, error)
+            return CommandDispatchResult(command, error)
+
                 
     async def on_invoke_error(self, g_ctx: GlobalContext, event: CommandEvent, command: CommandListener, error: Exception):
         usage_text = command.get_usage_text(event.prefix, event.invoked_with)

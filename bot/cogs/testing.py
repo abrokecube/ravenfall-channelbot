@@ -5,11 +5,13 @@ Contains simple ping/hi commands and test redeems used in development.
 
 from typing import Optional, Dict, Any
 from ..commands.cog import Cog
-from ..commands.events import CommandEvent, TwitchRedemptionEvent
+from ..commands.events import CommandEvent, TwitchRedemptionEvent, MessageEvent
 from ..commands.exceptions import CommandError
-from ..commands.decorators import command, on_match, on_twitch_redeem, checks
+from ..commands.decorators import command, on_match, on_twitch_redeem, checks, on_message
 from ..commands.checks import MinPermissionLevel
 from ..commands.enums import UserRole
+
+import re
 
 class TestingCog(Cog):
     """Small set of test commands and redeems for development.
@@ -43,6 +45,15 @@ class TestingCog(Cog):
     async def ping(self, ctx: CommandEvent):
         """Simple ping command that replies with 'Pong!'."""
         await ctx.message.reply("Pong!")
+        
+    # @on_message(lambda e: bool(re.match(r"^\?\?(ping)", e.text, re.IGNORECASE)))
+    # async def ping_alias(self, ctx: MessageEvent, result: re.Match):
+    #     await self.event_manager.execute_text(ctx.text[2:], ctx)
+
+    # @on_message(lambda e: bool(re.match(r"^\?\?(error)", e.text, re.IGNORECASE)))
+    # async def test_error_alias(self, ctx: MessageEvent, result: re.Match):
+    #     responses = await self.event_manager.execute_text("test_error", ctx, capture_responses=True)
+    #     print(responses)
 
     @command()
     async def roles(self, ctx: CommandEvent):

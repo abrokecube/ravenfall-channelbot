@@ -4,7 +4,7 @@ from .modals import MetaFilter
 from .cooldown import Cooldown
 from .converters import BaseConverter
 from .checks import BaseCheck, FunctionCheck
-from .events import BaseEvent, TwitchRedemptionEvent
+from .events import BaseEvent, TwitchRedemptionEvent, MessageEvent
 from .listeners import LambdaListener, GenericListener
 
 # Matchers
@@ -35,20 +35,25 @@ def _lambda_filter_decorator(
         return func
     return decorator
 
-def on_message(*, platforms: list[EventSource] | None=None):
-    _sources = []
-    if platforms:
-        _sources = tuple(platforms)
-    meta_filter = MetaFilter(
-        (EventCategory.Message,), True, 
-        _sources, bool(platforms)            
-    )
-    return _meta_filter_decorator(meta_filter)
+# def on_message(*, platforms: list[EventSource] | None=None):
+#     _sources = []
+#     if platforms:
+#         _sources = tuple(platforms)
+#     meta_filter = MetaFilter(
+#         (EventCategory.Message,), True, 
+#         _sources, bool(platforms)            
+#     )
+#     return _meta_filter_decorator(meta_filter)
 
 def on_match(event_types: type[BaseEvent] | list[type[BaseEvent]], match_fn: Callable[[BaseEvent], bool]):
     if not isinstance(event_types, list):
         event_types = [event_types]
     return _lambda_filter_decorator(event_types, match_fn)
+
+def on_message(match_fn: Callable[[MessageEvent], bool]):
+    return _lambda_filter_decorator(
+        [MessageEvent], match_fn, dispatcher_type=Dispatcher.Generic
+    )
 
 def on_twitch_redeem(match_fn: Callable[[TwitchRedemptionEvent], bool]):
     return _lambda_filter_decorator(
