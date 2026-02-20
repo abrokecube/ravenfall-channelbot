@@ -28,6 +28,7 @@ from .exceptions import OutOfStockError
 from .commands.events import TwitchRedemptionEvent
 from .commands.enums import TwitchCustomRewardRedemptionStatus
 from bot import middleman
+from bot.models import Channel
 from database.session import get_async_session
 from database.models import AutoRaidStatus, Character, User
 import database.utils as db_utils
@@ -90,7 +91,7 @@ class RFChannel:
     
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: Channel,
         manager: RFChannelManager,
     ):
         self.chat: Chat = manager.chat

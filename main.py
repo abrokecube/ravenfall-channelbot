@@ -1,4 +1,4 @@
-from twitchAPI.twitch import Twitch
+from twitchAPI.twitch import Twitch, TwitchUser
 from twitchAPI.oauth import UserAuthenticationStorageHelper, UserAuthenticator
 from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, EventData, ChatMessage, ChatCommand
@@ -110,10 +110,10 @@ for channel in channels:
     if 'command_prefix' not in channel:
         channel['command_prefix'] = '!'
 
-rf_manager: RFChannelManager = None
+rf_manager: RFChannelManager
 
 async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
-    async def get_twitch_auth_instance(user_id: int | str, user_name: str = None, scopes: List[AuthScope] = TWITCH_CHANNEL_SCOPES) -> Twitch:
+    async def get_twitch_auth_instance(user_id: int | str, user_name: Optional[str] = None, scopes: List[AuthScope] = TWITCH_CHANNEL_SCOPES) -> Twitch:
         save_new_tokens = True
         async with get_async_session() as session:
             access_token, refresh_token = await db_utils.get_tokens(session, user_id)
@@ -121,7 +121,7 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
                 save_new_tokens = False
 
         while True:
-            twitch = await Twitch(os.getenv("TWITCH_APP_ID"), os.getenv("TWITCH_APP_SECRET"), target_app_auth_scope=TWITCH_APP_SCOPES)
+            twitch = await Twitch(os.getenv("TWITCH_APP_ID", ""), os.getenv("TWITCH_APP_SECRET"), target_app_auth_scope=TWITCH_APP_SCOPES)
             if access_token is None:
                 auth = UserAuthenticator(twitch, scopes, True)
                 print(f"Auth scopes: {', '.join([x.value for x in scopes])}")
@@ -134,11 +134,12 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
 
             try:
                 await twitch.set_user_authentication(access_token, scopes, refresh_token)
-                user = None
+                user: TwitchUser | None = None
                 if save_new_tokens:
                     user = await helper.first(twitch.get_users())
-                    async with get_async_session() as session:
-                        await db_utils.update_tokens(session, user.id, access_token, refresh_token, user.login)
+                    if isinstance(user, TwitchUser):
+                        async with get_async_session() as session:
+                            await db_utils.update_tokens(session, user.id, access_token, refresh_token, user.login)
             except MissingScopeException:
                 print("Token is missing scopes")
                 access_token = None
@@ -171,7 +172,7 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
                 return twitch
                 
     logger.info("Getting twitch info")
-    twitch = await get_twitch_auth_instance(os.getenv("BOT_USER_ID"), scopes=TWITCH_BOT_USER_SCOPES)
+    twitch = await get_twitch_auth_instance(os.getenv("BOT_USER_ID", ""), scopes=TWITCH_BOT_USER_SCOPES)
 
     logger.info("Initializing twitch chat instance")
     chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
@@ -290,7 +291,7 @@ async def run():
 
     global_ctx.ravenfall_manager = rf_manager
 
-    server = SomeEndpoints(rf_manager, None, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), os.getenv("PRIVATE_SERVER_PORT", 8080))
+    server = SomeEndpoints(rf_manager, None, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), int(os.getenv("PRIVATE_SERVER_PORT", 8080)))
     await server.start()
 
     try:

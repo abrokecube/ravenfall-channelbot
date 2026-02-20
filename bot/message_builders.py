@@ -11,9 +11,9 @@ class SenderBuilder:
         user_id: Union[str, UUID] = "00000000-0000-0000-0000-000000000000",
         character_id: Union[str, UUID] = "00000000-0000-0000-0000-000000000000",
         display_name: str = "",
-        color: str = None,
+        color: Optional[str] = None,
         platform: str = "twitch",
-        platform_id: str = None,
+        platform_id: Optional[str] = None,
         is_broadcaster: bool = False,
         is_moderator: bool = False,
         is_subscriber: bool = False,
@@ -288,7 +288,3 @@ class MessageFactory:
             
         return builder.build()
 
-if __name__ == "__main__":
-    MessageFactory.create_ravenbot_message(
-        sender=SenderBuilder()
-    )

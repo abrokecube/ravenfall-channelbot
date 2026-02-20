@@ -1,9 +1,9 @@
 import math
-from typing import Iterable, List, Tuple
+from typing import Sequence, Tuple
 import random
 
 # yoinked from https://505e06b2.github.io/Image-to-Braille/
-def pixels_to_char(pixels: Iterable[bool], monospace=False, use_space=False):
+def pixels_to_char(pixels: Sequence[bool], monospace=False, use_space=False):
     if len(pixels) != 8:
         raise ValueError(f"Expected an array of 8 bools, got length {len(pixels)}")
     shifts = [0, 1, 2, 6, 3, 4, 5, 7]
@@ -91,7 +91,7 @@ def interpolate_with_gap_handling(pairs, output_count, max_gap):
     return output
 
 # Expects (timestamp, value) pairs
-def simple_line_graph(pairs: Iterable[Tuple[float, float]], width=24, height=4, min_val=None, max_val=None, hard_min_val=None, hard_max_val=None, fill_type=0, max_gap=20, monospace=False, use_space=False):
+def simple_line_graph(pairs: Sequence[Tuple[float, float]], width=24, height=4, min_val=None, max_val=None, hard_min_val=None, hard_max_val=None, fill_type=0, max_gap=20, monospace=False, use_space=False):
     values = [x[1] for x in pairs]
     if max_val is None:
         max_val = max(values)

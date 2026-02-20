@@ -21,6 +21,12 @@ class Channel(TypedDict):
     auto_restart: bool
     event_notifications: bool
     restart_period: int
+    middleman_connection_id: str
+    ravenfall_loc_strings_path: str
+    auto_restore_raids: bool
+    restart_timeout: int
+    town_level_notifications: bool
+    command_prefix: str
 
 class GameSession(TypedDict):
     authenticated: bool
