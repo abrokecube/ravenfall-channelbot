@@ -52,7 +52,7 @@ class TestingCog(Cog):
 
     # @on_message(lambda e: bool(re.match(r"^\?\?(error)", e.text, re.IGNORECASE)))
     # async def test_error_alias(self, ctx: MessageEvent, result: re.Match):
-    #     responses = await self.event_manager.execute_text("test_error", ctx, capture_responses=True)
+    #     responses = await self.event_manager.execute_text("test_error", ctx)
     #     print(responses)
 
     @command()

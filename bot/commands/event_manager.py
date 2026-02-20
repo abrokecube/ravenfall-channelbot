@@ -216,7 +216,6 @@ class EventManager:
         try:
             result = await d.dispatch(
                 self.global_context, event, no_prefix=True,
-                respond_to_errors=capture_responses
             )
             command_exception = result.error
         except Exception as e:
