@@ -429,7 +429,7 @@ class GameCog(Cog):
         await ctx.message.reply(f"Available channel scrolls: {', '.join(scroll_list)}")
         
     @on_message(lambda e: re.match(r"^\?(rs|ds|exps|fs)", e.text, re.IGNORECASE))
-    async def scrolls_aliases(self, ctx: MessageEvent, result: re.Match):
+    async def scrolls_use_aliases(self, ctx: MessageEvent, result: re.Match):
         await self.event_manager.execute_text(ctx.text[1:], ctx)
         
     @on_message(lambda e: re.match(r"^\?scrolls", e.text, re.IGNORECASE))
