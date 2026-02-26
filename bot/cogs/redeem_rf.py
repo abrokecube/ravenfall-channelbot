@@ -43,7 +43,7 @@ import asyncio
 import random
 import json
 from twitchAPI.helper import first
-from utils.utils import upload_to_pastes
+from utils.utils import upload_to_borkedbin
 from bot.ravenfallrestarttask import RestartReason
 import re
 from utils.routines import routine
@@ -909,7 +909,7 @@ class RedeemRFCog(Cog):
             out_str.append(f"{category_name} --- -- -- - -")
             out_str.extend(items)
             out_str.append("")        
-        url = await upload_to_pastes("\n".join(out_str))
+        url = await upload_to_borkedbin("\n".join(out_str))
         await ctx.message.reply(f"Stock list: {url}")
 
     @command(name="giftto")

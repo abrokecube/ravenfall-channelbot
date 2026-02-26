@@ -9,7 +9,7 @@ from ..commands.checks import MinPermissionLevel
 from ..commands.enums import UserRole
 from ..commands.converters import RFChannelConverter
 from ..ravenfallchannel import RFChannel
-from utils.utils import upload_to_pastes
+from utils.utils import upload_to_borkedbin
 import inspect
 import logging
 
@@ -23,7 +23,7 @@ class DebugCog(Cog):
         result = getattr(self.global_context, property, "Invalid property")
         result_text = f"{property}: {result}"
         if len(result_text) > 300:
-            url = await upload_to_pastes(result_text)
+            url = await upload_to_borkedbin(result_text)
             await ctx.message.reply(f"Result too long. {url}")
         else:
             await ctx.message.reply(result_text)
@@ -54,7 +54,7 @@ class DebugCog(Cog):
         logger.info(f"Eval result: {result_text}")
         # Upload long responses
         if len(result_text) > 300:
-            url = await upload_to_pastes(result_text)
+            url = await upload_to_borkedbin(result_text)
             await ctx.message.reply(f"Result too long. {url}")
         elif len(result_text) == 0:
             await ctx.message.reply("No result.")

@@ -29,7 +29,7 @@ from ..rf_webops_client import WebOpsClient
 from ravenpy.ravenpy import Item
 from ravenpy import ravenpy
 from ravenpy.itemdefs import Items
-from utils.utils import upload_to_pastes
+from utils.utils import upload_to_borkedbin
 from ..models import RFChannelEvent, GameMultiplier
 
 import logging
@@ -548,7 +548,7 @@ class GameCog(Cog):
         out_str.append(f"Points in {channel.channel_name}: {points_in_channel:,} points")
         out_str.append(f"Total: {total_points:,} points")
         out_str.append("")
-        out_url = await upload_to_pastes("\n".join(out_str))
+        out_url = await upload_to_borkedbin("\n".join(out_str))
         await ctx.message.reply(
             f"In this channel: {points_in_channel:,} points – Total: {result['total_points']:,} points – Breakdown: {out_url}"
         )

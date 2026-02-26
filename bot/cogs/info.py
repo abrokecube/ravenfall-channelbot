@@ -679,7 +679,7 @@ class InfoCog(Cog):
                 f"{utils.pl2(filtered_player_count, "player", "players", False)} total"
             )
         out_str.append("")    
-        url = await utils.upload_to_pastes("\n".join(out_str))
+        url = await utils.upload_to_borkedbin("\n".join(out_str))
         await ctx.message.reply(
             f"{player_count_text}: {url}"
         )
