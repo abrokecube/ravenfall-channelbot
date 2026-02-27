@@ -350,15 +350,16 @@ async def upload_to_pastes(text: str):
 async def upload_to_borkedbin(text: str):
     async with aiohttp.ClientSession() as s:
         r = await s.post(
-            "https://bin.borkedcube.moe/api/add/text",
+            f"{os.getenv('BORKEDBIN_HOST', 'https://bin.borkedcube.moe').strip('/')}/api/add/text",
             headers={
                 "X-Api-Key": os.getenv("BORKEDBIN_API_KEY", "")
             },
-            data=aiohttp.FormData({"content": text})
+            json={"content": text}
         )
         if r.status == 200:
             return (await r.json())['url']
         else:
+            await r.text()  # Consume response to free connection
             return None
 
 def get_char_identifier(char: ravenpy.Character):
