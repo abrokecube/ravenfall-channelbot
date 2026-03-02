@@ -58,7 +58,10 @@ logger = logging.getLogger(__name__)
 RAID_SCROLL_SIZE = 1
 DUNGEON_SCROLL_SIZE = 8
 MAX_QUEUE_SIZE = 25
-NON_MOD_MAX_BATCH_SCROLLS = 5
+NON_MOD_MAX_BATCH_SCROLLS = 99
+
+assert DUNGEON_SCROLL_SIZE <= NON_MOD_MAX_BATCH_SCROLLS, "Non-mods won't be able to queue dungeon scrolls!"
+assert RAID_SCROLL_SIZE <= NON_MOD_MAX_BATCH_SCROLLS, "Non-mods won't be able to queue raid scrolls!"
 
 @dataclass
 class RavenfallResponse:
