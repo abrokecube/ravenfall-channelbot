@@ -959,13 +959,16 @@ class RFChannel:
     async def remove_scrolls_from_queue(self, start_pos: int):
         while len(self.scroll_queue) > start_pos:
             item = self.scroll_queue.pop()
-            if item.reward_id:
-                await self.twitch.update_redemption_status(
-                    self.channel_id,
-                    item.reward_id,
-                    item.reward_redemption_id,
-                    TwitchCustomRewardRedemptionStatus.CANCELED
-                )
+            try:
+                if item.reward_id:
+                    await self.twitch.update_redemption_status(
+                        self.channel_id,
+                        item.reward_id,
+                        item.reward_redemption_id,
+                        TwitchCustomRewardRedemptionStatus.CANCELED
+                    )
+            except Exception:
+                logger.warning(f"Failed to cancel scroll redemption for {item}")
             if item.credits_spent != 0:
                 async with get_async_session() as session:
                     await db_utils.add_credits(session, item.user_id, item.credits_spent, "Scroll refund")
