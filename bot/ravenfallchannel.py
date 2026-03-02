@@ -385,7 +385,7 @@ class RFChannel:
                     paste_out.append(f"Loot gained by {message['Recipent']['PlatformUserName']} ({datetime.now(timezone.utc).strftime('%d %B %Y %H:%M:%S UTC')})")
                     paste_out.append("")
                     paste_out.extend(loots)
-                    paste_url = await utils.upload_to_borkedbin('\n'.join(paste_out))
+                    paste_url = await utils.upload_to_bin('\n'.join(paste_out))
                     await self.send_chat_message(f"{', '.join(loots[:3])} ✦ More: {paste_url}", reply_id=message['CorrelationId'])
                 else:
                     await self.send_chat_message(f"{', '.join(loots)}", reply_id=message['CorrelationId'])

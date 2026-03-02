@@ -333,6 +333,15 @@ def is_twitch_username(text: str):
     return bool(tw_username_re.match(text))
 
 
+async def upload_to_bin(text: str):
+    provider = os.getenv("PASTEBIN_PROVIDER", "pastes.dev").lower()
+    if provider == "pastes":
+        return await upload_to_pastes(text)
+    elif provider == "borkedbin":
+        return await upload_to_borkedbin(text)
+    else:
+        raise ValueError(f"Invalid pastebin provider: {provider}")
+
 async def upload_to_pastes(text: str):
     async with aiohttp.ClientSession() as s:
         r = await s.post(
