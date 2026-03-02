@@ -334,7 +334,7 @@ def is_twitch_username(text: str):
 
 
 async def upload_to_bin(text: str):
-    provider = os.getenv("PASTEBIN_PROVIDER", "pastes.dev").lower()
+    provider = os.getenv("PASTEBIN_PROVIDER", "pastes").lower()
     if provider == "pastes":
         return await upload_to_pastes(text)
     elif provider == "borkedbin":
