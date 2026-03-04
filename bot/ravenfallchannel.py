@@ -716,7 +716,7 @@ class RFChannel:
             await asyncio.sleep(10)
 
         await self.send_chat_message(
-            f"Town level is now {self.town_level}!"
+            f"🎉 Town level is now {self.town_level}!"
         )
         
 
