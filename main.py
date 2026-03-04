@@ -99,11 +99,21 @@ logger_config = {
         'console_level': logging.INFO,
     }
 }
-default_console_logging_level = int(os.getenv("LOGGING_LEVEL", logging.DEBUG))
+logging_level_strs = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warn": logging.WARNING,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL
+}
+log_level = os.getenv("LOG_LEVEL", "info")
+default_console_logging_level = logging_level_strs.get(log_level.lower(), "info")
 setup_logging(level=default_console_logging_level, loggers_config=logger_config)
-logger = logging.getLogger(__name__)
 
-logger.info(f"Console logging level: {default_console_logging_level}")
+logger = logging.getLogger(__name__)
+if not log_level.lower() in logging_level_strs:
+    logger.warning(f"Invalid logging level '{log_level}'")
 
 with open("channels.json", "r") as f:
     channels: List[Channel] = json.load(f)
