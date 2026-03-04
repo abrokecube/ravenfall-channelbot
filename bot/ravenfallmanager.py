@@ -343,6 +343,7 @@ class RAMUsageAlertMonitor(BatchAlertMonitor):
         maximum_total_ravenfall_bytes = int(os.getenv("MAX_RAVENFALL_TOTAL_MIB", "10240")) * 1024 * 1024
         maximum_single_ravenfall_bytes = int(os.getenv("MAX_RAVENFALL_MIB", "5120")) * 1024 * 1024
         over_bytes = max(0, total_bytes - maximum_total_ravenfall_bytes)
+        logger.debug(f"[RAMUsageAlertMonitor] Total usage: {total_bytes / 1024 / 1024} MiB ({over_bytes / 1024 / 1024} MiB over)")
         for name, bytes_used in sorted(processes_named.items(), key=lambda x: x[1], reverse=True):
             logger.debug(f"[RAMUsageAlertMonitor] {name} usage: {bytes_used / 1024 / 1024} MiB")
             if over_bytes > 0:
