@@ -430,9 +430,9 @@ class GameCog(Cog):
     async def scrolls_use_aliases(self, ctx: MessageEvent, result: re.Match):
         await self.event_manager.execute_text(ctx.text[1:], ctx)
         
-    @on_message(lambda e: re.match(r"^\?scrolls", e.text, re.IGNORECASE))
+    @on_message(lambda e: re.match(r"^\?scrolls(?P<args>.*)", e.text, re.IGNORECASE))
     async def scrolls_aliases(self, ctx: MessageEvent, result: re.Match):
-        await self.event_manager.execute_text("channelscrolls", ctx)
+        await self.event_manager.execute_text(f"channelscrolls{result.group('args')}", ctx)
 
     @command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
