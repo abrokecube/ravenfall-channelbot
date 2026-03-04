@@ -357,3 +357,6 @@ class RAMUsageAlertMonitor(BatchAlertMonitor):
             channel = self.rfmanager.get_channel(channel_name=name)
             if not channel.monitoring_paused:
                 channel.queue_restart(90, label="Town is using too much memory", reason=RestartReason.MEMORY_USE)
+
+    async def resolve_alert(self, name):
+        pass
