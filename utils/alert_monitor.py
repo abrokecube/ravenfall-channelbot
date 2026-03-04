@@ -112,6 +112,7 @@ class AlertMonitor(ABC):
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
         logger.info(f"[{self.name}] AlertMonitor started.")
+        logger.debug(f"[{self.name}] configuration: interval={self.interval}, timeout={self.timeout}, alert_interval={self.alert_interval}")
 
     async def stop(self):
         """Stop the monitoring loop."""
@@ -119,6 +120,7 @@ class AlertMonitor(ABC):
             return
 
         self._running = False
+        logger.debug(f"[{self.name}] stopping monitor, cancelling task")
         if self._task:
             self._task.cancel()
             try:
@@ -135,6 +137,7 @@ class AlertMonitor(ABC):
                 reason = "Condition check returned False"
                 try:
                     is_good = await self.check_condition()
+                    logger.debug(f"[{self.name}] check_condition returned {is_good}")
                     if isinstance(is_good, tuple):
                         is_good, reason = is_good
                     elif isinstance(is_good, str):
@@ -149,6 +152,7 @@ class AlertMonitor(ABC):
                 now = asyncio.get_running_loop().time()
                 
                 if is_good:
+                    logger.debug(f"[{self.name}] condition good, is_alerting={self._is_alerting}")
                     # Condition is good (True)
                     if self._is_alerting:
                         logger.info(f"[{self.name}] Condition returned to normal. Resolving alert.")
@@ -301,6 +305,7 @@ class BatchAlertMonitor(ABC):
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
         logger.info(f"[{self.name}] BatchAlertMonitor started.")
+        logger.debug(f"[{self.name}] configuration: interval={self.interval}, timeout={self.timeout}, alert_interval={self.alert_interval}")
 
     async def stop(self):
         """Stop the monitoring loop."""
@@ -308,6 +313,7 @@ class BatchAlertMonitor(ABC):
             return
 
         self._running = False
+        logger.debug(f"[{self.name}] stopping batch monitor, cancelling task")
         if self._task:
             self._task.cancel()
             try:
@@ -323,6 +329,7 @@ class BatchAlertMonitor(ABC):
             while self._running:
                 try:
                     results = await self.check_condition()
+                    logger.debug(f"[{self.name}] check_condition returned keys: {list(results.keys())}")
                 except Exception as e:
                     logger.error(f"[{self.name}] Error in check_condition: {e}", exc_info=True)
                     results = {} # Or handle global failure?
@@ -331,6 +338,7 @@ class BatchAlertMonitor(ABC):
                 
                 # Process results
                 all_keys = set(results.keys()) | set(self._states.keys())
+                logger.debug(f"[{self.name}] processing keys: {all_keys}")
                 for name in all_keys:
                     if name not in self._states:
                         self._states[name] = MonitorState()
@@ -354,6 +362,7 @@ class BatchAlertMonitor(ABC):
                         reason = "Key missing from check results"
                     
                     if is_good:
+                        logger.debug(f"[{self.name}] '{name}' is good, alerting={state.is_alerting}")
                         if state.is_alerting:
                             logger.info(f"[{self.name}] Condition '{name}' returned to normal. Resolving alert.")
                             try:
@@ -370,8 +379,10 @@ class BatchAlertMonitor(ABC):
                     else:
                         if state.first_failure_time is None:
                             state.first_failure_time = now
+                            logger.debug(f"[{self.name}] '{name}' first failure at {now}")
                         else:
                             elapsed = now - state.first_failure_time
+                            logger.debug(f"[{self.name}] '{name}' failure elapsed {elapsed:.2f}s")
                             if elapsed >= self.timeout:
                                 if not state.is_alerting:
                                     logger.warning(f"[{self.name}] Alert timer expired for '{name}'. Starting alerts.")
