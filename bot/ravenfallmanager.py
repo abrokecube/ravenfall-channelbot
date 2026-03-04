@@ -14,7 +14,9 @@ from utils.websocket_client import AutoReconnectingWebSocket
 from datetime import timedelta, datetime, timezone
 import time
 from .ravenfallrestarttask import RestartReason
+from .prometheus import get_prometheus_instant
 from utils.alert_monitor import BatchAlertMonitor
+from utils.runshell import runshell
 
 import os
 
@@ -42,6 +44,8 @@ class RFChannelManager:
         self.load_channels()
 
         self.global_resync_lock = asyncio.Lock()
+        self.item_alert_monitor: ItemAlertMonitor = None
+        self.ram_usage_alert_monitor: RAMUsageAlertMonitor = None
 
 
     def load_channels(self):
@@ -70,7 +74,10 @@ class RFChannelManager:
             self.rf_message_processor.add_disconnection_callback(self.on_processor_disconnect)
         else:
             logger.info("RF_MIDDLEMAN_PROCESSOR_HOST or RF_MIDDLEMAN_PROCESSOR_PORT not set, not starting message processor")
-        await ItemAlertMonitor(self).start()
+        self.item_alert_monitor = ItemAlertMonitor(self)
+        self.ram_usage_alert_monitor = RAMUsageAlertMonitor(self)
+        await self.item_alert_monitor.start()
+        await self.ram_usage_alert_monitor.start()
 
     async def stop(self):
         for channel in self.channels:
@@ -79,6 +86,8 @@ class RFChannelManager:
         self.resync_routine.cancel()
         if self.rf_message_processor:
             await self.rf_message_processor.astop()
+        await self.item_alert_monitor.stop()
+        await self.ram_usage_alert_monitor.stop()
 
     async def event_twitch_message(self, message: ChatMessage):
         for channel in self.channels:
@@ -294,4 +303,57 @@ class ItemAlertMonitor(BatchAlertMonitor):
     
     async def resolve_alert(self, name):
         pass
+
+class RAMUsageAlertMonitor(BatchAlertMonitor):
+    def __init__(self, rfmanager: RFChannelManager):
+        super().__init__(interval=60, timeout=10*60, alert_interval=60*60, name='RAMUsageAlertMonitor')
+        self.rfmanager = rfmanager
+
+    async def check_condition(self):
+        working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
+        tasks = []
+        for ch in self.rfmanager.channels:
+            shellcmd = (
+                f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
+            )
+            tasks.append(runshell(shellcmd))
+        responses: List[str | None] = await asyncio.gather(*tasks)
+        if None in responses:
+            return {}
+        pid_lists = [x.splitlines() for code, x in responses]
+        box_pids = {}
+        for i in range(len(self.rfmanager.channels)):
+            box_pids[self.rfmanager.channels[i].channel_name] = pid_lists[i]
+        processes: Dict[str, List[float]] = {}
+        total_bytes = 0
+        for metric in working_set:
+            m = metric['metric']
+            pid = m['process_id']
+            bytes_usage = int(metric['value'][1])
+            total_bytes += bytes_usage
+            processes[pid] = bytes_usage
+        processes_named: Dict[str, List[float]] = {}
+        for name, pids in box_pids.items():
+            for pid in pids:
+                if pid in processes:
+                    processes_named[name] = processes[pid]
+                    break
+        alerts = {}
+        maximum_total_ravenfall_bytes = int(os.getenv("MAX_RAVENFALL_TOTAL_MIB", "10240")) * 1024 * 1024
+        maximum_single_ravenfall_bytes = int(os.getenv("MAX_RAVENFALL_MIB", "5120")) * 1024 * 1024
+        over_bytes = max(0, total_bytes - maximum_total_ravenfall_bytes)
+        for name, bytes_used in sorted(processes_named.items(), key=lambda x: x[1], reverse=True):
+            if over_bytes > 0:
+                alerts[name] = "Over maximum total RAM usage"
+                over_bytes -= bytes_used
+            elif bytes_used > maximum_single_ravenfall_bytes:
+                alerts[name] = "Over maximum RAM usage"
+            else:
+                alerts[name] = True
+        return alerts
         
+    async def trigger_alert(self, name: str, reason: str):
+        if reason is not None:
+            channel = self.rfmanager.get_channel(channel_name=name)
+            if not channel.monitoring_paused:
+                channel.queue_restart(90, label="Town is using too much memory", reason=RestartReason.MEMORY_USE)

@@ -20,6 +20,7 @@ class RestartReason(Enum):
     UNRESPONSIVE = "unresponsive"
     MULTIPLIER_DESYNC = "multiplier_desync"
     ITEM_DESYNC = "item_desync"
+    MEMORY_USE = "memory_use"
     
 
 class PreRestartEvent(Enum):
