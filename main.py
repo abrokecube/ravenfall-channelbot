@@ -99,8 +99,11 @@ logger_config = {
         'console_level': logging.INFO,
     }
 }
-setup_logging(level=int(os.getenv("LOGGING_LEVEL", logging.DEBUG)), loggers_config=logger_config)
+default_console_logging_level = int(os.getenv("LOGGING_LEVEL", logging.DEBUG))
+setup_logging(level=default_console_logging_level, loggers_config=logger_config)
 logger = logging.getLogger(__name__)
+
+logger.info(f"Console logging level: {default_console_logging_level}")
 
 with open("channels.json", "r") as f:
     channels: List[Channel] = json.load(f)
