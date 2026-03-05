@@ -58,6 +58,7 @@ class CommandEvent:
     invoked_with: str
     parsed_args: CommandArgs
     parameters_text: str
+    specified_parameters: set[str] = field(default_factory=set)
 
 if TYPE_CHECKING:
     from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData

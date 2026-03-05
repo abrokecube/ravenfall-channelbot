@@ -379,14 +379,15 @@ class CommandListener(GenericListener):
             except Exception as e:
                 raise ArgumentConversionError(f"Could not convert to {conv_obj.__name__}", value, param, e)    
 
-    async def _parse_arguments(self, ctx: CommandEvent, g_ctx: GlobalContext) -> tuple[list, dict]:
-        args = []
+    async def _parse_arguments(self, ctx: CommandEvent, g_ctx: GlobalContext) -> tuple[set[str], dict]:
         kwargs = {}
         
         # Separate positional args and flags from ctx.args
         positional_args = []
         named_args = {}
         parsed_args = ctx.parsed_args
+        
+        specified_params = set()
 
         # Check if we have a VAR_KEYWORD parameter
         has_var_keyword = any(p.kind == ParameterKind.VAR_KEYWORD for p in self.parameters)
@@ -420,7 +421,8 @@ class CommandListener(GenericListener):
             if param.kind == ParameterKind.VAR_POSITIONAL:
                 for arg in positional_args[positional_index:]:
                     converted = await self._convert_argument(ctx, arg, param, g_ctx)
-                    args.append(converted)
+                    kwargs[param.name] = converted
+                    specified_params.add(param.name)
                 positional_index = len(positional_args)
                 continue
             
@@ -429,6 +431,7 @@ class CommandListener(GenericListener):
                 for name, value in list(named_args.items()):
                     converted = await self._convert_argument(ctx, value, param, g_ctx)
                     kwargs[name] = converted
+                    specified_params.add(param.name)
                     del named_args[name]
                 continue
             
@@ -441,6 +444,7 @@ class CommandListener(GenericListener):
                 
                 converted = await self._convert_argument(ctx, val, param, g_ctx)
                 kwargs[param_name] = converted
+                specified_params.add(param.name)
                 continue
             
             # If KEYWORD_ONLY and not in named_args (checked above)
@@ -489,10 +493,9 @@ class CommandListener(GenericListener):
                 converted = await self._convert_argument(ctx, val, param, g_ctx)
                 
                 # Decide where to put it
-                if param.kind == ParameterKind.POSITIONAL_ONLY:
-                    args.append(converted)
-                else:
-                    kwargs[param_name] = converted
+                # param.kind == ParameterKind.POSITIONAL_ONLY:
+                kwargs[param_name] = converted
+                specified_params.add(param.name)
             else:
                 # Not provided positionally
                 if param.default != inspect.Parameter.empty:
@@ -508,14 +511,14 @@ class CommandListener(GenericListener):
         if positional_index < len(positional_args):
             raise UnknownArgumentError(positional_args[positional_index:])
 
-        return args, kwargs
+        return specified_params, kwargs
 
-    async def invoke(self, global_ctx, event, *args, **kwargs):
+    async def invoke(self, global_ctx, event: CommandEvent, *args, **kwargs):
         await self._run_checks(global_ctx, event)
         await self._check_cooldown(event)
         if self.parameters:
-            parsed_args, parsed_kwargs = await self._parse_arguments(event, global_ctx)
-            args = (*args, *parsed_args)
+            specified_params, parsed_kwargs = await self._parse_arguments(event, global_ctx)
+            event.specified_parameters = specified_params
             kwargs = {**kwargs, **parsed_kwargs}
         await self._run_verification(event, *args, **kwargs)
         await self._run_func(global_ctx, event, *args, **kwargs)
