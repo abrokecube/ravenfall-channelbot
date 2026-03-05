@@ -78,14 +78,7 @@ class ArgumentConversionError(ArgumentError):
         self.value = value
         self.original_error = original_error
         self.parameter = parameter
-        self.message = message
-        if message:
-            error_msg = message
-        else:
-            error_msg = f"Cannot convert '{value}' into {parameter.type_title} ({parameter.display_name})"
-        # if original_error:
-        #     error_msg += f": {original_error}"
-        super().__init__(error_msg)
+        super().__init__(message)
 
 class EmptyFlagValueError(ArgumentConversionError):
     """Raised when a flag is provided without a value."""

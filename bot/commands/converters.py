@@ -170,6 +170,8 @@ class RFChannelConverter(BaseConverter):
                 raise ArgumentConversionError("A channel must be specified.")
         else:
             query = arg
+        if not g_ctx.ravenfall_manager:
+            raise ArgumentConversionError("Please try again after a few seconds.")
         channel_by_name = g_ctx.ravenfall_manager.get_channel(channel_name=query)
         channel_by_id = g_ctx.ravenfall_manager.get_channel(channel_id=query)
         channel = channel_by_name or channel_by_id

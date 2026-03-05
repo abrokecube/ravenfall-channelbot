@@ -280,9 +280,9 @@ class CommandDispatcher(BaseDispatcher):
             await event.message.reply(f"❌ Expected a value for argument '{error.parameter.name}' (type: {error.parameter.type_title})")
         elif isinstance(error, ArgumentConversionError):
             if error.message:
-                out_text = f"❌ Error in argument '{error.parameter.name}': {error.message}"
+                out_text = f"❌ Error parsing argument '{error.parameter.name}': {error.message}"
             else:
-                out_text = f"❌ Error turning '{error.value}' ({error.parameter.name}) into {error.parameter.type_title}"
+                out_text = f"❌ '{error.value}' ({error.parameter.name}) is not a valid {error.parameter.type_title}"
             await event.message.reply(out_text)
         elif isinstance(error, UnknownArgumentError):
             await event.message.reply(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
