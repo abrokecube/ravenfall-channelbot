@@ -553,6 +553,7 @@ class GameCog(Cog):
             f"In this channel: {points_in_channel:,} points – Total: {result['total_points']:,} points – Breakdown: {out_url}"
         )
     
+    @command()
     @parameter("user", converter=TwitchUsername)
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(MinPermissionLevel(UserRole.MODERATOR))
