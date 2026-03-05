@@ -324,7 +324,7 @@ class GameCog(Cog):
     
     @command(name="exps")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def exps(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
+    async def exps(self, ctx: CommandEvent, count: int = 99, *, channel: RFChannel = 'this'):
         """Uses my exp multiplier scroll(s).
 
         Args:
@@ -374,15 +374,17 @@ class GameCog(Cog):
         if multiplier_value == 100:
             raise CommandError("Multiplier is already maxed.")
         
-        count = 100 - multiplier_value
-        if count > scrolls_remaining:
+        count_ = 100 - multiplier_value
+        if count_ > count:
+            raise CommandError("The number of scrolls used must result in a 100x multiplier.")
+        if count_ > scrolls_remaining:
             raise CommandError("There are not enough scrolls in stock to reach 100x multiplier.")
         
         elif multiplier_value > 1 and remaining / duration < 0.8:
             raise CommandError("Wait for the current multiplier to expire before using this command again.")
         
         
-        await send_multichat_command(f"?exps {count}", "0", "", channel.channel_id, channel.channel_name)
+        await send_multichat_command(f"?exps {count_}", "0", "", channel.channel_id, channel.channel_name)
     
     @command(name="fs")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
