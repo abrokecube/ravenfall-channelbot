@@ -570,10 +570,14 @@ class GameCog(Cog):
         )
         await send_to_server(
             channel.middleman_connection_id,
-            RavenBotTemplates.sail(sender)
-        )
-        await send_to_server(
-            channel.middleman_connection_id,
             RavenBotTemplates.train(sender, query_result['training'])
         )
-
+        await asyncio.sleep(0.5)
+        query2_result = await channel.get_query(f"select id, island, training from players where name = '{user}'")
+        if not query2_result:
+            raise CommandError("User not found")
+        if query2_result['island'] != query_result['island']:
+            await send_to_server(
+                channel.middleman_connection_id,
+                RavenBotTemplates.sail_to(sender, query_result['island'])
+            )
