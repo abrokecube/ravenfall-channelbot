@@ -1184,6 +1184,7 @@ class RedeemRFCog(Cog):
     @command(aliases=['scroll_queue', 'sq'])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def scrollqueue(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
+        """Lists scrolls in the scroll queue."""
         total = channel.get_scroll_queue_length()
         queue_content_text = []
         last = ScrollType.NONE
@@ -1215,6 +1216,12 @@ class RedeemRFCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(MinPermissionLevel(UserRole.MODERATOR))
     async def clearscrollqueue(self, ctx: CommandEvent, start_pos: int = 0, *, channel: RFChannel = 'this'):
+        """Clears the scroll queue.
+        
+        Args:
+            start_pos: Index from the first scroll in the queue to cut off.
+            channel: Target channel.
+        """
         len_before = channel.get_scroll_queue_length()
         await channel.remove_scrolls_from_queue(start_pos)
         len_after = channel.get_scroll_queue_length()

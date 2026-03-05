@@ -560,6 +560,12 @@ class GameCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(MinPermissionLevel(UserRole.MODERATOR))
     async def healbump(self, ctx: CommandEvent, user: str, *, channel: RFChannel = 'this'):
+        """Fix a player who is not earning exp. Executes commands on the player's behalf.
+        
+        Args:
+            user: Target user.
+            channel: Target channel.
+        """
         query_result = await channel.get_query(f"select id, island, training from players where name = '{user}'")
         if not query_result:
             raise CommandError("User not found")

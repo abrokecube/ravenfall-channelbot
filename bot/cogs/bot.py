@@ -183,7 +183,7 @@ class BotStuffCog(Cog):
     @parameter(name="restart", aliases=['r'])
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     async def pull_process(self, ctx: CommandEvent, process_name: str, *, restart: bool = False):
-        """Runs "git pull" in a process's directory.
+        """Runs "git pull" in a process' directory.
         
         Args:
             process_name: A registered process name.
@@ -213,6 +213,7 @@ class BotStuffCog(Cog):
     @command(name="reloadwatchdog")
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     async def reload_watchdog_conf(self, ctx: CommandEvent):
+        """Reloads config for all watchdog instances."""
         had_errored = False
         for watcher in self.watchers:
             try:
