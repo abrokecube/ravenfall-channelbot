@@ -1020,9 +1020,12 @@ class RedeemRFCog(Cog):
         queue_size = 0
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
+        if queue_size >= MAX_QUEUE_SIZE:
+            await ctx.cancel()
+            raise CommandError("The queue is full.")
         if queue_size + DUNGEON_SCROLL_SIZE > MAX_QUEUE_SIZE:
             await ctx.cancel()
-            raise CommandError("The queue does not have enough space for a Dungeon Scroll. Your points have been refunded.")
+            raise CommandError("The queue does not have enough space for a Dungeon Scroll.")
         
         queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
         
@@ -1032,7 +1035,7 @@ class RedeemRFCog(Cog):
             else:
                 await channel.add_scroll_to_queue('dungeon', ctx)
         except OutOfStockError:
-            raise CommandError("We are out of dungeon scrolls. Your points have been refunded.")
+            raise CommandError("We are out of dungeon scrolls.")
         
         await ctx.send("Added a Dungeon Scroll to the queue.")
         if queue_is_empty:
@@ -1049,9 +1052,12 @@ class RedeemRFCog(Cog):
         queue_size = 0
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
+        if queue_size >= MAX_QUEUE_SIZE:
+            await ctx.cancel()
+            raise CommandError("The queue is full.")
         if queue_size + RAID_SCROLL_SIZE > MAX_QUEUE_SIZE:
             await ctx.cancel()
-            raise CommandError("The queue does not have enough space for a Raid Scroll. Your points have been refunded.")
+            raise CommandError("The queue does not have enough space for a Raid Scroll.")
 
         queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
 
@@ -1061,7 +1067,7 @@ class RedeemRFCog(Cog):
             else:
                 await channel.add_scroll_to_queue('raid', ctx)
         except OutOfStockError:
-            raise CommandError("We are out of raid scrolls. Your points have been refunded.")
+            raise CommandError("We are out of raid scrolls.")
         
         await ctx.send("Added a Raid Scroll to the queue.")
         if queue_is_empty:
@@ -1096,10 +1102,13 @@ class RedeemRFCog(Cog):
         queue_size = 0
         queue_size += channel.get_scroll_count_in_queue('dungeon') * DUNGEON_SCROLL_SIZE
         queue_size += channel.get_scroll_count_in_queue('raid') * RAID_SCROLL_SIZE
-        
+
+        if queue_size >= MAX_QUEUE_SIZE:
+            raise CommandError("The queue is full.")
+
         available_space = MAX_QUEUE_SIZE - queue_size
         if available_space < scroll_size:
-             raise CommandError(f"The queue does not have enough space for a {scroll_type.capitalize()} Scroll.")
+            raise CommandError(f"The queue does not have enough space for a {scroll_type.capitalize()} Scroll.")
          
         user_maximum = 99
         if not any(role.level() >= UserRole.MODERATOR.level() for role in ctx.message.author_roles):

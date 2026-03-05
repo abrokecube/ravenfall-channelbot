@@ -135,7 +135,7 @@ class TwitchRedeemDispatcher(SimpleDispatcher):
         
     async def on_invoke_error(self, global_context, event: TwitchRedemptionEvent, error):
         if isinstance(error, CommandError):
-            await event.send(f"❌ {error.message.rstrip('.')}. Your points will be refunded.")
+            await event.send(f"❌ {error.message.rstrip('.')}. (Points refunded)")
         else:
             await event.send(f"❌ An error occurred. Points will be refunded.")
         try:
