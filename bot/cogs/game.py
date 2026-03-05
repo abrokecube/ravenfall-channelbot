@@ -7,7 +7,7 @@ Ravenfall servers and in-channel actions.
 from ..commands.events import CommandEvent, MessageEvent
 from ..commands.global_context import GlobalContext
 from ..commands.checks import MinPermissionLevel
-from ..commands.converters import RangeInt, RFChannelConverter, RFItemConverter
+from ..commands.converters import RangeInt, RFChannelConverter, RFItemConverter, TwitchUsername
 from ..commands.decorators import command, checks, parameter, cooldown, on_message
 from ..commands.cog import Cog
 from ..commands.enums import UserRole, BucketType
@@ -552,4 +552,14 @@ class GameCog(Cog):
         await ctx.message.reply(
             f"In this channel: {points_in_channel:,} points – Total: {result['total_points']:,} points – Breakdown: {out_url}"
         )
+    
+    @parameter("user", converter=TwitchUsername)
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    async def healbump(self, ctx: CommandEvent, user: str, *, channel: RFChannel = 'this'):
+        user_island = await channel.get_query(f"select island from players where name = '{user}'")
+        if not user_island:
+            raise CommandError("User not found")
+        await send_multichat_command(f"?say !sail {user}", ctx.message.room_id, ctx.message.room_name, ctx.message.room_id, ctx.message.room_name)
+        await send_multichat_command(f"?say !sail {user} {user_island['island']}", ctx.message.room_id, ctx.message.room_name, ctx.message.room_id, ctx.message.room_name)
 
