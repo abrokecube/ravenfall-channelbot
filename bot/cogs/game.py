@@ -376,9 +376,9 @@ class GameCog(Cog):
         
         count_ = 100 - multiplier_value
         if count_ > count:
-            raise CommandError("The number of scrolls used must result in a 100x multiplier.")
+            raise CommandError(f"The number of scrolls used must result in a 100x multiplier. ({count_} scrolls are needed)")
         if count_ > scrolls_remaining:
-            raise CommandError("There are not enough scrolls in stock to reach 100x multiplier.")
+            raise CommandError(f"There are not enough scrolls in stock to reach 100x multiplier. (stock: {scrolls_remaining}, required: {count_})")
         
         elif multiplier_value > 1 and remaining / duration < 0.8:
             raise CommandError("Wait for the current multiplier to expire before using this command again.")
