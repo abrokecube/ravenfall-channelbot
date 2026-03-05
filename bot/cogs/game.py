@@ -31,6 +31,8 @@ from ravenpy import ravenpy
 from ravenpy.itemdefs import Items
 from utils.utils import upload_to_bin
 from ..models import RFChannelEvent, GameMultiplier
+from ..message_templates import RavenBotTemplates
+from ..middleman import send_to_server
 
 import logging
 logger = logging.getLogger(__name__)
@@ -558,9 +560,20 @@ class GameCog(Cog):
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @checks(MinPermissionLevel(UserRole.MODERATOR))
     async def healbump(self, ctx: CommandEvent, user: str, *, channel: RFChannel = 'this'):
-        user_island = await channel.get_query(f"select island from players where name = '{user}'")
-        if not user_island:
+        query_result = await channel.get_query(f"select id, island, training from players where name = '{user}'")
+        if not query_result:
             raise CommandError("User not found")
-        await send_multichat_command(f"?say !sail {user}", ctx.message.room_id, ctx.message.room_name, ctx.message.room_id, ctx.message.room_name)
-        await send_multichat_command(f"?say !sail {user} {user_island['island']}", ctx.message.room_id, ctx.message.room_name, ctx.message.room_id, ctx.message.room_name)
+        sender = await channel.build_sender_from_character_id(query_result['id'])
+        await send_to_server(
+            channel.middleman_connection_id,
+            RavenBotTemplates.sail(sender)
+        )
+        await send_to_server(
+            channel.middleman_connection_id,
+            RavenBotTemplates.sail(sender)
+        )
+        await send_to_server(
+            channel.middleman_connection_id,
+            RavenBotTemplates.train(sender, query_result['training'])
+        )
 

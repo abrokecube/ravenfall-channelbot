@@ -50,6 +50,19 @@ class RavenBotTemplates:
         ).build()
 
     @staticmethod
+    def sail_to(
+        sender: Dict[str, Any],
+        island_name: str,
+        correlation_id: Optional[Union[str, UUID]] = None
+    ) -> str:
+        return RavenBotMessageBuilder(
+            sender=sender,
+            identifier="ferry_travel",
+            content=island_name,
+            correlation_id=correlation_id
+        ).build()
+
+    @staticmethod
     def gift_item(
         sender: Dict[str, Any],
         recipient_user_name: str,
@@ -113,6 +126,48 @@ class RavenBotTemplates:
         a = RavenBotMessageBuilder(
             sender=sender.build(),
             identifier="inspect",
+            correlation_id=correlation_id,
+        )
+        if return_dict:
+            return a.build_dict()
+        return a.build()
+    
+    @staticmethod
+    def train(
+        sender: Dict[str, Any],
+        skill: str,
+        correlation_id: Optional[Union[str, UUID]] = None,
+        return_dict: bool = False
+    ):
+        skill = skill.lower()
+        if skill_q == "alchemy":
+            skill_q = "brewing"
+        
+        identifier = ""
+        content = {}
+        match skill_q:
+            case "sailing":
+                identifier = "ferry_enter"
+            case "attack" | "defense" | "strength" | "all" | "magic" | "ranged" | "healing" | "health":
+                identifier = "task"
+                content = {
+                    "Task": "Fighting",
+                    "Arguments": [skill_q]
+                }
+            case "woodcutting" | "fishing" | "mining" | "crafting" | "cooking" | "farming" | "gathering" | "brewing":
+                identifier = "task"
+                content = {
+                    "Task": skill_q.capitalize(),
+                    "Arguments": []
+                }
+            case _:
+                raise ValueError("Invalid skill")
+
+        a = RavenBotMessageBuilder(
+            sender=sender,
+            identifier=identifier,
+            content=content,
+            correlation_id=correlation_id
         )
         if return_dict:
             return a.build_dict()
