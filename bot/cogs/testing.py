@@ -45,7 +45,11 @@ class TestingCog(Cog):
     async def ping(self, ctx: CommandEvent):
         """Simple ping command that replies with 'Pong!'."""
         await ctx.message.reply("Pong!")
-        
+
+    @on_message(lambda e: re.match(r"^\?ping", e.text, re.IGNORECASE))
+    async def ping_alias(self, ctx: MessageEvent, result: re.Match):
+        await self.event_manager.execute_text("ping", ctx)
+
     # @on_message(lambda e: bool(re.match(r"^\?\?(ping)", e.text, re.IGNORECASE)))
     # async def ping_alias(self, ctx: MessageEvent, result: re.Match):
     #     await self.event_manager.execute_text(ctx.text[2:], ctx)
