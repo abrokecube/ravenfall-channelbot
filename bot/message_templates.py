@@ -140,24 +140,24 @@ class RavenBotTemplates:
         return_dict: bool = False
     ):
         skill = skill.lower()
-        if skill_q == "alchemy":
-            skill_q = "brewing"
+        if skill == "alchemy":
+            skill = "brewing"
         
         identifier = ""
         content = {}
-        match skill_q:
+        match skill:
             case "sailing":
                 identifier = "ferry_enter"
             case "attack" | "defense" | "strength" | "all" | "magic" | "ranged" | "healing" | "health":
                 identifier = "task"
                 content = {
                     "Task": "Fighting",
-                    "Arguments": [skill_q]
+                    "Arguments": [skill]
                 }
             case "woodcutting" | "fishing" | "mining" | "crafting" | "cooking" | "farming" | "gathering" | "brewing":
                 identifier = "task"
                 content = {
-                    "Task": skill_q.capitalize(),
+                    "Task": skill.capitalize(),
                     "Arguments": []
                 }
             case _:
