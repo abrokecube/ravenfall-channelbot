@@ -48,7 +48,7 @@ TWITCH_BOT_USER_SCOPES = [
 ]
 TWITCH_CHANNEL_SCOPES = [
     AuthScope.CHANNEL_MANAGE_REDEMPTIONS,
-    AuthScope.CHANNEL_BOT
+    AuthScope.CHANNEL_BOT,
 ]
 logger_config = {
     'asyncio': {
@@ -295,6 +295,9 @@ async def run():
     await event_manager.add_cog(BotStuffCog, watcher_urls=watchers)
     from bot.cogs.debug import DebugCog
     await event_manager.add_cog(DebugCog)
+
+    logger.info("Checking db after cog imports")
+    await update_schema()
 
     await setup_twitch(global_ctx, event_manager)
 
