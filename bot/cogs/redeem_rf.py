@@ -15,23 +15,15 @@ from ..commands.checks import MinPermissionLevel, TwitchOnly
 from ..commands.converters import RangeInt, Choice, RFChannelConverter, TwitchUsername, RFItemConverter
 from ..commands.exceptions import CommandError
 
-# from ..commands import CommandEvent, Commands, TwitchRedemptionEvent, CommandEvent, checks, parameter, cooldown, Cooldown
-# from ..command_enums import UserRole, Platform, CustomRewardRedemptionStatus, BucketType
-# from ..command_utils import HasRole, TwitchOnly, RangeInt, Choice
-# from ..command_exceptions import CommandError
-# from ..commands_old.cog import Cog
-# from utils.commands_rf import RFChannelConverter, TwitchUsername, RFItemConverter
-
 from ..ravenfallmanager import RFChannelManager
+from twitchAPI.twitch import Twitch
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
 from ..exceptions import OutOfStockError
 from ..models import ScrollType, RFChannelEvent
 from bot.multichat_command import get_char_coins, get_char_items, track_item_use, track_coin_use
 from bot.message_templates import RavenBotTemplates
-from database.session import get_async_session
-from database.utils import get_formatted_sender_data, add_credits, get_user_credits, get_channel
-from dataclasses import dataclass
+from bot.commands.services import DatabaseService
 from bot.messageprocessor import RavenfallMessage
 import logging
 import json
@@ -51,6 +43,8 @@ from datetime import timedelta, datetime, timezone
 from bot.models import Player
 from database.models import UserCreditIdleEarn, Character, Channel
 from sqlalchemy import select
+
+from dataclasses import dataclass
 
 
 logger = logging.getLogger(__name__)
@@ -120,8 +114,8 @@ def fill_whitespace(text: str, pattern: str = ". "):
     return re.sub(r' +', repl, text)
 async def get_sender_str(channel: RFChannel, sender_username: str):
     """Return formatted sender data for `sender_username` in `channel`."""
-    async with get_async_session() as session:
-        sender = await get_formatted_sender_data(session, channel.channel_id, sender_username)
+    db = channel.manager.global_context.require_service(DatabaseService)
+    sender = await db.get_formatted_sender_data(channel.channel_id, sender_username)
     return sender
 
 async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15):
@@ -487,9 +481,10 @@ class RedeemRFCog(Cog):
 
     @routine(delta=timedelta(seconds=15), wait_remainder=True, max_attempts=99999)
     async def idle_points(self):
-        if not self.global_context.ravenfall_manager:
+        if not self.global_context.require_service(RFChannelManager):
             return
-        for ch in self.global_context.ravenfall_manager.channels:
+        db = self.global_context.require_service(DatabaseService)
+        for ch in self.global_context.require_service(RFChannelManager).channels:
             chars: List[Player] = await ch.get_query("select * from players")
             if not chars:
                 continue
@@ -499,7 +494,7 @@ class RedeemRFCog(Cog):
             if not char_ids:
                 continue
 
-            async with get_async_session() as session:
+            async with db.get_session() as session:
                 char_rows = await session.execute(
                     select(Character).where(Character.id.in_(char_ids))
                 )
@@ -508,7 +503,7 @@ class RedeemRFCog(Cog):
                 idle_rows = await session.execute(
                     select(UserCreditIdleEarn).where(UserCreditIdleEarn.char_id.in_(char_ids))
                 )
-                channel_db = await get_channel(session, id=ch.channel_id, name=ch.channel_name)
+                channel_db = await db.get_channel(id=ch.channel_id, name=ch.channel_name, session=session)
                 earn_rate = 3 if not channel_db else channel_db.idle_earn_rate
 
                 idle_records = {rec.char_id: rec for rec in idle_rows.scalars()}
@@ -561,17 +556,17 @@ class RedeemRFCog(Cog):
                     )
                     if earned_chunks > 0 and character.twitch_id is not None:
                         credits = earned_chunks * earn_rate
-                        await add_credits(
-                            session,
+                        await db.add_credits(
                             character.twitch_id,
                             credits,
                             f"Idle town earnings ({character.id})",
-                            record_transaction=False
+                            record_transaction=False,
+                            session=session
                         )
 
     async def send_coins_redeem(self, ctx: TwitchRedemptionEvent, amount: int):
-        """Handle a coin redemption and attempt to send `amount` coins to the redeemer."""
-        channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
+        """Handle a coin redemption and attempt to se1nd `amount` coins to the redeemer."""
+        channel = self.global_context.require_service(RFChannelManager).get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             return
         await ctx.send(f"Sending {amount:,} coins to {ctx.data.user_login}...")
@@ -622,10 +617,10 @@ class RedeemRFCog(Cog):
 
     async def send_item_credits_redeem(self, ctx: TwitchRedemptionEvent, amount: int, quiet: bool = False):
         """Credit `amount` item credits to the redeemer and optionally notify them."""
-        async with get_async_session() as session:
-            trans_id = await add_credits(session, ctx.data.user_id, amount, "Item credits redeem")
-            if not quiet:
-                await ctx.send(f"You have been given {amount:,} item credits. (ID: {trans_id})")
+        db = self.global_context.require_service(DatabaseService)
+        trans_id = await db.add_credits(ctx.data.user_id, amount, "Item credits redeem")
+        if not quiet:
+            await ctx.send(f"You have been given {amount:,} item credits. (ID: {trans_id})")
         await ctx.fulfill()
 
     @on_twitch_redeem(lambda e: "lurking" in e.redeem_name.lower())
@@ -659,9 +654,9 @@ class RedeemRFCog(Cog):
     @checks(TwitchOnly)
     async def credits_balance(self, ctx: CommandEvent):
         """Gets your current credits balance."""
-        async with get_async_session() as session:
-            credits = await get_user_credits(session, ctx.message.author_id)
-            await ctx.message.reply(f"You have {credits:,} item {pl(credits, 'credit', 'credits')}.")
+        db = self.global_context.require_service(DatabaseService)
+        credits = await db.get_user_credits(ctx.message.author_id)
+        await ctx.message.reply(f"You have {credits:,} item {pl(credits, 'credit', 'credits')}.")
 
     @command(
         name="credits value",
@@ -729,14 +724,15 @@ class RedeemRFCog(Cog):
         if price == 0:
             await ctx.message.reply(f"{item.name} is not redeemable.")
             return
-        async with get_async_session() as session:
-            balance = await get_user_credits(session, ctx.message.author_id)
-            if balance < price * count:
-                await ctx.message.reply(
-                    f"You do not have enough credits to purchase {count:,}× {item.name}{pl(count, '', '(s)')}. "
-                    f"You have {balance:,} {pl(balance, 'credit', 'credits')}. "
-                    f"You need {price * count:,} {pl(price * count, 'credit', 'credits')}.")
-                return
+        db = self.global_context.require_service(DatabaseService)
+        balance = await db.get_user_credits(ctx.message.author_id)
+        if balance < price * count:
+            await ctx.message.reply(
+                f"You do not have enough credits to purchase {count:,}× {item.name}{pl(count, '', '(s)')}. "
+                f"You have {balance:,} {pl(balance, 'credit', 'credits')}. "
+                f"You need {price * count:,} {pl(price * count, 'credit', 'credits')}."
+            )
+            return
 
         await ctx.message.reply(f"Sending you {count}× {item.name}{pl(count, "", "(s)")}...")
         try:
@@ -749,8 +745,8 @@ class RedeemRFCog(Cog):
             )
             return
         except PartialSendError as e:
-            async with get_async_session() as session:
-                trans_id = await add_credits(session, ctx.message.author_id, -price * e.items_sent, f"Shop purchase: {item.name} x{count}")
+            db = self.global_context.require_service(DatabaseService)
+            trans_id = await db.add_credits(ctx.message.author_id, -price * e.items_sent, f"Shop purchase: {item.name} x{count}")
             await ctx.message.send(
                 f"There were not enough {count:,}× {item.name}{pl(count, '', '(s)')} in stock. "
                 f"You received {e.items_sent:,}× {item.name}{pl(e.items_sent, '', '(s)')}. "
@@ -771,9 +767,9 @@ class RedeemRFCog(Cog):
             await ctx.message.send(f"❌ An unknown error occurred. Please try again later. Your credits were not deducted.")
             return
 
-        async with get_async_session() as session:
-            trans_id = await add_credits(session, ctx.message.author_id, -price * count, f"Shop purchase: {item.name} x{count}")
-            balance -= price * count
+        db = self.global_context.require_service(DatabaseService)
+        trans_id = await db.add_credits(ctx.message.author_id, -price * count, f"Shop purchase: {item.name} x{count}")
+        balance -= price * count
 
         await asyncio.sleep(0.5)
         await ctx.message.reply(
@@ -974,19 +970,19 @@ class RedeemRFCog(Cog):
             recipient_name: Twitch username of the recipient.
             amount: Amount of credits to give.
         """
-        user = await first(self.global_context.ravenfall_manager.chat.twitch.get_users(logins=[recipient_name]))
+        user = await first(self.global_context.require_service(Twitch).get_users(logins=[recipient_name]))
         if user is None:
             await ctx.message.reply(f"User {recipient_name} not found")
             return
         
-        async with get_async_session() as session:
-            trans_id = await add_credits(session, user.id, amount, f"Added by {ctx.message.author_login}")
-            await ctx.message.reply(f"Gave {amount:,} {pl(amount, 'credit', 'credits')} to {recipient_name}. (ID: {trans_id})")
+        db = self.global_context.require_service(DatabaseService)
+        trans_id = await db.add_credits(user.id, amount, f"Added by {ctx.message.author_login}")
+        await ctx.message.reply(f"Gave {amount:,} {pl(amount, 'credit', 'credits')} to {recipient_name}. (ID: {trans_id})")
 
 
     @on_twitch_redeem(lambda e: e.redeem_name == "Restart Ravenfall")
     async def restart_ravenfall(self, ctx: TwitchRedemptionEvent, result: bool):
-        channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
+        channel = self.global_context.require_service(RFChannelManager).get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()
             return
@@ -1001,7 +997,7 @@ class RedeemRFCog(Cog):
             
     @on_twitch_redeem(lambda e: e.redeem_name == "Restart RavenBot")
     async def restart_ravenbot(self, ctx: TwitchRedemptionEvent, result: bool):
-        channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
+        channel = self.global_context.require_service(RFChannelManager).get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()
             return
@@ -1012,7 +1008,7 @@ class RedeemRFCog(Cog):
 
     @on_twitch_redeem(lambda e: e.redeem_name == "Queue Dungeon scroll")
     async def queue_dungeon(self, ctx: TwitchRedemptionEvent, result: bool):
-        channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
+        channel = self.global_context.require_service(RFChannelManager).get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()
             return
@@ -1044,7 +1040,7 @@ class RedeemRFCog(Cog):
         
     @on_twitch_redeem(lambda e: e.redeem_name == "Queue Raid scroll")
     async def queue_raid(self, ctx: TwitchRedemptionEvent, result: bool):
-        channel = self.global_context.ravenfall_manager.get_channel(channel_id=ctx.data.broadcaster_user_id)
+        channel = self.global_context.require_service(RFChannelManager).get_channel(channel_id=ctx.data.broadcaster_user_id)
         if channel is None:
             await ctx.cancel()
             return
@@ -1121,19 +1117,19 @@ class RedeemRFCog(Cog):
         to_add = min(count, max_can_add)
         total_cost = to_add * cost
 
-        async with get_async_session() as session:
-            balance = await get_user_credits(session, ctx.message.author_id)
-            if balance < total_cost:
-                can_afford = balance // cost
-                if can_afford == 0:
-                    raise CommandError(
-                        f"You do not have enough credits to queue a {scroll_type.capitalize()} Scroll. "
-                        f"You have {balance:,} {pl(balance, 'credit', 'credits')}. "
-                        f"You need {cost:,} {pl(cost, 'credit', 'credits')}."
-                    )
-                # Adjust to what they can afford
-                to_add = can_afford
-                total_cost = to_add * cost
+        db = self.global_context.require_service(DatabaseService)
+        balance = await db.get_user_credits(ctx.message.author_id)
+        if balance < total_cost:
+            can_afford = balance // cost
+            if can_afford == 0:
+                raise CommandError(
+                    f"You do not have enough credits to queue a {scroll_type.capitalize()} Scroll. "
+                    f"You have {balance:,} {pl(balance, 'credit', 'credits')}. "
+                    f"You need {cost:,} {pl(cost, 'credit', 'credits')}."
+                )
+            # Adjust to what they can afford
+            to_add = can_afford
+            total_cost = to_add * cost
 
         added_count = 0
         queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
@@ -1159,8 +1155,8 @@ class RedeemRFCog(Cog):
             
         trans_id = None
         if final_cost > 0:
-            async with get_async_session() as session:
-                trans_id = await add_credits(session, ctx.message.author_id, -final_cost, f"Queued {scroll_type} scroll x{added_count}")
+            db = self.global_context.require_service(DatabaseService)
+            trans_id = await db.add_credits(ctx.message.author_id, -final_cost, f"Queued {scroll_type} scroll x{added_count}")
         
         msg = f"Added {added_count} {scroll_type.capitalize()} {pl(added_count, 'Scroll', 'Scrolls')} to the queue."
         

@@ -6,6 +6,7 @@ import dataclasses
 if TYPE_CHECKING:
     from .listeners import BaseListener
     from .global_context import GlobalContext
+    from .event_manager import EventManager
 from .events import (
     BaseEvent, 
     MessageEvent
@@ -56,6 +57,12 @@ class BaseDispatcher:
         self._func_listener: BaseListener = BaseListener
         self.listeners: Dict[str, BaseListener] = {}
         self.categories: Set[EventCategory] = set([EventCategory.Generic])
+        
+    async def setup(self, event_manager: EventManager):
+        pass
+
+    async def teardown(self):
+        pass
         
     def _func_to_listener(self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
         name = func.__name__

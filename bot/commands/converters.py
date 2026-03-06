@@ -8,7 +8,7 @@ from ravenpy import ravenpy
 from ravenpy.ravenpy import Item as RFItem
     
 from utils.utils import strjoin
-from .exceptions import ArgumentConversionError
+from .exceptions import ArgumentConversionError, ListenerError
 
 class BaseConverter:
     """To display a custom error message when conversion fails,
@@ -156,6 +156,10 @@ if TYPE_CHECKING:
     from bot.ravenfallmanager import RFChannelManager
     from bot.ravenfallchannel import RFChannel
 
+class GameNotConnected(ListenerError):
+    def __init__(self, message: str = "Game is not connected. Please try again later."):
+        super().__init__(message)
+
 class RFChannelConverter(BaseConverter):
     title = "RFChannel"
     short_help = "A Ravenfall channel name"
@@ -170,10 +174,11 @@ class RFChannelConverter(BaseConverter):
                 raise ArgumentConversionError("A channel must be specified.")
         else:
             query = arg
-        if not g_ctx.ravenfall_manager:
-            raise ArgumentConversionError("Please try again after a few seconds.")
-        channel_by_name = g_ctx.ravenfall_manager.get_channel(channel_name=query)
-        channel_by_id = g_ctx.ravenfall_manager.get_channel(channel_id=query)
+        rf_manager = g_ctx.require_service(RFChannelManager)
+        if not rf_manager:
+            raise GameNotConnected()
+        channel_by_name = rf_manager.get_channel(channel_name=query)
+        channel_by_id = rf_manager.get_channel(channel_id=query)
         channel = channel_by_name or channel_by_id
         if channel is None:
             if arg == 'this':

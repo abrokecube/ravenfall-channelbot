@@ -34,27 +34,39 @@ class EventManager:
         
         self.add_event_middleware(MessageEvent, middlewares.filter_message_event_text)
         
-    def add_event_source(self, source: BaseEventSource):
+    async def add_event_source(self, source: BaseEventSource):
         source.event_processor_callback = self.process_event
         self.event_sources.append(source)
+        setup_func = getattr(source, "setup", None)
+        if callable(setup_func):
+            await setup_func(self)
         
-    def remove_event_source(self, source: BaseEventSource):
+    async def remove_event_source(self, source: BaseEventSource):
         try:
             source_idx = self.event_sources.index(source)
         except:
             raise ValueError("Source not found")
         self.event_sources[source_idx].event_processor_callback = None
-        self.event_sources.pop(source_idx)
+        removed_source = self.event_sources.pop(source_idx)
+        teardown_func = getattr(removed_source, "teardown", None)
+        if callable(teardown_func):
+            await teardown_func()
         
-    def add_dispatcher(self, dispatcher: BaseDispatcher):
+    async def add_dispatcher(self, dispatcher: BaseDispatcher):
         if dispatcher._id in self.dispatchers:
             raise ValueError(f"Dispatcher with id '{dispatcher._id}' has already been added!")
         self.dispatchers[dispatcher._id] = dispatcher
+        setup_func = getattr(dispatcher, "setup", None)
+        if callable(setup_func):
+            await setup_func(self)
         
-    def remove_dispatcher(self, dispatcher: BaseDispatcher):
+    async def remove_dispatcher(self, dispatcher: BaseDispatcher):
         if not dispatcher._id in self.dispatchers:
             raise ValueError(f"Dispatcher with id '{dispatcher._id}' was not found!")
-        self.dispatchers.pop(dispatcher._id)
+        removed_dispatcher = self.dispatchers.pop(dispatcher._id)
+        teardown_func = getattr(removed_dispatcher, "teardown", None)
+        if callable(teardown_func):
+            await teardown_func()
     
     def add_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
         if isinstance(listener, BaseListener):

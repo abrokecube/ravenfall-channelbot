@@ -17,17 +17,21 @@ from .ravenfallrestarttask import RestartReason
 from .prometheus import get_prometheus_instant
 from utils.alert_monitor import BatchAlertMonitor
 from utils.runshell import runshell
+from .commands.global_context import GlobalContext
 
 import os
 
 logger = logging.getLogger(__name__)
 
 class RFChannelManager:
-    def __init__(self, config: dict, chat: Chat, rfapi: RavenNest, twitches: dict[str, Twitch]):
+    def __init__(self, config: dict, global_context: GlobalContext):
         self.config = config
-        self.rfapi = rfapi
-        self.chat = chat
-        self.twitches = twitches
+        self.global_context = global_context
+        from ravenpy import RavenNest
+        from twitchAPI.chat import Chat
+        
+        self.rfapi = global_context.require_service(RavenNest)
+        self.chat = global_context.require_service(Chat)
         self.channels: List[RFChannel] = []
         self.channel_id_to_channel: Dict[str, RFChannel] = {}
         self.channel_name_to_channel: Dict[str, RFChannel] = {}

@@ -43,6 +43,8 @@ from typing import Dict
 import re
 
 
+from ravenpy import RavenNest
+
 class GameCog(Cog):
     """Cog providing game control commands.
 
@@ -67,7 +69,7 @@ class GameCog(Cog):
         """
         channels = []
         if all_:
-            channels = self.global_context.ravenfall_manager.channels
+            channels = self.global_context.require_service(RFChannelManager).channels
         else:
             channels = [channel]
 
@@ -245,7 +247,7 @@ class GameCog(Cog):
         """
         channel.monitoring_paused = not channel.monitoring_paused
         if all_:
-            for channel_ in self.global_context.ravenfall_manager.channels:
+            for channel_ in self.global_context.require_service(RFChannelManager).channels:
                 channel_.monitoring_paused = channel.monitoring_paused
             await ctx.message.reply("RavenBot monitoring is now " + ("PAUSED" if channel.monitoring_paused else "RESUMED") + " for all channels.")
         else:
@@ -268,7 +270,7 @@ class GameCog(Cog):
         """
         if all_:
             tasks = []
-            for channel in self.global_context.ravenfall_manager.channels:
+            for channel in self.global_context.require_service(RFChannelManager).channels:
                 tasks.append(channel.backup_state_data_routine())
             await asyncio.gather(*tasks)
             await ctx.message.reply("Backed up all state data.")
@@ -335,7 +337,7 @@ class GameCog(Cog):
         
         tasks = [
             channel.get_query("select * from multiplier"),
-            self.global_context.ravennest.get_global_mult()
+            self.global_context.require_service(RavenNest).get_global_mult()
         ]
         m_client, m_server = await asyncio.gather(*tasks, return_exceptions=True)
         m_client: GameMultiplier

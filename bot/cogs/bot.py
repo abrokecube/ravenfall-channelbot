@@ -43,7 +43,7 @@ class BotStuffCog(Cog):
             all: Reloads strings for all channels.
             channel: Channel to reload strings for.
         """
-        rf_manager = self.global_context.ravenfall_manager
+        rf_manager = self.global_context.require_service(RFChannelManager)
         if all_:
             for _channel in rf_manager.channels:
                 _channel.rfloc.load_definitions()

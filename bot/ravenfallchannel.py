@@ -27,6 +27,7 @@ from .message_builders import SenderBuilder
 from .exceptions import OutOfStockError
 from .commands.events import TwitchRedemptionEvent
 from .commands.enums import TwitchCustomRewardRedemptionStatus
+from .commands.event_sources import TwitchUtils
 from bot import middleman
 from bot.models import Channel
 from database.session import get_async_session
@@ -102,8 +103,6 @@ class RFChannel:
         self.channel_id: str = str(config['channel_id'])
         self.channel_name: str = config['channel_name'].lower()
         self.rf_query_url: str = config['rf_query_url'].rstrip('/')
-        
-        self.twitch = manager.twitches.get(self.channel_id)
         
         # Optional fields with defaults
         self.ravenbot_prefixes: tuple = config.get('ravenbot_prefix', ('!',))
@@ -894,13 +893,14 @@ class RFChannel:
             logging.info(f"Out of {name} scrolls! Skipping queue entry...")
             return
         await send_multichat_command(command, "0", self.channel_name, self.channel_id, self.channel_name)
+        twitch = self.manager.global_context.require_service(TwitchUtils).twitches.get(self.channel_id, None)
         for _ in range(10):
             await asyncio.sleep(1)
             if self.event == expected_event:
                 self.scroll_queue.popleft()
                 await self.save_scroll_queue()
                 if next_scroll.reward_id:
-                    await self.twitch.update_redemption_status(
+                    await twitch.update_redemption_status(
                         self.channel_id,
                         next_scroll.reward_id,
                         next_scroll.reward_redemption_id,
@@ -957,11 +957,12 @@ class RFChannel:
         await self.save_scroll_queue()
         
     async def remove_scrolls_from_queue(self, start_pos: int):
+        twitch = self.manager.global_context.require_service(TwitchUtils).twitches.get(self.channel_id, None)
         while len(self.scroll_queue) > start_pos:
             item = self.scroll_queue.pop()
             try:
                 if item.reward_id:
-                    await self.twitch.update_redemption_status(
+                    await twitch.update_redemption_status(
                         self.channel_id,
                         item.reward_id,
                         item.reward_redemption_id,
