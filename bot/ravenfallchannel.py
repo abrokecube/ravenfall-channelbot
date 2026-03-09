@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING, Literal
+from typing import Any, TYPE_CHECKING, Literal, cast
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,14 +13,14 @@ from datetime import timedelta, timezone
 from .models import (
     Player, Village, Dungeon, Raid, GameMultiplier, GameSession, Ferry,
     RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent,
-    ScrollType, QueuedScroll
+    ScrollType, QueuedScroll, Sender
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
 from .middleman import send_to_client, send_to_server_and_wait_response
 from .ravenfallrestarttask import RFRestartTask, RestartReason, WARNING_MSG_TIMES
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command, get_scroll_counts
-from .messageprocessor import RavenMessage, MessageMetadata
+from .messageprocessor import MessageMetadata, BlockResponse
 from .ravenfallloc import RavenfallLocalization
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
@@ -105,7 +105,7 @@ class RFChannel:
         self.rf_query_url: str = config['rf_query_url'].rstrip('/')
         
         # Optional fields with defaults
-        self.ravenbot_prefixes: tuple = config.get('ravenbot_prefix', ('!',))
+        self.ravenbot_prefixes: tuple[str, ...] = tuple(config.get('ravenbot_prefix', ('!',)))
         self.custom_town_msg: str = config.get('custom_town_msg', '')
         self.welcome_message: str = config.get('welcome_message', '')
         self.auto_restart: bool = bool(config.get('auto_restart', False))
@@ -137,7 +137,7 @@ class RFChannel:
         self.ravenbot_waiter: RavenBotMessageWaiter = RavenBotMessageWaiter()
         self.ravenfall_waiter: RavenfallMessageWaiter = RavenfallMessageWaiter()
         
-        self.rfloc = RavenfallLocalization('data/definitions.yaml', self.ravenfall_loc_strings_path)
+        self.rfloc: RavenfallLocalization = RavenfallLocalization('data/definitions.yaml', self.ravenfall_loc_strings_path)
 
         self.max_dungeon_hp: int = 0
         self.current_mult: float | None = None
@@ -150,21 +150,21 @@ class RFChannel:
         self.restart_task: RFRestartTask | None = None
         
         # Monitoring state
-        self.monitoring_paused = config.get('pause_monitoring', False)
-        self.is_monitoring = False  # Whether we're currently monitoring a command
-        self.current_monitor = None  # Current monitor info if monitoring
-        self.ravenbot_restart_attempts = {'count': 0, 'last_attempt': 0}  # Track restart attempts
-        self.ravenfall_restart_attempts = 0
-        self.restart_future = None  # Current restart future if any
+        self.monitoring_paused: bool = config.get('pause_monitoring', False)
+        self.is_monitoring: bool = False  # Whether we're currently monitoring a command
+        self.current_monitor: dict[str, Any] | None = None  # Current monitor info if monitoring
+        self.ravenbot_restart_attempts: dict[str, int] = {'count': 0, 'last_attempt': 0}  # Track restart attempts
+        self.ravenfall_restart_attempts: int = 0
+        self.restart_future: asyncio.Future[bool] | None = None  # Current restart future if any
 
         self.cooldowns: Cooldown = Cooldown()
 
         self.middleman_connection_status: middleman.ConnectionStatus = middleman.ConnectionStatus()
         
-        self.island_arrivals = defaultdict(list)  # island name -> list of names
-        self.island_last_arrival_time = defaultdict(lambda: 0)  # island name -> last arrival timestamp
+        self.island_arrivals: dict[str, list[str]] = defaultdict(list)  # island name -> list of names
+        self.island_last_arrival_time: dict[str, float] = defaultdict(lambda: 0)  # island name -> last arrival timestamp
         
-        self.update_events_routine_first_iteration = True
+        self.update_events_routine_first_iteration: bool = True
         self.scroll_queue: deque[QueuedScroll] = deque()
         
     async def save_scroll_queue(self):
@@ -306,7 +306,7 @@ class RFChannel:
         await self.ravenfall_waiter.process_message(message)
 
     # Messages from ravenbot
-    async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
+    async def process_ravenbot_message(self, message: RavenBotMessage, _: MessageMetadata) -> RavenBotMessage | BlockResponse:
         platform_id = message['Sender']['PlatformId']
         if not platform_id:
             if message['Identifier'] in ('observe', 'travel'):
@@ -319,25 +319,25 @@ class RFChannel:
         if not platform_id.isdigit():
             return message
 
-        asyncio.create_task(self.record_user(
+        __ = asyncio.create_task(self.record_user(
             int(platform_id),
             message['Sender']['Username'],
             message['Sender']['Color'],
             message['Sender']['DisplayName']
         ))
-        asyncio.create_task(self.record_sender_data(message['Sender']))
+        __ = asyncio.create_task(self.record_sender_data(message['Sender']))
 
         if message['Identifier'] == 'task':
-            asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait_first=True))
+            __ = asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait_first=True))
         elif message['Identifier'] == 'leave':
             await self.fetch_training(message['Sender']['Username'])
         elif message['Identifier'] == 'inspect':
-            return None
+            return {'block': True}
             
         return message
 
     # Messages from ravenfall
-    async def process_ravenfall_message(self, message: RavenfallMessage, metadata: MessageMetadata):
+    async def process_ravenfall_message(self, message: RavenfallMessage, _: MessageMetadata) -> RavenfallMessage | BlockResponse:
         # Make sure session data messages and other things are not processed
         if message['Identifier'] != 'message':
             return message
@@ -354,40 +354,41 @@ class RFChannel:
                 "multiplier_ends", "multiplier_ended"):
                 return {'block': True}
         if message['Recipent']['Platform'].lower() == 'twitch':
-            asyncio.create_task(self.record_character(
-                message['Recipent']['CharacterId'],
+            __ = asyncio.create_task(self.record_character(
+                str(message['Recipent']['CharacterId']),
                 message['Recipent']['PlatformUserName'],
                 message['Recipent']['PlatformId'],
             ))
-            asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
+            __ = asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
             if key == "join_welcome":
             #     # Auto raid is already handled in process_auto_raid_sessionless
             #     asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
-                asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait_first=True))
+                __ = asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait_first=True))
             elif key in ("village_boost", "village_boost_no_boost"):
                 town_level, exp_left = message_args[0], message_args[1]
-                level_exp = experience_for_level(town_level+1)
+                level_exp = experience_for_level(int(town_level)+1)
                 additional_args['requiredExp'] = level_exp
-                additional_args['currentExp'] = (level_exp - exp_left)
-                additional_args['levelPercent'] = f"{(level_exp - exp_left) / level_exp:.2%}"
+                additional_args['currentExp'] = (level_exp - int(exp_left))
+                additional_args['levelPercent'] = f"{(level_exp - int(exp_left)) / level_exp:.2%}"
             elif key == "ferry_arrived":
                 user = message['Recipent']['PlatformUserName']
                 destination = message_args[0]
                 t = time.monotonic()
-                self.island_arrivals[destination].append(user)
-                self.island_last_arrival_time[destination] = t
+                if isinstance(destination, str):
+                    self.island_arrivals[destination].append(user)
+                    self.island_last_arrival_time[destination] = t
                 return {'block': True}
             elif key == "loot":
                 loots = [x.strip() for x in message['Format'].split(". ")]
                 if len(loots) > 3:
-                    paste_out = []
+                    paste_out: list[str] = []
                     paste_out.append(f"Loot gained by {message['Recipent']['PlatformUserName']} ({datetime.now(timezone.utc).strftime('%d %B %Y %H:%M:%S UTC')})")
                     paste_out.append("")
                     paste_out.extend(loots)
                     paste_url = await utils.upload_to_bin('\n'.join(paste_out))
-                    await self.send_chat_message(f"{', '.join(loots[:3])} ✦ More: {paste_url}", reply_id=message['CorrelationId'])
+                    await self.send_chat_message(f"{', '.join(loots[:3])} ✦ More: {paste_url}", reply_id=str(message['CorrelationId']))
                 else:
-                    await self.send_chat_message(f"{', '.join(loots)}", reply_id=message['CorrelationId'])
+                    await self.send_chat_message(f"{', '.join(loots)}", reply_id=str(message['CorrelationId']))
                 return {'block': True}
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
@@ -398,7 +399,7 @@ class RFChannel:
             max_length -= len(recipient_name) + 2
             trans_strs = split_by_utf16_bytes(trans_str, max_length)
             if len(trans_strs) > 1:
-                asyncio.create_task(self.send_split_msgs(message, trans_strs))
+                __ = asyncio.create_task(self.send_split_msgs(message, trans_strs))
                 return {'block': True}
             message['Format'] = trans_strs[0]
             message['Args'] = []
@@ -408,14 +409,14 @@ class RFChannel:
         self, 
         char_id: str, 
         username: str, 
-        twitch_id: int, 
-        name_tag_color: str = None,
-        display_name: str = None
+        twitch_id: int | str, 
+        name_tag_color: str | None = None,
+        display_name: str | None = None
     ):
         async with get_async_session() as session:
             if name_tag_color and len(name_tag_color) != 7:
                 name_tag_color = None
-            user, character = await db_utils.record_character_and_user(
+            _ = await db_utils.record_character_and_user(
                 session=session,
                 character_id=char_id,
                 twitch_id=twitch_id,
@@ -425,7 +426,7 @@ class RFChannel:
             )
 
 
-    async def build_sender_from_character_id(self, char_id: str, session: AsyncSession = None, default_username: str = None) -> Optional[Dict[str, Any]]:
+    async def build_sender_from_character_id(self, char_id: str, session: AsyncSession = None, default_username: str = None) -> Optional[dict[str, Any]]:
         """
         Build a Sender dictionary from a character ID by looking up user and character data.
         
@@ -487,9 +488,9 @@ class RFChannel:
                 display_name=display_name
             )
 
-    async def record_sender_data(self, sender_json: dict):
+    async def record_sender_data(self, sender_json: Sender):
         async with get_async_session() as session:
-            await db_utils.record_sender_data(session, "twitch", self.channel_id, sender_json)
+            __ = await db_utils.record_sender_data(session, "twitch", self.channel_id, sender_json)
 
     async def get_sender_data(self, user_name: str):
         async with get_async_session() as session:
@@ -499,10 +500,10 @@ class RFChannel:
         for msg in msgs:
             message['Format'] = msg
             message['Args'] = []
-            await send_to_client(self.middleman_connection_id, json.dumps(message))
+            __ = await send_to_client(self.middleman_connection_id, json.dumps(message))
             await asyncio.sleep(0.1)
 
-    async def get_town_boost(self) -> List[TownBoost] | None:
+    async def get_town_boost(self) -> list[TownBoost] | None:
         village: Village = await self.get_query("select * from village")
         if not village:
             return []
@@ -1363,7 +1364,7 @@ class RFChannel:
     async def fetch_auto_raids(self):
         if not self.manager.middleman_connected:
             return
-        chars: List[Player] = await self.get_query("select * from players")
+        chars: list[Player] = await self.get_query("select * from players")
         char_id_to_player = {char['id']: char for char in chars}
         
         async with get_async_session() as session:
@@ -1400,7 +1401,7 @@ class RFChannel:
         if not self.manager.middleman_connected:
             return
             
-        chars: List[Player] = await self.get_query("select * from players")
+        chars: list[Player] = await self.get_query("select * from players")
         char_id_to_player = {char['id']: char for char in chars}
         logging.debug(f"Restoring auto raids for {len(char_id_to_player)} characters")
         
@@ -1453,7 +1454,7 @@ class RFChannel:
     async def restore_sailors(self):
         if not self.manager.middleman_connected:
             return
-        chars: List[Player] = await self.get_query("select * from players")
+        chars: list[Player] = await self.get_query("select * from players")
         char_id_to_player = {char['id']: char for char in chars}
 
         logging.debug(f"Restoring sailors for {len(chars)} characters")
@@ -1508,7 +1509,7 @@ class RFChannel:
     async def fetch_all_training(self):
         if not self.manager.middleman_connected:
             return
-        chars: List[Player] = await self.get_query("select * from players")
+        chars: list[Player] = await self.get_query("select * from players")
         char_id_to_player = {char['id']: char for char in chars}
         
         async with get_async_session() as session:

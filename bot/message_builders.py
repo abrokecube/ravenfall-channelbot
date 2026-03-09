@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Union, Any
+from typing import Optional, Union, Any
 from uuid import UUID, uuid4
 import json
 
@@ -42,7 +42,7 @@ class SenderBuilder:
             "Identifier": identifier
         }
     
-    def build(self) -> Dict[str, Any]:
+    def build(self) -> dict[str, Any]:
         """Return the constructed sender dictionary."""
         return self.sender_data
 
@@ -67,7 +67,7 @@ class RecipientBuilder:
             "PlatformUserName": platform_username
         }
     
-    def build(self) -> Dict[str, Any]:
+    def build(self) -> dict[str, Any]:
         """Return the constructed recipient dictionary."""
         return self.recipient_data
 
@@ -85,7 +85,7 @@ class RecipientBuilder:
 class RavenBotMessageBuilder:
     """Helper class to build RavenBot messages."""
     
-    def __init__(self, sender: Dict[str, Any], identifier: str, content: Any = {}, 
+    def __init__(self, sender: dict[str, Any], identifier: str, content: Any = {}, 
                  correlation_id: Optional[Union[str, UUID]] = None):
         """Initialize with required sender, content, and optional identifier and correlation ID.
         
@@ -105,7 +105,7 @@ class RavenBotMessageBuilder:
             "Content": json.dumps(content)
         }
     
-    def with_sender(self, sender: Dict[str, Any]) -> 'RavenBotMessageBuilder':
+    def with_sender(self, sender: dict[str, Any]) -> 'RavenBotMessageBuilder':
         """Set the sender of the message."""
         self.message_data["Sender"] = sender
         return self
@@ -129,7 +129,7 @@ class RavenBotMessageBuilder:
         """Build and return the message dictionary."""
         return json.dumps(self.build_dict())
 
-    def build_dict(self) -> Dict[str, Any]:
+    def build_dict(self) -> dict[str, Any]:
         """Build and return the message dictionary."""
         if "Content" not in self.message_data:
             raise ValueError("Message content is required")
@@ -141,7 +141,7 @@ class RavenBotMessageBuilder:
 class RavenfallMessageBuilder:
     """Helper class to build Ravenfall messages."""
     
-    def __init__(self, recipient: Dict[str, Any], format_str: str = "", args: Optional[List[str]] = None, 
+    def __init__(self, recipient: dict[str, Any], format_str: str = "", args: Optional[list[str]] = None, 
                  identifier: str = "message", correlation_id: Optional[Union[str, UUID]] = None):
         """Initialize with required recipient and optional format, args, identifier, and correlation ID.
         
@@ -165,7 +165,7 @@ class RavenfallMessageBuilder:
             "Category": ""
         }
     
-    def with_recipient(self, recipient: Dict[str, Any]) -> 'RavenfallMessageBuilder':
+    def with_recipient(self, recipient: dict[str, Any]) -> 'RavenfallMessageBuilder':
         """Set the recipient of the message."""
         self.message_data["Recipent"] = recipient
         return self
@@ -225,7 +225,7 @@ class MessageFactory:
     
     @staticmethod
     def create_ravenbot_message(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         content: str,
         identifier: str = "message",
         correlation_id: Optional[Union[str, UUID]] = None
@@ -250,10 +250,10 @@ class MessageFactory:
     
     @staticmethod
     def create_ravenfall_message(
-        recipient: Dict[str, Any],
+        recipient: dict[str, Any],
         format_str: str = "",
-        args: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None,
+        args: Optional[list[str]] = None,
+        tags: Optional[list[str]] = None,
         category: str = "",
         identifier: str = "message",
         correlation_id: Optional[Union[str, UUID]] = None
@@ -263,7 +263,7 @@ class MessageFactory:
         Args:
             recipient: The recipient information dictionary
             format_str: Format string for the message
-            args: List of format arguments
+            args: list of format arguments
             tags: Optional list of message tags
             category: Optional message category
             identifier: Message identifier (default: "message")

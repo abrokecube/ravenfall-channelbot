@@ -5,12 +5,9 @@ Provides commands for querying towns, players, diagnostics and metrics.
 
 from __future__ import annotations
 
-from typing import Dict, List
-
 from utils.format_time import seconds_to_dhms, format_seconds, format_timedelta, TimeSize
 from utils.is_twitch_username import is_twitch_username
 from utils.bytes_to_human_readable import bytes_to_human_readable
-from utils.filter_username import filter_username
 from utils.runshell import runshell
 from utils import (
     strutils, utils
@@ -129,7 +126,7 @@ class InfoCog(Cog):
             channel: Target channel.
             all_: Show usage for all channels.
         """
-        processes: Dict[str, List[float]] = {}
+        processes: dict[str, list[float]] = {}
         working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
         change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
         working_set_series = await get_prometheus_series("windows_process_working_set_private_bytes{process='Ravenfall'}", 60*10)
@@ -139,7 +136,7 @@ class InfoCog(Cog):
                 f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
             )
             tasks.append(runshell(shellcmd))
-        responses: List[str | None] = await asyncio.gather(*tasks)
+        responses: list[str | None] = await asyncio.gather(*tasks)
         if None in responses:
             await ctx.message.reply("Could not get data")
             return
@@ -162,7 +159,7 @@ class InfoCog(Cog):
             data_pairs = [(x[0], float(x[1])) for x in metric['values']]
             if name in processes:
                 processes[name].append(data_pairs)
-        processes_named: Dict[str, List[float]] = {}
+        processes_named: dict[str, list[float]] = {}
         for name, pids in box_pids.items():
             for pid in pids:
                 if pid in processes:
@@ -381,7 +378,7 @@ class InfoCog(Cog):
             channel: Target channel.
         """
         skill = skill.lower()
-        players: List[Player] = await channel.get_query("select * from players")
+        players: list[Player] = await channel.get_query("select * from players")
         if not isinstance(players, list):
             await ctx.message.reply("Ravenfall seems to be offline!")
             return
@@ -423,7 +420,7 @@ class InfoCog(Cog):
     @parameter("invert_glob", aliases=['invert_filter', 'if', 'ig'], help="Invert the name filter")
     @cooldown(1, 10, BucketType.CHANNEL)
     async def player_list(self, ctx: CommandEvent, *, sort_by: str = "name", group_by: str = "none", name_glob: re.Pattern = "*", invert_glob: bool = False, channel: RFChannel = 'this'):
-        """List players in the channel with optional sorting and grouping.
+        """list players in the channel with optional sorting and grouping.
 
         Args:
             sort_by: Field to sort by.
@@ -435,7 +432,7 @@ class InfoCog(Cog):
             channel.get_query("select * from multiplier"),
             channel.get_query("select * from village")
         ]
-        players: List[Player]
+        players: list[Player]
         multiplier: GameMultiplier
         village: Village 
         players, multiplier, village = await asyncio.gather(*tasks)
@@ -475,7 +472,7 @@ class InfoCog(Cog):
             case "combatlevel":
                 players_parsed.sort(key=lambda x: x.combat_level, reverse=True)
                 
-        players_grouped: Dict[str, List[Character]] = defaultdict(list)
+        players_grouped: dict[str, list[Character]] = defaultdict(list)
         
         match group_by:
             case "training":

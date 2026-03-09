@@ -3,7 +3,7 @@
 Small utilities for creating channel point rewards.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 from ..commands.cog import Cog
 from ..commands.decorators import command, checks
 from ..commands.enums import UserRole

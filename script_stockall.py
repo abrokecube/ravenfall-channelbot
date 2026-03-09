@@ -7,7 +7,7 @@ from pathlib import Path
 from tqdm import tqdm
 from dotenv import load_dotenv
 from ravenpy import ravenpy
-from typing import Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 load_dotenv()
 import bot.multichat_command as mc
@@ -31,7 +31,7 @@ CATEGORY_LIMITS = {
     ravenpy.ItemCategory.Cosmetic: 2500,
 }
 
-def create_curve(points: List[Tuple[float, float]]) -> callable:
+def create_curve(points: list[Tuple[float, float]]) -> callable:
     """
     Create a curve function based on given points.
     Points should be a list of (input, output) tuples, sorted by input value.
@@ -82,7 +82,7 @@ INGREDIENT_CURVE = create_curve([
     (2048, 90   ),
 ])
 
-def get_fundamental_ingredients(item: ravenpy.Item) -> List[ravenpy.Ingredient]:
+def get_fundamental_ingredients(item: ravenpy.Item) -> list[ravenpy.Ingredient]:
     # Recurse ingredients until the ingredient is not craftable
     ingredients_count = {}
     def recurse_ingredients(item: ravenpy.Item, amount: int = 1):
@@ -106,7 +106,7 @@ async def main():
     await rf.refresh_items()
     
     char_items = await mc.get_char_items(CHANNEL_ID)
-    total_items: Dict[str, int] = {}
+    total_items: dict[str, int] = {}
     for user in char_items["data"]:
         for user_item in user["items"]:
             if user_item['soulbound'] or user_item['equipped']:
@@ -119,18 +119,18 @@ async def main():
             else:
                 total_items[item.name] = user_item["amount"]
     
-    item_base_ingredients: Dict[str, Dict[str, int]] = {}
-    item_total_ingredient_count: Dict[str, Dict[str, int]] = {}
-    item_max_stock: Dict[str, Dict[str, int]] = {}
-    item_recipes: Dict[str, Dict[str, int]] = {}
-    resources: Dict[str, int] = {}
+    item_base_ingredients: dict[str, dict[str, int]] = {}
+    item_total_ingredient_count: dict[str, dict[str, int]] = {}
+    item_max_stock: dict[str, dict[str, int]] = {}
+    item_recipes: dict[str, dict[str, int]] = {}
+    resources: dict[str, int] = {}
     for item in ravenpy.get_all_items():
         if not item.craft_ingredients:
             resources[item.name] = total_items.get(item.name, 0) * INGREDIENT_USE_PERCENTAGE
             continue
         base_ings = {}
         total_ing_count = 0
-        direct_recipe: Dict[str, int] = {}
+        direct_recipe: dict[str, int] = {}
         for ing in get_fundamental_ingredients(item):
             base_ings[ing.item.name] = ing.amount
             total_ing_count += ing.amount
@@ -141,11 +141,11 @@ async def main():
         item_max_stock[item.name] = min(CATEGORY_LIMITS[item.category], MAX_STOCK_COUNT)
         item_recipes[item.name] = direct_recipe
     
-    remaining_resources: Dict[str, int] = {
+    remaining_resources: dict[str, int] = {
         name: max(0, math.floor(amount)) for name, amount in resources.items()
     }
 
-    item_craft_counts: Dict[str, int] = {
+    item_craft_counts: dict[str, int] = {
         name: 0 for name in item_base_ingredients.keys()
     }
 
@@ -209,8 +209,8 @@ async def main():
 
     planned_list = sorted(item_craft_counts.items())
 
-    command_counts: Dict[str, int] = defaultdict(int)
-    dependency_graph: Dict[str, List[str]] = defaultdict(list)
+    command_counts: dict[str, int] = defaultdict(int)
+    dependency_graph: dict[str, list[str]] = defaultdict(list)
 
     def accumulate_all(item_name: str, amount: int) -> None:
         if amount <= 0:
@@ -229,8 +229,8 @@ async def main():
     for item_name, crafted in planned_list:
         accumulate_all(item_name, crafted)
 
-    ordered_items: List[str] = []
-    visited: Dict[str, int] = {}
+    ordered_items: list[str] = []
+    visited: dict[str, int] = {}
 
     def dfs(node: str) -> None:
         state = visited.get(node, 0)
@@ -253,9 +253,9 @@ async def main():
     for item_name in ordered_items:
         print(f"  {item_name}: {command_counts[item_name]}")
 
-    base_materials: List[str] = []
+    base_materials: list[str] = []
     base_mats_json = {}
-    commands: List[str] = []
+    commands: list[str] = []
     for item_name in ordered_items:
         crafted = command_counts[item_name]
         item = ravenpy._items_name_data.get(item_name)

@@ -1,6 +1,5 @@
 import re
 from ravenpy import ravenpy
-from typing import Dict
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -32,7 +31,7 @@ def fill_whitespace(text: str, pattern: str = ". "):
 
     return re.sub(r' +', repl, text)
 
-async def get_all_item_count(channel_id) -> Dict[str, int]:
+async def get_all_item_count(channel_id) -> dict[str, int]:
     char_items = await get_char_items(channel_id)
     total_items = {}
     for user in char_items["data"]:

@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, NamedTuple
+from typing import NamedTuple
 import logging
 from .multichat_command import get_char_info
 
@@ -46,8 +46,8 @@ def to_label(obj):
 
 class Metrics:
     def __init__(self):
-        self.definitions: Dict[str, MetricDefinition] = {}
-        self.metrics: Dict[MetricEntry, float] = {}
+        self.definitions: dict[str, MetricDefinition] = {}
+        self.metrics: dict[MetricEntry, float] = {}
         
     def add_value(self, metric_name: str, value: float | int | bool, **labels):
         if value is None:
@@ -94,7 +94,7 @@ class Metrics:
             )
         return "\n".join(out_text)
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, list
 if TYPE_CHECKING:
     from .ravenfallmanager import RFChannelManager
 import psutil
@@ -148,7 +148,7 @@ class MetricsManager:
                 f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
             )
             tasks.append(runshell(shellcmd))
-        responses: List[str | None] = await asyncio.gather(*tasks)
+        responses: list[str | None] = await asyncio.gather(*tasks)
         pid_lists = [x.splitlines() for code, x in responses]
         box_pids = {}
         for i in range(len(self.rf_manager.channels)):

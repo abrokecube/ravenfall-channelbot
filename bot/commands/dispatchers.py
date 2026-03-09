@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Set, Dict, Callable, Awaitable
+from typing import TYPE_CHECKING, Set, Callable, Awaitable
 import logging
 import dataclasses
 
@@ -41,11 +41,10 @@ from .cooldown import Cooldown
 
 LOGGER = logging.getLogger(__name__)
 
-TEXT_REPLACEMENTS = {
-    "\U000e0000": None,
-    "\u034f": None
+TEXT_REPLACEMENTS: dict[int, str | int | None] = {
+    ord("\U000e0000"): None,
+    ord("\u034f"): None
 }
-TEXT_TRANS = str.maketrans(TEXT_REPLACEMENTS)
 def filter_text(text: str):
     text = text.translate(TEXT_REPLACEMENTS)
     text = text.strip()
@@ -54,9 +53,9 @@ def filter_text(text: str):
 class BaseDispatcher:
     def __init__(self):
         self._id: Dispatcher = Dispatcher.Base
-        self._func_listener: BaseListener = BaseListener
-        self.listeners: Dict[str, BaseListener] = {}
-        self.categories: Set[EventCategory] = set([EventCategory.Generic])
+        self._func_listener: type[BaseListener] = BaseListener
+        self.listeners: dict[str, BaseListener] = {}
+        self.categories: set[EventCategory] = set([EventCategory.Generic])
         
     async def setup(self, event_manager: EventManager):
         pass
@@ -111,7 +110,7 @@ class BaseDispatcher:
             if match_result:
                 await self._invoke_listener(l, global_context, event)
                 
-    async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception):
+    async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception, *args, **kwargs):
         pass
             
 class SimpleDispatcher(BaseDispatcher):
@@ -119,7 +118,7 @@ class SimpleDispatcher(BaseDispatcher):
         super().__init__()
         self._id = Dispatcher.Generic
         self._func_listener = GenericListener
-        self.categories: Set[EventCategory] = set([
+        self.categories: set[EventCategory] = set([
             EventCategory.Generic, EventCategory.Message, EventCategory.RavenBotMessage,
             EventCategory.RavenfallMessage
         ])
@@ -140,7 +139,9 @@ class TwitchRedeemDispatcher(SimpleDispatcher):
         super().__init__()
         self._id = Dispatcher.TwitchRedeem
         
-    async def on_invoke_error(self, global_context, event: TwitchRedemptionEvent, error):
+    async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception, *args, **kwargs):
+        if not isinstance(event, TwitchRedemptionEvent):
+            return
         if isinstance(error, CommandError):
             await event.send(f"❌ {error.message.rstrip('.')}. (Points refunded)")
         else:
@@ -155,20 +156,20 @@ class CommandDispatcher(BaseDispatcher):
         super().__init__()
         self._id = Dispatcher.Command
         self._func_listener = CommandListener
-        self.categories = set([EventCategory.Message])
-        self.listeners: Dict[str, CommandListener] = {}
-        self.listeners_and_aliases: Dict[str, CommandListener] = {}
+        self.categories: set[EventCategory] = set([EventCategory.Message])
+        self.listeners: dict[str, BaseListener] = {}
+        self.listeners_and_aliases: dict[str, BaseListener] = {}
         self.error_cooldown = Cooldown(1, 5, [BucketType.USER, BucketType.CHANNEL])
         self.case_sensitive = case_sensitive
 
-    def add_listener(self, listener: CommandListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
-        if not isinstance(listener, BaseListener):
+    def add_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
+        if getattr(listener, "expected_dispatcher", None) != self._id and not isinstance(listener, BaseListener):
             listener = self._func_to_listener(listener)
         if listener.expected_dispatcher != self._id:
             raise ValueError(f"Listener {listener} cannot be assigned to this dispatcher!")
         
         name: str = listener._id
-        aliases: List[str] = listener.aliases.copy()
+        aliases: list[str] = listener.aliases.copy()
         if not self.case_sensitive:
             name = name.lower()
             aliases = [a.lower() for a in aliases]
@@ -192,9 +193,9 @@ class CommandDispatcher(BaseDispatcher):
         for alias in aliases:
             self.listeners_and_aliases[alias] = listener
     
-    def remove_listener(self, listener: CommandListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
+    def remove_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
         name: str = ""
-        aliases: List[str] = []
+        aliases: list[str] = []
         if not isinstance(listener, BaseListener):
             name = listener.__name__
         else:
@@ -220,10 +221,10 @@ class CommandDispatcher(BaseDispatcher):
         for cmd in sorted(self.listeners_and_aliases.keys(), key=len, reverse=True):
             if norm_text == cmd or norm_text.startswith(cmd + ' '):
                 return cmd, text[len(cmd):].strip()
-        return None, text
+        return "", text
 
     async def dispatch(
-        self, global_context: GlobalContext, event: MessageEvent | CommandEvent, 
+        self, global_context: GlobalContext, event: BaseEvent, 
         respond_to_errors: bool = True, no_prefix: bool = False
         ) -> CommandDispatchResult:
         if isinstance(event, MessageEvent):            
@@ -275,7 +276,10 @@ class CommandDispatcher(BaseDispatcher):
             return CommandDispatchResult(command, error)
 
                 
-    async def on_invoke_error(self, g_ctx: GlobalContext, event: CommandEvent, command: CommandListener, error: Exception):
+    async def on_invoke_error(self, g_ctx: GlobalContext, event: BaseEvent, error: Exception, *args, **kwargs):
+        command: CommandListener = args[0] if args else kwargs.get("command") # type: ignore
+        if not isinstance(event, CommandEvent):
+            return
         usage_text = command.get_usage_text(event.prefix, event.invoked_with)
         if isinstance(error, ListenerOnCooldown):
             if error.cooldown.per >= 60 and self.error_cooldown.get_retry_after(event) <= 0:
@@ -316,5 +320,5 @@ class CommandDispatcher(BaseDispatcher):
         else:
             await event.message.reply(f"❌ An unknown error occurred")
                 
-    async def get_prefix(self, global_context: GlobalContext, event: MessageEvent):
+    async def get_prefix(self, global_context: GlobalContext, event: MessageEvent) -> str:
         return "!"

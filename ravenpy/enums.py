@@ -51,7 +51,7 @@ class ItemCategory(Enum):
     Scroll = 9
     Skin = 10
     Cosmetic = 11
-
+    
 class ItemMaterials(Enum):
     Bronze = 1
     Iron = 2
@@ -104,6 +104,7 @@ class Skills(Enum):
     All = 999
 
 class Enchantments(Enum):
+    NoneEnchantment = -1
     Attack = 0
     Defense = 1
     Strength = 2
@@ -169,7 +170,7 @@ class Effects(Enum):
     Teleport = 31
 
 class Islands(Enum):
-    # NoneIsland = -2
+    Unknown = -2
     Ferry = -1
     Sailing = 0
     Home = 1

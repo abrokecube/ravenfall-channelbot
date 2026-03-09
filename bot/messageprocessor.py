@@ -2,75 +2,21 @@ import asyncio
 import datetime
 import json
 import logging
-import os
 import signal
 import uuid
-from typing import Dict, Any, Optional, Tuple, Callable, Awaitable, List, Union, TypedDict, TypeVar, Generic, Type, Literal
-from uuid import UUID
+from typing import Any, Callable, TypedDict, TypeVar, NotRequired, cast
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
-from websockets import WebSocketServerProtocol as WebSocketServer
+from websockets import ServerConnection
 import websockets
-import logging
-
-logger = logging.getLogger('new_message_processor')
+from .models import RavenBotMessage, RavenfallMessage
 
 # Type variable for message content types
-T = TypeVar('T', bound=Dict[str, Any])
-
-class Sender(TypedDict):
-    Id: UUID
-    CharacterId: UUID
-    Username: str
-    DisplayName: str
-    Color: str
-    Platform: str
-    PlatformId: str
-    IsBroadcaster: bool
-    IsModerator: bool
-    IsSubscriber: bool
-    IsVip: bool
-    IsGameAdministrator: bool
-    IsGameModerator: bool
-    SubTier: int
-    Identifier: str
-
-class RavenBotMessage(TypedDict):
-    """Represents a message from RavenBot with its metadata."""
-    Identifier: str
-    Sender: Sender
-    Content: str
-    CorrelationId: UUID
-
-class Recipient(TypedDict):
-    """Represents the recipient information in a Ravenfall message."""
-    UserId: UUID
-    CharacterId: UUID
-    Platform: str
-    PlatformId: str
-    PlatformUserName: str
-
-class RavenfallMessage(TypedDict):
-    """Represents a message received from Ravenfall."""
-    Identifier: str  # e.g., "message"
-    Recipient: Recipient
-    Format: str  # Format string for the message
-    Args: List[str]  # Arguments to be inserted into the format string
-    Tags: List[str]  # Any tags associated with the message
-    Category: str  # Message category (if any)
-    CorrelationId: UUID  # For tracking the message
-
-# Union type for all possible message types
-RavenMessage = Union[RavenBotMessage, RavenfallMessage, Dict[str, Any]]
+T = TypeVar('T', bound=dict[str, Any])
 
 # Configure logging
 logger = logging.getLogger('new_message_processor')
 
-@dataclass
-class ProcessorResponse(TypedDict, total=False):
-    """Response format for message processor callbacks."""
-    block: bool  # If True, the message will be blocked
-    message: Dict[str, Any]  # Modified message content (optional)
-    error: str  # Error message (optional)
 
 @dataclass
 class MessageMetadata:
@@ -80,25 +26,35 @@ class MessageMetadata:
     correlation_id: str = ""
     is_api: bool = False
     timestamp: str = field(default_factory=lambda: datetime.datetime.utcnow().isoformat())
-    custom_metadata: Dict[str, Any] = field(default_factory=dict)
+    custom_metadata: dict[str, Any] = field(default_factory=dict)
     client_addr: str = ""
     server_addr: str = ""
 
+class BlockResponse(TypedDict):
+    block: bool
+
+class ProcessorResponse(TypedDict):
+    """Response format for message processor callbacks."""
+    block: NotRequired[bool]  # If True, the message will be blocked
+    message: NotRequired[dict[str, RavenBotMessage | RavenfallMessage | BlockResponse]]  # Modified message content (optional)
+    error: NotRequired[str]  # Error message (optional)
+    correlation_id: str  # Correlation ID for tracking
+
 # Define types for callbacks
 MessageCallback = Callable[
-    [RavenMessage, MessageMetadata, 'ClientInfo'],  # message_data, metadata, client_info
-    Awaitable[Optional[RavenMessage]]  # Return None to keep current message, or return new message data
+    [RavenBotMessage | RavenfallMessage | BlockResponse, MessageMetadata, 'ClientInfo'],  # message_data, metadata, client_info
+    Coroutine[Any, Any, RavenBotMessage | RavenfallMessage | BlockResponse | None]  # Return None to keep current message, or return new message data
 ]
-ConnectionCallback = Callable[['ClientInfo'], Awaitable[None]]
+ConnectionCallback = Callable[['ClientInfo'], Coroutine[Any, Any, None]]
 
 @dataclass
 class ClientInfo:
     """Information about a connected WebSocket client."""
-    websocket: WebSocketServer
+    websocket: ServerConnection
     client_id: str
     remote_address: str
     connection_time: float = field(default_factory=lambda: asyncio.get_event_loop().time())
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 class MessageProcessor:
     def __init__(self, host: str = '0.0.0.0', port: int = 8000, max_message_size: int = 10 * 1024 * 1024):
@@ -114,13 +70,13 @@ class MessageProcessor:
         self.port = port
         self.max_message_size = max_message_size
         self.server = None
-        self.clients: Dict[str, ClientInfo] = {}
+        self.clients: dict[str, ClientInfo] = {}
         self.running = False
         
         # Callback lists
-        self.message_callbacks: List[MessageCallback] = []
-        self.connection_callbacks: List[ConnectionCallback] = []
-        self.disconnection_callbacks: List[ConnectionCallback] = []
+        self.message_callbacks: list[MessageCallback] = []
+        self.connection_callbacks: list[ConnectionCallback] = []
+        self.disconnection_callbacks: list[ConnectionCallback] = []
         
         logger.info(f"MessageProcessor initialized on {host}:{port}")
 
@@ -153,7 +109,7 @@ class MessageProcessor:
         try:
             # Parse the message as JSON
             try:
-                message_data: Dict[str, Any] = json.loads(message)
+                message_data: dict[str, Any] = json.loads(message)
                 
                 # Create message metadata
                 metadata = MessageMetadata(
@@ -165,7 +121,7 @@ class MessageProcessor:
                 )
                 
                 # The remaining data is the actual message content
-                message_content: RavenMessage = message_data.pop('message', {})
+                message_content: RavenfallMessage | RavenBotMessage = message_data.pop('message', {})
                 
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse message as JSON: {e}")
@@ -176,26 +132,22 @@ class MessageProcessor:
                 logger.info(f"Processing API-originated message (Correlation ID: {metadata.correlation_id})")
 
             logger.debug(
-                f"Processing message from {metadata.source} "
-                f"(client: {client_info.client_id}, "
-                f"connection: {metadata.connection_id}, "
+                f"Processing message from {metadata.source} " +
+                f"(client: {client_info.client_id}, " +
+                f"connection: {metadata.connection_id}, " +
                 f"correlation: {metadata.correlation_id})"
             )
             logger.debug(f"Message data: {message_content}")
 
             # Process message through callbacks
-            processor_response: Optional[ProcessorResponse] = None
+            processor_response: ProcessorResponse | None = None
             
             for callback in self.message_callbacks:
                 try:
                     result = await callback(message_content, metadata, client_info)
                     if not result:
                         continue
-                        
-                    if not isinstance(result, dict):
-                        logger.warning(f"Callback returned non-dict result: {result}")
-                        continue
-                        
+                                                
                     # Check for block flag
                     if result.get('block') is True:
                         logger.debug(f"Message blocked by callback for connection {metadata.connection_id}")
@@ -204,17 +156,8 @@ class MessageProcessor:
                             "correlation_id": metadata.correlation_id
                         }) + '\n'
                         
-                    # Update message content if provided
-                    if 'message' in result:
-                        message_content = result['message']
-                        
-                    # Store any error
-                    if 'error' in result and result['error']:
-                        processor_response = {
-                            'error': str(result['error']),
-                            'correlation_id': metadata.correlation_id
-                        }
-                        
+                    message_content = cast(RavenBotMessage | RavenfallMessage, result)
+                                                
                 except Exception as e:
                     error_msg = f"Error in message callback: {e}"
                     logger.error(error_msg, exc_info=True)
@@ -255,7 +198,7 @@ class MessageProcessor:
             logger.error(error_msg, exc_info=True)
             return json.dumps({"error": error_msg, "original_message": message}) + '\n'
     
-    async def _handle_client(self, websocket: WebSocketServer) -> None:
+    async def _handle_client(self, websocket: ServerConnection) -> None:
         """Handle a new WebSocket client connection.
         
         Args:
@@ -369,12 +312,7 @@ class MessageProcessor:
         if self.clients:
             logger.info(f"Closing {len(self.clients)} client connections...")
             for client_info in list(self.clients.values()):
-                try:
-                    if not client_info.websocket.closed:
-                        # Create a task to close each client
-                        cleanup_tasks.append(self._safe_close_websocket(client_info.websocket))
-                except Exception as e:
-                    logger.debug(f"Error preparing to close client {client_info.client_id}: {e}")
+                cleanup_tasks.append(client_info.websocket.close())
         
         # Close the server to prevent new connections
         if self.server:
@@ -400,22 +338,7 @@ class MessageProcessor:
         self.clients.clear()
             
         logger.info("WebSocket server stopped")
-    
-    async def _safe_close_websocket(self, websocket) -> None:
-        """Safely close a WebSocket connection."""
-        try:
-            if not websocket.closed:
-                await websocket.close()
-        except Exception as e:
-            logger.debug(f"Error closing WebSocket: {e}")
-    
-    async def _safe_wait_closed(self, server) -> None:
-        """Safely wait for server to close."""
-        try:
-            await server.wait_closed()
-        except Exception as e:
-            logger.debug(f"Error waiting for server to close: {e}")
-        
+            
     def stop(self) -> None:
         """Synchronously stop the WebSocket server."""
         loop = asyncio.get_event_loop()

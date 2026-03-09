@@ -3,7 +3,7 @@ from datetime import datetime
 import shutil
 import aiofiles
 
-def backup_file_with_date(filepath, max_backups=5):
+def backup_file_with_date(filepath: str, max_backups: int = 5) -> str:
     if not os.path.isfile(filepath):
         raise FileNotFoundError(f"The file '{filepath}' does not exist.")
 
@@ -21,10 +21,10 @@ def backup_file_with_date(filepath, max_backups=5):
     new_filepath = os.path.join(backup_dir, new_filename)
 
     # Copy the file
-    shutil.copy2(filepath, new_filepath)
+    _ = shutil.copy2(filepath, new_filepath)
 
     # Find all existing backups for this file
-    backups = []
+    backups: list[tuple[str, float]] = []
     for file in os.listdir(backup_dir):
         if file.startswith(name + "_") and file.endswith(ext):
             full_path = os.path.join(backup_dir, file)
@@ -41,7 +41,7 @@ def backup_file_with_date(filepath, max_backups=5):
 
     return new_filepath
 
-async def backup_file_with_date_async(filepath, max_backups=5):
+async def backup_file_with_date_async(filepath: str, max_backups: int = 5) -> str:
     if not os.path.isfile(filepath):
         raise FileNotFoundError(f"The file '{filepath}' does not exist.")
 
@@ -61,10 +61,10 @@ async def backup_file_with_date_async(filepath, max_backups=5):
     # Copy the file
     async with aiofiles.open(filepath, 'rb') as f:
         async with aiofiles.open(new_filepath, 'wb') as new_f:
-            await new_f.write(await f.read())
+            _ = await new_f.write(await f.read())
 
     # Find all existing backups for this file
-    backups = []
+    backups: list[tuple[str, float]] = []
     for file in os.listdir(backup_dir):
         if file.startswith(name + "_") and file.endswith(ext):
             full_path = os.path.join(backup_dir, file)

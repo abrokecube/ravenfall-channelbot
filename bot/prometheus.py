@@ -1,6 +1,6 @@
 import time
 import aiohttp
-from typing import List, TypedDict
+from typing import list, TypedDict
 import os
 
 class PrometheusMetric(TypedDict):
@@ -10,7 +10,7 @@ class PrometheusMetric(TypedDict):
 
 class PromethusInstantResult(TypedDict):
     metric: PrometheusMetric
-    value: List[float | str]
+    value: list[float | str]
 
 async def get_prometheus_series(query: str, duration_s: int, step_s: int = 20):
     url = os.getenv("PROMETHEUS_URL")
@@ -24,7 +24,7 @@ async def get_prometheus_series(query: str, duration_s: int, step_s: int = 20):
     data = result['data']['result']
     return data
     
-async def get_prometheus_instant(query: str) -> List[PromethusInstantResult] | None:
+async def get_prometheus_instant(query: str) -> list[PromethusInstantResult] | None:
     url = os.getenv("PROMETHEUS_URL")
     async with aiohttp.ClientSession() as session:
         r = await session.get(

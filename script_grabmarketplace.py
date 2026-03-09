@@ -3,7 +3,7 @@ import asyncio
 import json
 from dotenv import load_dotenv
 import ravenpy
-from typing import List, Tuple, Optional
+from typing import list, Tuple, Optional
 import csv
 
 load_dotenv()
@@ -20,7 +20,7 @@ async def main():
     
     market = await rf.get_marketplace()
     table = csv.writer(open(OUT_CSV_FILE, "w", newline='', encoding="utf-8"))
-    table.writerow(["Item Name", "Amount", "Price Per Item", "Total cost", "Buy command", "List time", "Seller ID"])
+    table.writerow(["Item Name", "Amount", "Price Per Item", "Total cost", "Buy command", "list time", "Seller ID"])
     for item in market:
         if item.seller_char_id in char_ids:
             continue

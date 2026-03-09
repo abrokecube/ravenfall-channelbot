@@ -23,7 +23,7 @@ from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
 
 from utils.format_time import format_seconds, TimeSize
-from utils.utils import pl, pl2
+from utils.strutils import pl, pl2
 from ..multichat_command import send_multichat_command, get_char_info, get_scroll_counts
 from ..rf_webops_client import WebOpsClient
 from ravenpy.ravenpy import Item
@@ -33,12 +33,13 @@ from utils.utils import upload_to_bin
 from ..models import RFChannelEvent, GameMultiplier
 from ..message_templates import RavenBotTemplates
 from ..middleman import send_to_server
-
 import logging
 logger = logging.getLogger(__name__)
 import asyncio
 from datetime import datetime, timezone
-from typing import Dict
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from bot.commands.event_manager import EventManager
 
 import re
 
@@ -51,10 +52,10 @@ class GameCog(Cog):
     Includes commands for restarting Ravenfall, managing monitoring and backups,
     and small utility actions such as refreshing town boosts.
     """
-    def __init__(self, event_manager, rf_webops_url="http://pc2-mobile:7102"):
+    def __init__(self, event_manager: EventManager, rf_webops_url: str="http://pc2-mobile:7102"):
         super().__init__(event_manager)
-        self.rf_webops = WebOpsClient(rf_webops_url)
-        self.web_op_lock = asyncio.Lock()
+        self.rf_webops: WebOpsClient = WebOpsClient(rf_webops_url)
+        self.web_op_lock: asyncio.Lock = asyncio.Lock()
     
     @command(name="updateboost", aliases=["update", "refreshboost"])
     @parameter("all_", display_name="all", aliases=["a"])

@@ -1,13 +1,12 @@
-from twitchAPI.chat import Chat
+from typing import Any, override, cast
 from database.service import DatabaseService
 
 from dotenv import load_dotenv
-load_dotenv()
+_ = load_dotenv()
 
 import os
 import asyncio
 import json
-from typing import List, Tuple
 import logging
 
 import ravenpy
@@ -16,6 +15,7 @@ from bot.commands.global_context import GlobalContext
 from bot.commands.event_sources import TwitchAPIEventSource
 from bot.commands.event_manager import EventManager
 from bot.commands.dispatchers import CommandDispatcher, TwitchRedeemDispatcher
+from bot.commands.events import MessageEvent
 
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
@@ -24,7 +24,7 @@ from utils.logging_fomatter import setup_logging
 from bot.server import SomeEndpoints
 
 with open('pid', 'w') as f:
-    f.write(str(os.getpid()))
+    _ = f.write(str(os.getpid()))
 
 logger_config = {
     'asyncio': {
@@ -84,7 +84,7 @@ logging_level_strs = {
     "critical": logging.CRITICAL
 }
 log_level = os.getenv("LOG_LEVEL", "info")
-default_console_logging_level = logging_level_strs.get(log_level.lower(), "info")
+default_console_logging_level = logging_level_strs.get(log_level.lower(), logging.INFO)
 setup_logging(level=default_console_logging_level, loggers_config=logger_config)
 
 logger = logging.getLogger(__name__)
@@ -92,25 +92,26 @@ if not log_level.lower() in logging_level_strs:
     logger.warning(f"Invalid logging level '{log_level}'")
 
 with open("channels.json", "r") as f:
-    channels: List[Channel] = json.load(f)
+    channels: list[Channel] = cast(list[Channel], json.load(f))
 for channel in channels:
     channel["rf_query_url"] = channel["rf_query_url"].rstrip("/")
     # Set default command prefix if not specified
     if 'command_prefix' not in channel:
         channel['command_prefix'] = '!'
 
-rf_manager: RFChannelManager = None
+rf_manager: RFChannelManager | None = None
 
 class MyCmdDispatcher(CommandDispatcher):
     def __init__(self):
         super().__init__()
-        
-    async def get_prefix(self, global_context, event):
+    
+    @override
+    async def get_prefix(self, global_context: GlobalContext, event: MessageEvent) -> str:
         return os.getenv("BOT_COMMAND_PREFIX", "!")
 
 async def run():
-    def handle_loop_exception(loop, context):
-        logger.error("Caught async exception: %s", context["exception"], exc_info=True)
+    def handle_loop_exception(_: asyncio.AbstractEventLoop, context: dict[str, Any]):  # pyright: ignore [reportExplicitAny]
+        logger.error("Caught async exception: %s", context.get("exception"), exc_info=True)
 
     logger.info("Setting up loop")
     loop = asyncio.get_event_loop()
@@ -119,8 +120,8 @@ async def run():
     logger.info("Checking db")
     await update_schema()
         
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
-    asyncio.create_task(rf.login())
+    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER") or "", os.getenv("RAVENFALL_API_PASS") or "")
+    _ = asyncio.create_task(rf.login())
     
     logger.info("Initializing event system")
 
@@ -162,7 +163,7 @@ async def run():
     logger.info("Checking db after cog imports")
     await update_schema()
 
-    twitch_admin_uids = set((os.getenv("BOT_USER_ID"), os.getenv("OWNER_TWITCH_ID")))
+    twitch_admin_uids = set((os.getenv("BOT_USER_ID", ""), os.getenv("OWNER_TWITCH_ID", "")))
     twitch_source = TwitchAPIEventSource(
         channels,
         twitch_admin_uids,
@@ -178,7 +179,7 @@ async def run():
 
     global_ctx.register_service(RFChannelManager, rf_manager)
 
-    server = SomeEndpoints(rf_manager, None, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), int(os.getenv("PRIVATE_SERVER_PORT", 8080)))
+    server = SomeEndpoints(rf_manager, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), int(os.getenv("PRIVATE_SERVER_PORT", 8080)))
     await server.start()
 
     try:

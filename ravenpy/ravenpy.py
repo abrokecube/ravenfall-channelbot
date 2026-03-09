@@ -3,96 +3,313 @@ import aiohttp
 from async_lru import alru_cache
 import base64
 import json
-from enum import Enum
-from typing import List, Dict, Any, Callable, Tuple
+from typing import Any, Callable, cast, override, TypeVar, TypedDict
+from collections.abc import Iterator
 import math
 from datetime import datetime, timedelta, timezone
 import os
-import time
+from enum import Enum
 
-import thefuzz
-import thefuzz.fuzz
-import thefuzz.process
+import thefuzz  # pyright: ignore [reportMissingTypeStubs]
+import thefuzz.fuzz  # pyright: ignore [reportMissingTypeStubs]
+import thefuzz.process  # pyright: ignore [reportMissingTypeStubs]
 from . import itemdefs
 from .enums import *
-from .itemdata import _fetch_raw_item_data
+from .modals import CraftIngredientJson, InternalItemData, RFItemJson, RFItemDropJson, RFItemRedeemableJson, RFRecipeJson, FuzzResult
+
+
+dirname = os.path.dirname(__file__)
+
+item_materials = {
+    'Bronze': 1,
+    'Iron': 2,
+    'Steel': 3,
+    'Black': 4,
+    'Mithril': 5,
+    'Adamantite': 6,
+    'Rune': 7,
+    'Dragon': 8,
+    'Abraxas': 9,
+    'Phantom': 10,
+    'Lionsbane': 11,
+    'Ether': 12,
+    'Ancient': 13,
+    'Atlarus': 14
+}
+skills = [
+    "Attack",
+    "Defense",
+    "Strength",
+    "Health",
+    "Woodcutting",
+    "Fishing",
+    "Mining",
+    "Crafting",
+    "Cooking",
+    "Farming",
+    "Slayer",
+    "Magic",
+    "Ranged",
+    "Sailing",
+    "Healing",
+    "Gathering",
+    "Alchemy",
+]
+item_stat_names = [
+    ("weaponAim", 0),
+    ("weaponPower", 1),
+    ("magicAim", 2),
+    ("magicPower", 3),
+    ("rangedAim", 4),
+    ("rangedPower", 5),
+    ("armorPower", 6),
+]
+item_requirement_names = [
+    ("requiredAttackLevel", 0),
+    ("requiredDefenseLevel", 1),
+    ("requiredMagicLevel", 11),
+    ("requiredRangedLevel", 12),
+    ("requiredSlayerLevel", 10),
+]
+
+ItemEffectJSON = TypedDict('ItemEffectJSON', {'id': int, 'duration': int, 'percentage': float, 'min_amount': int})
+ItemEffectsJSON = TypedDict('ItemEffectsJSON', {'name': str, 'effects': list[ItemEffectJSON]})
+class ItemRaidDropJSON(TypedDict):
+    name: str
+    month_start: int
+    months_length: int
+    min_drop: float
+    max_drop: float
+    tier: int
+    slayer_requirement: int
+InternalGameData = TypedDict('InternalGameData', {'item_effects': dict[str, ItemEffectsJSON], 'item_raid_drops': dict[str, ItemRaidDropJSON]})
+class Buh(TypedDict):
+    item: RFItemJson
+    recipe: RFRecipeJson | None
+    drop: RFItemDropJson | None
+    redeemable: RFItemRedeemableJson | None
+
+async def _fetch_raw_item_data(rf: 'RavenNest'): 
+    with open(os.path.join(dirname, "data/internal_game_data.json")) as f:
+        a: InternalGameData = cast(InternalGameData, json.load(f))
+    item_effects: dict[str, ItemEffectsJSON] = a['item_effects']
+    item_raid_drops: dict[str, ItemRaidDropJSON] = a['item_raid_drops']
+
+    item_effects_strings = list(item_effects.keys())
+    item_raid_drops_strings = list(item_raid_drops.keys())
+
+    items = await rf._items()  # pyright: ignore [reportPrivateUsage]
+    recipes = await rf._recipes()  # pyright: ignore [reportPrivateUsage]
+    drops = await rf._drops()  # pyright: ignore [reportPrivateUsage]
+    redeemables = await rf._redeemables()  # pyright: ignore [reportPrivateUsage]
+
+    items_grouped: dict[str, Buh] = {}
+    for item in items:
+        items_grouped[item['id']] = {'item': item, 'recipe': None, 'drop': None, 'redeemable': None}
+    for recipe in recipes:
+        items_grouped[recipe['itemId']]['recipe'] = recipe
+    for drop in drops:
+        items_grouped[drop['itemId']]['drop'] = drop
+    for redeemable in redeemables:
+        items_grouped[redeemable['itemId']]['redeemable'] = redeemable
+    
+    items_out: dict[str, InternalItemData] = {}
+    for item_id in items_grouped:
+        item_data = items_grouped[item_id]
+        item = item_data['item']
+        recipe = item_data['recipe']
+        drop = item_data['drop']
+        redeemable = item_data['redeemable']
+        item_a: InternalItemData = {
+            "id": item['id'],
+            "name": item['name'],
+            "description": item['description'],
+            "stats": [],
+            "level": item['level'],
+            "equip_requirements": [],
+            "type": item['type'],
+            "category": item['category'],
+            "material": item['material'],
+            "sell_price": item['shopSellPrice'],
+            "buy_price": item['shopBuyPrice'],
+            "enchantments": 0,
+            "soulbound": item['soulbound'],
+            "modified": item['modified'],
+            "craft_skill": None,
+            "craft_level": 0,
+            "min_success_rate": 0,
+            "max_success_rate": 0,
+            "preperation_time": 0,
+            "is_fixed_success_rate": True,
+            "craft_fail_item": None,
+            "craft_ingredients": [],
+            "drop_skill": None,
+            "drop_level": 0,
+            "drop_chance": 0,
+            "drop_cooldown": 0,
+            "used_in": [],
+            "effects": [],
+            "raid_drop_month_start": 0,
+            "raid_drop_month_length": 0,
+            "raid_min_drop": 0,
+            "raid_max_drop": 0,
+            "raid_drop_tier": 0,
+            "drop_slayer_requirement": 0
+        }
+        if item_a['category'] in [0, 1, 11, 2, 3]:
+            item_a['enchantments'] = max(1, math.floor(math.floor(item_a['level'] / 10) / 5))
+        for key, name in item_stat_names:
+            value = cast(int, item[key])
+            if value > 0:
+                item_a['stats'].append({
+                    'stat': name,
+                    'level': value
+                })
+        for key, name in item_requirement_names:
+            value = cast(int, item[key])
+            if value > 0:
+                item_a['equip_requirements'].append({
+                    'skill': name,
+                    'level': value
+                })
+        items_out[item['id']] = item_a
+        if recipe:
+            item_a['craft_skill'] = skills[recipe['requiredSkill']]
+            item_a['craft_level'] = recipe['requiredLevel']
+            item_a['min_success_rate'] = recipe['minSuccessRate']
+            item_a['max_success_rate'] = recipe['maxSuccessRate']
+            item_a['preperation_time'] = recipe['preparationTime']
+            item_a['is_fixed_success_rate'] = recipe['fixedSuccessRate']
+            item_a['craft_fail_item'] = recipe['failedItemId']
+            for ingredient in recipe['ingredients']:
+                item_a['craft_ingredients'].append({
+                    'item_id': ingredient['itemId'],
+                    'amount': ingredient['amount']
+                })
+        if drop:
+            item_a['drop_skill'] = skills[drop['requiredSkill']]
+            item_a['drop_level'] = drop['levelRequirement']
+            item_a['drop_chance'] = drop['dropChance']
+            item_a['drop_cooldown'] = drop['cooldown']
+
+        if item_a["category"] in [4, 5]:
+
+            found_effect_str: FuzzResult = cast(FuzzResult, thefuzz.process.extract(item_a['name'], item_effects_strings, limit=1, scorer=thefuzz.fuzz.ratio)[0])  # pyright: ignore [reportUnknownMemberType]
+            if found_effect_str[1] > 90:
+                item_a['effects'] = item_effects[found_effect_str[0]]['effects']
+            else:
+                ...
+        found_raid_drop_str: FuzzResult = cast(FuzzResult, thefuzz.process.extract(item_a['name'], item_raid_drops_strings, limit=1, scorer=thefuzz.fuzz.ratio)[0])  # pyright: ignore [reportUnknownMemberType]
+        if found_raid_drop_str[1] > 90:
+            raid_stuff = item_raid_drops[found_raid_drop_str[0]]
+            item_a["raid_drop_month_start"] = raid_stuff["month_start"]
+            item_a["raid_drop_month_length"] = raid_stuff["months_length"]
+            item_a["raid_min_drop"] = raid_stuff["min_drop"]
+            item_a["raid_max_drop"] = raid_stuff["max_drop"]
+            item_a["raid_drop_tier"] = raid_stuff["tier"]
+            item_a["drop_slayer_requirement"] = raid_stuff["slayer_requirement"]
+        else:
+            ...
+        if item_a['material'] == 0 and item_a['category'] in [0, 1]:
+            first_word = item_a['name'].split(" ")[0]
+            result_mat_id = item_materials.get(first_word)
+            if result_mat_id:
+                print(f"Assigning {item_a['name']} {first_word} material")
+                item_a['material'] = result_mat_id
+
+    for item_id in items_out:
+        item = items_out[item_id]
+        for ingredient in item['craft_ingredients']:
+            items_out[ingredient['item_id']]['used_in'].append(item['id'])
+
+    items_list: list[InternalItemData] = []
+    for item_id, item in items_out.items():
+        items_list.append(item)
+    items_list.sort(key=lambda x: x['name'])
+
+    return items_list
 
 
 class ItemEffect:
-    def __init__(self, **kwargs):
-        self.effect: Effects = kwargs.get('effect')
-        self.duration: float = kwargs.get('duration')
-        self.percentage: float = kwargs.get('percentage')
-        self.min_amount: float = kwargs.get('min_amount')
-        
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.effect: Effects = kwargs.get('effect', Effects.NoEffect)
+        self.duration: float = kwargs.get('duration', 0.0)
+        self.percentage: float = kwargs.get('percentage', 0.0)
+        self.min_amount: float = kwargs.get('min_amount', 0.0)
+    
+    @override
     def __repr__(self):
         return f"ItemEffect({self.effect.name}, {self.duration}s, {self.percentage}, {self.min_amount})"
 
 class ItemRequirement:
-    def __init__(self, **kwargs):
-        self.skill: Skills = kwargs.get('skill')
-        self.level: int = kwargs.get('level')
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.skill: Skills = kwargs.get('skill', Skills(0))
+        self.level: int = kwargs.get('level', 0)
     
+    @override
     def __repr__(self):
         return f"ItemRequirement({self.skill.name}, {self.level})"
 
 class ItemStat:
-    def __init__(self, **kwargs):
-        self.stat: Stat = kwargs.get('stat')
-        self.level: int = kwargs.get('level')
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.stat: Stat = kwargs.get('stat', Stat(0))
+        self.level: int = kwargs.get('level', 0)
     
+    @override
     def __repr__(self):
         return f"ItemStat({self.stat.name}, {self.level})"
 
 class Ingredient:
-    def __init__(self, **kwargs):
-        self.item: Item = kwargs.get('item')
-        self.amount: int = kwargs.get('amount')
+    def __init__(self, item: 'Item', **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.item: Item = item
+        self.amount: int = kwargs.get('amount', 0)
         
+    @override
     def __repr__(self):
         return f"Ingredient({self.item.name}, {self.amount})"
 
 class Item:
-    def __init__(self, data: dict):
-        self.id: str = data.get('id')
-        self.name: str = data.get('name')
-        self.description: str = data.get('description')
-        self.level: int = data.get('level')
+    def __init__(self, data: InternalItemData):
+        self.id: str = data.get('id', "")
+        self.name: str = data.get('name', "")
+        self.description: str | None = data.get('description', None)
+        self.level: int = data.get('level', 0)
         self.type: ItemTypes | None = ItemTypes(data.get("type")) if data.get('type') else None
-        self.category: ItemCategory | None = ItemCategory(data.get("category")) if data.get('category') is not None else None
+        self.category: ItemCategory | None = ItemCategory(data.get("category"))
         self.material: ItemMaterials | None = ItemMaterials(data.get("material")) if data.get('material') else None
-        self.sell_price: int = data.get("sell_price")
-        self.buy_price: int = data.get("buy_price")
-        self.enchantments: int = data.get("enchantments")
-        self.soulbound: bool = data.get("soulbound")
-        self.craft_skill: Skills | None = Skills[data.get("craft_skill")] if data.get("craft_skill") else None
-        self.craft_level: int = data.get("craft_level")
-        self.min_success_rate: float = data.get("min_success_rate")
-        self.max_success_rate: float = data.get("max_success_rate")
-        self.preparation_time: int = data.get("preperation_time")
-        self.is_fixed_success_rate = data.get("is_fixed_success_rate")
-        self.drop_skill: Skills | None = Skills[data.get("drop_skill")] if data.get("drop_skill") else None
-        self.drop_level: int = data.get("drop_level")
-        self.drop_chance: float = data.get("drop_chance")
-        self.drop_cooldown: int = data.get("drop_cooldown")
-        self.raid_drop_month_start: int = data.get("raid_drop_month_start")
-        self.raid_drop_month_length: int = data.get("raid_drop_month_length")
-        self.raid_min_drop: int = data.get("raid_min_drop")
-        self.raid_max_drop: int = data.get("raid_max_drop")
-        self.raid_drop_tier: int = data.get("raid_drop_tier")
-        self.drop_slayer_requirement: int = data.get("drop_slayer_requirement")
+        self.sell_price: int = data.get("sell_price", 0)
+        self.buy_price: int = data.get("buy_price", 0)
+        self.enchantments: int = data.get("enchantments", 0)
+        self.soulbound: bool = data.get("soulbound", False)
+        self.craft_skill: Skills | None = _getenum_or_none(data['craft_skill'], Skills)
+        self.craft_level: int = data.get("craft_level", 0)
+        self.min_success_rate: float = data.get("min_success_rate", 0.0)
+        self.max_success_rate: float = data.get("max_success_rate", 0.0)
+        self.preparation_time: int = data.get("preperation_time", 0)
+        self.is_fixed_success_rate: bool = data.get("is_fixed_success_rate", False)
+        self.drop_skill: Skills | None = _getenum_or_none(data['drop_skill'], Skills)
+        self.drop_level: int = data.get("drop_level", 0)
+        self.drop_chance: float = data.get("drop_chance", 0.0)
+        self.drop_cooldown: int = data.get("drop_cooldown", 0)
+        self.raid_drop_month_start: int = data.get("raid_drop_month_start", 0)
+        self.raid_drop_month_length: int = data.get("raid_drop_month_length", 0)
+        self.raid_min_drop: float = data.get("raid_min_drop", 0)
+        self.raid_max_drop: float = data.get("raid_max_drop", 0)
+        self.raid_drop_tier: int = data.get("raid_drop_tier", 0)
+        self.drop_slayer_requirement: int = data.get("drop_slayer_requirement", 0)
 
-        self._craft_fail_item = data.get("craft_fail_item")
-        self._craft_ingredients = data.get("craft_ingredients")
-        self._used_in = data.get("used_in")
-        self._modified = data.get("modified")
+        self._craft_fail_item: str | None = data.get("craft_fail_item", None)
+        self._craft_ingredients: list[CraftIngredientJson] = data.get("craft_ingredients", [])
+        self._used_in: list[str] = data.get("used_in", [])
+        self._modified: str | None = data['modified']
 
-        self.craft_fail_item: Item = None
-        self.craft_ingredients: List[Ingredient] = []
-        self.used_in: List[Item] = []
+        self.craft_fail_item: Item | None = None
+        self.craft_ingredients: list[Ingredient] = []
+        self.used_in: list[Item] = []
 
-        self.effects: List[ItemEffect] = []
-        for effect in data.get("effects"):
+        self.effects: list[ItemEffect] = []
+        effects: list[dict[str, int | float]] = cast(list[dict[str, int | float]], data.get("effects", []))
+        for effect in effects:
             self.effects.append(ItemEffect(**{
                 "effect": Effects(effect['id']),
                 "duration": effect["duration"],
@@ -100,28 +317,32 @@ class Item:
                 "min_amount": effect["min_amount"],
             }))
 
-        self.equip_requirements: List[ItemRequirement] = []
-        for req in data.get('equip_requirements'):
+        self.equip_requirements: list[ItemRequirement] = []
+        reqs: list[dict[str, int]] = cast(list[dict[str, int]], data.get('equip_requirements', []))
+        for req in reqs:
             self.equip_requirements.append(ItemRequirement(**{
                 "skill": Skills(req['skill']),
                 "level": req['level']
             }))
 
-        self.stats: List[ItemStat] = []
-        for stat in data.get('stats'):
+        self.stats: list[ItemStat] = []
+        stats: list[dict[str, int]] = cast(list[dict[str, int]], data.get('stats', []))
+        for stat in stats:
             self.stats.append(ItemStat(**{
                 "stat": Stat(stat['stat']),
                 "level": stat['level']
             }))
     
-    def __eq__(self, value: 'Item'):
-        return self.id == value.id
+    @override
+    def __eq__(self, value: object):
+        return isinstance(value, Item) and self.id == value.id
     
+    @override
     def __repr__(self):
         return f"Item({self.name}, {self.id})"
 
 class CharacterStat:
-    def __init__(self, skill: Skills, exp: float, level: int):
+    def __init__(self, skill: Skills, exp: int, level: int):
         self.skill: Skills = skill
         self.level: int = level
         self.level_exp: int = exp
@@ -129,46 +350,52 @@ class CharacterStat:
         self.enchant_percent: float = 0
         self.enchant_levels: int = 0
 
-    def _add_enchant(self, percent):
+    def _add_enchant(self, percent: float):
         self.enchant_percent += percent
         self.enchant_levels = round(self.level * self.enchant_percent)
     
+    @override
     def __repr__(self):
         return f"CharacterStat({self.skill.name}, {self.level}, {self.level_exp}xp, {self.enchant_percent}%, {self.enchant_levels})"
 
+_ISO_EPOCH = "1970-01-01T00:00:00.000Z"
+
 class ClanStat:
-    def __init__(self, **kwargs):
-        self.skill: ClanSkill = ClanSkill[kwargs.get('name').capitalize()]
-        self.level: int = kwargs.get('level')
-        self.experience: int = kwargs.get('experience')
-        self.max_level: int = kwargs.get('maxLevel')
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.skill: ClanSkill = ClanSkill[cast(str, kwargs.get('name', '')).capitalize()]
+        self.level: int = kwargs.get('level', 0)
+        self.experience: int = kwargs.get('experience', 0)
+        self.max_level: int = kwargs.get('maxLevel', 0)
     
+    @override
     def __repr__(self):
         return f"ClanStat({self.skill.name}, {self.level}, {self.experience}xp)"
 
 class CharacterClanRole:
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
         self.role: ClanRole = ClanRole(kwargs.get('level'))
-        self.joined: datetime = _parse_time(kwargs.get('joined'))
+        self.joined: datetime = _parse_time(cast(str, kwargs.get('joined', _ISO_EPOCH)))
     
+    @override
     def __repr__(self):
         return f"CharacterClanRole({self.role.name}, joined {self.joined.isoformat()})"
 
 class CharacterClan:
-    def __init__(self, **kwargs):
-        self.id: str = kwargs.get('id')
-        self.owner_twitch_id: str = kwargs.get('owner')
-        self.owner_id: str = kwargs.get('ownerUserId')
-        self.level: int = kwargs.get('level')
-        self.experience: int = kwargs.get('experience')
-        self.name: str = kwargs.get('name')
-        self.logo: str = kwargs.get('logo')
-        self.skills: List[ClanStat] = []
-        skills = kwargs.get('clanSkills')
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.id: str = kwargs.get('id', "")
+        self.owner_twitch_id: str = kwargs.get('owner', "")
+        self.owner_id: str = kwargs.get('ownerUserId', "")
+        self.level: int = kwargs.get('level', 0)
+        self.experience: int = kwargs.get('experience', 0)
+        self.name: str = kwargs.get('name', "")
+        self.logo: str = kwargs.get('logo', "")
+        self.skills: list[ClanStat] = []
+        skills: list[dict[str, str | int]] = cast(list[dict[str, str | int]], kwargs.get('clanSkills', []))
         if skills:
             for skill in skills:
                 self.skills.append(ClanStat(**skill))
     
+    @override
     def __repr__(self):
         return f"CharacterClan({self.name}, level {self.level}, {self.experience}xp)"
 
@@ -178,42 +405,45 @@ class ItemEnchantment:
         self.percentage: float = float(percentage.rstrip('%'))/100
         self.stat: Enchantments = Enchantments[stat.capitalize()]
     
+    @override
     def __repr__(self):
         return f"ItemEnchantment({self.stat.name}, {self.percentage*100}%)"
 
 class CharacterItem:
-    def __init__(self, **kwargs):
-        self.item: Item = _items_id_data[kwargs.get('itemId')]
-        self.amount: int = kwargs.get('amount')
-        self.equipped: bool = kwargs.get('equipped')
-        self.soulbound: bool = kwargs.get('soulbound')
-        enchantment: str = kwargs.get('enchantment')
-        self.enchantments: List[ItemEnchantment] = []
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.item: Item = _items_id_data[kwargs.get('itemId', "")]
+        self.amount: int = kwargs.get('amount', 0)
+        self.equipped: bool = kwargs.get('equipped', False)
+        self.soulbound: bool = kwargs.get('soulbound', False)
+        enchantment: str = cast(str, kwargs.get('enchantment', ""))
+        self.enchantments: list[ItemEnchantment] = []
         self.active: bool = False
         if enchantment:
             for item in enchantment.split(";"):
                 self.enchantments.append(ItemEnchantment(item))
 
-    def _set_active(self, value):
+    def set_active(self, value: bool):
         self.active = value
-        
+    
+    @override
     def __repr__(self):
         return f"CharacterItem({self.item.name}, x{self.amount}, equipped={self.equipped}, soulbound={self.soulbound}, enchantments={self.enchantments}, active={self.active})"
 
 class CharacterStatusEffect:
-    def __init__(self, **kwargs):
-        self.effect = Effects(kwargs.get('type'))
-        self.amount: float = kwargs.get('amount')
-        self.duration: float = kwargs.get('duration')
-        self.time_left: float = kwargs.get('timeLeft')
-        self.start_time: datetime = _parse_time(kwargs.get('startUtc'))
-        self.expires: datetime = _parse_time(kwargs.get('expiresUtc'))
-        
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.effect: Effects = Effects(kwargs.get('type'))
+        self.amount: float = kwargs.get('amount', 0.0)
+        self.duration: float = kwargs.get('duration', 0.0)
+        self.time_left: float = kwargs.get('timeLeft', 0.0)
+        self.start_time: datetime = _parse_time(cast(str, kwargs.get('startUtc', _ISO_EPOCH)))
+        self.expires: datetime = _parse_time(cast(str, kwargs.get('expiresUtc', _ISO_EPOCH)))
+
+    @override
     def __repr__(self):
         return f"CharacterStatusEffect({self.effect.name}, {self.amount}, {self.duration}s, {self.time_left}s left)"
 
 class CharacterEquipment:
-    def __init__(self, equipment: List[CharacterItem]):
+    def __init__(self, equipment: list[CharacterItem]):
         self.helmet: CharacterItem | None = None
         self.chest: CharacterItem | None = None
         self.gloves: CharacterItem | None = None
@@ -230,7 +460,7 @@ class CharacterEquipment:
         for item in equipment:
             if not item.equipped:
                 continue
-            item._set_active(True)
+            item.set_active(True)
             match item.item.type:
                 case ItemTypes.TwoHandedSword | ItemTypes.OneHandedSword:
                     self.weapon = item
@@ -260,6 +490,8 @@ class CharacterEquipment:
                     self.amulet = item
                 case ItemTypes.Pet:
                     self.pet = item
+                case _:
+                    pass
 
         if self.weapon and self.shield:
             if self.weapon.item.type in [
@@ -267,9 +499,9 @@ class CharacterEquipment:
                 ItemTypes.TwoHandedAxe,
                 ItemTypes.TwoHandedSpear
             ]:
-                self.shield._set_active(False)
+                self.shield.set_active(False)
 
-    def __iter__(self) -> List[CharacterItem]:
+    def __iter__(self) -> Iterator[CharacterItem]:
         out = [
             self.helmet, self.chest, self.gloves, self.leggings, self.boots, 
             self.ring, self.amulet, self.staff, self.weapon, self.bow, self.pet, 
@@ -277,6 +509,7 @@ class CharacterEquipment:
         ]
         return [x for x in out if x].__iter__()
 
+    @override
     def __repr__(self):
         return f"CharacterEquipment"
 
@@ -296,22 +529,31 @@ def _parse_time(iso_str: str):
         s = iso_str + '+00:00'
     return datetime.fromisoformat(s)
 
-def _class_or_none(_obj: Any, _class: Any):
+def _class_or_none[T](_obj: dict[str, Any] | None, _class: Callable[..., T]) -> T | None:  # pyright: ignore [reportExplicitAny]
     if _obj is not None:
         return _class(**_obj)
+    return None
 
-def _getitem_or_none(_obj: Any, _obj2: Any):
-    if _obj is not None:
-        return _obj2[_obj]
+# def _getitem_or_none[K, V](_obj: K | None, _obj2: Mapping[K, V]) -> V | None:
+#     if _obj is not None:
+#         return _obj2[_obj]
+#     return None
 
-def _call_or_none(_obj: Any, _callable: Callable):
+E = TypeVar('E', bound=Enum)
+def _getenum_or_none(prop: str | None, enum: type[E]) -> E | None:
+    if prop is not None:
+        return enum[prop]
+    return None
+
+def _call_or_none[T, V](_obj: T | None, _callable: Callable[[T], V]) -> V | None:
     if _obj is not None:
         return _callable(_obj)
+    return None
 
 class Character:
-    def __init__(self, data):
-        self._raw: Dict = data
-        self.time_recieved = datetime.now(timezone.utc)
+    def __init__(self, data: dict[str, Any]):  # pyright: ignore [reportExplicitAny]
+        self._raw: dict[str, Any] = data  # pyright: ignore [reportExplicitAny]
+        self.time_recieved: datetime = datetime.now(timezone.utc)
         self.id: str = data['id']
         self.char_id: str = self.id
         self.user_id: str = data['userId']
@@ -319,7 +561,7 @@ class Character:
         self.twitch_id: str = data['twitch']['platformId']
         self.identifier: str = data['identifier']
         self.character_index: int = data['characterIndex']+1
-        self.index = self.character_index
+        self.index: int = self.character_index
         if not self.identifier:
             self.identifier = str(self.character_index)
         self.name: str = self.identifier
@@ -331,34 +573,34 @@ class Character:
         self.is_moderator: bool = data['isModerator']
         self.is_rejoin: bool = data['isRejoin']  # what does this mean
 
-        self.clan: CharacterClan | None = _class_or_none(data['clan'], CharacterClan)
-        self.clan_role: CharacterClanRole | None = _class_or_none(data['clanRole'], CharacterClanRole)
-        self.attack = CharacterStat(Skills.Attack, data['skills']['attack'], data['skills']['attackLevel'])
-        self.defense = CharacterStat(Skills.Defense, data['skills']['defense'], data['skills']['defenseLevel'])
-        self.strength = CharacterStat(Skills.Strength, data['skills']['strength'], data['skills']['strengthLevel'])
-        self.health = CharacterStat(Skills.Health, data['skills']['health'], data['skills']['healthLevel'])
-        self.magic = CharacterStat(Skills.Magic, data['skills']['magic'], data['skills']['magicLevel'])
-        self.ranged = CharacterStat(Skills.Ranged, data['skills']['ranged'], data['skills']['rangedLevel'])
-        self.woodcutting = CharacterStat(Skills.Woodcutting, data['skills']['woodcutting'], data['skills']['woodcuttingLevel'])
-        self.fishing = CharacterStat(Skills.Fishing, data['skills']['fishing'], data['skills']['fishingLevel'])
-        self.mining = CharacterStat(Skills.Mining, data['skills']['mining'], data['skills']['miningLevel'])
-        self.crafting = CharacterStat(Skills.Crafting, data['skills']['crafting'], data['skills']['craftingLevel'])
-        self.cooking = CharacterStat(Skills.Cooking, data['skills']['cooking'], data['skills']['cookingLevel'])
-        self.farming = CharacterStat(Skills.Farming, data['skills']['farming'], data['skills']['farmingLevel'])
-        self.slayer = CharacterStat(Skills.Slayer, data['skills']['slayer'], data['skills']['slayerLevel'])
-        self.sailing = CharacterStat(Skills.Sailing, data['skills']['sailing'], data['skills']['sailingLevel'])
-        self.healing = CharacterStat(Skills.Healing, data['skills']['healing'], data['skills']['healingLevel'])
-        self.gathering = CharacterStat(Skills.Gathering, data['skills']['gathering'], data['skills']['gatheringLevel'])
-        self.alchemy = CharacterStat(Skills.Alchemy, data['skills']['alchemy'], data['skills']['alchemyLevel'])
-        self.combat_level = int(((self.attack.level + self.defense.level + self.health.level + self.strength.level) / 4) + ((self.ranged.level + self.magic.level + self.healing.level) / 8))
+        self.clan: CharacterClan | None = _class_or_none(data['clan'], CharacterClan)  # pyright: ignore [reportAny]
+        self.clan_role: CharacterClanRole | None = _class_or_none(data['clanRole'], CharacterClanRole)  # pyright: ignore [reportAny]
+        self.attack: CharacterStat = CharacterStat(Skills.Attack, data['skills']['attack'], data['skills']['attackLevel'])  # pyright: ignore [reportAny]
+        self.defense: CharacterStat = CharacterStat(Skills.Defense, data['skills']['defense'], data['skills']['defenseLevel'])  # pyright: ignore [reportAny]
+        self.strength: CharacterStat = CharacterStat(Skills.Strength, data['skills']['strength'], data['skills']['strengthLevel'])  # pyright: ignore [reportAny]
+        self.health: CharacterStat = CharacterStat(Skills.Health, data['skills']['health'], data['skills']['healthLevel'])  # pyright: ignore [reportAny]
+        self.magic: CharacterStat = CharacterStat(Skills.Magic, data['skills']['magic'], data['skills']['magicLevel'])  # pyright: ignore [reportAny]
+        self.ranged: CharacterStat = CharacterStat(Skills.Ranged, data['skills']['ranged'], data['skills']['rangedLevel'])  # pyright: ignore [reportAny]
+        self.woodcutting: CharacterStat = CharacterStat(Skills.Woodcutting, data['skills']['woodcutting'], data['skills']['woodcuttingLevel'])  # pyright: ignore [reportAny]
+        self.fishing: CharacterStat = CharacterStat(Skills.Fishing, data['skills']['fishing'], data['skills']['fishingLevel'])  # pyright: ignore [reportAny]
+        self.mining: CharacterStat = CharacterStat(Skills.Mining, data['skills']['mining'], data['skills']['miningLevel'])  # pyright: ignore [reportAny]
+        self.crafting: CharacterStat = CharacterStat(Skills.Crafting, data['skills']['crafting'], data['skills']['craftingLevel'])  # pyright: ignore [reportAny]
+        self.cooking: CharacterStat = CharacterStat(Skills.Cooking, data['skills']['cooking'], data['skills']['cookingLevel'])  # pyright: ignore [reportAny]
+        self.farming: CharacterStat = CharacterStat(Skills.Farming, data['skills']['farming'], data['skills']['farmingLevel'])  # pyright: ignore [reportAny]
+        self.slayer: CharacterStat = CharacterStat(Skills.Slayer, data['skills']['slayer'], data['skills']['slayerLevel'])  # pyright: ignore [reportAny]
+        self.sailing: CharacterStat = CharacterStat(Skills.Sailing, data['skills']['sailing'], data['skills']['sailingLevel'])  # pyright: ignore [reportAny]
+        self.healing: CharacterStat = CharacterStat(Skills.Healing, data['skills']['healing'], data['skills']['healingLevel'])  # pyright: ignore [reportAny]
+        self.gathering: CharacterStat = CharacterStat(Skills.Gathering, data['skills']['gathering'], data['skills']['gatheringLevel'])  # pyright: ignore [reportAny]
+        self.alchemy: CharacterStat = CharacterStat(Skills.Alchemy, data['skills']['alchemy'], data['skills']['alchemyLevel'])  # pyright: ignore [reportAny]
+        self.combat_level: int = int(((self.attack.level + self.defense.level + self.health.level + self.strength.level) / 4) + ((self.ranged.level + self.magic.level + self.healing.level) / 8))
         #  (int)(((skills.AttackLevel + skills.DefenseLevel + skills.HealthLevel + skills.StrengthLevel) / 4f) + ((skills.RangedLevel + skills.MagicLevel + skills.HealingLevel) / 8f))
-        self.stats = [
+        self.stats: list[CharacterStat] = [
             self.attack, self.defense, self.strength, self.health, self.magic,
             self.ranged, self.woodcutting, self.fishing, self.mining, self.crafting,
             self.cooking, self.farming, self.slayer, self.sailing, self.healing,
             self.gathering, self.alchemy
         ]
-        self._skill_dict = {
+        self._skill_dict: dict[Skills, CharacterStat] = {
             Skills.Attack: self.attack,
             Skills.Defense: self.defense,
             Skills.Strength: self.strength,
@@ -378,7 +620,7 @@ class Character:
             Skills.Alchemy: self.alchemy
         }
 
-        state = data['state']
+        state: dict[str, Any] = data['state']  # pyright: ignore [reportAny, reportExplicitAny]
         self.hp: int = state['health']
         self.in_raid: bool = state['inRaid']
         self.in_arena: bool = state['inArena']
@@ -391,38 +633,37 @@ class Character:
             self.exp_per_hour = 0
 
         self.training: Skills | None = None
-        self.island: Islands = None
+        self.island: Islands = Islands.Sailing
         if state['island'] != "None":
-            self.island: Islands = _getitem_or_none(state['island'], Islands)
-        self.destination: Islands = _getitem_or_none(state['destination'], Islands)
-        # self.waiting_for_ferry: bool = self.destination and self.destination == self.island
+            self.island = _getenum_or_none(cast(str, state['island']), Islands) or Islands.Unknown
+        self.destination: Islands = _getenum_or_none(cast(str, state['destination']), Islands) or Islands.Unknown
         self.waiting_for_ferry: bool = False
-        self.estimated_level_time: datetime = _call_or_none(state['estimatedTimeForLevelUp'], _parse_time)
+        self.estimated_level_time: datetime = _call_or_none(cast(str, state['estimatedTimeForLevelUp']), _parse_time) or datetime.min
         self.x: int = state['x']
         self.y: int = state['y']
         self.z: int = state['z']
-        # self.rested_time_s = int(state['restedTime'])
-        self.rested_time = timedelta(seconds=int(state['restedTime']))
-        self.is_captain = state['isCaptain']
+        self.rested_time: timedelta = timedelta(seconds=int(cast(str, state['restedTime'])))
+        self.is_captain: bool = state['isCaptain']
 
-        self.auto_join_dungeon_count = state['autoJoinDungeonCounter']
+        self.auto_join_dungeon_count: int = state['autoJoinDungeonCounter']
         if state['autoJoinDungeonCounter'] == 2147483647:
-            self.auto_join_dungeon_count = math.inf
-        self.auto_join_raid_count = state['autoJoinRaidCounter']
+            self.auto_join_dungeon_count = cast(int, math.inf)
+        self.auto_join_raid_count: int = state['autoJoinRaidCounter']
         if state['autoJoinRaidCounter'] == 2147483647:
-            self.auto_join_raid_count = math.inf
-        self.is_auto_resting = state['isAutoResting']
-        self.auto_rest_start = state['autoRestStart']
-        self.auto_rest_target = state['autoRestTarget']
+            self.auto_join_raid_count = cast(int, math.inf)
+        self.is_auto_resting: bool = state['isAutoResting']
+        self.auto_rest_start: int = state['autoRestStart']
+        self.auto_rest_target: int = state['autoRestTarget']
         
-        self.dungeon_combat_style = _call_or_none(state['dungeonCombatStyle'], Skills)
-        self.raid_combat_style = _call_or_none(state['raidCombatStyle'], Skills)
+        self.dungeon_combat_style: Skills | None = _call_or_none(cast(str, state['dungeonCombatStyle']), Skills)
+        self.raid_combat_style: Skills | None = _call_or_none(cast(str, state['raidCombatStyle']), Skills)
 
-        self.items: List[CharacterItem] = []
-        self._equipment: List[CharacterItem] = []
-        self._id_item: Dict[str, List[CharacterItem]] = {}
-        for item in data['inventoryItems']:
-            char_item = CharacterItem(**item)
+        self.items: list[CharacterItem] = []
+        self._equipment: list[CharacterItem] = []
+        self._id_item: dict[str, list[CharacterItem]] = {}
+        invitems: list[dict[str, Any]] = cast(list[dict[str, Any]], data['inventoryItems'])  # pyright: ignore [reportExplicitAny]
+        for invitem in invitems:
+            char_item = CharacterItem(**invitem)
             if char_item.equipped:
                 self._equipment.append(char_item)
             else:
@@ -430,7 +671,7 @@ class Character:
             if not char_item.item.id in self._id_item:
                 self._id_item[char_item.item.id] = []
             self._id_item[char_item.item.id].append(char_item)
-        self.equipment = CharacterEquipment(self._equipment)
+        self.equipment: CharacterEquipment = CharacterEquipment(self._equipment)
 
         for item in self.equipment:
             item: CharacterItem
@@ -438,24 +679,26 @@ class Character:
                 continue
             for enchant in item.enchantments:
                 if enchant.stat.value < 17:  # not power, aim or armor
-                    self.get_skill(Skills(enchant.stat.value))._add_enchant(enchant.percentage)
+                    self.get_skill(Skills(enchant.stat.value))._add_enchant(enchant.percentage)  # pyright: ignore [reportPrivateUsage]
         
-        self.status_effects: List[CharacterStatusEffect] = []
-        for effect in data['statusEffects']:
+        self.status_effects: list[CharacterStatusEffect] = []
+        effects: list[dict[str, Any]] = cast(list[dict[str, Any]], data['statusEffects'])  # pyright: ignore [reportExplicitAny]
+        for effect in effects:
             self.status_effects.append(CharacterStatusEffect(**effect))
 
         self.target_item: CharacterItem | None = None
         if state['task'] == "Fighting":
-            task_arg = state['taskArgument'].capitalize()
+            task_arg: str = cast(str, state['taskArgument']).capitalize()
             replace = fighting_replacements.get(task_arg)
             if replace:
                 task_arg = replace
             self.training = Skills[task_arg]
-        elif (not state['task']) or state['task'].lower() == "none":
+        elif (not state['task']) or cast(str, state['task']).lower() == "none":
             pass
         else:
-            self.training = Skills[state['task'].capitalize()]
-            target_item_name, f_score = thefuzz.process.extract(state['taskArgument'], _items_names, limit=1, scorer=thefuzz.fuzz.ratio)[0]
+            self.training = Skills[(cast(str, state['task'])).capitalize()]
+            fuzz_result: list[FuzzResult] = cast(list[FuzzResult], thefuzz.process.extract(cast(str, state['taskArgument']), _items_names, limit=1, scorer=thefuzz.fuzz.ratio))  # pyright: ignore [reportUnknownMemberType]
+            target_item_name, f_score = fuzz_result[0]
             if f_score > 90:
                 target_item = _items_name_data[target_item_name]
                 inv_item = self.get_item(target_item)
@@ -471,11 +714,10 @@ class Character:
         if self.training == Skills.Melee:
             self.training = Skills.All
 
-        if not self.training:
-            if (not self.island) or self.destination == Islands.Ferry:
-                self.training = Skills.Sailing
+        if not self.training and not self.island:
+            self.training = Skills.Sailing
 
-        self.training_stats: List[CharacterStat] = []
+        self.training_stats: list[CharacterStat] = []
         if self.training:
             if self.training in (Skills.All, Skills.Health, Skills.Melee):
                 self.training_stats.extend([self.health, self.attack, self.defense, self.strength])
@@ -487,7 +729,7 @@ class Character:
             if self.in_raid or self.in_dungeon:
                 self.training_stats.append(self.slayer)
 
-        self.training_skills: List[Skills] = []
+        self.training_skills: list[Skills] = []
         for char_stat in self.training_stats:
             self.training_skills.append(char_stat.skill)
 
@@ -498,7 +740,7 @@ class Character:
         else:
             return result[0]
 
-    def get_all_item(self, item: Item | str | itemdefs.Items):
+    def get_all_item(self, item: Item | str | itemdefs.Items) -> list[CharacterItem]:
         query = None
         if isinstance(item, Item):
             query = item.id
@@ -509,59 +751,63 @@ class Character:
                 item_query = get_item(item)
                 if item_query:
                     query = item_query.id
-        elif isinstance(item, itemdefs.Items):
-            query = item.value
         else:
-            raise ValueError("bro...")
-        return self._id_item.get(query)
+            query = item.value
+        if query:
+            return self._id_item.get(query, [])
+        else:
+            return []
 
     def get_skill(self, skill: Skills):
         return self._skill_dict[skill]
     
+    @override
     def __repr__(self):
         return f"Character({self.name}, {self.id}, char_index={self.character_index})"
 
 
 class ExpMult:
-    def __init__(self, **kwargs):
-        self.start_time = _parse_time(kwargs.get('startTime'))
-        self.end_time = _parse_time(kwargs.get('endTime'))
-        self.multiplier = kwargs.get('multiplier')
-        self.event_name = kwargs.get("eventName")
-        
+    def __init__(self, **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self.start_time: datetime = _parse_time(cast(str, kwargs.get('startTime', _ISO_EPOCH)))
+        self.end_time: datetime = _parse_time(cast(str, kwargs.get('endTime', _ISO_EPOCH)))
+        self.multiplier: float = kwargs.get('multiplier', 1.0)
+        self.event_name: str = kwargs.get("eventName", "")
+    
+    @override
     def __repr__(self):
         return f"ExpMult({self.multiplier}x from {self.start_time.isoformat()} to {self.end_time.isoformat()})"
 
 
 class MarketplaceItem:
-    def __init__(self, **kwargs):
-        self._rf_api: RavenNest = kwargs.get('rfapi')
-        self.seller_char_id: str = kwargs.get('sellerCharacterId')
-        self._seller_user_id = kwargs.get('sellerUserId')
-        self.item: Item = _items_id_data[kwargs.get('itemId')]
-        self.amount: int = kwargs.get('amount')
-        self.price_per_item: int = kwargs.get('pricePerItem')
-        self.expires: datetime = _parse_time(kwargs.get('expires'))
-        self.created: datetime = _parse_time(kwargs.get('created'))
+    def __init__(self, rfapi: 'RavenNest', **kwargs: Any):  # pyright: ignore [reportExplicitAny, reportAny]
+        self._rf_api: RavenNest = rfapi
+        self.seller_char_id: str = kwargs.get('sellerCharacterId', "")
+        self._seller_user_id: str = kwargs.get('sellerUserId', "")
+        self.item: Item = _items_id_data[kwargs.get('itemId', "")]
+        self.amount: int = kwargs.get('amount', 0)
+        self.price_per_item: int = kwargs.get('pricePerItem', 0)
+        self.expires: datetime = _parse_time(cast(str, kwargs.get('expires', _ISO_EPOCH)))
+        self.created: datetime = _parse_time(cast(str, kwargs.get('created', _ISO_EPOCH)))
         self.enchantment: ItemEnchantment | None = _class_or_none(kwargs.get('enchantment'), ItemEnchantment)
         
-    async def get_seller(self):
-        result = self._rf_api._get_character(self.seller_char_id)
-        return Character(result)
+    async def get_seller(self) -> Character:
+        result = await self._rf_api._get_character(self.seller_char_id)  # pyright: ignore [reportPrivateUsage]
+        return Character(cast(dict[str, Any], result))  # pyright: ignore [reportExplicitAny]
     
+    @override
     def __repr__(self):
         return f"MarketplaceItem({self.item.name}, x{self.amount}, {self.price_per_item} coins each, listed by {self.seller_char_id})"
 
 class RavenNest:
     def __init__(self, username: str, password: str):
-        self._user = username
-        self._pass = password
-        self._auth = ""
-        self._baseURL = "https://www.ravenfall.stream/api"
-        self.is_authing: asyncio.Future = None
+        self._user: str = username
+        self._pass: str = password
+        self._auth: str = ""
+        self._baseURL: str = "https://www.ravenfall.stream/api"
+        self.is_authing: asyncio.Future[Any] | None = None  # pyright: ignore [reportExplicitAny]
 
     async def login(self):
-        await self._authenticate()
+        _ = await self._authenticate()
         if self._auth:
             await self.refresh_items()
     
@@ -573,7 +819,7 @@ class RavenNest:
         if self.is_authing is None or self.is_authing.done():
             self.is_authing = asyncio.get_running_loop().create_future()
         elif not self.is_authing.done():
-            result = await self.is_authing
+            result: Any = await self.is_authing   # pyright: ignore [reportAny, reportExplicitAny]
             if result:
                 return
         async with aiohttp.ClientSession() as s:
@@ -596,7 +842,7 @@ class RavenNest:
             self.is_authing.set_result(False)
             return False
 
-    async def _get(self, path, reauth=True):
+    async def _get(self, path: str, reauth: bool = True) -> dict[str, int | float | bool | str] | list[Any]:   # pyright: ignore [reportExplicitAny]
         if not self._auth:
             print("RavenNest: Not authenticated! Call login() first!")
             return {}
@@ -610,64 +856,64 @@ class RavenNest:
                 ssl=False
             )
             if r.status == 204:
-                return None
+                return {}
             elif r.status != 200:
                 if reauth:
-                    await self._authenticate()
-                    await self._get(path, False)
+                    _ = await self._authenticate()
+                    _ = await self._get(path, False)
                 else:
                     print(f"WHAT (got {r.status})")
                     raise Exception("WHAT")
-            return await r.json()
+            return cast(dict[str, int | float | bool | str], await r.json())
 
-    async def _items(self):
-        return await self._get(f"/Items")
+    async def _items(self) -> list[RFItemJson]:
+        return cast(list[RFItemJson], await self._get(f"/Items"))
     
-    async def _drops(self):
-        return await self._get(f"/Items/drops")
+    async def _drops(self) -> list[RFItemDropJson]:
+        return cast(list[RFItemDropJson], await self._get(f"/Items/drops"))
     
-    async def _redeemables(self):
-        return await self._get(f"/Items/redeemable")
+    async def _redeemables(self) -> list[RFItemRedeemableJson]:
+        return cast(list[RFItemRedeemableJson], await self._get(f"/Items/redeemable"))
     
-    async def _recipes(self):
-        return await self._get(f"/Items/recipes")
+    async def _recipes(self) -> list[RFRecipeJson]:
+        return cast(list[RFRecipeJson], await self._get(f"/Items/recipes"))
 
     async def _exp_multiplier(self):
         return await self._get(f"/Game/exp-multiplier")
 
-    async def _get_players_twitch(self, twitch_id, char_id=1):
+    async def _get_players_twitch(self, twitch_id: str, char_id: int | str = 1):
         return await self._get(f"/Players/twitch/{twitch_id}/{char_id}")
     
-    async def _get_character(self, character_id):
+    async def _get_character(self, character_id: str):
         return await self._get(f"/Players/{character_id}")
     
     @alru_cache(ttl=29)
-    async def _get_marketplace(self, offset=0, size=99999, *_):
-        return await self._get(f"/Marketplace/{offset}/{size}")
+    async def _get_marketplace(self, offset: int = 0, size: int = 99999, *_):
+        return cast(list[dict[str, Any]], await self._get(f"/Marketplace/{offset}/{size}"))  # pyright: ignore [reportExplicitAny]
     
     @alru_cache(ttl=4)
-    async def get_character(self, twitch_uid, character_id=1, *_):
+    async def get_character(self, twitch_uid: str, character_id: int | str = 1, *_):
         result = await self._get_players_twitch(twitch_uid, character_id)
         if not result:
             return None
-        return Character(result)
+        return Character(cast(dict[str, Any], result))  # pyright: ignore [reportExplicitAny]
     
     @alru_cache(ttl=4)
-    async def get_character_from_id(self, ravenfall_char_id, *_):
+    async def get_character_from_id(self, ravenfall_char_id: str, *_):
         result = await self._get_character(ravenfall_char_id)
         if not result:
             return None
-        return Character(result)
+        return Character(cast(dict[str, Any], result))  # pyright: ignore [reportExplicitAny]
     
     @alru_cache(ttl=3)
     async def get_global_mult(self, *_):
         result = await self._exp_multiplier()
-        return ExpMult(**result)
+        return ExpMult(**cast(dict[str, Any], result))  # pyright: ignore [reportExplicitAny]
     
     @alru_cache(ttl=30)
-    async def get_marketplace(self, *_) -> Tuple[MarketplaceItem]:
+    async def get_marketplace(self, *_) -> tuple[MarketplaceItem, ...]:
         result = await self._get_marketplace()
-        market_items = [MarketplaceItem(**x, rfapi=self) for x in result]
+        market_items = [MarketplaceItem(rfapi=self, **x) for x in result]
         market_items.sort(key=lambda x: x.created, reverse=True)
         return tuple(market_items)
 
@@ -685,11 +931,11 @@ for level_index in range(MAX_LEVEL):
 _dirname = os.path.dirname(__file__)
 
 _items = []    
-_items_name_data: Dict[str, Item] = {}
-_items_id_data: Dict[str, Item] = {}
-_items_names: List[str] = []
-_items_list: List[Item] = []
-def _load_item_data(item_list):
+_items_name_data: dict[str, Item] = {}
+_items_id_data: dict[str, Item] = {}
+_items_names: list[str] = []
+_items_list: list[Item] = []
+def _load_item_data(item_list: list[InternalItemData]):
     global _items
     global _items_name_data
     global _items_id_data
@@ -705,20 +951,17 @@ def _load_item_data(item_list):
         _items_id_data[item_thing.id] = item_thing
         _items_names.append(item_thing.name)
         _items_list.append(item_thing)
-    for item_id, item in _items_id_data.items():
-        if item._craft_fail_item:
-            item.craft_fail_item = _items_id_data[item._craft_fail_item]
-        for ing in item._craft_ingredients:
-            item.craft_ingredients.append(Ingredient(**{
-                'item': _items_id_data[ing['item_id']],
-                'amount': ing['amount']
-            }))
-        for uitem in item._used_in:
+    for _, item in _items_id_data.items():
+        if item._craft_fail_item:  # pyright: ignore [reportPrivateUsage]
+            item.craft_fail_item = _items_id_data[item._craft_fail_item]  # pyright: ignore [reportPrivateUsage]
+        for ing in item._craft_ingredients:  # pyright: ignore [reportPrivateUsage]
+            item.craft_ingredients.append(Ingredient(item=_items_id_data[ing['item_id']], amount=ing['amount']))
+        for uitem in item._used_in:  # pyright: ignore [reportPrivateUsage]
             item.used_in.append(_items_id_data[uitem])
 
 def load_local_item_data():
     with open(os.path.join(_dirname, 'data/items.json'), 'r') as f:
-        _a = json.load(f)
+        _a: list[InternalItemData] = cast(list[InternalItemData], json.load(f))
         _load_item_data(_a)
 
 equipment_levels = {
@@ -762,14 +1005,14 @@ island_ranges = {
     (700, math.inf): Islands.Eldara
 }
 
-def experience_for_level(level):
+def experience_for_level(level: int) -> int:
     if level - 2 >= len(experience_array):
         return experience_array[len(experience_array) - 1]
     return (0 if level - 2 < 0 else experience_array[level - 2])
 
-def search_item(name: str, limit=10) -> List[Tuple[Item, int]]:
-    search_result = thefuzz.process.extract(name, _items_names, limit=limit, scorer=thefuzz.fuzz.ratio)
-    out_results = []
+def search_item(name: str, limit: int = 10) -> list[tuple[Item, int]]:
+    search_result: list[FuzzResult] = cast(list[FuzzResult], thefuzz.process.extract(name, _items_names, limit=limit, scorer=thefuzz.fuzz.ratio))  # pyright: ignore [reportUnknownMemberType]
+    out_results: list[tuple[Item, int]] = []
     for result, score in search_result:
         out_results.append((_items_name_data[result], score))
     return out_results
@@ -782,10 +1025,7 @@ def get_item(item: str | Item | itemdefs.Items):
             return _items_id_data.get(item)
         else:
             return _items_name_data.get(item)
-    elif isinstance(item, itemdefs.Items):
-        return _items_id_data.get(item.value)
-    else:
-        raise ValueError("bro...")
+    return _items_id_data.get(item.value)
 
 def get_all_items():
     return _items_list

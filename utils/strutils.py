@@ -1,4 +1,4 @@
-def strjoin(connecting_char: str, *strings: str, before_end: str | None=None, include_conn_char_before_end=False):
+def strjoin(connecting_char: str, *strings: str, before_end: str | None=None, include_conn_char_before_end: bool=False):
     str_list = [str(x) for x in strings if x]
     if len(str_list) > 1 and before_end is not None:
         if include_conn_char_before_end:
@@ -9,7 +9,7 @@ def strjoin(connecting_char: str, *strings: str, before_end: str | None=None, in
     
     return connecting_char.join(str_list)
 
-def strjoin_list(connecting_char: str, *strings: str, before_end: str | None=None, include_conn_char_before_end=False):
+def strjoin_list(connecting_char: str, *strings: str, before_end: str | None=None, include_conn_char_before_end: bool=False) -> list[str]:
     str_list = [str(x) for x in strings if x]
     if len(str_list) > 1 and before_end is not None:
         if include_conn_char_before_end:
@@ -17,11 +17,11 @@ def strjoin_list(connecting_char: str, *strings: str, before_end: str | None=Non
         else:
             a = str_list.pop()
             str_list[-1] += f"{before_end}{a}"
-    out_list = []
+    out_list: list[str] = []
     for string in str_list:
         out_list.append(string)
         out_list.append(connecting_char)
-    out_list.pop()
+    _ = out_list.pop()
     return out_list
 
 def strenclose(open_char: str, close_char: str, connecting_char: str, *strings: str):
@@ -30,8 +30,9 @@ def strenclose(open_char: str, close_char: str, connecting_char: str, *strings: 
         return None
     return connecting_char.join(out)
 
-def strjoin_len(connecting_char: str, max_chars: int, *strings: str):
-    result, current = [], ""
+def strjoin_len(connecting_char: str, max_chars: int, *strings: str) -> list[str]:
+    result: list[str] = []
+    current: str = ""
 
     for s in filter(None, strings):
         if current:
@@ -50,13 +51,14 @@ def strjoin_len(connecting_char: str, max_chars: int, *strings: str):
     
     return result
 
-def strextend(base, max_chars: int, *strings: str):
+def strextend(base: str | list[str], max_chars: int, *strings: str) -> list[str]:
     if isinstance(base, str):
-        result, current = [], base
-    elif isinstance(base, list):
-        result, current = base[:-1], base[-1] if base else ""
+        result: list[str] = []
+        current: str = base
     else:
-        raise TypeError("Base must be a string or a list of strings")
+        result = base[:-1]
+        current = base[-1] if base else ""
+
     
     for s in filter(None, strings):
         if current:
@@ -74,11 +76,13 @@ def strextend(base, max_chars: int, *strings: str):
         result.append(current)
     
     return result
+
 def strprefix(prefix: str, string: str):
     if string:
         return f"{prefix}{string}"
     else:
         return ''
+
 def rm_words(string: str, num: int):
     split = string.split(' ')
     if num > 0:
@@ -90,7 +94,7 @@ def rm_words(string: str, num: int):
 
 def split_by_utf16_bytes(text: str, max_bytes: int) -> list[str]:
     words = text.split(' ')
-    parts = []
+    parts: list[str] = []
     current = ''
     current_bytes = 0
     max_bytes *= 2
@@ -128,7 +132,7 @@ def split_by_utf16_bytes(text: str, max_bytes: int) -> list[str]:
 
 
 def split_long_word_utf16(word: str, max_bytes: int) -> list[str]:
-    parts = []
+    parts: list[str] = []
     current = ''
     current_bytes = 0
     for char in word:
@@ -187,3 +191,27 @@ def truncate_by_bytes(s: str, max_bytes: int, start_byte: int = 0, encoding: str
     
     return truncated.decode(encoding, errors='ignore')
 
+def pl(number: int | float, word: str, include_number: bool=True) -> str:
+    if word[-1].lower() == 's':
+        word = word[:-1]
+    if include_number:
+        if number == 1:
+            return f"{number:,} {word}"
+        else:
+            return f"{number:,} {word}s"
+    else:
+        if number == 1:
+            return f"{word}"
+        else:
+            return f"{word}s"
+def pl2(number: int | float, singular: str, plural: str, include_number: bool=True) -> str:
+    if include_number:
+        if number == 1:
+            return f"{number:,} {singular}"
+        else:
+            return f"{number:,} {plural}"
+    else:
+        if number == 1:
+            return singular
+        else:
+            return plural

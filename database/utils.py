@@ -1,16 +1,16 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import User, Channel, Character, SenderData, TwitchAuth, UserCredits, UserCreditTransaction
-from typing import Union, Optional, Tuple
 from sqlalchemy import select
 from datetime import datetime
-
+from typing import Any
+from bot.models import Sender
 
 async def get_user(
     session: AsyncSession,
     *, 
-    id: Union[int, str] = None,
-    name: str = None
-):
+    id: int | str | None = None,
+    name: str | None = None
+) -> User:
     if isinstance(id, str):
         id = int(id)
     
@@ -23,7 +23,7 @@ async def get_user(
             select(User).where(User.name == name)
         )
     else:
-        return None
+        raise ValueError("Either id or name must be provided")
     
     user_obj = result.scalar_one_or_none()
     if user_obj is None:
@@ -41,8 +41,8 @@ async def get_user(
 async def get_channel(
     session: AsyncSession,
     *, 
-    id: Union[int, str] = None,
-    name: str = None
+    id: int | str | None = None,
+    name: str | None = None
 ):
     if isinstance(id, str):
         id = int(id)
@@ -56,7 +56,7 @@ async def get_channel(
             select(Channel).where(Channel.name == name)
         )
     else:
-        return None
+        raise ValueError("Either id or name must be provided")
     
     user_obj = result.scalar_one_or_none()
     if user_obj is None:
@@ -66,17 +66,15 @@ async def get_channel(
         )
         session.add(user_obj)
         await session.flush()
-    if user_obj.name is None:
-        user_obj.name = name
     return user_obj
 
 async def get_character(
     session: AsyncSession,
-    id: Union[int, str],
+    id: int | str,
     *, 
-    twitch_id: Union[int, str] = None,
-    name: str = None,
-):
+    twitch_id: int | str | None = None,
+    name: str | None = None,
+) -> Character:
     if isinstance(twitch_id, str):
         twitch_id = int(twitch_id)
 
@@ -92,7 +90,7 @@ async def get_character(
         )
         session.add(user_obj)
         await session.flush()
-    await get_user(session, id=twitch_id, name=name)
+    _ = await get_user(session, id=twitch_id, name=name)
     if name:
         user_obj.name = name  # update name if it was changed
 
@@ -100,9 +98,9 @@ async def get_character(
 
 async def get_sender_data(
     session: AsyncSession,
-    channel_id: Union[int, str],
+    channel_id: int | str,
     user_name: str
-):
+) -> SenderData | None:
     if isinstance(channel_id, int):
         channel_id = str(channel_id)
     result = await session.execute(
@@ -117,9 +115,9 @@ async def get_sender_data(
 
 async def get_formatted_sender_data(
     session: AsyncSession,
-    channel_id: Union[int, str],
+    channel_id: int | str,
     user_name: str
-):
+) -> Sender:
     sender_data = await get_sender_data(session, channel_id, user_name)
     if sender_data is not None:
         return {
@@ -162,12 +160,12 @@ async def record_character_and_user(
     session: AsyncSession,
     # Character fields
     character_id: str,
-    twitch_id: Union[int, str],
+    twitch_id: int | str,
     # User fields
-    user_name: Optional[str] = None,
-    display_name: Optional[str] = None,
-    name_tag_color: Optional[str] = None
-) -> Tuple[User, Character]:
+    user_name: str | None = None,
+    display_name: str | None = None,
+    name_tag_color: str | None = None
+) -> tuple[User, Character]:
     """
     Create or update both a User and their associated Character in a single transaction.
     
@@ -216,9 +214,9 @@ async def record_character_and_user(
 async def record_user(
     session: AsyncSession,
     user_name: str,
-    twitch_id: Union[int, str],
-    name_tag_color: Optional[str] = None,
-    display_name: Optional[str] = None,
+    twitch_id: int | str,
+    name_tag_color: str | None = None,
+    display_name: str | None = None,
 ) -> User:
     user = await get_user(session, name=user_name, id=twitch_id)
     if name_tag_color is not None:
@@ -230,23 +228,28 @@ async def record_user(
 async def record_sender_data(
     session: AsyncSession,
     channel_platform: str,
-    channel_platform_id: Union[int, str],
-    sender_json: dict,
+    channel_platform_id: int | str,
+    sender_json: Sender,
 ) -> SenderData:
     if isinstance(channel_platform_id, int):
         channel_platform_id = str(channel_platform_id)  
-    result = await get_sender_data(session, channel_platform_id, sender_json.get('Username')) 
-    if result is None:
+    username = sender_json.get('Username', '')
+    if not username: 
         sender_data = SenderData()
         session.add(sender_data)
     else:
-        sender_data = result
+        result = await get_sender_data(session, channel_platform_id, username) 
+        if result is None:
+            sender_data = SenderData()
+            session.add(sender_data)
+        else:
+            sender_data = result
 
     sender_data.channel_platform = channel_platform
     sender_data.channel_platform_id = channel_platform_id
     sender_data.user_id = sender_json.get('Id')
     sender_data.character_id = sender_json.get('CharacterId')
-    sender_data.username = sender_json.get('Username', '').lower()
+    sender_data.username = username.lower()
     sender_data.display_name = sender_json.get('DisplayName')
     sender_data.color = sender_json.get('Color')
     sender_data.platform = sender_json.get('Platform')
@@ -262,19 +265,19 @@ async def record_sender_data(
 
     return sender_data
 
-async def get_tokens_raw(session: AsyncSession, user_id: Union[int, str]) -> TwitchAuth | None:
+async def get_tokens_raw(session: AsyncSession, user_id: int | str) -> TwitchAuth | None:
     result = await session.execute(
         select(TwitchAuth).where(TwitchAuth.user_id == user_id)
     )
     return result.scalar_one_or_none()
 
-async def get_tokens(session: AsyncSession, user_id: Union[int, str]) -> Tuple[str | None, str | None]:
+async def get_tokens(session: AsyncSession, user_id: int | str) -> tuple[str | None, str | None]:
     a = await get_tokens_raw(session, user_id)
     if a:
         return str(a.access_token), str(a.refresh_token)
     return None, None
 
-async def update_tokens(session: AsyncSession, user_id: Union[int, str], access_token: str, refresh_token: str, user_name: str) -> None:
+async def update_tokens(session: AsyncSession, user_id: int | str, access_token: str, refresh_token: str, user_name: str) -> None:
     result = await get_tokens_raw(session, user_id)
     if result is None:
         result = TwitchAuth(user_id=user_id, access_token=access_token, refresh_token=refresh_token, user_name=user_name)
@@ -284,7 +287,7 @@ async def update_tokens(session: AsyncSession, user_id: Union[int, str], access_
         result.refresh_token = refresh_token
         result.user_name = user_name
 
-async def get_user_credits_raw(session: AsyncSession, user_id: Union[int, str]) -> UserCredits:
+async def get_user_credits_raw(session: AsyncSession, user_id: int | str) -> UserCredits:
     result = await session.execute(
         select(UserCredits).where(UserCredits.user_id == user_id)
     )
@@ -295,11 +298,11 @@ async def get_user_credits_raw(session: AsyncSession, user_id: Union[int, str]) 
         return user_credits
     return result_obj
 
-async def get_user_credits(session: AsyncSession, user_id: Union[int, str]) -> int:
+async def get_user_credits(session: AsyncSession, user_id: int | str) -> int:
     user_credits = await get_user_credits_raw(session, user_id)
     return user_credits.credits
 
-async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: int, description: str = "", record_transaction: bool=True) -> int:
+async def add_credits(session: AsyncSession, user_id: int | str, amount: int, description: str = "", record_transaction: bool=True) -> int:
     user_credits = await get_user_credits_raw(session, user_id)
     user_credits.credits += amount
     if record_transaction:
@@ -309,10 +312,10 @@ async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: i
         return transaction.id
     return -1
 
-async def get_scroll_queue(session: AsyncSession, channel_id: Union[int, str]) -> list[int]:
+async def get_scroll_queue(session: AsyncSession, channel_id: int | str) -> list[int]:
     channel = await get_channel(session, id=channel_id)
     return channel.scroll_queue
 
-async def update_scroll_queue(session: AsyncSession, channel_id: Union[int, str], queue: list[int]):
+async def update_scroll_queue(session: AsyncSession, channel_id: int | str, queue: list[int]):
     channel = await get_channel(session, id=channel_id)
     channel.scroll_queue = queue

@@ -1,25 +1,22 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Dict, List, Type, TypeVar, Any
 from dataclasses import dataclass, field
-
-# 1. Define a generic TypeVar for our get/set methods
-T = TypeVar('T')
+from typing import Any
 
 @dataclass
 class GlobalContext:
     # 2. Add a private dictionary to hold modular services/data
-    _services: Dict[Type[Any], Any] = field(default_factory=dict)   
+    _services: dict[type[Any], Any] = field(default_factory=dict)   
         
     # 3. Add methods to register and retrieve services by their type
-    def register_service(self, service_type: Type[T], instance: T) -> None:
+    def register_service[T](self, service_type: type[T], instance: T) -> None:
         """Registers a service for cross-module sharing."""
         self._services[service_type] = instance
         
-    def get_service(self, service_type: Type[T]) -> T | None:
+    def get_service[T](self, service_type: type[T]) -> T | None:
         """Retrieves a service. Returns None if not found."""
         return self._services.get(service_type)
         
-    def require_service(self, service_type: Type[T]) -> T:
+    def require_service[T](self, service_type: type[T]) -> T:
         """Retrieves a service, raising an error if it doesn't exist."""
         service = self.get_service(service_type)
         if service is None:

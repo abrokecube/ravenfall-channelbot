@@ -19,13 +19,12 @@ _time_str = {
     'seconds': ('s', 's', 'secs', ' secs', ' seconds'),
 }
 
-def format_timedelta(td: timedelta, size=TimeSize.SMALL_SPACES, max_terms=99) -> str:  
+def format_timedelta(td: timedelta, size: TimeSize = TimeSize.SMALL_SPACES, max_terms: int = 99) -> str:  
     return format_seconds(int(td.total_seconds()), size, max_terms)
 
 
-def format_seconds(seconds: int, size=TimeSize.SMALL, max_terms=99, include_zero=True):
+def format_seconds(seconds: float, size: TimeSize = TimeSize.SMALL, max_terms: int = 99, include_zero: bool = True):
     seconds = int(seconds)
-    total_seconds = seconds
     negative = False
     if seconds < 0:
         seconds = -seconds
@@ -34,7 +33,7 @@ def format_seconds(seconds: int, size=TimeSize.SMALL, max_terms=99, include_zero
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
     
-    parts = []
+    parts: list[str] = []
     if days:
         word = _time_str['day'][size.value] if days == 1 else _time_str['days'][size.value]
         parts.append(f"{days}{word}")
@@ -64,7 +63,7 @@ def format_seconds(seconds: int, size=TimeSize.SMALL, max_terms=99, include_zero
     else:
         return "".join(parts).strip()
 
-def seconds_to_dhms(seconds):
+def seconds_to_dhms(seconds: float) -> str:
     seconds = int(seconds)
     days, remainder = divmod(seconds, 86400)        # 86400 seconds in a day
     hours, remainder = divmod(remainder, 3600)      # 3600 seconds in an hour

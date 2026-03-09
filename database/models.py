@@ -1,10 +1,9 @@
-from database import enums
 from database.db import engine
 
 from sqlalchemy import (
-    Column, String, Integer, ForeignKey, Table, Enum, Boolean, DateTime, Float, JSON
+    Column, String, Integer, ForeignKey, Boolean, DateTime, Float, JSON
 )
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase
 

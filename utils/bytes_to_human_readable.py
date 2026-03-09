@@ -1,4 +1,4 @@
-def bytes_to_human_readable(size_bytes):
+def bytes_to_human_readable(size_bytes: int) -> str:
     negative = ''
     if size_bytes < 0:
         size_bytes = -size_bytes
@@ -10,8 +10,9 @@ def bytes_to_human_readable(size_bytes):
     power = 1024
     unit_index = 0
 
-    while size_bytes >= power and unit_index < len(units) - 1:
-        size_bytes /= power
+    bytes_value: float = size_bytes
+    while bytes_value >= power and unit_index < len(units) - 1:
+        bytes_value /= power
         unit_index += 1
 
-    return f"{negative}{size_bytes:.2f} {units[unit_index]}"
+    return f"{negative}{bytes_value:.2f} {units[unit_index]}"

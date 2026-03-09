@@ -1,10 +1,12 @@
-from datetime import datetime, timedelta
+# pyright: reportPrivateUsage=false
+from datetime import datetime
 import string
-from typing import Iterable, Dict, List, Tuple
+from collections.abc import Collection, Callable
+from typing import cast, NamedTuple
 
-import thefuzz.process
+import thefuzz.process  # pyright: ignore [reportMissingTypeStubs]
 import os
-import thefuzz
+import thefuzz  # pyright: ignore [reportMissingTypeStubs]
 
 import ravenpy
 
@@ -12,98 +14,6 @@ import re
 from enum import Enum
 from math import inf
 import aiohttp
-
-
-
-def strjoin(connecting_char: str, *strings: str, before_end: str | None=None, include_conn_char_before_end=False):
-    str_list = [str(x) for x in strings if x]
-    if len(str_list) > 1 and before_end is not None:
-        if include_conn_char_before_end:
-            str_list[-1] = f"{before_end}{str_list[-1]}"
-        else:
-            a = str_list.pop()
-            str_list[-1] += f"{before_end}{a}"
-    
-    return connecting_char.join(str_list)
-
-def strjoin_list(connecting_char: str, *strings: str, before_end: str | None=None, include_conn_char_before_end=False):
-    str_list = [str(x) for x in strings if x]
-    if len(str_list) > 1 and before_end is not None:
-        if include_conn_char_before_end:
-            str_list[-1] = f"{before_end}{str_list[-1]}"
-        else:
-            a = str_list.pop()
-            str_list[-1] += f"{before_end}{a}"
-    out_list = []
-    for string in str_list:
-        out_list.append(string)
-        out_list.append(connecting_char)
-    out_list.pop()
-    return out_list
-
-def strenclose(open_char: str, close_char: str, connecting_char: str, *strings: str):
-    out = [open_char + str(x) + close_char for x in strings if x]
-    if len(out) == 0:
-        return None
-    return connecting_char.join(out)
-
-def strjoin_len(connecting_char: str, max_chars: int, *strings: str):
-    result, current = [], ""
-
-    for s in filter(None, strings):
-        if current:
-            candidate = current + connecting_char + s
-        else:
-            candidate = s
-        
-        if len(candidate) > max_chars:
-            result.append(current)
-            current = s
-        else:
-            current = candidate
-    
-    if current:
-        result.append(current)
-    
-    return result
-
-def strextend(base, max_chars: int, *strings: str):
-    if isinstance(base, str):
-        result, current = [], base
-    elif isinstance(base, list):
-        result, current = base[:-1], base[-1] if base else ""
-    else:
-        raise TypeError("Base must be a string or a list of strings")
-    
-    for s in filter(None, strings):
-        if current:
-            candidate = current + s
-        else:
-            candidate = s
-        
-        if len(candidate) > max_chars:
-            result.append(current)
-            current = s
-        else:
-            current = candidate
-    
-    if current:
-        result.append(current)
-    
-    return result
-def strprefix(prefix: str, string: str):
-    if string:
-        return f"{prefix}{string}"
-    else:
-        return ''
-def rm_words(string: str, num: int):
-    split = string.split(' ')
-    if num > 0:
-        return " ".join(split[num:])
-    elif num < 0:
-        return " ".join(split[:num])
-    else:
-        return string
 
 def parse_time(iso_str: str):
     s = ""
@@ -113,32 +23,8 @@ def parse_time(iso_str: str):
         s = iso_str + '+00:00'
     return datetime.fromisoformat(s)
 
-def pl(number: int | float, word: str, include_number=True):
-    if word[-1].lower() == 's':
-        word = word[:-1]
-    if include_number:
-        if number == 1:
-            return f"{number:,} {word}"
-        else:
-            return f"{number:,} {word}s"
-    else:
-        if number == 1:
-            return f"{word}"
-        else:
-            return f"{word}s"
-def pl2(number: int | float, singular: str, plural: str, include_number=True):
-    if include_number:
-        if number == 1:
-            return f"{number:,} {singular}"
-        else:
-            return f"{number:,} {plural}"
-    else:
-        if number == 1:
-            return singular
-        else:
-            return plural
-def unping(in_str: str):
-    out = []
+def unping(in_str: str) -> str:
+    out: list[str] = []
     for word in in_str.split():
         if len(word) < 3:
             out.append(word)
@@ -166,8 +52,8 @@ def truncate_sentence(in_string: str, char_limit: int):
 
 
 class SplitWildcard:
-    def __init__(self, min_words=0):
-        self.min_words = min_words
+    def __init__(self, min_words: int = 0):
+        self.min_words: int = min_words
 
 class SplitFuzzyRatio(Enum):
     SIMPLE_RATIO = 1
@@ -176,34 +62,38 @@ class SplitFuzzyRatio(Enum):
     TOKEN_SET_RATIO = 4
     PARTIAL_TOKEN_SORT_RATIO = 5
     PARTIAL_TOKEN_SET_RATIO = 6
-    
-_split_fuzzy_funcs = {
-    SplitFuzzyRatio.SIMPLE_RATIO: thefuzz.process.fuzz.ratio,
-    SplitFuzzyRatio.PARTIAL_RATIO: thefuzz.process.fuzz.partial_ratio,
-    SplitFuzzyRatio.TOKEN_SORT_RATIO: thefuzz.process.fuzz.token_sort_ratio,
-    SplitFuzzyRatio.TOKEN_SET_RATIO: thefuzz.process.fuzz.token_set_ratio,
-    SplitFuzzyRatio.PARTIAL_TOKEN_SORT_RATIO: thefuzz.process.fuzz.partial_token_sort_ratio,
-    SplitFuzzyRatio.PARTIAL_TOKEN_SET_RATIO: thefuzz.process.fuzz.partial_token_set_ratio,
-}
-    
+      
+_split_fuzzy_funcs: dict[SplitFuzzyRatio, Callable[[str, str], int]] = {
+    SplitFuzzyRatio.SIMPLE_RATIO: thefuzz.process.fuzz.ratio,  # pyright: ignore [reportUnknownMemberType]
+    SplitFuzzyRatio.PARTIAL_RATIO: thefuzz.process.fuzz.partial_ratio,  # pyright: ignore [reportUnknownMemberType]
+    SplitFuzzyRatio.TOKEN_SORT_RATIO: thefuzz.process.fuzz.token_sort_ratio,  # pyright: ignore [reportUnknownMemberType]
+    SplitFuzzyRatio.TOKEN_SET_RATIO: thefuzz.process.fuzz.token_set_ratio,  # pyright: ignore [reportUnknownMemberType]
+    SplitFuzzyRatio.PARTIAL_TOKEN_SORT_RATIO: thefuzz.process.fuzz.partial_token_sort_ratio,  # pyright: ignore [reportUnknownMemberType]
+    SplitFuzzyRatio.PARTIAL_TOKEN_SET_RATIO: thefuzz.process.fuzz.partial_token_set_ratio,  # pyright: ignore [reportUnknownMemberType]
+} 
+
+class FuzzResult(NamedTuple):
+    string: str
+    score: int
+
 class SplitQuery:
     def __init__(
-            self, string_list: Iterable[str], min_match_thresh=90, 
-            match_word_count=False, search_range=2, optional=False,
-            return_result_count = 5, match_count = 1,
+            self, string_list: Collection[str], min_match_thresh: int=90, 
+            match_word_count: bool=False, search_range: int=2, optional: bool=False,
+            return_result_count: int = 5, match_count: int = 1,
             match_algo: SplitFuzzyRatio = SplitFuzzyRatio.SIMPLE_RATIO
             ):
-        self.string_list = string_list
-        self.match_threshold = min_match_thresh
-        self.match_word_count = match_word_count
-        self.search_range = search_range
-        self.optional = optional
-        self.return_result_count = return_result_count
-        self.max_match_count = match_count
-        self.fuzzy_algo = match_algo
-        self._grouped_by_word_count: Dict[int, List[str]] = {}
-        self._max_word_count = 0
-        self._min_word_count = inf
+        self.string_list: Collection[str] = string_list
+        self.match_threshold: int = min_match_thresh
+        self.match_word_count: bool = match_word_count
+        self.search_range: int = search_range
+        self.optional: bool = optional
+        self.return_result_count: int = return_result_count
+        self.max_match_count: int = match_count
+        self.fuzzy_algo: SplitFuzzyRatio = match_algo
+        self._grouped_by_word_count: dict[int, list[str]] = {}
+        self._max_word_count: int = 0
+        self._min_word_count: int = cast(int, inf)
         for string in self.string_list:
             words = len(string.split())
             if not words in self._grouped_by_word_count:
@@ -215,17 +105,17 @@ class SplitQuery:
                 self._min_word_count = words
         if self._min_word_count == 0:
             self.optional = True
-        self._iterations = 0
+        self._iterations: int = 0
 
 class SplitResult:
     def __init__(self):
-        self.text: str | None = None
+        self.text: str = ""
         self.match_score: int = 0
-        self.match_results: Iterable[Tuple[str, int]] = tuple()
-        self.match_query = ""
+        self.match_results: Collection[tuple[str, int]] = tuple()
+        self.match_query: str = ""
 
-def split_arguments(in_str: str | Iterable[str], *queries: SplitQuery | SplitWildcard
-) -> Tuple[SplitResult | None]:
+def split_arguments(in_str: str | tuple[str, ...], *queries: SplitQuery | SplitWildcard
+) -> tuple[SplitResult, ...]:
     if isinstance(in_str, str):
         in_args = in_str.split()
     else:
@@ -234,7 +124,7 @@ def split_arguments(in_str: str | Iterable[str], *queries: SplitQuery | SplitWil
     ptr_length = 1
     advance_pointer = False
     prev_is_wildcard = False
-    out_results = [SplitResult() for _ in range(len(queries))]
+    out_results: list[SplitResult] = [SplitResult() for _ in range(len(queries))]
     # print(f"split_arguments with {len(in_args)} queries")
     
     idx = -1    
@@ -249,7 +139,7 @@ def split_arguments(in_str: str | Iterable[str], *queries: SplitQuery | SplitWil
                 break
             out_results[idx].text = " ".join(in_args[ptr_start:ptr_start+ptr_length])
             
-        elif isinstance(query, SplitQuery):
+        else:
             query._iterations = 1
             if query.max_match_count <= 0:
                 continue
@@ -276,10 +166,10 @@ def split_arguments(in_str: str | Iterable[str], *queries: SplitQuery | SplitWil
                     else:
                         string_items = query.string_list
                     query_string = " ".join(in_args[ptr_start:ptr_start+ptr_length])
-                    query_result = thefuzz.process.extract(
+                    query_result: list[FuzzResult] = cast(list[FuzzResult], thefuzz.process.extract(  # pyright: ignore [reportUnknownMemberType]
                         query_string, string_items, limit=query.return_result_count,
                         scorer=_split_fuzzy_funcs[query.fuzzy_algo]
-                    )
+                    ))
                     # print(f"{idx}: {query_string}")
                     result, score = query_result[0]
                     if score > out_results[idx].match_score:
@@ -292,20 +182,21 @@ def split_arguments(in_str: str | Iterable[str], *queries: SplitQuery | SplitWil
                             out_results[idx].text = result
                             if score == 100:
                                 break
-                if out_results[idx].text is None:
-                    if query.optional:
-                        out_results[idx].text = ''
-                        ptr_length = 0
-                        # break
-                    if prev_is_wildcard:
-                        if not out_results[idx-1].text:
-                            out_results[idx-1].text = in_args[ptr_start]
-                        else:
-                            out_results[idx-1].text += f" {in_args[ptr_start]}"
-                        ptr_start += 1
-                    else:
-                        break
-                elif out_results[idx].text != '':
+                # if out_results[idx].text is None:
+                #     if query.optional:
+                #         out_results[idx].text = ''
+                #         ptr_length = 0
+                #         # break
+                #     if prev_is_wildcard:
+                #         if not out_results[idx-1].text:
+                #             out_results[idx-1].text = in_args[ptr_start]
+                #         else:
+                #             out_results[idx-1].text += f" {in_args[ptr_start]}"
+                #         ptr_start += 1
+                #     else:
+                #         break
+                # elif out_results[idx].text != '':
+                if out_results[idx].text != '':
                     if query._iterations >= query.max_match_count:
                         break
                     else:
@@ -318,8 +209,8 @@ def split_arguments(in_str: str | Iterable[str], *queries: SplitQuery | SplitWil
                 else:
                     break
             prev_is_wildcard = False
-        else:
-            raise ValueError("Argument must be SplitQuery or SplitWildcard")
+        # else:
+        #     raise ValueError("Argument must be SplitQuery or SplitWildcard")
         if advance_pointer:
             ptr_start += ptr_length
         ptr_length = 1
@@ -356,7 +247,7 @@ async def upload_to_pastes(text: str):
         else:
             return None
         
-async def upload_to_borkedbin(text: str):
+async def upload_to_borkedbin(text: str) -> str | None:
     async with aiohttp.ClientSession() as s:
         r = await s.post(
             f"{os.getenv('BORKEDBIN_HOST', 'https://bin.borkedcube.moe').strip('/')}/api/add/text",
@@ -366,9 +257,10 @@ async def upload_to_borkedbin(text: str):
             json={"content": text}
         )
         if r.status == 200:
-            return (await r.json())['url']
+            result: dict[str, str] = cast(dict[str, str], await r.json())
+            return result['url']
         else:
-            await r.text()  # Consume response to free connection
+            _ = await r.text()  # Consume response to free connection
             return None
 
 def get_char_identifier(char: ravenpy.Character):
@@ -391,7 +283,7 @@ def fill_whitespace(text: str, pattern: str = ". "):
     Example:
         "a          b" -> "a . . . .  b"
     """
-    def repl(m):
+    def repl(m: re.Match[str]) -> str:
         run = m.group(0)
         run_len = len(run)
         if run_len <= 2:

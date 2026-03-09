@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Union
+from typing import Any, Optional, Union
 from uuid import UUID
 from .message_builders import (
     RavenBotMessageBuilder,
@@ -12,7 +12,7 @@ class RavenBotTemplates:
     
     @staticmethod
     def auto_raid_status(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         correlation_id: Optional[Union[str, UUID]] = None
     ) -> str:
         return RavenBotMessageBuilder(
@@ -24,7 +24,7 @@ class RavenBotTemplates:
 
     @staticmethod
     def auto_join_raid(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         count: int = 2147483647,
         correlation_id: Optional[Union[str, UUID]] = None
     ) -> str:
@@ -40,7 +40,7 @@ class RavenBotTemplates:
     
     @staticmethod
     def sail(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         correlation_id: Optional[Union[str, UUID]] = None
     ) -> str:
         return RavenBotMessageBuilder(
@@ -51,7 +51,7 @@ class RavenBotTemplates:
 
     @staticmethod
     def sail_to(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         island_name: str,
         correlation_id: Optional[Union[str, UUID]] = None
     ) -> str:
@@ -64,13 +64,13 @@ class RavenBotTemplates:
 
     @staticmethod
     def gift_item(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         recipient_user_name: str,
         item_name: str,
         item_count: Optional[int] = 1,
         correlation_id: Optional[Union[str, UUID]] = None,
         return_dict: bool = False
-    ) -> Union[str, Dict[str, Any]]:
+    ) -> Union[str, dict[str, Any]]:
         a = RavenBotMessageBuilder(
             sender=sender,
             identifier="gift_item",
@@ -83,7 +83,7 @@ class RavenBotTemplates:
     
     @staticmethod
     def query_item_count(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         item_name: str,
         correlation_id: Optional[Union[str, UUID]] = None,
         return_dict: bool = False
@@ -100,7 +100,7 @@ class RavenBotTemplates:
     
     @staticmethod
     def query_resources(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         correlation_id: Optional[Union[str, UUID]] = None,
         return_dict: bool = False
     ):
@@ -134,7 +134,7 @@ class RavenBotTemplates:
     
     @staticmethod
     def train(
-        sender: Dict[str, Any],
+        sender: dict[str, Any],
         skill: str,
         correlation_id: Optional[Union[str, UUID]] = None,
         return_dict: bool = False
@@ -182,7 +182,7 @@ class RavenfallTemplates:
     def chat_message(
         message: str,
         correlation_id: Optional[Union[str, UUID]] = None,
-        recipient: Dict[str, Any] = RecipientBuilder.system().build()
+        recipient: dict[str, Any] = RecipientBuilder.system().build()
     ) -> str:
         """Create a chat message for Ravenfall.
         

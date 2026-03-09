@@ -7,7 +7,7 @@ from pathlib import Path
 from tqdm import tqdm
 from dotenv import load_dotenv
 from ravenpy import ravenpy
-from typing import Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 load_dotenv()
 

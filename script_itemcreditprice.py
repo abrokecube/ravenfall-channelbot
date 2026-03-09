@@ -3,9 +3,9 @@ import asyncio
 import json
 from dotenv import load_dotenv
 import ravenpy
-from typing import List, Tuple, Optional
+from typing import list, Tuple, Optional
 
-def create_curve(points: List[Tuple[float, float]]) -> callable:
+def create_curve(points: list[Tuple[float, float]]) -> callable:
     """
     Create a curve function based on given points.
     Points should be a list of (input, output) tuples, sorted by input value.
@@ -66,7 +66,7 @@ VALUE_CURVE = create_curve([
     (float('inf'), 2000000) 
 ])
 
-def get_fundamental_ingredients(item: ravenpy.Item) -> List[ravenpy.Ingredient]:
+def get_fundamental_ingredients(item: ravenpy.Item) -> list[ravenpy.Ingredient]:
     # Recurse ingredients until the ingredient is not craftable
     ingredients_count = {}
     def recurse_ingredients(item: ravenpy.Item, amount: int = 1):

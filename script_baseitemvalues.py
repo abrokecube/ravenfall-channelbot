@@ -3,7 +3,7 @@ import asyncio
 import json
 from dotenv import load_dotenv
 import ravenpy
-from typing import List, Tuple, Optional
+from typing import list, Tuple, Optional
 
 load_dotenv()
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Awaitable, Dict, Set
+from typing import TYPE_CHECKING, Callable, Awaitable, Set
 if TYPE_CHECKING:
     from .event_manager import EventManager
 
@@ -54,11 +54,11 @@ TWITCH_CHANNEL_SCOPES = [
 
 class TwitchUtils:
     def __init__(self, twitch_event_src: 'TwitchAPIEventSource'):
-        self._src = twitch_event_src
-        self.twitches = twitch_event_src.channel_twitches
+        self._src: 'TwitchAPIEventSource' = twitch_event_src
+        self.twitches: dict[str, Twitch] = twitch_event_src.channel_twitches
 
 class TwitchAPIEventSource(BaseEventSource):
-    def __init__(self, channels: list[Channel], bot_admin_uids: Set[str], bot_user_id: str, twitch_app_id: str, twitch_app_secret: str):
+    def __init__(self, channels: list[Channel], bot_admin_uids: set[str], bot_user_id: str, twitch_app_id: str, twitch_app_secret: str):
         super().__init__()
         self.event_platform = EventSource.Twitch
         self.channels = channels
@@ -70,7 +70,7 @@ class TwitchAPIEventSource(BaseEventSource):
         self.chat: Chat | None = None
         self.bot_twitch: Twitch | None = None
         self.bot_user: TwitchUser | None = None
-        self.channel_twitches: Dict[str, Twitch] = {}
+        self.channel_twitches: dict[str, Twitch] = {}
         self.eventsubs: list[EventSubWebsocket] = []
         
         self.db_service: DatabaseService | None = None

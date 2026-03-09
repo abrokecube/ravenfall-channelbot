@@ -1,7 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, NamedTuple, Any, List, Callable
+from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
-    from events import CommandEvent
+    from .events import CommandEvent
     from .global_context import GlobalContext
 from .events import BaseEvent
 from .enums import UserRole, EventSource
@@ -51,7 +51,7 @@ class HasRole(BaseCheck):
 class MinPermissionLevel(BaseCheck):
     """Check if the user is at or above a permission level"""
     
-    def __init__(self, minimum_role: UserRole, *, extra_roles: List[UserRole] = []):
+    def __init__(self, minimum_role: UserRole, *, extra_roles: list[UserRole] = []):
         self.min_level = minimum_role.level()
         self.extra_roles = extra_roles
         self.title = minimum_role.name.lower().replace("_", " ")

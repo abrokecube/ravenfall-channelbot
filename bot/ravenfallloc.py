@@ -1,6 +1,7 @@
-from typing import Iterable, List, Dict, NamedTuple, Optional, Pattern
+from typing import NamedTuple, override, cast, Any
 from enum import Enum
 import re
+from re import Pattern
 import os
 import logging
 from ruamel.yaml import YAML
@@ -12,9 +13,9 @@ import random
 logger = logging.getLogger(__name__)
 
 # Compiled regex patterns for string matching and translation
-MATCH_DEF_TOKENIZER: Pattern = re.compile(r"{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<parsed>[a-zA-Z_0-9]+(:((?:(?!}})).)+)?)}}|(?P<nothing>[^{}]*)")
-TRANSLATE_TOKENIZER: Pattern = re.compile(r'{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<eval>((?:(?!}})).)+)}}|(?P<nothing>[^{}]*)')
-FSTRINGS: Pattern = re.compile(r'{([a-zA-Z_0-9]+)}')
+MATCH_DEF_TOKENIZER: Pattern[str] = re.compile(r"{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<parsed>[a-zA-Z_0-9]+(:((?:(?!}})).)+)?)}}|(?P<nothing>[^{}]*)")
+TRANSLATE_TOKENIZER: Pattern[str] = re.compile(r'{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<eval>((?:(?!}})).)+)}}|(?P<nothing>[^{}]*)')
+FSTRINGS: Pattern[str] = re.compile(r'{([a-zA-Z_0-9]+)}')
 
 class StringArgType(Enum):
     GIVEN = 0
@@ -28,20 +29,18 @@ class StringArg(NamedTuple):
 class TranslatedString():
     """Container for translated string variations."""
     key: str
-    strings: List[str]
+    strings: list[str]
 
 
 def pl(number: int | float, singular: str, plural: str):
     """Pluralization helper function."""
-    if not isinstance(number, (int, float)):
-        number = float(number)
     if number == 1:
         return singular
     return plural
 
 def unping(in_str: str):
     """Prevent pings in messages by adding invisible characters."""
-    out = []
+    out: list[str] = []
     for word in in_str.split():
         if len(word) < 3:
             out.append(word)
@@ -53,11 +52,11 @@ def unping(in_str: str):
             out.append(f"{a}\U000e0000{b}")
     return ' '.join(out)
 
-def pickrand(*args):
+def pickrand[T](*args: T) -> T:
     """Pick a random argument."""
     return random.choice(args)
 
-def to_str(obj):
+def to_str(obj: object) -> str:
     if isinstance(obj, float):
         if obj.is_integer():
             obj = int(obj)
@@ -72,17 +71,17 @@ def to_str(obj):
 class RavenfallLocalization:
     """Handles string localization and translation for Ravenfall bot."""
     
-    def __init__(self, definitions_path: str = 'definitions.yaml', strings_path: str = None):
+    def __init__(self, definitions_path: str = 'definitions.yaml', strings_path: str | None = None):
         """Initialize the localization system with paths to definition and string files."""
-        self.definitions_path = definitions_path
-        self.strings_path = strings_path
+        self.definitions_path: str = definitions_path
+        self.strings_path: str | None = strings_path
         
         # Initialize storage
-        self.strings: List[Match] = []
-        self.strings_dict: Dict[str, Match] = {}
-        self.simple_matches: Dict[str, Match] = {}
-        self.regex_matches: List[Match] = []
-        self.translated_strings: Dict[str, TranslatedString] = {}
+        self.strings: list[Match] = []
+        self.strings_dict: dict[str, Match] = {}
+        self.simple_matches: dict[str, Match] = {}
+        self.regex_matches: list[Match] = []
+        self.translated_strings: dict[str, TranslatedString] = {}
         
         # Load definitions and translations
         self.load_definitions()
@@ -93,7 +92,11 @@ class RavenfallLocalization:
         """Load string definitions from YAML file."""
         yaml = YAML()
         with open(self.definitions_path, 'r', encoding="utf-8") as f:
-            defs = yaml.load(f)
+            defs: dict[str, str | yamllib.CommentedSeq] = yaml.load(f)
+            if not isinstance(defs, dict):
+                defs = {}
+            else:
+                defs = cast(dict[str, str | yamllib.CommentedSeq], defs)  # satisfy pyright
             
         self.strings.clear()
         self.simple_matches.clear()
@@ -117,11 +120,7 @@ class RavenfallLocalization:
                 self.simple_matches[matcher.match_string] = matcher
             else:
                 self.regex_matches.append(matcher)
-        
-        # Add default bot strings to the strings dict
-        for key, value in _default_bot_strings.items():
-            self.strings.append(Match(key, value))
-        
+                
         # Create a dictionary for quick lookup by key
         for a in self.strings:
             self.strings_dict[a.key] = a
@@ -138,7 +137,11 @@ class RavenfallLocalization:
             return
             
         with open(self.strings_path, 'r', encoding='utf-8') as f:
-            defs = yaml.load(f)
+            defs: dict[str, str | yamllib.CommentedSeq] = yaml.load(f)
+            if not isinstance(defs, dict):
+                defs = {}
+            else:
+                defs = cast(dict[str, str | yamllib.CommentedSeq], defs)  # satisfy pyright
             
         self.translated_strings.clear()
         
@@ -150,10 +153,13 @@ class RavenfallLocalization:
                 strs = [trans_str]
             self.translated_strings[key] = TranslatedString(key, strs)
     
-    def _fill_args(self, in_str: str, in_args: List, named_args: Dict[str, str] = {}) -> str:
+    def _fill_args(self, in_str: str, in_args: list[str | int | float], named_args: dict[str, str] | None = None) -> str:
         """Fill in arguments in a format string."""
-        expl_args = {}
-        for a in FSTRINGS.findall(in_str):
+        if not named_args:
+            named_args = {}
+        expl_args: dict[str, str] = {}
+        results: list[str] = FSTRINGS.findall(in_str)
+        for a in results:
             expl_args[a] = ''
         for argname, argvalue in zip(expl_args, in_args):
             expl_args[argname] = to_str(argvalue)
@@ -165,21 +171,25 @@ class RavenfallLocalization:
             return self.simple_matches[in_str]
         else:
             for m in self.regex_matches:
-                if m.regex.match(in_str):
+                if m.regex and m.regex.match(in_str):
                     return m
         return None
 
-    def translate_string(self, in_str: str, in_args: List, match: 'Match' = None, additional_args: Dict[str, str] = {}) -> str:
+    def translate_string(self, in_str: str, in_args: list[str | int | float], match: 'Match | None' = None, additional_args: dict[str, str] | None = None) -> str:
         """
         Translate a string using the loaded definitions and translations.
         
         Args:
             in_str: The input string to translate
-            in_args: List of arguments to use for formatting
+            in_args: list of arguments to use for formatting
+            match: Optional pre-matched string definition
+            additional_args: Additional arguments to use for formatting
             
         Returns:
             str: The translated string
         """
+        if not additional_args:
+            additional_args = {}
         if match is None:
             matched = self.identify_string(in_str)
             if matched:
@@ -221,13 +231,13 @@ class RavenfallLocalization:
         return self.translate_string(in_str, [], additional_args=kwargs)
         
     
-    def getstr(self, key: str, args: Dict[str, str] = None) -> str:
+    def getstr(self, key: str, args: dict[str, str] | None = None) -> str:
         """
         Get a translated string by key with the given arguments.
         
         Args:
             key: The key of the string to retrieve
-            args: Dictionary of arguments to format the string with
+            args: dictionary of arguments to format the string with
             
         Returns:
             str: The translated and formatted string
@@ -254,11 +264,7 @@ class RavenfallLocalization:
             trans_str = random.choice(self.translated_strings[key].strings)
         else:
             logger.warning(f"No translation for {key}")
-        
-        # Get default string if available
-        if key in _default_bot_strings:
-            default_str = _default_bot_strings[key]
-        
+                
         # Validate we have at least one string to work with
         if not default_str and not trans_str:
             raise ValueError(f"No string found for key: {key}")
@@ -267,19 +273,19 @@ class RavenfallLocalization:
         if not trans_str:
             trans_str = default_str
             
-        return matcher.translate(trans_str, default_str, args)
+        return matcher.translate(trans_str, default_str, cast(dict[str, str | int | float], args))
 
 class Match:
     def __init__(self, key: str, match_string: str = ""):
-        self.key = key
-        self.match_string = match_string
-        self.arguments: List[StringArg] = []
-        regex_str_build = ['^']
-        orig_str_build = []
+        self.key: str = key
+        self.match_string: str = match_string
+        self.arguments: list[StringArg] = []
+        regex_str_build: list[str] = ['^']
+        orig_str_build: list[str] = []
         has_regex = False
         for mo in MATCH_DEF_TOKENIZER.finditer(match_string):
             kind = mo.lastgroup
-            value = mo.groupdict()[kind]
+            value = mo.groupdict().get(kind or "", "")
             match kind:
                 case "nothing":
                     regex_str_build.append(re.escape(value))
@@ -307,7 +313,7 @@ class Match:
                 case _:
                     logger.error("Unexpected match group in string pattern")
                     assert False, "Unexpected match group in string pattern"
-        self.regex = None
+        self.regex: re.Pattern[str] | None = None
         if has_regex:
             regex_str_build.append("$")
             self.regex = re.compile("".join(regex_str_build))
@@ -315,23 +321,25 @@ class Match:
             # print(self.regex)
             # print(self.match_string)
     
-    def extract_args(self, rf_string: str, rf_args: List):
+    def extract_args(self, rf_string: str, rf_args: list[str | int | float]) -> dict[str, str | int | float]:
         # expl_args = [x for x in self.arguments if x.arg_type == StringArgType.GIVEN]
-        expl_args = {}
+        expl_args: dict[str, None] = {}
         for a in FSTRINGS.findall(rf_string):
             # ordered set
             expl_args[a] = None
         impl_args = [x.name for x in self.arguments if x.arg_type == StringArgType.PARSED]
-        mapped_args = {}
+        mapped_args: dict[str, str | int | float] = {}
                 
         if len(impl_args) > 0:
-            groups = self.regex.findall(rf_string)
+            if not self.regex:
+                raise ValueError("Matcher has no regex pattern")
+            groups: list[str] = self.regex.findall(rf_string)
             if len(groups) == 1:
-                if isinstance(groups[0], str):
-                    mapped_args[impl_args[0]] = groups[0]
-                else:
-                    for idx, g in enumerate(groups[0]):
-                        mapped_args[impl_args[idx]] = g
+                # if isinstance(groups[0], str):
+                mapped_args[impl_args[0]] = groups[0]
+                # else:
+                #     for idx, g in enumerate(groups[0]):
+                #         mapped_args[impl_args[idx]] = g
             else:
                 raise ValueError("Input string may not match this matcher")
             
@@ -340,17 +348,17 @@ class Match:
 
         return mapped_args
             
-    def translate(self, trans_string: str, rf_string: str, rf_args: List | Dict, additional_args: Dict[str, str] = {}) -> str:
-        if isinstance(rf_args, Dict):
+    def translate(self, trans_string: str, rf_string: str, rf_args: list[str | int | float] | dict[str, str | int | float], additional_args: dict[str, str] = {}) -> str:
+        if isinstance(rf_args, dict):
             mapped_args = rf_args
         else:
             mapped_args = self.extract_args(rf_string, rf_args)
         mapped_args.update(additional_args)
-        def fill(string):
+        def fill(string: str) -> str:
             return self.translate(string, rf_string, rf_args, additional_args)
         str_a = trans_string
         str_b = ""
-        eval_globals = {}
+        eval_globals: dict[str, object] = {}
         eval_globals.update(mapped_args)
         eval_globals.update({
             "pl": pl,
@@ -361,9 +369,11 @@ class Match:
             "fill": fill
         })
         while str_a != str_b:
-            string_build = []
+            string_build: list[str] = []
             for mo in TRANSLATE_TOKENIZER.finditer(str_a):
                 kind = mo.lastgroup
+                if kind is None:
+                    continue
                 value = mo.groupdict()[kind]
                 match kind:
                     case "nothing":
@@ -377,11 +387,13 @@ class Match:
                     case "eval":
                         try:
                             logger.debug(f"Evaluating expression: {value}")
-                            eval_out = eval(value, eval_globals)
+                            eval_out: Any = eval(value, eval_globals)
                         except Exception as e:
                             logger.error(f"Evaluation failed for expression '{value}': {e}")
                             eval_out = "(?)"
                         string_build.append(to_str(eval_out))
+                    case _:
+                        logger.warning(f"Unknown token type: {kind}")
             str_b = "".join(string_build)
                 
             str_a, str_b = (str_b, str_a)
@@ -391,107 +403,45 @@ class Match:
         #     str_a, str_b = (str_b, str_a)
         return str_b
     
+    @override
     def __repr__(self):
         return f"Match({self.key})"
 
-
-class BotString:
-    """Container for bot string constants."""
-    RAVENFALL_CONNECTED = "Connected to Ravenfall!"
-    RAVENFALL_CONNECTED_WITHOUT_SESSION = "Connected to Ravenfall without session info... Please restart the bot or Ravenfall."
-    RAVENFALL_NOT_CONNECTED = "Not connected to Ravenfall!"
-    QUERY_PUBSUB = "yes there definitely is a pubsub here mhm"
-    RELOADED_STRINGS = "Reloaded strings."
-    ERROR = "bruh Error."
-    TRAVEL_FAILED_INVALID_ISLAND = "You cannot travel to {query}. You can travel to Home, Away, Ironhill, Kyo, Heim, Atria, or Eldara."
-    TRAVEL_ISLAND_MISSING = "Please specify an island to teleport to."
-    NOT_PERMITTED = "NOPERS"
-    NO_DUNGEONS_OR_RAIDS_AVAILABLE = "There are no active dungeons or raids at the moment."
-    GAME_BUG_BROKE_THIS_COMMAND = "Game is bugged so this command is broken. aga"
-    TOGGLE_UNSPECIFIED = "You need to specify what to toggle. (Options: helm or pet)"
-    TOGGLE_FAILED = "{item} cannot be toggled."
-    EXP_FAIL_NO_NUMBER = "Please enter a number."
-    DUEL_FAIL_NO_ARGS = "To duel a player you need to specify their name. ex: '!duel JohnDoe', to accept or decline a duel request use '!duel accept' or '!duel decline'. You may also cancel an ongoing request by using '!duel cancel'"
-    KICK_ARENA_FAIL_NO_ARGS = "Specify a player to kick."
-    ADD_ARENA_FAIL_NO_ARGS = "Specify a player to kick."
-    RAIDWAR_FAIL_NO_ARGS = "Enter a valid Twitch username."
-    ITEM_NOT_IN_INVENTORY = "You do not have any {query}."
-    ITEM_SEARCH_FAIL_NO_ITEM = "Please include an item name."
-    ITEM_SEARCH_FAIL_NO_RESULT = "No results for '{query}'"
-    ITEM_SEARCH_FAIL_NO_RESULT_SUGGEST = "Couldn't find '{query}', did you mean {suggestions}?"
-    ITEM_FAIL_NO_VALID_ARGS = "uuh No valid item names were provided."
-    ITEM_FAIL_NO_VALID_ARGS_SUGGEST = "uuh No valid item names were provided. (Did you mean {suggestions}?)"
-    ITEMS = "You have {items}."
-    EQUIP_FAIL_NO_ARGS = "You have to use {prefix}equip <item name> or {prefix}equip all for equipping your best items."
-    UNEQUIP_FAIL_NO_ARGS = "You have to use {prefix}unequip <item name> or {prefix}unequip all for equipping your best items."
-    GIFT_FAIL_NO_ARGS = "{prefix}gift <user> <item> (optional: amount)."
-    TRAIN_FAIL_NO_ARGS = "You need to specify a skill to train, currently supported skills: all, atk, def, str, magic, ranged, fishing, cooking, woodcutting, mining, crafting, farming, healing, gathering, alchemy or !sail for sailing."
-    TRAIN_FAIL_INVALID_ARG = "You cannot train '{query}'"
-    TRAIN_SLAYER = "Join raids and dungeons to train Slayer!"
-    ITEM_FAIL_MISSING_ITEM_NAME = "Please specify an item name."
-    CRAFT_FAIL_ITEMS_NOT_LOADED = "Awkward Items have not been loaded yet. Wait a bit or ping abrokecube about it."
-    CRAFT_FAIL_AMBIGUOUS_NUMBER = "uuh Please place an amount before the first item or after the last item to remove ambiguity. (I don't know if '{mysteryNumber}' is for the item before it or the item after it.)"
-    CRAFT_FAIL_UNCRAFTABLE = "One item cannot be crafted."
-    CRAFT_FAIL_MANY_NUMBER_UNCRAFTABLE = "{itemCount} items cannot be crafted."
-    CRAFT_FAIL_MANY_UNCRAFTABLE = "{items} cannot be crafted."
-    CRAFT_FAIL_CONTINUE_MANY = "Respond with yes to continue without these items."
-    CRAFT_FAIL_CONTINUE = "Respond with yes to continue without this item."
-    CRAFT_FAIL_MANY_ITEMS_MISSING_SKILLS_NUMBER = "{itemCount} items cannot be crafted because of missing skill requirements. You need {skills}."
-    CRAFT_FAIL_MANY_MISSING_SKILLS = "{items} cannot be crafted because of missing skill requirements. You need {skills}."
-    CRAFT_FAIL_ITEM = "Unable to craft {item}."
-    CRAFT_FAIL_MANY_ITEMS = "Unable to craft items."
-    CRAFT_FAIL_MISSING_INGREDIENTS_NUMBER = "You are missing {ingredientCount} ingredients!"
-    CRAFT_FAIL_MISSING_INGREDIENTS = "You are missing {ingredients}!"
-    CRAFT_FAIL_MISSING_INGREDIENTS_CRAFTABLE = "Respond with yes to craft these ingredients."
-    CRAFT_PROCESSING_MANY_NUMBER = "Crafting {itemCount} items..."
-    ENCHANT_REPLACE_FAIL_NO_RECENT_ITEMS = "You have not enchanted any items recently."
-    ENCHANT_REPLACE_FAIL_TIMEOUT = "It has been more than 5 minutes since you enchanted '{item}', to avoid disenchanting by mistake you have to use '{prefix} disenchant last' to continue."
-    COUNT_FAIL_NO_ARGS = "You must specify an item. Use {prefix}items (item name) or {prefix}count (item name)"
-
-# Python black magic
-_default_bot_strings: Dict[str, str] = {}
-for key, value in BotString.__dict__.items():
-    if "__" in key:
-        continue
-    new_key = "bot_" + key.lower()
-    _default_bot_strings[new_key] = value
-    setattr(BotString, key, new_key)
-
-def _test():
-    """Test function for the localization system."""
-    logger.basicConfig(
-        level=logger.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logger.StreamHandler(),
-        ]
-    )
-    # Example test cases
-    test_input = "You have {scrollCount} scrolls, for a total multiplier of 60x! Use those {scrollCount} scrolls wisely! when the {a} does {b} and {c}"
-    test_translate = "{scrollCount} scrolls? {multAmount} multiplier? Wowee! I love using {{pl(scrollCount, 'my scroll', 'all of my {scrollCount} scrolls', False)}}! {ffstringTest}"
-    test_args = [1, 1, 2, 3]
+# def _test():
+#     """Test function for the localization system."""
+#     logger.basicConfig(
+#         level=logger.DEBUG,
+#         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#         handlers=[
+#             logger.StreamHandler(),
+#         ]
+#     )
+#     # Example test cases
+#     test_input = "You have {scrollCount} scrolls, for a total multiplier of 60x! Use those {scrollCount} scrolls wisely! when the {a} does {b} and {c}"
+#     test_translate = "{scrollCount} scrolls? {multAmount} multiplier? Wowee! I love using {{pl(scrollCount, 'my scroll', 'all of my {scrollCount} scrolls', False)}}! {ffstringTest}"
+#     test_args = [1, 1, 2, 3]
     
-    # Initialize the localization system
-    loc = RavenfallLocalization()
+#     # Initialize the localization system
+#     loc = RavenfallLocalization()
     
-    # Example usage
-    try:
-        # Example of using translate_string
-        result = loc.translate_string(
-            "{type0}: {playerName0}, {playerName1} ({playerStats0})",
-            ["Mining", "Player1", "Lvl 99"]
-        )
-        print("Translated string:", result)
+#     # Example usage
+#     try:
+#         # Example of using translate_string
+#         result = loc.translate_string(
+#             "{type0}: {playerName0}, {playerName1} ({playerStats0})",
+#             ["Mining", "Player1", "Lvl 99"]
+#         )
+#         print("Translated string:", result)
         
-        # Example of using getstr with bot strings
-        bot_msg = loc.getstr(
-            BotString.RAVENFALL_CONNECTED,
-            {"prefix": "!"}
-        )
-        print("Bot message:", bot_msg)
+#         # Example of using getstr with bot strings
+#         bot_msg = loc.getstr(
+#             BotString.RAVENFALL_CONNECTED,
+#             {"prefix": "!"}
+#         )
+#         print("Bot message:", bot_msg)
         
-    except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
+#     except Exception as e:
+#         logger.error(f"Error: {e}", exc_info=True)
 
-if __name__ == "__main__":
-    _test()
+# if __name__ == "__main__":
+#     _test()

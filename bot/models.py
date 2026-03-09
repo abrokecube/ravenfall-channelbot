@@ -1,6 +1,6 @@
 from __future__ import annotations
-from typing import TypedDict, Dict, Literal, Union, NamedTuple, Optional, List, TYPE_CHECKING
-from uuid import UUID
+from typing import TypedDict, Literal, NamedTuple
+from collections.abc import Collection
 from enum import Enum
 from dataclasses import dataclass
 
@@ -13,7 +13,7 @@ class Channel(TypedDict):
     channel_name: str
     rf_query_url: str
     custom_town_msg: str
-    ravenbot_prefix: str | list | tuple
+    ravenbot_prefix: str | Collection[str]
     welcome_message: str
     receive_global_alerts: bool
     sandboxie_box: str
@@ -93,11 +93,11 @@ class Player(TypedDict):
     inraid: bool
     coins: int
     commandidletime: float
-    stats: Dict[Literal[
+    stats: dict[Literal[
         "combatlevel", "attack", "defense", "strength", "health", "woodcutting",
         "fishing", "mining", "crafting", "cooking", "farming", "slayer", "magic", "ranged",
         "sailing", "healing", "gathering", "alchemy"
-    ], Union[int, PlayerStat]]
+    ], int | PlayerStat]
 
 class Village(TypedDict):
     name: str
@@ -120,13 +120,13 @@ class Ferry(TypedDict):
     captain: FerryCaptain
 
 class Sender(TypedDict):
-    Id: UUID
-    CharacterId: UUID
+    Id: str
+    CharacterId: str
     Username: str
     DisplayName: str
     Color: str
     Platform: str
-    PlatformId: str
+    PlatformId: str | None
     IsBroadcaster: bool
     IsModerator: bool
     IsSubscriber: bool
@@ -141,13 +141,13 @@ class RavenBotMessage(TypedDict):
     Identifier: str
     Sender: Sender
     Content: str
-    CorrelationId: UUID
+    CorrelationId: str
 
 
 class Recipient(TypedDict):
     """Represents the recipient information in a Ravenfall message."""
-    UserId: UUID
-    CharacterId: UUID
+    UserId: str
+    CharacterId: str
     Platform: str
     PlatformId: str
     PlatformUserName: str
@@ -158,10 +158,10 @@ class RavenfallMessage(TypedDict):
     Identifier: str  # e.g., "message"
     Recipent: Recipient
     Format: str  # Format string for the message
-    Args: List[str]  # Arguments to be inserted into the format string
-    Tags: List[str]  # Any tags associated with the message
+    Args: list[str | int | float]  # Arguments to be inserted into the format string
+    Tags: list[str]  # Any tags associated with the message
     Category: str  # Message category (if any)
-    CorrelationId: UUID  # For tracking the message
+    CorrelationId: str  # For tracking the message
 
 class RFChannelEvent(Enum):
     NONE = 0

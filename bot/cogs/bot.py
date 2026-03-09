@@ -16,8 +16,9 @@ from ..commands.exceptions import (
 from aiohttp import ClientError
 from collections import defaultdict
 
-from typing import TYPE_CHECKING, NamedTuple, Any, List, Dict
+from typing import TYPE_CHECKING, NamedTuple, Any
 from ..ravenfallchannel import RFChannel
+from ..ravenfallmanager import RFChannelManager
 
 class BotStuffCog(Cog):
     def __init__(self, event_manager, watcher_urls=["http://127.0.0.1:8110"]):
@@ -150,7 +151,7 @@ class BotStuffCog(Cog):
     @command(name="listproc", aliases=["listprocess", "listprocesses", "list_processes", "proclist"])
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     async def list_processes(self, ctx: CommandEvent):
-        """List all registered processes."""
+        """list all registered processes."""
         try:
             processes = {}
             for watcher in self.watchers:

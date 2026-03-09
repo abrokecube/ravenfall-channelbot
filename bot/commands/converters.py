@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, NamedTuple, Any, List, Dict
+from typing import TYPE_CHECKING, NamedTuple, Any, list
 if TYPE_CHECKING:
     from ..commands.global_context import GlobalContext
 from .events import CommandEvent, TwitchMessageEvent
@@ -22,7 +22,7 @@ class BaseConverter:
         raise NotImplementedError
 
 class Choice(BaseConverter):
-    def __init__(self, definition: List[str] | Dict[str, List[str]], title=None, case_sensitive=False):
+    def __init__(self, definition: list[str] | dict[str, list[str]], title=None, case_sensitive=False):
         super().__init__()
         string_map = {}
         choices = []

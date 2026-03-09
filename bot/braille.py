@@ -91,7 +91,7 @@ def interpolate_with_gap_handling(pairs, output_count, max_gap):
     return output
 
 # Expects (timestamp, value) pairs
-def simple_line_graph(pairs: Sequence[Tuple[float, float]], width=24, height=4, min_val=None, max_val=None, hard_min_val=None, hard_max_val=None, fill_type=0, max_gap=20, monospace=False, use_space=False):
+def simple_line_graph(pairs: Sequence[tuple[float, float]], width=24, height=4, min_val=None, max_val=None, hard_min_val=None, hard_max_val=None, fill_type=0, max_gap=20, monospace=False, use_space=False):
     values = [x[1] for x in pairs]
     if max_val is None:
         max_val = max(values)

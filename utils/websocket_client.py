@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import json
-from typing import Any, Callable, Optional, Dict, Union, Awaitable
+from typing import Any, Callable, cast
+from collections.abc import Awaitable
 import aiohttp
 from datetime import datetime
 
@@ -19,15 +20,15 @@ class AutoReconnectingWebSocket:
     def __init__(
         self,
         url: str,
-        on_message: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
-        on_connect: Optional[Callable[[], Awaitable[None]]] = None,
-        on_disconnect: Optional[Callable[[], Awaitable[None]]] = None,
-        on_error: Optional[Callable[[Exception], Awaitable[None]]] = None,
+        on_message: Callable[[dict[str, Any]], Awaitable[None]] | None = None,  # pyright: ignore [reportExplicitAny]
+        on_connect: Callable[[], Awaitable[None]] | None = None,
+        on_disconnect: Callable[[], Awaitable[None]] | None = None,
+        on_error: Callable[[Exception], Awaitable[None]] | None = None,
         reconnect_interval: float = 1.0,
         max_reconnect_interval: float = 30.0,
-        max_retries: Optional[int] = None,
-        logger: Optional[logging.Logger] = None,
-        **session_kwargs: Any
+        max_retries: int | None = None,
+        logger: logging.Logger | None = None,
+        **session_kwargs: Any  # pyright: ignore [reportExplicitAny, reportAny]
     ):
         """
         Initialize the AutoReconnectingWebSocket.
@@ -44,27 +45,27 @@ class AutoReconnectingWebSocket:
             logger: Custom logger instance
             **session_kwargs: Additional arguments for aiohttp.ClientSession
         """
-        self.url = url
-        self.on_message = on_message
-        self.on_connect = on_connect
-        self.on_disconnect = on_disconnect
-        self.on_error = on_error
-        self.reconnect_interval = reconnect_interval
-        self.max_reconnect_interval = max_reconnect_interval
-        self.max_retries = max_retries
-        self.retry_count = 0
-        self.logger = logger or logging.getLogger(f"AutoReconnectingWebSocket: {url}")
-        self.session_kwargs = session_kwargs
+        self.url: str = url
+        self.on_message: Callable[[dict[str, Any]], Awaitable[None]] | None = on_message  # pyright: ignore [reportExplicitAny]
+        self.on_connect: Callable[[], Awaitable[None]] | None = on_connect
+        self.on_disconnect: Callable[[], Awaitable[None]] | None = on_disconnect
+        self.on_error: Callable[[Exception], Awaitable[None]] | None = on_error
+        self.reconnect_interval: float = reconnect_interval
+        self.max_reconnect_interval: float = max_reconnect_interval
+        self.max_retries: int | None = max_retries
+        self.retry_count: int = 0
+        self.logger: logging.Logger = logger or logging.getLogger(f"AutoReconnectingWebSocket: {url}")
+        self.session_kwargs: dict[str, Any] = session_kwargs  # pyright: ignore [reportExplicitAny]
         
-        self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._reconnect_task: Optional[asyncio.Task] = None
-        self._listen_task: Optional[asyncio.Task] = None
-        self._message_queue: asyncio.Queue = asyncio.Queue()
-        self._is_connected = False
-        self._should_reconnect = True
-        self._last_message_time: Optional[datetime] = None
-        self._connection_lock = asyncio.Lock()
+        self._ws: aiohttp.ClientWebSocketResponse | None = None
+        self._session: aiohttp.ClientSession | None = None
+        self._reconnect_task: asyncio.Task[Any] | None = None  # pyright: ignore [reportExplicitAny]
+        self._listen_task: asyncio.Task[Any] | None = None  # pyright: ignore [reportExplicitAny]
+        self._message_queue: asyncio.Queue[dict[str, Any] | str | bytes] = asyncio.Queue()  # pyright: ignore [reportExplicitAny]
+        self._is_connected: bool = False
+        self._should_reconnect: bool = True
+        self._last_message_time: datetime | None = None
+        self._connection_lock: asyncio.Lock = asyncio.Lock()
 
     @property
     def is_connected(self) -> bool:
@@ -86,24 +87,24 @@ class AutoReconnectingWebSocket:
             self._should_reconnect = False
             
             if self._reconnect_task and not self._reconnect_task.done():
-                self._reconnect_task.cancel()
+                _ = self._reconnect_task.cancel()
                 try:
                     await self._reconnect_task
                 except asyncio.CancelledError:
                     pass
             
             if self._listen_task and not self._listen_task.done():
-                self._listen_task.cancel()
+                _ = self._listen_task.cancel()
                 try:
                     await self._listen_task
                 except asyncio.CancelledError:
                     pass
             
             if self._ws and not self._ws.closed:
-                await self._ws.close()
+                _ = await self._ws.close()
             
             if self._session and not self._session.closed:
-                await self._session.close()
+                _ = await self._session.close()
             
             self._ws = None
             self._session = None
@@ -115,14 +116,14 @@ class AutoReconnectingWebSocket:
                 except Exception as e:
                     self.logger.error(f"Error in on_disconnect callback: {e}", exc_info=True)
 
-    async def send(self, message: Union[Dict[str, Any], str, bytes]) -> None:
+    async def send(self, message: dict[str, Any] | str | bytes) -> None:  # pyright: ignore [reportExplicitAny]
         """
         Send a message through the WebSocket.
         
         Args:
             message: Message to send (dict, str, or bytes)
         """
-        if not self.is_connected:
+        if (not self.is_connected) or not self._ws:
             self.logger.warning("WebSocket not connected, queuing message")
             await self._message_queue.put(message)
             return
@@ -133,10 +134,8 @@ class AutoReconnectingWebSocket:
                 await self._ws.send_str(message_str)
             elif isinstance(message, str):
                 await self._ws.send_str(message)
-            elif isinstance(message, bytes):
+            else:  # Must be bytes due to type hint exhaustion
                 await self._ws.send_bytes(message)
-            else:
-                raise ValueError(f"Unsupported message type: {type(message)}")
                 
             self._last_message_time = datetime.now()
             
@@ -157,12 +156,12 @@ class AutoReconnectingWebSocket:
         """Establish WebSocket connection."""
         try:
             if self._session is None or self._session.closed:
-                self._session = aiohttp.ClientSession(**self.session_kwargs)
+                self._session = aiohttp.ClientSession(**self.session_kwargs)  # pyright: ignore [reportAny]
                 
             self._ws = await self._session.ws_connect(
                 self.url,
                 heartbeat=30,
-                timeout=aiohttp.ClientTimeout(total=30)
+                timeout=aiohttp.ClientWSTimeout(ws_close=30)  # pyright: ignore [reportCallIssue]
             )
             
             self._is_connected = True
@@ -200,10 +199,10 @@ class AutoReconnectingWebSocket:
                 connected = await self._connect_websocket()
                 if not connected:
                     # Exponential backoff with jitter
-                    delay = min(
-                        self.reconnect_interval * (2 ** min(self.retry_count, 10)),
+                    delay: float = cast(float, min(
+                        self.reconnect_interval * (2 ** (min(self.retry_count, 10))),  # pyright: ignore [reportAny]
                         self.max_reconnect_interval
-                    ) * (0.5 + (0.5 * (1 + 0.1 * (self.retry_count % 10))))  # Add some jitter
+                    ) * (0.5 + (0.5 * (1 + 0.1 * (self.retry_count % 10)))))  # Add some jitter
                     
                     self.retry_count += 1
                     if self.max_retries is not None and self.retry_count > self.max_retries:
@@ -217,24 +216,27 @@ class AutoReconnectingWebSocket:
 
     async def _listen(self) -> None:
         """Listen for incoming WebSocket messages."""
+        if not self._ws:
+            return
         try:
             async for msg in self._ws:
+                raw_data: str | bytes = cast(str | bytes, msg.data)
                 self._last_message_time = datetime.now()
                 
                 if msg.type == aiohttp.WSMsgType.TEXT:
-                    self.logger.debug(f"Received text message: {msg.data}")
+                    self.logger.debug(f"Received text message: {raw_data}")
                     try:
-                        data = json.loads(msg.data)
+                        data: Any = json.loads(raw_data)  # pyright: ignore [reportExplicitAny, reportAny]
                         if self.on_message:
                             try:
-                                await self.on_message(data)
+                                await self.on_message(data)  # pyright: ignore [reportAny]
                             except Exception as e:
                                 self.logger.error(f"Error in on_message callback: {e}", exc_info=True)
                     except json.JSONDecodeError:
-                        self.logger.warning(f"Received non-JSON message: {msg.data}")
+                        self.logger.warning(f"Received non-JSON message: {raw_data}")
                         
                 elif msg.type == aiohttp.WSMsgType.BINARY:
-                    self.logger.debug(f"Received binary message: {len(msg.data)} bytes")
+                    self.logger.debug(f"Received binary message: {len(raw_data)} bytes")
                     
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     self.logger.error(f"WebSocket error: {self._ws.exception()}")
@@ -260,7 +262,7 @@ class AutoReconnectingWebSocket:
             self._is_connected = False
             
             if self._ws and not self._ws.closed:
-                await self._ws.close()
+                _ = await self._ws.close()
             
             if self.on_disconnect:
                 try:
@@ -281,7 +283,7 @@ class AutoReconnectingWebSocket:
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb):  # pyright: ignore [reportUnknownParameterType, reportMissingParameterType]
         """Async context manager exit."""
         await self.disconnect()
 
@@ -289,7 +291,7 @@ class AutoReconnectingWebSocket:
         """Alias for disconnect()."""
         await self.disconnect()
 
-    async def wait_until_connected(self, timeout: Optional[float] = None) -> bool:
+    async def wait_until_connected(self, timeout: float | None = None) -> bool:
         """
         Wait until the WebSocket is connected.
         

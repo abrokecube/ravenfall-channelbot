@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, List, Dict
+from typing import Optional
 from ..commands.cog import Cog
 from ..commands.events import CommandEvent
 from ..commands.listeners import CommandListener
@@ -21,7 +21,7 @@ LOGGER = logging.getLogger(__name__)
 
 class HelpCog(Cog):
     async def build_command_list_single_line(self, ctx: CommandEvent = None, show_more=False) -> str:
-        cogs_dict: Dict[str, List[CommandListener]] = defaultdict(list)
+        cogs_dict: dict[str, list[CommandListener]] = defaultdict(list)
         cmd_dispatcher: CommandDispatcher = self.event_manager.dispatchers.get(Dispatcher.Command)
         
         if cmd_dispatcher is not None:

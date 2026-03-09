@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import aiohttp
-from typing import Dict, Optional, Tuple, Any, TypedDict
+from typing import Optional, Tuple, Any, TypedDict
 from dataclasses import dataclass
 from .messageprocessor import RavenfallMessage
 
@@ -22,7 +22,7 @@ def handle_sigint():
     logger.info("Shutting down server...")
     stop_event.set()
 
-async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional[Dict] = None) -> Tuple[Dict, int]:
+async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional[dict] = None) -> tuple[dict, int]:
     """Make an API call to the middleman server."""
     url = f"http://{MIDDLEMAN_API_HOST.rstrip('/')}:{MIDDLEMAN_API_PORT}/{endpoint.lstrip('/')}"
     headers = {'Content-Type': 'application/json'}
@@ -43,7 +43,7 @@ async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional
         logger.error(f"Error calling middleman API: {str(e)}", exc_info=True)
         return {"error": f"Failed to connect to middleman API: {str(e)}"}, 500
 
-async def force_reconnect(connection_id: str, timeout: int = 0) -> Dict:
+async def force_reconnect(connection_id: str, timeout: int = 0) -> dict:
     """Force a reconnection for the specified connection."""
     data = {
         "connectionId": connection_id,
@@ -52,7 +52,7 @@ async def force_reconnect(connection_id: str, timeout: int = 0) -> Dict:
     response, status = await _call_middleman_api('/api/reconnect', 'POST', data)
     return response
 
-async def send_to_client(connection_id: str, message: str) -> Dict:
+async def send_to_client(connection_id: str, message: str) -> dict:
     """Send a message to a specific client."""
     data = {
         "connectionId": connection_id,
@@ -62,7 +62,7 @@ async def send_to_client(connection_id: str, message: str) -> Dict:
     response, status = await _call_middleman_api('/api/send-to-client', 'POST', data)
     return response
 
-async def send_to_server(connection_id: str, message: str) -> Dict:
+async def send_to_server(connection_id: str, message: str) -> dict:
     """Send a message to the server through a specific connection."""
     data = {
         "connectionId": connection_id,
@@ -95,7 +95,7 @@ async def send_to_server_and_wait_response(connection_id: str, message: str, cor
         timeout: Maximum time in seconds to wait for a response (default: 30)
         
     Returns:
-        Dict containing the response data or error information
+        dict containing the response data or error information
     """
     data = {
         "connectionId": connection_id,
@@ -110,7 +110,7 @@ async def send_to_server_and_wait_response(connection_id: str, message: str, cor
     logger.debug(f"Response from server: {response}")
     return response
 
-async def ensure_connected(connection_id: str, timeout: int = 0) -> Dict:
+async def ensure_connected(connection_id: str, timeout: int = 0) -> dict:
     """
     Ensure the connection to the server is active.
     
@@ -119,7 +119,7 @@ async def ensure_connected(connection_id: str, timeout: int = 0) -> Dict:
         timeout: Optional timeout in seconds for the connection (0 for default)
         
     Returns:
-        Dict containing the result of the operation
+        dict containing the result of the operation
     """
     data = {
         "connectionId": connection_id,

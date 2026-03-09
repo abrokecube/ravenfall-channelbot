@@ -1,4 +1,4 @@
-from typing import List, Callable, Type
+from typing import list, Callable, Type
 from .enums import EventCategory, EventSource, Dispatcher, BucketType
 from .modals import MetaFilter
 from .cooldown import Cooldown
@@ -62,7 +62,7 @@ def on_twitch_redeem(match_fn: Callable[[TwitchRedemptionEvent], bool]):
 
 def command(
     name: str | None = None, short_help: str | None = None, help: str | None = None,
-    aliases: List[str] = [], verifier: Callable = None, hidden: bool = False, **kwargs):
+    aliases: list[str] = [], verifier: Callable = None, hidden: bool = False, **kwargs):
     def decorator(func):
         kwargs.update({
             "name": name,
@@ -83,7 +83,7 @@ def command(
 
 # Add-ons
 
-def cooldown(rate: int, per: float, type: BucketType | List[BucketType] = BucketType.USER):
+def cooldown(rate: int, per: float, type: BucketType | list[BucketType] = BucketType.USER):
     """Decorator to apply a cooldown to a command.
     
     Args:
@@ -97,7 +97,7 @@ def cooldown(rate: int, per: float, type: BucketType | List[BucketType] = Bucket
     return decorator
 
 def parameter(
-    name: str, aliases: str | List[str] = [],
+    name: str, aliases: str | list[str] = [],
     greedy: bool = False, hidden: bool = False,
     help: str = None, regex: str = None,
     display_name: str = None, converter: BaseConverter | type[BaseConverter] | None = None

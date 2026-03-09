@@ -1,7 +1,7 @@
 """
 A cooldown system that tracks and enforces cooldowns for arbitrary keys with bucket support.
 """
-from typing import Dict, Optional, Tuple
+from typing import Optional
 import time
 import asyncio
 from dataclasses import dataclass
@@ -38,7 +38,7 @@ class CooldownScoped:
         """Check if the scoped key is currently rate limited."""
         return self._cooldown.is_rate_limited(self.key, self.bucket)
 
-    def update_rate_limit(self) -> Tuple[bool, float]:
+    def update_rate_limit(self) -> tuple[bool, float]:
         """Update the rate limit for the scoped key."""
         return self._cooldown.update_rate_limit(self.key, self.bucket)
 
@@ -90,7 +90,7 @@ class Cooldown:
     """
 
     def __init__(self):
-        self._cooldowns: Dict[Tuple[str, CooldownBucket], _CooldownState] = {}
+        self._cooldowns: dict[tuple[str, CooldownBucket], _CooldownState] = {}
         self._lock = asyncio.Lock()
 
     def _get_state(self, key: str, bucket: CooldownBucket) -> Optional[_CooldownState]:
@@ -108,7 +108,7 @@ class Cooldown:
         state = self._get_state(key, bucket)
         return state is not None and state.count >= bucket.rate
 
-    def update_rate_limit(self, key: str, bucket: CooldownBucket) -> Tuple[bool, float]:
+    def update_rate_limit(self, key: str, bucket: CooldownBucket) -> tuple[bool, float]:
         """
         Update the rate limit for the given key and bucket.
         Returns a tuple of (is_rate_limited, retry_after).

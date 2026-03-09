@@ -1,8 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .event_manager import EventManager
     from .enums import Dispatcher
+    from .listeners import BaseListener
+    from .global_context import GlobalContext
 
 import logging
 
@@ -10,20 +12,20 @@ LOGGER = logging.getLogger(__name__)
 
 class Cog:
     def __init__(self, event_manager: EventManager):
-        self.event_manager = event_manager
-        self.global_context = event_manager.global_context
-        self.g_ctx = event_manager.global_context
-        self.name = self.__class__.__name__
-        self.listeners = []
+        self.event_manager: EventManager = event_manager
+        self.global_context: GlobalContext = event_manager.global_context
+        self.g_ctx: GlobalContext = event_manager.global_context
+        self.name: str = self.__class__.__name__
+        self.listeners: list[BaseListener] = []
         for attr_name in dir(self):
-            attr = getattr(self, attr_name)
+            attr: Any = getattr(self, attr_name)
             listener_dispatcher: Dispatcher | None = getattr(attr, "_listener_dispatcher", None)
             if not listener_dispatcher:
                 continue
             d = event_manager.dispatchers.get(listener_dispatcher, None)
             if not d:
                 LOGGER.warning(
-                    f"Cog {self.name}: Listener '{attr_name}' could not be added. "
+                    f"Cog {self.name}: Listener '{attr_name}' could not be added. " +
                     f"The event manager does not have a '{listener_dispatcher.name}' dispatcher registered."
                 )
                 continue

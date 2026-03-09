@@ -1,18 +1,20 @@
 # Modified from twitchio utils.py
 
-from typing import Any
+from collections.abc import Mapping
+from typing import override, TextIO, cast
 import logging
 import logging.handlers
 import os
 import sys
 import datetime
+from typing import Any
 
 def setup_logging(
     *,
     handler: logging.Handler | None = None,
     formatter: logging.Formatter | None = None,
     level: int = logging.INFO,  # Default console level
-    loggers_config: dict[str, str | dict] | None = None,
+    loggers_config: Mapping[str, str | Mapping[str, int | str]] | None = None,
 ) -> None:
     """
     Set up logging with both console and rotating file handlers.
@@ -48,7 +50,7 @@ def setup_logging(
     os.makedirs('logs', exist_ok=True)
     
     # Process loggers config to handle both string and dict formats
-    log_files = {}
+    log_files: dict[str, dict[str, Any]] = {}  # pyright: ignore [reportExplicitAny]
     if loggers_config:
         for logger_name, config in loggers_config.items():
             if isinstance(config, str):
@@ -58,7 +60,7 @@ def setup_logging(
                     'level': logging.DEBUG,
                     'console_level': level  # Use root console level
                 }
-            elif isinstance(config, dict):
+            else:
                 # Advanced case with custom configuration
                 log_files[logger_name] = {
                     'filename': config.get('filename', None),
@@ -67,7 +69,7 @@ def setup_logging(
                 }
     
     # Create a mapping of filenames to their handlers to avoid duplicate handlers
-    file_handlers = {}
+    file_handlers: dict[str, logging.handlers.RotatingFileHandler] = {}
     
     # Set up console handler with filter for per-logger levels
     if handler is None:
@@ -77,7 +79,7 @@ def setup_logging(
     # Apply formatter to console handler
     if formatter is None:
         # Use color formatter for console if supported
-        if isinstance(console_handler, logging.StreamHandler) and stream_supports_colour(console_handler.stream):
+        if isinstance(console_handler, logging.StreamHandler) and stream_supports_colour(console_handler.stream):  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType]
             formatter = ColourFormatter()
         else:
             formatter = logging.Formatter(
@@ -88,15 +90,15 @@ def setup_logging(
     console_handler.setFormatter(formatter)
     
     # Create a filter function for console logging based on per-logger levels
-    def console_filter(record):
+    def console_filter(record: logging.LogRecord) -> bool:
         # First check for exact matches
         if record.name in log_files:
-            return record.levelno >= log_files[record.name]['console_level']
+            return record.levelno >= cast(int, log_files[record.name]['console_level'])
             
         # Then check for child loggers (logger names that start with the configured name plus a dot)
         for name, config in log_files.items():
             if record.name.startswith(f"{name}."):
-                return record.levelno >= config['console_level']
+                return record.levelno >= cast(int, config['console_level'])
                 
         # Default to root level for unconfigured loggers
         return record.levelno >= level
@@ -113,11 +115,11 @@ def setup_logging(
         root_logger.removeHandler(h)
     
     # Add console handler to root logger
-    root_logger.addHandler(console_handler)
+    root_logger.addHandler(console_handler)  # pyright: ignore [reportUnknownArgumentType]
     
     # Set up file handlers for configured loggers
     for logger_name, config in log_files.items():
-        filename = config['filename']
+        filename: str = cast(str, config['filename'])
         if not filename:
             continue
         
@@ -152,7 +154,7 @@ def setup_logging(
         
         # Add the file handler
         logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
+        logger.addHandler(console_handler)  # pyright: ignore [reportUnknownArgumentType]
         logger.propagate = False  # Prevent logs from propagating to root logger
     
     # Set up default file handler for all other loggers
@@ -180,11 +182,11 @@ def setup_logging(
     startup_msg = f"\n{'='*80}\nApplication started at {startup_time}\n{'='*80}"
     
     # Track which log files we've already written the startup message to
-    logged_files = set()
+    logged_files: set[str] = set()
     
     # Log to all configured log files, but only once per unique file
     for logger_name, config in log_files.items():
-        filename = config['filename']
+        filename = cast(str, config['filename'])
         if not filename:
             continue
         if filename not in logged_files:
@@ -198,7 +200,7 @@ def setup_logging(
         root_logger.debug(startup_msg)
         logged_files.add(default_log_file)
 
-def stream_supports_colour(stream: Any) -> bool:
+def stream_supports_colour(stream: TextIO) -> bool:
     is_a_tty = hasattr(stream, "isatty") and stream.isatty()
 
     # Pycharm and Vscode support colour in their inbuilt editors
@@ -213,7 +215,7 @@ def stream_supports_colour(stream: Any) -> bool:
     return is_a_tty and ("ANSICON" in os.environ or "WT_SESSION" in os.environ)
 
 
-def stream_supports_rgb(stream: Any) -> bool:
+def stream_supports_rgb(stream: TextIO) -> bool:
     if not stream_supports_colour(stream):
         return False
 
@@ -223,10 +225,10 @@ def stream_supports_rgb(stream: Any) -> bool:
     return False
 
 class ColourFormatter(logging.Formatter):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args: Any, **kwargs: Any) -> None:  # pyright: ignore [reportExplicitAny, reportAny]
+        super().__init__(*args, **kwargs)  # pyright: ignore [reportAny]
 
-        self._handler: logging.StreamHandler[Any] = kwargs.get("handler", logging.StreamHandler())
+        self._handler: logging.StreamHandler[TextIO] = kwargs.get("handler", logging.StreamHandler())
 
         self._supports_colour: bool = stream_supports_colour(self._handler.stream)
         self._supports_rgb: bool = stream_supports_rgb(self._handler.stream)
@@ -259,6 +261,7 @@ class ColourFormatter(logging.Formatter):
             for level, colour in self._colours.items()
         }
 
+    @override
     def format(self, record: logging.LogRecord) -> str:
         formatter: logging.Formatter | None = self._FORMATS.get(record.levelno, None)
         if formatter is None:

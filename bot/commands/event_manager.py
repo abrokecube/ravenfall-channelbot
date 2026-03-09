@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Dict, Callable, Awaitable, Type, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Awaitable, Type, Optional, Sequence, ParamSpec
 from types import MethodType
 from collections import defaultdict
 import logging
@@ -24,12 +24,12 @@ MiddlewareFunc = Callable[[GlobalContext, BaseEvent], BaseEvent | Awaitable[Base
 
 class EventManager:
     def __init__(self, global_context: GlobalContext):
-        self.event_sources: List[BaseEventSource] = []
-        self.event_middlewares: Dict[type[BaseEvent], List[MiddlewareFunc]] = defaultdict(list)
-        self.dispatchers: Dict[Dispatcher, BaseDispatcher] = {
+        self.event_sources: list[BaseEventSource] = []
+        self.event_middlewares: dict[type[BaseEvent], list[MiddlewareFunc]] = defaultdict(list)
+        self.dispatchers: dict[Dispatcher, BaseDispatcher] = {
             Dispatcher.Generic: SimpleDispatcher()
         }
-        self.cogs: Dict[str, Cog] = {}
+        self.cogs: dict[str, Cog] = {}
         self.global_context: GlobalContext = global_context
         
         self.add_event_middleware(MessageEvent, middlewares.filter_message_event_text)
@@ -86,11 +86,11 @@ class EventManager:
             raise ValueError(f"No dispatcher exists for listener {listener}")
         self.dispatchers[expd_dispatcher].remove_listener(listener)
         
-    async def add_cog(self, cog_cls: Type[Cog], **kwargs):
+    async def add_cog(self, cog_cls: type[Cog], *args: Any, **kwargs: Any) -> None:  # pyright: ignore [reportExplicitAny, reportAny]
         if cog_cls in self.cogs:
             raise ValueError(f"Cog {cog_cls.__name__} is already loaded.")
             
-        cog_instance = cog_cls(self, **kwargs)
+        cog_instance = cog_cls(self, *args, **kwargs)
         self.cogs[cog_cls.__name__] = cog_instance
         
         for listener in cog_instance.listeners:
@@ -98,7 +98,7 @@ class EventManager:
             
         await cog_instance.setup()
         
-    async def remove_cog(self, cog_cls: Type[Cog] | str):
+    async def remove_cog(self, cog_cls: type[Cog] | str):
         if isinstance(cog_cls, str):
             cog_name = cog_cls
         else:
@@ -161,7 +161,7 @@ class EventManager:
 
     async def process_event(self, event: BaseEvent):
         LOGGER.debug(f"Processing event {event}")
-        matching_middlewares: List[MiddlewareFunc] = []
+        matching_middlewares: list[MiddlewareFunc] = []
         for t, m in self.event_middlewares.items():
             if isinstance(event, t):
                 matching_middlewares.extend(m)
@@ -174,7 +174,7 @@ class EventManager:
             if isinstance(result, BaseEvent):
                 event = result
         
-        matching_dispatchers: Dict[BaseDispatcher, None] = {}
+        matching_dispatchers: dict[BaseDispatcher, None] = {}
         for category in event.categories:
             for dispatcher in self.dispatchers.values():
                 if category in dispatcher.categories:
@@ -195,7 +195,7 @@ class EventManager:
         await asyncio.gather(*tasks, return_exceptions=True)
         
     async def execute_text(
-        self, text: str, event: Optional[MessageEvent] = None,
+        self, text: str, event: MessageEvent | None = None,
         roles: Sequence[UserRole] = [UserRole.USER], capture_responses: bool = False
         ) -> CommandExecutionResult:
         if not Dispatcher.Command in self.dispatchers:
@@ -217,7 +217,7 @@ class EventManager:
                 bot_user_name="bot",
                 bot_user_id="bot"
             )
-        responses: List[CommandResponse] = []
+        responses: list[CommandResponse] = []
         if capture_responses:
             async def message(self, text: str, *args, **kwargs):
                 responses.append(CommandResponse(text, args, kwargs))

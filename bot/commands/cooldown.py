@@ -1,19 +1,19 @@
 from __future__ import annotations
-from typing import Union, List, Dict, Any, TYPE_CHECKING
+from typing import Union, Any, TYPE_CHECKING
 from .enums import BucketType
 
 if TYPE_CHECKING:
     from .events import BaseEvent
 
 class Cooldown:
-    def __init__(self, rate: int, per: float, bucket: Union[BucketType, List[BucketType]] = BucketType.USER):
+    def __init__(self, rate: int, per: float, bucket: Union[BucketType, list[BucketType]] = BucketType.USER):
         self.rate = rate
         self.per = per
 
         if not isinstance(bucket, list):
             bucket = [bucket]
         self.bucket = bucket
-        self._windows: Dict[Any, List[float]] = {}
+        self._windows: dict[Any, list[float]] = {}
     
     def _get_bucket_key(self, event: BaseEvent) -> str:
         if hasattr(event, "get_bucket_key"):

@@ -6,7 +6,7 @@ import logging
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
-async def runshell(cmd) -> str | None:
+async def runshell(cmd: str) -> tuple[int, str | None]:
     proc = await asyncio.create_subprocess_shell(
         cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -21,17 +21,18 @@ async def runshell(cmd) -> str | None:
         out_text = stdout_text
     if stderr:
         logger.error(f'Command stderr: {stderr.decode().replace("\n", "\\n")}')
-    return proc.returncode, out_text
+    code = proc.returncode if proc.returncode is not None else 1
+    return code, out_text
 
-def runshell_detached(cmd):
+def runshell_detached(cmd: str):
     DETACHED_PROCESS = 0x00000008
-    subprocess.Popen(
+    _ = subprocess.Popen(
         cmd,
         shell=True,
         creationflags=DETACHED_PROCESS
     )
 
-async def restart_process(box_name, process_name, startup_command: str):
+async def restart_process(box_name: str, process_name: str, startup_command: str) -> tuple[int, str | None]:
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"taskkill /f /im {process_name}"

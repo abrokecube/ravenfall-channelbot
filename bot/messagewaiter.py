@@ -1,4 +1,4 @@
-from typing import List, Tuple, Callable, TypeVar, Generic, Optional, Deque, Dict, Any
+from typing import list, Tuple, Callable, TypeVar, Generic, Optional, Deque, Any
 import asyncio
 import time
 from collections import deque
@@ -16,8 +16,8 @@ class BaseMessageWaiter(Generic[T]):
         Args:
             max_message_age: Maximum age in seconds to keep messages in the queue
         """
-        self.waiting_messages: List[Tuple[Callable[[T], bool], asyncio.Future]] = []
-        self.message_queue: Deque[Tuple[float, T]] = deque()  # (timestamp, message) pairs
+        self.waiting_messages: list[tuple[Callable[[T], bool], asyncio.Future]] = []
+        self.message_queue: Deque[tuple[float, T]] = deque()  # (timestamp, message) pairs
         self.max_message_age = max_message_age
         self._lock = asyncio.Lock()
     

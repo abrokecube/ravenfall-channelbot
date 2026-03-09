@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, NamedTuple, Any, List
+from typing import TYPE_CHECKING, NamedTuple, Any, override
 from .enums import EventCategory, EventSource, ParameterKind
 import inspect
 from dataclasses import dataclass, field
@@ -25,20 +25,20 @@ class Parameter:
     raw_annotation: Any
     annotation: Any
     default: Any = inspect.Parameter.empty
-    aliases: List[str] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
     greedy: bool = False
     hidden: bool = False
     kind: ParameterKind = ParameterKind.POSITIONAL_OR_KEYWORD
-    converter: Any = field(default=None)
+    converter: Any | None = None
     is_optional: bool = False
-    type_title: str = None
-    type_short_help: str = None
-    type_help: str = None
+    type_title: str | None = None
+    type_short_help: str | None = None
+    type_help: str | None = None
     help: str | None = None
-    command: CommandListener = None
-    regex: str = None
+    command: "CommandListener | None" = None
+    regex: str | None = None
     
-    def get_parameter_display(self, invoked_name: str = None) -> str:
+    def get_parameter_display(self, invoked_name: str | None = None) -> str:
         param_str = invoked_name or self.display_name
         if self.type_title:
             param_str += f": {self.type_title}"
@@ -53,7 +53,7 @@ class Parameter:
             param_str = f"<{param_str}>"
         return param_str
     
-    def get_help_text(self, invoked_name: str = None):
+    def get_help_text(self, invoked_name: str | None = None) -> str:
         param_aliases = self.aliases[:]
         
         if invoked_name in param_aliases:
@@ -63,7 +63,7 @@ class Parameter:
             param_aliases.append(self.display_name)
         param_aliases.sort()
 
-        out_str = []
+        out_str: list[str] = []
         param_str = self.get_parameter_display(invoked_name)
         out_str.append(param_str)
         help_text = self.help
@@ -76,8 +76,9 @@ class Parameter:
             elif type_help:
                 help_text = type_help
                 type_help = None
-        out_str.append(help_text)
-        properties = []
+        if help_text:
+            out_str.append(help_text)
+        properties: list[str] = []
         if self.is_optional:
             properties.append("optional")
         else:
@@ -98,9 +99,10 @@ class Parameter:
 @dataclass
 class Flag:
     name: str
-    value: str = None
+    value: str | None = None
 
-    def __repr__(self):
+    @override
+    def __repr__(self) -> str:
         return f"Flag({self.name}, {self.value})"
     
 class CommandResponse(NamedTuple):
@@ -109,11 +111,11 @@ class CommandResponse(NamedTuple):
     kwargs: dict[str, Any]
 
 class CommandExecutionResult(NamedTuple):
-    responses: List[CommandResponse]
+    responses: list[CommandResponse]
     error: Exception | None
     
 class CommandDispatchResult(NamedTuple):
-    listener: CommandListener | None
+    listener: "CommandListener | None"
     error: Exception | None
 
 BUILTIN_TYPE_DOCS = {

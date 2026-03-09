@@ -1,7 +1,6 @@
 import ravenpy
 from .models import *
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List
 from ravenpy import Skills, Islands
 import aiohttp
 import logging
@@ -25,7 +24,7 @@ class CharacterStat:
 
 class Character:
     def __init__(self, data: Player):
-        self._raw: Dict = data
+        self._raw: dict = data
         self.time_received = datetime.now(timezone.utc)
         self.id: str = data["id"]
         self.char_id: str = self.id
@@ -114,7 +113,7 @@ class Character:
             if (not self.island) or self.is_sailing:
                 self.training = Skills.Sailing
                 
-        self.training_stats: List[CharacterStat] = []
+        self.training_stats: list[CharacterStat] = []
         if self.training:
             if self.training in (Skills.All, Skills.Health):
                 self.training_stats.extend([self.health, self.attack, self.defense, self.strength])
@@ -125,7 +124,7 @@ class Character:
 
             if self.in_raid or self.in_dungeon:
                 self.training_stats.append(self.slayer)
-        self.training_skills: List[Skills] = []
+        self.training_skills: list[Skills] = []
         for char_stat in self.training_stats:
             self.training_skills.append(char_stat.skill)
             

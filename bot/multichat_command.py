@@ -7,7 +7,7 @@ environment variables are properly set.
 """
 import aiohttp
 import os
-from typing import Dict, Any, List, TypedDict, Optional
+from typing import Any, TypedDict, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ async def send_multichat_command(
     user_name: str = "example_user",
     channel_id: str = "example_channel_id",
     channel_name: str = "example_channel"
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Send a command to the Ravenfall MultiChat server.
     
@@ -67,7 +67,7 @@ async def track_item_use(
     char_index: int,
     item_id: str,
     amount: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     url = f"{BASE_URL}/track_item_use"
     payload = {
         "user_name": user_name,
@@ -93,7 +93,7 @@ async def track_item_use(
 async def track_coin_use(
     user_name: str,
     amount: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     url = f"{BASE_URL}/track_item_use"
     payload = {
         "user_name": user_name,
@@ -116,7 +116,7 @@ async def track_coin_use(
 
 
 class DesyncInfo(TypedDict):
-    towns: Dict[str, float]  # Channel ID to desync data mapping
+    towns: dict[str, float]  # Channel ID to desync data mapping
     last_updated: float  # Time since epoch
 
 class DesyncResponse(TypedDict):
@@ -125,7 +125,7 @@ class DesyncResponse(TypedDict):
     error: Optional[str]
 
 class TotalItemCountInfo(TypedDict):
-    towns: Dict[str, float]  # Channel ID to desync data mapping
+    towns: dict[str, float]  # Channel ID to desync data mapping
 
 class TotalItemCountResponse(TypedDict):
     status: int
@@ -141,12 +141,12 @@ class CharInfo(TypedDict):
     channel_name: str
     desync_s: float
     last_update_time: float
-    recommendations: List[str]
+    recommendations: list[str]
     total_item_count: int
     
 class CharInfoResponse(TypedDict):
     status: int
-    data: List[CharInfo]
+    data: list[CharInfo]
     error: Optional[str]
 
 class CharCoins(TypedDict):
@@ -157,7 +157,7 @@ class CharCoins(TypedDict):
 
 class CharCoinsResponse(TypedDict):
     status: int
-    data: List[CharCoins]
+    data: list[CharCoins]
     error: Optional[str]
 
 class CharItem(TypedDict):
@@ -170,11 +170,11 @@ class CharItems(TypedDict):
     twitch_id: str
     user_name: str
     char_index: int
-    items: List[CharItem]
+    items: list[CharItem]
 
 class CharItemsResponse(TypedDict):
     status: int
-    data: List[CharItems]
+    data: list[CharItems]
     error: Optional[str]
 
 ScrollCounts = TypedDict('ScrollCounts', {

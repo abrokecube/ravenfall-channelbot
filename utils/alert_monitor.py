@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, Dict
+from typing import Any
 from dataclasses import dataclass
 from utils.format_time import format_seconds
 
@@ -26,7 +26,7 @@ class AlertMonitor(ABC):
     remains in a 'bad' state (returns False) for a specified duration.
     """
 
-    def __init__(self, interval: float, timeout: float, alert_interval: Optional[float] = None, name: str = "AlertMonitor"):
+    def __init__(self, interval: float, timeout: float, alert_interval: float | None = None, name: str = "AlertMonitor"):
         """
         Initialize the AlertMonitor.
 
@@ -38,15 +38,15 @@ class AlertMonitor(ABC):
                                               once in the alerting state. Defaults to interval.
             name (str, optional): The name of this monitor for logging. Defaults to "AlertMonitor".
         """
-        self.name = name
-        self.interval = interval
-        self.timeout = timeout
-        self.alert_interval = alert_interval if alert_interval is not None else interval
-        self._running = False
-        self._task: Optional[asyncio.Task] = None
-        self._first_failure_time: Optional[float] = None
-        self._last_alert_time: Optional[float] = None
-        self._is_alerting = False
+        self.name: str = name
+        self.interval: float = interval
+        self.timeout: float = timeout
+        self.alert_interval: float = alert_interval if alert_interval is not None else interval
+        self._running: bool = False
+        self._task: asyncio.Task[Any] | None = None  # pyright: ignore [reportExplicitAny]
+        self._first_failure_time: float | None = None
+        self._last_alert_time: float | None = None
+        self._is_alerting: bool = False
 
     def get_status(self) -> AlertStatus:
         """
@@ -122,7 +122,7 @@ class AlertMonitor(ABC):
         self._running = False
         logger.debug(f"[{self.name}] stopping monitor, cancelling task")
         if self._task:
-            self._task.cancel()
+            _ = self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
@@ -200,8 +200,8 @@ class AlertMonitor(ABC):
 
 @dataclass
 class MonitorState:
-    first_failure_time: Optional[float] = None
-    last_alert_time: Optional[float] = None
+    first_failure_time: float | None = None
+    last_alert_time: float | None = None
     is_alerting: bool = False
 
 class BatchAlertMonitor(ABC):
@@ -210,7 +210,7 @@ class BatchAlertMonitor(ABC):
     independently for each condition.
     """
 
-    def __init__(self, interval: float, timeout: float, alert_interval: Optional[float] = None, name: str = "BatchAlertMonitor"):
+    def __init__(self, interval: float, timeout: float, alert_interval: float | None = None, name: str = "BatchAlertMonitor"):
         """
         Initialize the BatchAlertMonitor.
 
@@ -222,22 +222,22 @@ class BatchAlertMonitor(ABC):
                                               once in the alerting state. Defaults to interval.
             name (str, optional): The name of this monitor for logging. Defaults to "BatchAlertMonitor".
         """
-        self.name = name
-        self.interval = interval
-        self.timeout = timeout
-        self.alert_interval = alert_interval if alert_interval is not None else interval
-        self._running = False
-        self._task: Optional[asyncio.Task] = None
-        self._states: Dict[str, MonitorState] = {}
+        self.name: str = name
+        self.interval: float = interval
+        self.timeout: float = timeout
+        self.alert_interval: float = alert_interval if alert_interval is not None else interval
+        self._running: bool = False
+        self._task: asyncio.Task[Any] | None = None  # pyright: ignore [reportExplicitAny]
+        self._states: dict[str, MonitorState] = {}
 
-    def get_status(self) -> Dict[str, AlertStatus]:
+    def get_status(self) -> dict[str, AlertStatus]:
         """
         Get the current status of all monitors.
 
         Returns:
-            Dict[str, AlertStatus]: A dictionary mapping alert names to their status.
+            dict[str, AlertStatus]: A dictionary mapping alert names to their status.
         """
-        statuses = {}
+        statuses: dict[str, AlertStatus] = {}
         loop = None
         try:
             loop = asyncio.get_running_loop()
@@ -262,12 +262,12 @@ class BatchAlertMonitor(ABC):
         return statuses
 
     @abstractmethod
-    async def check_condition(self) -> Dict[str, bool | str | tuple[bool, str]]:
+    async def check_condition(self) -> dict[str, bool | str | tuple[bool, str]]:
         """
         Check the conditions.
 
         Returns:
-            Dict[str, bool | str | tuple[bool, str]]: A dictionary mapping alert names to their status.
+            dict[str, bool | str | tuple[bool, str]]: A dictionary mapping alert names to their status.
                 - True: Good condition
                 - False: Bad condition (default reason)
                 - str: Bad condition (string is reason)
@@ -315,7 +315,7 @@ class BatchAlertMonitor(ABC):
         self._running = False
         logger.debug(f"[{self.name}] stopping batch monitor, cancelling task")
         if self._task:
-            self._task.cancel()
+            _ = self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
@@ -355,7 +355,7 @@ class BatchAlertMonitor(ABC):
                         elif isinstance(result, str):
                             is_good = False
                             reason = result
-                        elif isinstance(result, tuple):
+                        else:
                             is_good, reason = result
                     else:
                         is_good = False

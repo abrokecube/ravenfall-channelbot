@@ -27,7 +27,7 @@ from bot.commands.services import DatabaseService
 from bot.messageprocessor import RavenfallMessage
 import logging
 import json
-from typing import Dict, Tuple, List
+from typing import Tuple
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
 import os
@@ -195,7 +195,7 @@ def get_item(item_name: str) -> Item:
         return None
     return item_search_results[0][0]
 
-async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]:
+async def get_item_count(channel: RFChannel, item_name: str) -> tuple[Item, int]:
     """Return (Item, total_count) of non-equipped items available in `channel`."""
     item = get_item(item_name)
     if item is None:
@@ -211,7 +211,7 @@ async def get_item_count(channel: RFChannel, item_name: str) -> Tuple[Item, int]
                 break
     return item, total_items
 
-async def get_all_item_count(channel: RFChannel) -> Dict[str, int]:
+async def get_all_item_count(channel: RFChannel) -> dict[str, int]:
     """Return mapping of item name to total count available in `channel`."""
     char_items = await get_char_items(channel.channel_id)
     total_items = {}
@@ -228,7 +228,7 @@ async def get_all_item_count(channel: RFChannel) -> Dict[str, int]:
                 total_items[item.name] = user_item["amount"]
     return total_items
 
-channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
+channel_item_gift_locks: dict[str, asyncio.Lock] = {}
 async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
     """Send coins to `target_user_name` by aggregating coins from other characters.
 
@@ -326,7 +326,7 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
         if amount != -1 and coins_remaining > 0:
             raise PartialSendError(f"Ran out of coins ({coins_remaining} remaining)", total_coins - coins_remaining)
 
-channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
+channel_item_gift_locks: dict[str, asyncio.Lock] = {}
 async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int):
     """Send `amount` of `item_name` to `target_user_name` from available stock in `channel`.
 
@@ -485,7 +485,7 @@ class RedeemRFCog(Cog):
             return
         db = self.global_context.require_service(DatabaseService)
         for ch in self.global_context.require_service(RFChannelManager).channels:
-            chars: List[Player] = await ch.get_query("select * from players")
+            chars: list[Player] = await ch.get_query("select * from players")
             if not chars:
                 continue
 

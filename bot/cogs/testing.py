@@ -3,7 +3,7 @@
 Contains simple ping/hi commands and test redeems used in development.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 from ..commands.cog import Cog
 from ..commands.events import CommandEvent, TwitchRedemptionEvent, MessageEvent
 from ..commands.exceptions import CommandError

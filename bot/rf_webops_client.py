@@ -1,15 +1,14 @@
 import aiohttp
-import asyncio
-from typing import List, Dict, Any
+from typing import Any
 
 class WebOpsClient:
     def __init__(self, base_url: str = "http://127.0.0.1:7102"):
-        self.base_url = base_url.rstrip("/")
+        self.base_url: str = base_url.rstrip("/")
 
-    async def redeem_items(self, item_id: str, quantity: int, characters: List[Dict[str, str]]) -> Dict[str, Any]:
+    async def redeem_items(self, item_id: str, quantity: int, characters: list[dict[str, str]]) -> dict[str, Any]:
         """
         Redeem items for a list of characters.
-        characters: List of dicts with 'username' and 'id'.
+        characters: list of dicts with 'username' and 'id'.
         """
         url = f"{self.base_url}/redeem"
         payload = {
@@ -24,7 +23,7 @@ class WebOpsClient:
                     raise Exception(f"Redemption failed: {response.status} - {text}")
                 return await response.json()
 
-    async def get_total_loyalty_points(self, usernames: List[str]) -> Dict[str, Any]:
+    async def get_total_loyalty_points(self, usernames: list[str]) -> dict[str, Any]:
         """
         Get total loyalty points for a list of usernames.
         """
