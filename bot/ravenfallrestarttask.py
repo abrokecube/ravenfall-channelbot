@@ -69,6 +69,7 @@ class RFRestartTask:
         self.label: str = label
         self.reason: RestartReason | None = reason
         self._status: RestartStatus = RestartStatus.IDLE
+        self.event_watch_lock = asyncio.Lock()
         self.sent_initial_announcement = False
         self.sent_reason = False
 
@@ -131,6 +132,8 @@ class RFRestartTask:
                         if not self.sent_reason:
                             self.sent_reason = True
                 warning_idx = new_warning_idx
+        async with self.event_watch_lock:  # wait for any pending events to be processed
+            pass
         await self._execute()
 
     async def _event_watcher(self):
@@ -154,51 +157,52 @@ class RFRestartTask:
         while True:
             old_event_type = event_type
             event_type = ""
-            await asyncio.sleep(2)
-            if self.done:
-                return
+            async with self.event_watch_lock:
+                await asyncio.sleep(2)
+                if self.done:
+                    return
             
-            time_left = self.get_time_left()
-            try:
-                if self.channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
-                    event_type = "dungeon_prep"
-                if self.channel.event == RFChannelEvent.DUNGEON and self.channel.dungeon['players'] > 0:
-                    event_type = "dungeon"
-                elif self.channel.event == RFChannelEvent.RAID and self.channel.raid["players"] > 0:
-                    event_type = "raid"
-                if not self.manager.ravennest_is_online:
-                    event_type = "server_down"
-                if not self.manager.updater_is_working:
-                    event_type = "updater_down"
-                
-                if event_type:
-                    self.future_pause_reason = names[event_type]
-                else:
-                    self.future_pause_reason = ""
-            except Exception as e:
-                logger.error(f"Error checking restart pause events for {self.channel.channel_name}: {e}", exc_info=True)
-                event_type = "error"
+                time_left = self.get_time_left()
+                try:
+                    if self.channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
+                        event_type = "dungeon_prep"
+                    if self.channel.event == RFChannelEvent.DUNGEON and self.channel.dungeon['players'] > 0:
+                        event_type = "dungeon"
+                    elif self.channel.event == RFChannelEvent.RAID and self.channel.raid["players"] > 0:
+                        event_type = "raid"
+                    if not self.manager.ravennest_is_online:
+                        event_type = "server_down"
+                    if time_left < 35 and not await self.manager.check_update_endpoint():
+                        event_type = "updater_down"
+                    
+                    if event_type:
+                        self.future_pause_reason = names[event_type]
+                    else:
+                        self.future_pause_reason = ""
+                except Exception as e:
+                    logger.error(f"Error checking restart pause events for {self.channel.channel_name}: {e}", exc_info=True)
+                    event_type = "error"
 
-            if (time_left > WARNING_MSG_TIMES[0][0]) and not self._paused:
-                continue
+                if (time_left > WARNING_MSG_TIMES[0][0]) and not self._paused:
+                    continue
 
-            if not event_type:
-                if self._paused:
-                    self.unpause()
-                    time_left = self.get_time_left()
-                    if time_left < 60:
-                        self.time_to_restart += 60 - time_left
+                if not event_type:
+                    if self._paused:
+                        self.unpause()
                         time_left = self.get_time_left()
-                    await self.channel.send_announcement(
-                        f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}.",
-                    )
-            else:
-                if (not self._paused) or old_event_type != event_type:
-                    self.pause(names[event_type])
-                    await self.channel.send_chat_message(
-                        messages[event_type],
-                        ignore_error=True
-                    )
+                        if time_left < 60:
+                            self.time_to_restart += 60 - time_left
+                            time_left = self.get_time_left()
+                        await self.channel.send_announcement(
+                            f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}.",
+                        )
+                else:
+                    if (not self._paused) or old_event_type != event_type:
+                        self.pause(names[event_type])
+                        await self.channel.send_chat_message(
+                            messages[event_type],
+                            ignore_error=True
+                        )
 
     async def _execute(self):
         self.event_watch_task.cancel()

@@ -17,6 +17,7 @@ from .ravenfallrestarttask import RestartReason
 from .prometheus import get_prometheus_instant
 from utils.alert_monitor import BatchAlertMonitor
 from utils.runshell import runshell
+from async_lru import alru_cache
 
 import os
 
@@ -32,7 +33,6 @@ class RFChannelManager:
         self.channel_id_to_channel: Dict[str, RFChannel] = {}
         self.channel_name_to_channel: Dict[str, RFChannel] = {}
         self.ravennest_is_online = True
-        self.updater_is_working = False
         self.global_multiplier = 1.0
         self.global_multiplier_last_change = datetime.now(timezone.utc)
 
@@ -79,7 +79,6 @@ class RFChannelManager:
         self.ram_usage_alert_monitor = RAMUsageAlertMonitor(self)
         await self.item_alert_monitor.start()
         await self.ram_usage_alert_monitor.start()
-        await self.check_update_endpoint_routine.start()
 
     async def stop(self):
         for channel in self.channels:
@@ -90,7 +89,6 @@ class RFChannelManager:
             await self.rf_message_processor.astop()
         await self.item_alert_monitor.stop()
         await self.ram_usage_alert_monitor.stop()
-        await self.check_update_endpoint_routine.stop()
 
     async def event_twitch_message(self, message: ChatMessage):
         for channel in self.channels:
@@ -202,21 +200,17 @@ class RFChannelManager:
                 if r['status'] != 200:
                     await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
     
-    @routine(delta=timedelta(minutes=2))
-    async def check_update_endpoint_routine(self):
-        old_updator_status = self.updater_is_working
+    @alru_cache(ttl=10)
+    async def check_update_endpoint(self):
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
             try:
                 async with session.get(f"https://www.ravenfall.stream/api/version/check", ssl=False) as response:
-                    response = await response.json()
-                    self.updater_is_working = True
-            except Exception as e:
-                self.updater_is_working = False
-        if old_updator_status != self.updater_is_working:
-            if self.updater_is_working:
-                logger.info("Ravenfall update endpoint is now working")
-            else:
-                logger.warning("Ravenfall update endpoint falied")
+                    __ = await response.text()
+                    if response.status == 200:  
+                        return True
+                    return False
+            except Exception:
+                return False
 
     async def get_desync_info(self) -> Dict[str, float]:
         ch_desyncs: Dict[str, float] = {}
