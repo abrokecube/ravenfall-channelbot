@@ -18,6 +18,7 @@ from .ravenfallrestarttask import RestartReason
 from .prometheus import get_prometheus_instant
 from utils.alert_monitor import BatchAlertMonitor
 from utils.runshell import runshell
+from async_lru import alru_cache
 from .commands.global_context import GlobalContext
 
 import os
@@ -211,6 +212,18 @@ class RFChannelManager:
                 if r['status'] != 200:
                     await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
     
+    @alru_cache(ttl=10)
+    async def check_update_endpoint(self):
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            try:
+                async with session.get(f"https://www.ravenfall.stream/api/version/check", ssl=False) as response:
+                    __ = await response.text()
+                    if response.status == 200:  
+                        return True
+                    return False
+            except Exception:
+                return False
+
     async def get_desync_info(self) -> dict[str, float]:
         ch_desyncs: dict[str, float] = {}
         data = await get_desync_info()
