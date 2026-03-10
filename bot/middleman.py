@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import aiohttp
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 from dataclasses import dataclass
 from .models import RavenfallMessage
 
@@ -21,8 +21,11 @@ def handle_sigint():
     logger.info("Shutting down server...")
     stop_event.set()
 
-async def _call_middleman_api(endpoint: str, method: str = 'GET', data: dict | None = None) -> tuple[dict, int]:
+async def _call_middleman_api(endpoint: str, method: str = 'GET', data: dict[str, Any] | None = None) -> tuple[dict[str, Any], int]:
     """Make an API call to the middleman server."""
+    if not MIDDLEMAN_API_HOST or not MIDDLEMAN_API_PORT:
+        logger.error("MIDDLEMAN_API_HOST or MIDDLEMAN_API_PORT not set")
+        return {"error": "MIDDLEMAN_API_HOST or MIDDLEMAN_API_PORT not set"}, 500
     url = f"http://{MIDDLEMAN_API_HOST.rstrip('/')}:{MIDDLEMAN_API_PORT}/{endpoint.lstrip('/')}"
     headers = {'Content-Type': 'application/json'}
     
@@ -31,44 +34,42 @@ async def _call_middleman_api(endpoint: str, method: str = 'GET', data: dict | N
             if method.upper() == 'GET':
                 async with session.get(url, headers=headers) as response:
                     response_data = await response.json()
-                    # logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data)}")
                     return response_data, response.status
             else:
                 async with session.post(url, json=data, headers=headers) as response:
                     response_data = await response.json()
-                    # logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data)}")
                     return response_data, response.status
     except Exception as e:
         logger.error(f"Error calling middleman API: {str(e)}", exc_info=True)
         return {"error": f"Failed to connect to middleman API: {str(e)}"}, 500
 
-async def force_reconnect(connection_id: str, timeout: int = 0) -> dict:
+async def force_reconnect(connection_id: str, timeout: int = 0) -> dict[str, Any]:
     """Force a reconnection for the specified connection."""
     data = {
         "connectionId": connection_id,
         "timeout": timeout
     }
-    response, status = await _call_middleman_api('/api/reconnect', 'POST', data)
+    response, __ = await _call_middleman_api('/api/reconnect', 'POST', data)
     return response
 
-async def send_to_client(connection_id: str, message: str) -> dict:
+async def send_to_client(connection_id: str, message: str) -> dict[str, Any]:
     """Send a message to a specific client."""
     data = {
         "connectionId": connection_id,
         "data": message
     }
     logger.debug(f"Sending message to client: {message}")
-    response, status = await _call_middleman_api('/api/send-to-client', 'POST', data)
+    response, __ = await _call_middleman_api('/api/send-to-client', 'POST', data)
     return response
 
-async def send_to_server(connection_id: str, message: str) -> dict:
+async def send_to_server(connection_id: str, message: str) -> dict[str, Any]:
     """Send a message to the server through a specific connection."""
     data = {
         "connectionId": connection_id,
         "data": message
     }
     logger.debug(f"Sending message to server: {message}")
-    response, status = await _call_middleman_api('/api/send-to-server', 'POST', data)
+    response, __ = await _call_middleman_api('/api/send-to-server', 'POST', data)
     return response
 
 class SendAndWaitResult(TypedDict, total=False):
@@ -105,11 +106,11 @@ async def send_to_server_and_wait_response(connection_id: str, message: str, cor
     if correlation_id:
         data["correlationId"] = correlation_id
         
-    response, status = await _call_middleman_api('/api/send-and-wait-response', 'POST', data)
+    response, __ = await _call_middleman_api('/api/send-and-wait-response', 'POST', data)
     logger.debug(f"Response from server: {response}")
-    return response
+    return cast(SendAndWaitResult, response)
 
-async def ensure_connected(connection_id: str, timeout: int = 0) -> dict:
+async def ensure_connected(connection_id: str, timeout: int = 0) -> dict[str, Any]:
     """
     Ensure the connection to the server is active.
     
@@ -124,7 +125,7 @@ async def ensure_connected(connection_id: str, timeout: int = 0) -> dict:
         "connectionId": connection_id,
         "timeout": timeout
     }
-    response, status = await _call_middleman_api('/api/ensure-connected', 'POST', data)
+    response, __ = await _call_middleman_api('/api/ensure-connected', 'POST', data)
     return response
 
 @dataclass

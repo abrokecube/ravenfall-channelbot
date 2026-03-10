@@ -6,7 +6,7 @@ import os
 import logging
 from ruamel.yaml import YAML
 from ruamel import yaml as yamllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import random
 
 # Configure logging
@@ -149,7 +149,7 @@ class RavenfallLocalization:
             strs = []
             if isinstance(trans_str, yamllib.CommentedSeq):
                 strs = [x for x in trans_str]
-            elif isinstance(trans_str, str):
+            else:
                 strs = [trans_str]
             self.translated_strings[key] = TranslatedString(key, strs)
     

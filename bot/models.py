@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TypedDict, Literal, NamedTuple
 from collections.abc import Collection
-from enum import Enum
+from enum import Enum, IntEnum
 from dataclasses import dataclass
 
 class TownBoost(NamedTuple):
@@ -184,16 +184,22 @@ class RFMiddlemanMessage(TypedDict):
     timestamp: str
     message: RavenfallMessage | RavenBotMessage
     
-class ScrollType(Enum):
+class ScrollType(IntEnum):
     NONE = 0
     RAID = 1
     DUNGEON = 2
 
 @dataclass
-class QueuedScroll:
+class QueuedScrollDC:
     scroll: ScrollType
     reward_id: str | None
     reward_redemption_id: str | None
     user_id: str
     credits_spent: int
-    
+
+class QueuedScroll(TypedDict):
+    scroll: ScrollType
+    reward_id: str | None
+    reward_redemption_id: str | None
+    user_id: str
+    credits_spent: int

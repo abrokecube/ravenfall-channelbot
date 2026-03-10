@@ -3,7 +3,7 @@ from database.session import get_async_session
 import database.utils as db_utils
 from database.models import User, Channel, Character, SenderData, TwitchAuth, UserCredits
 from sqlalchemy.ext.asyncio import AsyncSession
-from bot.models import Sender
+from bot.models import QueuedScroll, Sender
 
 class DatabaseService:
     def get_session(self):
@@ -120,13 +120,13 @@ class DatabaseService:
         async with get_async_session() as s:
             return await db_utils.add_credits(s, user_id, amount, description, record_transaction)
 
-    async def get_scroll_queue(self, channel_id: int | str, session: AsyncSession | None = None) -> list[int]:
+    async def get_scroll_queue(self, channel_id: int | str, session: AsyncSession | None = None) -> list[QueuedScroll]:
         if session:
             return await db_utils.get_scroll_queue(session, channel_id)
         async with get_async_session() as s:
             return await db_utils.get_scroll_queue(s, channel_id)
 
-    async def update_scroll_queue(self, channel_id: int | str, queue: list[int], session: AsyncSession | None = None):
+    async def update_scroll_queue(self, channel_id: int | str, queue: list[QueuedScroll], session: AsyncSession | None = None):
         if session:
             await db_utils.update_scroll_queue(session, channel_id, queue)
         else:

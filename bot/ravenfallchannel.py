@@ -13,7 +13,7 @@ from datetime import timedelta, timezone
 from .models import (
     Player, Village, Dungeon, Raid, GameMultiplier, GameSession,
     RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent,
-    ScrollType, QueuedScroll, Sender
+    ScrollType, QueuedScrollDC, QueuedScroll, Sender
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
 from .middleman import send_to_client, send_to_server_and_wait_response
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 from utils.routines import routine
 from utils.format_time import format_seconds, TimeSize
 from utils.backup_file_with_date import backup_file_with_date_async
-from utils.runshell import restart_process, runshell, runshell_detached
+from utils.runshell import restart_process
 from utils.strutils import split_by_utf16_bytes
 from utils import utils
 
@@ -165,13 +165,13 @@ class RFChannel:
         self.island_last_arrival_time: dict[str, float] = defaultdict(lambda: 0)  # island name -> last arrival timestamp
         
         self.update_events_routine_first_iteration: bool = True
-        self.scroll_queue: deque[QueuedScroll] = deque()
+        self.scroll_queue: deque[QueuedScrollDC] = deque()
         
     async def save_scroll_queue(self):
-        encoded = []
+        encoded: list[QueuedScroll] = []
         for item in self.scroll_queue:
             encoded.append({
-                "scroll": item.scroll.value,
+                "scroll": item.scroll,
                 "reward_id": item.reward_id,
                 "reward_redemption_id": item.reward_redemption_id,
                 "user_id": item.user_id,
@@ -184,9 +184,9 @@ class RFChannel:
         encoded = []
         async with get_async_session() as session:
             encoded = await db_utils.get_scroll_queue(session, self.channel_id) or []
-        decoded = []
+        decoded: list[QueuedScrollDC] = []
         for item in encoded:
-            decoded.append(QueuedScroll(
+            decoded.append(QueuedScrollDC(
                 scroll=ScrollType(item['scroll']),
                 reward_id=item['reward_id'],
                 reward_redemption_id=item['reward_redemption_id'],
@@ -201,16 +201,16 @@ class RFChannel:
         
         await self.load_scroll_queue()        
 
-        await self.chat.join_room(self.channel_name)
-        self.update_mult_routine.start()
-        self.update_events_routine.start()
-        self.backup_state_data_routine.start(instant=False)
-        self.auto_restart_routine.start()
-        self.dungeon_killswitch_routine.start()
-        self.update_middleman_connection_status_routine.start()
-        self.town_level_notification_routine.start()
-        self.island_arrival_grouping_routine.start()
-        self.scroll_queue_routine.start()
+        __ = await self.chat.join_room(self.channel_name)
+        __ = self.update_mult_routine.start()
+        __ = self.update_events_routine.start()
+        __ = self.backup_state_data_routine.start(instant=False)
+        __ = self.auto_restart_routine.start()
+        __ = self.dungeon_killswitch_routine.start()
+        __ = self.update_middleman_connection_status_routine.start()
+        __ = self.town_level_notification_routine.start()
+        __ = self.island_arrival_grouping_routine.start()
+        __ = self.scroll_queue_routine.start()
 
     async def stop(self):
         self.update_mult_routine.cancel()
@@ -951,9 +951,9 @@ class RFChannel:
         if amount_in_queue >= stock:
             raise OutOfStockError(amount_in_queue, stock, f"Out of {scroll.capitalize()} scrolls!")
         if redeem_ctx:
-            queue_obj = QueuedScroll(scroll_id, redeem_ctx.data.reward.id, redeem_ctx.data.id, user_id, credits_spent)
+            queue_obj = QueuedScrollDC(scroll_id, redeem_ctx.data.reward.id, redeem_ctx.data.id, user_id, credits_spent)
         else:
-            queue_obj = QueuedScroll(scroll_id, None, None, user_id, credits_spent)
+            queue_obj = QueuedScrollDC(scroll_id, None, None, user_id, credits_spent)
         self.scroll_queue.append(queue_obj)
         await self.save_scroll_queue()
         

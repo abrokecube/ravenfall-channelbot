@@ -9,6 +9,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Relationship
 
 import logging
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bot.models import QueuedScroll
+
 logger = logging.getLogger(__name__)
 
 class Base(AsyncAttrs, DeclarativeBase):
@@ -34,7 +39,7 @@ class Channel(Base):
     idle_earn_rate: Mapped[int] = mapped_column(Integer, default=5)
     idle_earn_interval: Mapped[int] = mapped_column(Integer, default=5*60)  # add credits every 5 minutes
     prefix: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=["!"])
-    scroll_queue: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=[])
+    scroll_queue: Mapped[list[QueuedScroll]] = mapped_column(JSON, nullable=False, default=[])
 
 
 class Character(Base):

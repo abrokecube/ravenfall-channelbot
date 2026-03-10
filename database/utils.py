@@ -3,7 +3,7 @@ from database.models import User, Channel, Character, SenderData, TwitchAuth, Us
 from sqlalchemy import select
 from datetime import datetime
 from typing import Any
-from bot.models import Sender
+from bot.models import Sender, QueuedScroll
 
 async def get_user(
     session: AsyncSession,
@@ -312,10 +312,10 @@ async def add_credits(session: AsyncSession, user_id: int | str, amount: int, de
         return transaction.id
     return -1
 
-async def get_scroll_queue(session: AsyncSession, channel_id: int | str) -> list[int]:
+async def get_scroll_queue(session: AsyncSession, channel_id: int | str) -> list[QueuedScroll]:
     channel = await get_channel(session, id=channel_id)
     return channel.scroll_queue
 
-async def update_scroll_queue(session: AsyncSession, channel_id: int | str, queue: list[int]):
+async def update_scroll_queue(session: AsyncSession, channel_id: int | str, queue: list[QueuedScroll]):
     channel = await get_channel(session, id=channel_id)
     channel.scroll_queue = queue
