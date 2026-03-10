@@ -1,4 +1,3 @@
-from bot.models import GameMultiplier
 from typing import List, Dict
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent, Village
@@ -33,6 +32,7 @@ class RFChannelManager:
         self.channel_id_to_channel: Dict[str, RFChannel] = {}
         self.channel_name_to_channel: Dict[str, RFChannel] = {}
         self.ravennest_is_online = True
+        self.updater_is_working = False
         self.global_multiplier = 1.0
         self.global_multiplier_last_change = datetime.now(timezone.utc)
 
@@ -79,6 +79,7 @@ class RFChannelManager:
         self.ram_usage_alert_monitor = RAMUsageAlertMonitor(self)
         await self.item_alert_monitor.start()
         await self.ram_usage_alert_monitor.start()
+        await self.check_update_endpoint_routine.start()
 
     async def stop(self):
         for channel in self.channels:
@@ -89,6 +90,7 @@ class RFChannelManager:
             await self.rf_message_processor.astop()
         await self.item_alert_monitor.stop()
         await self.ram_usage_alert_monitor.stop()
+        await self.check_update_endpoint_routine.stop()
 
     async def event_twitch_message(self, message: ChatMessage):
         for channel in self.channels:
@@ -151,7 +153,7 @@ class RFChannelManager:
         multiplier: ExpMult | None = None
         attempts = 3
         while attempts > 0:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
                 try:
                     async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False) as response:
                         data: GameMultiplier = await response.json()
@@ -161,10 +163,7 @@ class RFChannelManager:
                                 self.global_multiplier = data["multiplier"]
                                 self.global_multiplier_last_change = now
                             multiplier = ExpMult(**data)
-                    async with session.get(f"https://www.ravenfall.stream/api/version/check", ssl=False) as response:
-                        update_data = await response.json()
-                        if update_data:
-                            is_online = True
+                        break
                 except Exception as e:
                     logger.error(f"Can't connect to Ravenfall API: {e}")
             attempts -= 1
@@ -203,6 +202,22 @@ class RFChannelManager:
                 if r['status'] != 200:
                     await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
     
+    @routine(delta=timedelta(minutes=2))
+    async def check_update_endpoint_routine(self):
+        old_updator_status = self.updater_is_working
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            try:
+                async with session.get(f"https://www.ravenfall.stream/api/version/check", ssl=False) as response:
+                    response = await response.json()
+                    self.updater_is_working = True
+            except Exception as e:
+                self.updater_is_working = False
+        if old_updator_status != self.updater_is_working:
+            if self.updater_is_working:
+                logger.info("Ravenfall update endpoint is now working")
+            else:
+                logger.warning("Ravenfall update endpoint falied")
+
     async def get_desync_info(self) -> Dict[str, float]:
         ch_desyncs: Dict[str, float] = {}
         data = await get_desync_info()

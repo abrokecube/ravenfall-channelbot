@@ -137,6 +137,7 @@ class RFRestartTask:
         event_type = ""
         messages = {
             "server_down": "Restart postponed due to server being offline.",
+            "updater_down": "Restart postponed due to update check failing.",
             "dungeon": "Restart postponed due to dungeon.",
             "dungeon_prep": "Restart postponed due to dungeon being prepared.",
             "raid": "Restart postponed due to raid.",
@@ -144,6 +145,7 @@ class RFRestartTask:
         }
         names = {
             "server_down": "server offline",
+            "updater_down": "update check failed",
             "dungeon": "dungeon",
             "dungeon_prep": "dungeon being prepared",
             "raid": "raid",
@@ -166,6 +168,8 @@ class RFRestartTask:
                     event_type = "raid"
                 if not self.manager.ravennest_is_online:
                     event_type = "server_down"
+                if not self.manager.updater_is_working:
+                    event_type = "updater_down"
                 
                 if event_type:
                     self.future_pause_reason = names[event_type]
