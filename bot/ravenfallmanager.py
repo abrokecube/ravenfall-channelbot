@@ -1,3 +1,4 @@
+from bot.models import GameMultiplier
 from typing import List, Dict
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent, Village
@@ -32,6 +33,7 @@ class RFChannelManager:
         self.channel_id_to_channel: Dict[str, RFChannel] = {}
         self.channel_name_to_channel: Dict[str, RFChannel] = {}
         self.ravennest_is_online = True
+        self.updater_is_working = False
         self.global_multiplier = 1.0
         self.global_multiplier_last_change = datetime.now(timezone.utc)
 
@@ -150,7 +152,7 @@ class RFChannelManager:
         multiplier: ExpMult | None = None
         attempts = 3
         while attempts > 0:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
                 try:
                     async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False) as response:
                         data: GameMultiplier = await response.json()
@@ -160,11 +162,14 @@ class RFChannelManager:
                                 self.global_multiplier = data["multiplier"]
                                 self.global_multiplier_last_change = now
                             multiplier = ExpMult(**data)
-                        break
+                    async with session.get(f"https://www.ravenfall.stream/api/version/check", ssl=False) as response:
+                        update_data = await response.json()
+                        if update_data:
+                            is_online = True
                 except Exception as e:
                     logger.error(f"Can't connect to Ravenfall API: {e}")
             attempts -= 1
-        self.ravennest_is_online = is_online
+        self.ravennest_is_online = is_online and self.updater_is_working
         
         if self.ravennest_is_online != old_online:
             if self.ravennest_is_online:
