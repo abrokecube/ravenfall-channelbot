@@ -33,7 +33,6 @@ class RFChannelManager:
         self.channel_id_to_channel: Dict[str, RFChannel] = {}
         self.channel_name_to_channel: Dict[str, RFChannel] = {}
         self.ravennest_is_online = True
-        self.updater_is_working = False
         self.global_multiplier = 1.0
         self.global_multiplier_last_change = datetime.now(timezone.utc)
 
@@ -169,7 +168,7 @@ class RFChannelManager:
                 except Exception as e:
                     logger.error(f"Can't connect to Ravenfall API: {e}")
             attempts -= 1
-        self.ravennest_is_online = is_online and self.updater_is_working
+        self.ravennest_is_online = is_online
         
         if self.ravennest_is_online != old_online:
             if self.ravennest_is_online:
