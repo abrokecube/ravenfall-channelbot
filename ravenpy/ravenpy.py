@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 import os
 from enum import Enum
 
-import thefuzz  # pyright: ignore [reportMissingTypeStubs]
-import thefuzz.fuzz  # pyright: ignore [reportMissingTypeStubs]
-import thefuzz.process  # pyright: ignore [reportMissingTypeStubs]
+import thefuzz
+import thefuzz.fuzz
+import thefuzz.process
 from . import itemdefs
 from .enums import *
 from .modals import CraftIngredientJson, InternalItemData, RFItemJson, RFItemDropJson, RFItemRedeemableJson, RFRecipeJson, FuzzResult

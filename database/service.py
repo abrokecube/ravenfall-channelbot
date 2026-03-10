@@ -3,6 +3,7 @@ from database.session import get_async_session
 import database.utils as db_utils
 from database.models import User, Channel, Character, SenderData, TwitchAuth, UserCredits
 from sqlalchemy.ext.asyncio import AsyncSession
+from bot.models import Sender
 
 class DatabaseService:
     def get_session(self):
@@ -33,7 +34,7 @@ class DatabaseService:
         async with get_async_session() as s:
             return await db_utils.get_sender_data(s, channel_id, user_name)
 
-    async def get_formatted_sender_data(self, channel_id: int | str, user_name: str, session: AsyncSession | None = None) -> dict[str, Any]:  # Complex return type from db_utils
+    async def get_formatted_sender_data(self, channel_id: int | str, user_name: str, session: AsyncSession | None = None) -> Sender:  # Complex return type from db_utils
         if session:
             return await db_utils.get_formatted_sender_data(session, channel_id, user_name)
         async with get_async_session() as s:
@@ -74,7 +75,7 @@ class DatabaseService:
         self,
         channel_platform: str,
         channel_platform_id: int | str,
-        sender_json: dict[str, Any],
+        sender_json: Sender,
         session: AsyncSession | None = None
     ) -> SenderData:
         if session:

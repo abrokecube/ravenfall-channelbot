@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING, cast, override, Any
-from collections.abc import Collection, Awaitable
+from collections.abc import Collection, Coroutine
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFChannelEvent, Channel, RavenBotMessage, RavenfallMessage
 from .multichat_command import send_multichat_command, get_desync_info, get_total_item_count
@@ -165,7 +165,7 @@ class RFChannelManager:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
                 try:
                     async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False) as response:
-                        data: GameMultiplier = await response.json()
+                        data: GameMultiplier = cast(GameMultiplier, await response.json())
                         if data:
                             is_online = True
                             if data["multiplier"] != self.global_multiplier:
@@ -256,7 +256,7 @@ class RFChannelManager:
                     await channel.send_chat_message("?resync")
                 await asyncio.sleep(60)
                 
-        tasks = []                
+        tasks: list[Coroutine[Any, Any, None]] = []                
         for channel_name, desync in data.items():
             if not self.ravennest_is_online:
                 continue
@@ -273,7 +273,7 @@ class RFChannelManager:
                 continue
             tasks.append(resync_task(channel))
         if tasks:
-            await asyncio.gather(*tasks)
+            __ = await asyncio.gather(*tasks)
     
     @routine(delta=timedelta(hours=3), wait_first=True, max_attempts=99999)
     async def update_boosts_routine(self):

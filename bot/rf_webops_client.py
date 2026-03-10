@@ -1,5 +1,5 @@
 import aiohttp
-from typing import Any
+from typing import Any, cast
 
 class WebOpsClient:
     def __init__(self, base_url: str = "http://127.0.0.1:7102"):
@@ -21,7 +21,7 @@ class WebOpsClient:
                 if response.status != 200:
                     text = await response.text()
                     raise Exception(f"Redemption failed: {response.status} - {text}")
-                return await response.json()
+                return cast(dict[str, Any], await response.json())
 
     async def get_total_loyalty_points(self, usernames: list[str]) -> dict[str, Any]:
         """
@@ -36,5 +36,5 @@ class WebOpsClient:
                 if response.status != 200:
                     text = await response.text()
                     raise Exception(f"Failed to get points: {response.status} - {text}")
-                return await response.json()
+                return cast(dict[str, Any], await response.json())
 

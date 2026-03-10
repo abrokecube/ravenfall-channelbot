@@ -1,11 +1,11 @@
 from database.db import engine
 
 from sqlalchemy import (
-    Column, String, Integer, ForeignKey, Boolean, DateTime, Float, JSON
+    String, Integer, ForeignKey, Boolean, DateTime, Float, JSON
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, mapped_column
 from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Mapped, Relationship
 
 import logging
 
@@ -16,118 +16,118 @@ class Base(AsyncAttrs, DeclarativeBase):
 
 
 class User(Base):
-    __tablename__ = 'users'
+    __tablename__: str = 'users'
 
-    twitch_id = Column(Integer, primary_key=True)
-    name_tag_color = Column(String, default="#7F7F7F")
-    name = Column(String)
-    display_name = Column(String)
+    twitch_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name_tag_color: Mapped[str] = mapped_column(String, default="#7F7F7F")
+    name: Mapped[str] = mapped_column(String)
+    display_name: Mapped[str] = mapped_column(String)
     
-    characters = relationship("Character", back_populates='user')
+    characters: Relationship[list["Character"]] = relationship("Character", back_populates='user')
 
 
 class Channel(Base):
-    __tablename__ = 'channels'
+    __tablename__: str = 'channels'
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
-    idle_earn_rate = Column(Integer, default=5)
-    idle_earn_interval = Column(Integer, default=5*60)  # add credits every 5 minutes
-    prefix = Column(JSON, nullable=False, default=["!"])
-    scroll_queue = Column(JSON, nullable=False, default=[])
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    idle_earn_rate: Mapped[int] = mapped_column(Integer, default=5)
+    idle_earn_interval: Mapped[int] = mapped_column(Integer, default=5*60)  # add credits every 5 minutes
+    prefix: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=["!"])
+    scroll_queue: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=[])
 
 
 class Character(Base):
-    __tablename__ = 'characters'
+    __tablename__: str = 'characters'
     
-    id = Column(String, primary_key=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
 
-    twitch_id = Column(Integer, ForeignKey('users.twitch_id'))
-    training = Column(String, default="None")
-    user = relationship("User", back_populates='characters')
+    twitch_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.twitch_id'))
+    training: Mapped[str] = mapped_column(String, default="None")
+    user: Relationship["User"] = relationship("User", back_populates='characters')
 
-    auto_raid_status = relationship("AutoRaidStatus", back_populates='char', uselist=False)
-    user_credit_idle_earn = relationship("UserCreditIdleEarn", back_populates='char', uselist=False)
+    auto_raid_status: Relationship["AutoRaidStatus"] = relationship("AutoRaidStatus", back_populates='char', uselist=False)
+    user_credit_idle_earn: Relationship["UserCreditIdleEarn"] = relationship("UserCreditIdleEarn", back_populates='char', uselist=False)
 
 
 class AutoRaidStatus(Base):
-    __tablename__ = 'auto_raid_status'
+    __tablename__: str = 'auto_raid_status'
     
-    id = Column(Integer, primary_key=True)
-    char_id = Column(String, ForeignKey('characters.id'), unique=True)
-    auto_raid_count = Column(Integer, default=-1)
-    char = relationship("Character", back_populates='auto_raid_status')
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    char_id: Mapped[str] = mapped_column(String, ForeignKey('characters.id'), unique=True)
+    auto_raid_count: Mapped[int] = mapped_column(Integer, default=-1)
+    char: Relationship["Character"] = relationship("Character", back_populates='auto_raid_status')
 
 class SenderData(Base):
-    __tablename__ = 'sender_data'
+    __tablename__: str = 'sender_data'
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    channel_platform = Column(String)
-    channel_platform_id = Column(String)
-    user_id = Column(String)  # uuid
-    character_id = Column(String)  # uuid
-    username = Column(String)
-    display_name = Column(String)
-    color = Column(String, nullable=True)
-    platform = Column(String)
-    platform_id = Column(String)
-    is_broadcaster = Column(Boolean)
-    is_moderator = Column(Boolean)
-    is_subscriber = Column(Boolean)
-    is_vip = Column(Boolean)
-    is_game_administrator = Column(Boolean)
-    is_game_moderator = Column(Boolean)
-    sub_tier = Column(Integer)
-    identifier = Column(String)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    channel_platform: Mapped[str] = mapped_column(String)
+    channel_platform_id: Mapped[str] = mapped_column(String)
+    user_id: Mapped[str] = mapped_column(String)  # uuid
+    character_id: Mapped[str] = mapped_column(String)  # uuid
+    username: Mapped[str] = mapped_column(String)
+    display_name: Mapped[str] = mapped_column(String)
+    color: Mapped[str] = mapped_column(String, nullable=True)
+    platform: Mapped[str] = mapped_column(String)
+    platform_id: Mapped[str] = mapped_column(String)
+    is_broadcaster: Mapped[bool] = mapped_column(Boolean)
+    is_moderator: Mapped[bool] = mapped_column(Boolean)
+    is_subscriber: Mapped[bool] = mapped_column(Boolean)
+    is_vip: Mapped[bool] = mapped_column(Boolean)
+    is_game_administrator: Mapped[bool] = mapped_column(Boolean)
+    is_game_moderator: Mapped[bool] = mapped_column(Boolean)
+    sub_tier: Mapped[int] = mapped_column(Integer)
+    identifier: Mapped[str] = mapped_column(String)
 
 class TwitchAuth(Base):
-    __tablename__ = 'twitch_auth'
+    __tablename__: str = 'twitch_auth'
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer)
-    user_name = Column(String)
-    access_token = Column(String)
-    refresh_token = Column(String)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer)
+    user_name: Mapped[str] = mapped_column(String)
+    access_token: Mapped[str] = mapped_column(String)
+    refresh_token: Mapped[str] = mapped_column(String)
 
 class UserCredits(Base):
-    __tablename__ = 'user_credits'
+    __tablename__: str = 'user_credits'
     
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
-    credits = Column(Integer, default=0)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer)
+    credits: Mapped[int] = mapped_column(Integer, default=0)
 
 class UserCreditIdleEarn(Base):
-    __tablename__ = 'user_credit_idle_earn'
+    __tablename__: str = 'user_credit_idle_earn'
     
-    id = Column(Integer, primary_key=True)
-    char_id = Column(String, ForeignKey('characters.id'), unique=True)
-    total_time = Column(Float, default=0)  # in seconds
-    last_seen_timestamp = Column(DateTime)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    char_id: Mapped[str] = mapped_column(String, ForeignKey('characters.id'), unique=True)
+    total_time: Mapped[float] = mapped_column(Float, default=0)  # in seconds
+    last_seen_timestamp: Mapped[DateTime] = mapped_column(DateTime)
     
-    char = relationship('Character', back_populates='user_credit_idle_earn')
+    char: Relationship["Character"] = relationship('Character', back_populates='user_credit_idle_earn')
 
 class UserCreditTransaction(Base):
-    __tablename__ = 'user_credit_transaction'
+    __tablename__: str = 'user_credit_transaction'
     
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
-    credits = Column(Integer)
-    description = Column(String)
-    timestamp = Column(DateTime)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer)
+    credits: Mapped[int] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(String)
+    timestamp: Mapped[DateTime] = mapped_column(DateTime)
     
 class ChatMessage(Base):
-    __tablename__ = 'chat_messages'
+    __tablename__: str = 'chat_messages'
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    room_name = Column(String, nullable=False)
-    user_name = Column(String, nullable=False)
-    content = Column(String, nullable=False)
-    timestamp = Column(DateTime, nullable=False)
-    reply_to_id = Column(Integer, ForeignKey('chat_messages.id'), nullable=True)
-    user_id = Column(String, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    room_name: Mapped[str] = mapped_column(String, nullable=False)
+    user_name: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(String, nullable=False)
+    timestamp: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
+    reply_to_id: Mapped[int] = mapped_column(Integer, ForeignKey('chat_messages.id'), nullable=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=True)
     
     
-    reply_to = relationship("ChatMessage", remote_side=[id], backref="replies")
+    reply_to: Relationship["ChatMessage"] = relationship("ChatMessage", remote_side=[id], backref="replies")
     
 
 async def create_all_tables():

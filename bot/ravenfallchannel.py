@@ -11,7 +11,7 @@ import aiohttp
 from datetime import timedelta, timezone
 
 from .models import (
-    Player, Village, Dungeon, Raid, GameMultiplier, GameSession, Ferry,
+    Player, Village, Dungeon, Raid, GameMultiplier, GameSession,
     RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent,
     ScrollType, QueuedScroll, Sender
 )

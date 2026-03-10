@@ -82,7 +82,7 @@ async def get_character(
         select(Character).where(Character.id == id)
     )
     
-    user_obj = result.scalar_one_or_none()
+    user_obj: Character | None = result.scalar_one_or_none()
     if user_obj is None:
         user_obj = Character(
             id=id,
@@ -92,7 +92,7 @@ async def get_character(
         await session.flush()
     _ = await get_user(session, id=twitch_id, name=name)
     if name:
-        user_obj.name = name  # update name if it was changed
+        user_obj.user.name = name  # update name if it was changed
 
     return user_obj
 
@@ -253,7 +253,7 @@ async def record_sender_data(
     sender_data.display_name = sender_json.get('DisplayName')
     sender_data.color = sender_json.get('Color')
     sender_data.platform = sender_json.get('Platform')
-    sender_data.platform_id = sender_json.get('PlatformId')
+    sender_data.platform_id = sender_json.get('PlatformId', '') or ''
     sender_data.is_broadcaster = sender_json.get('IsBroadcaster')
     sender_data.is_moderator = sender_json.get('IsModerator')
     sender_data.is_subscriber = sender_json.get('IsSubscriber')

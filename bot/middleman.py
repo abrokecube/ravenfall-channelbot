@@ -1,11 +1,10 @@
 import asyncio
-import json
 import logging
 import os
 import aiohttp
-from typing import Optional, Tuple, Any, TypedDict
+from typing import Any, TypedDict
 from dataclasses import dataclass
-from .messageprocessor import RavenfallMessage
+from .models import RavenfallMessage
 
 # Configuration
 MIDDLEMAN_API_HOST = os.getenv('RF_MIDDLEMAN_HOST', None)
@@ -22,7 +21,7 @@ def handle_sigint():
     logger.info("Shutting down server...")
     stop_event.set()
 
-async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional[dict] = None) -> tuple[dict, int]:
+async def _call_middleman_api(endpoint: str, method: str = 'GET', data: dict | None = None) -> tuple[dict, int]:
     """Make an API call to the middleman server."""
     url = f"http://{MIDDLEMAN_API_HOST.rstrip('/')}:{MIDDLEMAN_API_PORT}/{endpoint.lstrip('/')}"
     headers = {'Content-Type': 'application/json'}
