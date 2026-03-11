@@ -1,61 +1,62 @@
+
 import ravenpy
 from .models import *
 from datetime import datetime, timezone, timedelta
 from ravenpy import Skills, Islands
 import aiohttp
 import logging
-from typing import Any
+from typing import Any, cast
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
 class CharacterStat:
     def __init__(self, skill: ravenpy.Skills, data: PlayerStat):
-        self.skill = skill
-        self.level = data['level']
-        self.level_exp = data['experience']
-        self.total_exp_for_level = ravenpy.experience_for_level(self.level+1)
-        self.enchant_percent = data['maxlevel']/data['level']
-        self.enchant_levels = data['maxlevel'] - data['level']
+        self.skill: Skills = skill
+        self.level: int = data['level']
+        self.level_exp: float = data['experience']
+        self.total_exp_for_level: int = ravenpy.experience_for_level(self.level+1)
+        self.enchant_percent: float = data['maxlevel']/data['level']
+        self.enchant_levels: int = data['maxlevel'] - data['level']
 
-    def _add_enchant(self, percent):
+    def _add_enchant(self, percent: float):
         self.enchant_percent += percent
         self.enchant_levels = round(self.level * self.enchant_percent)
 
 class Character:
     def __init__(self, data: Player):
-        self._raw: dict = data
-        self.time_received = datetime.now(timezone.utc)
+        self._raw: Player = data
+        self.time_received: datetime = datetime.now(timezone.utc)
         self.id: str = data["id"]
         self.char_id: str = self.id
         self.user_name: str = data['name']
         self.coins: int = data['coins']
         
-        self.attack = CharacterStat(Skills.Attack, data['stats']['attack'])
-        self.defense = CharacterStat(Skills.Defense, data['stats']['defense'])
-        self.strength = CharacterStat(Skills.Strength, data['stats']['strength'])
-        self.health = CharacterStat(Skills.Health, data['stats']['health'])
-        self.magic = CharacterStat(Skills.Magic, data['stats']['magic'])
-        self.ranged = CharacterStat(Skills.Ranged, data['stats']['ranged'])
-        self.woodcutting = CharacterStat(Skills.Woodcutting, data['stats']['woodcutting'])
-        self.fishing = CharacterStat(Skills.Fishing, data['stats']['fishing'])
-        self.mining = CharacterStat(Skills.Mining, data['stats']['mining'])
-        self.crafting = CharacterStat(Skills.Crafting, data['stats']['crafting'])
-        self.cooking = CharacterStat(Skills.Cooking, data['stats']['cooking'])
-        self.farming = CharacterStat(Skills.Farming, data['stats']['farming'])
-        self.slayer = CharacterStat(Skills.Slayer, data['stats']['slayer'])
-        self.sailing = CharacterStat(Skills.Sailing, data['stats']['sailing'])
-        self.healing = CharacterStat(Skills.Healing, data['stats']['healing'])
-        self.gathering = CharacterStat(Skills.Gathering, data['stats']['gathering'])
-        self.alchemy = CharacterStat(Skills.Alchemy, data['stats']['alchemy'])
-        self.combat_level = int(((self.attack.level + self.defense.level + self.health.level + self.strength.level) / 4) + ((self.ranged.level + self.magic.level + self.healing.level) / 8))
-        self.stats = [
+        self.attack: CharacterStat = CharacterStat(Skills.Attack, data['stats']['attack'])
+        self.defense: CharacterStat = CharacterStat(Skills.Defense, data['stats']['defense'])
+        self.strength: CharacterStat = CharacterStat(Skills.Strength, data['stats']['strength'])
+        self.health: CharacterStat = CharacterStat(Skills.Health, data['stats']['health'])
+        self.magic: CharacterStat = CharacterStat(Skills.Magic, data['stats']['magic'])
+        self.ranged: CharacterStat = CharacterStat(Skills.Ranged, data['stats']['ranged'])
+        self.woodcutting: CharacterStat = CharacterStat(Skills.Woodcutting, data['stats']['woodcutting'])
+        self.fishing: CharacterStat = CharacterStat(Skills.Fishing, data['stats']['fishing'])
+        self.mining: CharacterStat = CharacterStat(Skills.Mining, data['stats']['mining'])
+        self.crafting: CharacterStat = CharacterStat(Skills.Crafting, data['stats']['crafting'])
+        self.cooking: CharacterStat = CharacterStat(Skills.Cooking, data['stats']['cooking'])
+        self.farming: CharacterStat = CharacterStat(Skills.Farming, data['stats']['farming'])
+        self.slayer: CharacterStat = CharacterStat(Skills.Slayer, data['stats']['slayer'])
+        self.sailing: CharacterStat = CharacterStat(Skills.Sailing, data['stats']['sailing'])
+        self.healing: CharacterStat = CharacterStat(Skills.Healing, data['stats']['healing'])
+        self.gathering: CharacterStat = CharacterStat(Skills.Gathering, data['stats']['gathering'])
+        self.alchemy: CharacterStat = CharacterStat(Skills.Alchemy, data['stats']['alchemy'])
+        self.combat_level: int = int(((self.attack.level + self.defense.level + self.health.level + self.strength.level) / 4) + ((self.ranged.level + self.magic.level + self.healing.level) / 8))
+        self.stats: list[CharacterStat] = [
             self.attack, self.defense, self.strength, self.health, self.magic,
             self.ranged, self.woodcutting, self.fishing, self.mining, self.crafting,
             self.cooking, self.farming, self.slayer, self.sailing, self.healing,
             self.gathering, self.alchemy
         ]
-        self._skill_dict = {
+        self._skill_dict: dict[Skills, CharacterStat] = {
             Skills.Attack: self.attack,
             Skills.Defense: self.defense,
             Skills.Strength: self.strength,
@@ -83,9 +84,9 @@ class Character:
         self.is_sailing: bool = data['sailing']
         
         self.training: Skills | None = None
-        self.island: Islands = Islands[data['island']] if data['island'] != "" else None
+        self.island: Islands | None = Islands(data['island']) if data['island'] != "" else None
    
-        self.rested_time = timedelta(seconds=int(data['restedtime']))
+        self.rested_time: timedelta = timedelta(seconds=int(data['restedtime']))
         self.target_item: ravenpy.CharacterItem | None = None
         if data['training'] == "Fighting":
             task_arg = data['taskargument'].capitalize()
@@ -131,7 +132,7 @@ class Character:
     def get_skill(self, skill: Skills):
         return self._skill_dict[skill]
 
-async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | None:
+async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> dict[str, Any] | list[Any] | None:
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
         try:
             r = await session.get(f"{url}/{query}")
@@ -141,5 +142,5 @@ async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | N
         except Exception as e:
             logger.error(f"Error fetching Ravenfall query from {url}: {e}", exc_info=True)
             return None
-        data = await r.json()
+        data = cast(dict[str, Any] | list[Any], await r.json())
     return data

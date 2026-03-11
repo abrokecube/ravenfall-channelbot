@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING, Literal, cast
+from sqlalchemy.engine.row import Row
+from typing import Any, TYPE_CHECKING, Literal
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,7 @@ from datetime import timedelta, timezone
 from .models import (
     Player, Village, Dungeon, Raid, GameMultiplier, GameSession,
     RavenBotMessage, RavenfallMessage, TownBoost, RFChannelEvent, RFChannelSubEvent,
-    ScrollType, QueuedScrollDC, QueuedScroll, Sender
+    ScrollType, QueuedScrollDC, QueuedScroll, Sender, Recipient
 )
 from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
 from .middleman import send_to_client, send_to_server_and_wait_response
@@ -223,7 +224,7 @@ class RFChannel:
         self.island_arrival_grouping_routine.cancel()
         self.scroll_queue_routine.cancel()
 
-    async def send_chat_message(self, message: str, ignore_error: bool = False, reply_id: Optional[str] = None):
+    async def send_chat_message(self, message: str, ignore_error: bool = False, reply_id: str | None = None):
         try:
             await self.chat.send_message(self.channel_name, message, reply_id=reply_id)
             await self.monitor_ravenfall_command(content=message)
@@ -233,9 +234,9 @@ class RFChannel:
             else:
                 logger.warning(f"Failed to send chat message for {self.channel_name}: {e}")
     
-    async def send_announcement(self, message: str, color: str = None, ignore_error: bool = True):
+    async def send_announcement(self, message: str, color: str | None = None, ignore_error: bool = True):
         try:
-            await self.chat.twitch.send_chat_announcement(self.channel_id, os.getenv("BOT_USER_ID"), message, color)
+            await self.chat.twitch.send_chat_announcement(self.channel_id, os.getenv("BOT_USER_ID", ""), message, color)
         except Exception as e:
             if not ignore_error:
                 raise e
@@ -243,7 +244,7 @@ class RFChannel:
                 logger.warning(f"Failed to send announcement for {self.channel_name}: {e}")
 
     async def send_message_as_ravenbot(self, text: str, cid: str):
-        message = {
+        message: RavenfallMessage = {
             "Identifier": "message",
             "CorrelationId": cid,
             "Recipent": {
@@ -254,9 +255,11 @@ class RFChannel:
                 "PlatformUserName": ""
             },
             "Format": text,
-            "Args": []
+            "Args": [],
+            "Tags": [],
+            "Category": ""
         }
-        await send_to_client(self.middleman_connection_id, json.dumps(message))
+        __ = await send_to_client(self.middleman_connection_id, json.dumps(message))
 
     async def event_twitch_message(self, message: ChatMessage):
         await self.twitch_message_waiter.process_message(message)
@@ -279,12 +282,12 @@ class RFChannel:
                 self.middleman_connection_id,
                 RavenBotTemplates.inspect(
                     username=arguments[0] if arguments else message.user.name,
-                ),
+                ).build(),
                 message.id,
                 timeout=3
             )
-            if not response.get('timeout', False):
-                await send_to_client(self.middleman_connection_id, json.dumps(response['responses'][0]))
+            if (not response.get('timeout', False)) and "responses" in response:
+                __ = await send_to_client(self.middleman_connection_id, json.dumps(response['responses'][0]))
             else:
                 is_inspecting_other = len(arguments) > 0 and arguments[0].lower() != message.user.name.lower()
                 if not is_inspecting_other:
@@ -346,7 +349,7 @@ class RFChannel:
         if match is not None:
             key = match.key
         message_args = message['Args']
-        additional_args = {}
+        additional_args: dict[Any, Any] = {}
         if message['Recipent']['Platform'].lower() == 'system':
             if key in (
                 "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count", "dungeon_countdown",
@@ -426,7 +429,7 @@ class RFChannel:
             )
 
 
-    async def build_sender_from_character_id(self, char_id: str, session: AsyncSession = None, default_username: str = None) -> Optional[dict[str, Any]]:
+    async def build_sender_from_character_id(self, char_id: str, session: AsyncSession | None = None, default_username: str | None = None) -> Sender | None:
         """
         Build a Sender dictionary from a character ID by looking up user and character data.
         
@@ -444,7 +447,7 @@ class RFChannel:
                 .where(Character.id == char_id)
                 .join(User, Character.twitch_id == User.twitch_id, isouter=True)
             )
-            row = result.one_or_none()
+            row: Row[tuple[Character, User]] | None = result.one_or_none()
             
             if not row:
                 if default_username:
@@ -455,7 +458,7 @@ class RFChannel:
                     ).build()
                 return None
                 
-            character, user = row
+            character, user = row.tuple()
             username = default_username or character.id  # Fallback to character ID if no default provided
             display_name = user.display_name if user else username
             
@@ -477,10 +480,10 @@ class RFChannel:
         twitch_id: int, 
         user_name: str, 
         name_tag_color: str,
-        display_name: Optional[str] = None
+        display_name: str | None = None
     ):
         async with get_async_session() as session:
-            await db_utils.record_user(
+            __ = await db_utils.record_user(
                 session=session,
                 user_name=user_name,
                 name_tag_color=name_tag_color,
@@ -548,10 +551,10 @@ class RFChannel:
                 resend_text = message.text if message.user.id == os.getenv("BOT_USER_ID") else None
             self.monitor_ravenbot_response(command, timeout=timeout, resend_text=resend_text)
                         
-    async def wait_for_ravenbot_command(self, command: str, timeout: float = 10.0) -> Optional[RavenBotMessage]:
+    async def wait_for_ravenbot_command(self, command: str, timeout: float = 10.0) -> RavenBotMessage | None:
         return await self.ravenbot_waiter.wait_for_command(command, timeout=timeout)
         
-    async def wait_for_ravenfall_format(self, format_str: str, timeout: float = 10.0) -> Optional[RavenfallMessage]:
+    async def wait_for_ravenfall_format(self, format_str: str, timeout: float = 10.0) -> RavenfallMessage | None:
         return await self.ravenfall_waiter.wait_for_format_match(format_str, timeout=timeout)
 
     async def get_query(self, query: str, timeout: int = 5, suppress_timeout_error: bool = False) -> Any:
@@ -935,7 +938,7 @@ class RFChannel:
                 count += 1
         return count
     
-    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid'], redeem_ctx: TwitchRedemptionEvent = None, user_id: str = None, credits_spent: int = 0):
+    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid'], redeem_ctx: TwitchRedemptionEvent | None = None, user_id: str | None = None, credits_spent: int = 0):
         scrolls = await get_scroll_counts(self.channel_id)
         stock = 0
         scroll_id = ScrollType.NONE
@@ -1156,7 +1159,7 @@ class RFChannel:
             self.sandboxie_box, "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
         )
 
-    async def _monitor_ravenbot_response_task(self, command: str, timeout: float = 5, resend_text: str = None):
+    async def _monitor_ravenbot_response_task(self, command: str, timeout: float = 5, resend_text: str | None = None):
         """
         Monitor for RavenBot's response to a command.
         If no response, restart RavenBot up to MAX_RETRIES times.
@@ -1249,7 +1252,7 @@ class RFChannel:
         if asked_to_retry and resend_text:
             self.monitor_ravenbot_response(command, timeout, resend_text)
 
-    def monitor_ravenbot_response(self, command: str, timeout: float = 10.0, resend_text: str = None):
+    def monitor_ravenbot_response(self, command: str, timeout: float = 10.0, resend_text: str | None = None):
         asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))
 
     def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None, overwrite_same_reason: bool = False):

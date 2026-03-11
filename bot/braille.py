@@ -1,9 +1,9 @@
 import math
-from typing import Sequence, Tuple
+from collections.abc import Sequence
 import random
 
 # yoinked from https://505e06b2.github.io/Image-to-Braille/
-def pixels_to_char(pixels: Sequence[bool], monospace=False, use_space=False):
+def pixels_to_char(pixels: Sequence[bool], monospace: bool = False, use_space: bool = False) -> str:
     if len(pixels) != 8:
         raise ValueError(f"Expected an array of 8 bools, got length {len(pixels)}")
     shifts = [0, 1, 2, 6, 3, 4, 5, 7]
@@ -19,14 +19,14 @@ def pixels_to_char(pixels: Sequence[bool], monospace=False, use_space=False):
             
     return chr(0x2800 + codepoint_offset)
 
-def interpolate_values(input_values, output_count):
+def interpolate_values(input_values: Sequence[float], output_count: int) -> list[float]:
     input_count = len(input_values)
     if input_count < 2:
         raise ValueError("Need at least two input values to interpolate.")
     if output_count < 2:
         raise ValueError("Need at least two output values to interpolate.")
     
-    result = []
+    result: list[float] = []
     for i in range(output_count):
         position = i * (input_count - 1) / (output_count - 1)
         left_index = int(position)
@@ -40,7 +40,7 @@ def interpolate_values(input_values, output_count):
     
     return result
 
-def interpolate_with_gap_handling(pairs, output_count, max_gap):
+def interpolate_with_gap_handling(pairs: Sequence[tuple[float, float]], output_count: int, max_gap: float) -> list[tuple[float, float | None]]:
     """
     Interpolates (timestamp, value) pairs while respecting large time gaps.
     Inserts None for values in regions where the time gap is too large.
@@ -65,7 +65,7 @@ def interpolate_with_gap_handling(pairs, output_count, max_gap):
         raise ValueError("Timestamps must be strictly increasing.")
 
     step = total_duration / (output_count - 1)
-    output = []
+    output: list[tuple[float, float | None]] = []
 
     # Build lookup list
     for i in range(output_count):
@@ -91,7 +91,19 @@ def interpolate_with_gap_handling(pairs, output_count, max_gap):
     return output
 
 # Expects (timestamp, value) pairs
-def simple_line_graph(pairs: Sequence[tuple[float, float]], width=24, height=4, min_val=None, max_val=None, hard_min_val=None, hard_max_val=None, fill_type=0, max_gap=20, monospace=False, use_space=False):
+def simple_line_graph(
+    pairs: Sequence[tuple[float, float]], 
+    width: int = 24, 
+    height: int = 4, 
+    min_val: float | None = None, 
+    max_val: float | None = None, 
+    hard_min_val: float | None = None, 
+    hard_max_val: float | None = None, 
+    fill_type: int = 0, 
+    max_gap: float = 20, 
+    monospace: bool = False, 
+    use_space: bool = False
+) -> str:
     values = [x[1] for x in pairs]
     if max_val is None:
         max_val = max(values)
@@ -108,10 +120,10 @@ def simple_line_graph(pairs: Sequence[tuple[float, float]], width=24, height=4, 
         total_range = 1
     
     values_interpolated = interpolate_with_gap_handling(pairs, width, max_gap)
-    columns = []
+    columns: list[list[bool]] = []
     for pair in values_interpolated:
-        t, v = pair
-        col = []
+        _, v = pair
+        col: list[bool] = []
         if v is not None:
             a = (v - min_val) / total_range * height
             b = int(a)
@@ -133,7 +145,7 @@ def simple_line_graph(pairs: Sequence[tuple[float, float]], width=24, height=4, 
     if len(columns) % 2 == 1:
         columns.append([False] * (height + (4 - height % 4)))
     
-    out_chars = []
+    out_chars: list[str] = []
     for b in range(0,math.ceil(height/4)):
         b *= 4
         for a in range(0, len(columns), 2):
@@ -145,7 +157,7 @@ def simple_line_graph(pairs: Sequence[tuple[float, float]], width=24, height=4, 
     return out_str.rstrip("\n")
 
 if __name__ == "__main__":
-    test_data = []
+    test_data: list[tuple[float, float]] = []
     t = 0
     for x in range(20):
         test_data.append((t, math.sin(x)))

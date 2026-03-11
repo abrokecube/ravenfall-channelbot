@@ -1,4 +1,3 @@
-from typing import Any, Optional, Union
 from uuid import UUID
 from .message_builders import (
     RavenBotMessageBuilder,
@@ -6,28 +5,29 @@ from .message_builders import (
     SenderBuilder,
     RecipientBuilder
 )
+from .models import Sender, Recipient
 
 class RavenBotTemplates:
     """Predefined templates for RavenBot messages."""
     
     @staticmethod
     def auto_raid_status(
-        sender: dict[str, Any],
-        correlation_id: Optional[Union[str, UUID]] = None
-    ) -> str:
+        sender: Sender,
+        correlation_id: str | UUID | None = None
+    ) -> RavenBotMessageBuilder:
         return RavenBotMessageBuilder(
             sender=sender,
             content="status",
             identifier="raid_auto",
             correlation_id=correlation_id
-        ).build()
+        )
 
     @staticmethod
     def auto_join_raid(
-        sender: dict[str, Any],
+        sender: Sender,
         count: int = 2147483647,
-        correlation_id: Optional[Union[str, UUID]] = None
-    ) -> str:
+        correlation_id: str | UUID | None = None
+    ) -> RavenBotMessageBuilder:
         content = "on"
         if count != 2147483647:
             content = f"{count}"
@@ -36,88 +36,78 @@ class RavenBotTemplates:
             identifier="raid_auto",
             correlation_id=correlation_id,
             content=content
-        ).build()
+        )
     
     @staticmethod
     def sail(
-        sender: dict[str, Any],
-        correlation_id: Optional[Union[str, UUID]] = None
-    ) -> str:
+        sender: Sender,
+        correlation_id: str | UUID | None = None
+    ) -> RavenBotMessageBuilder:
         return RavenBotMessageBuilder(
             sender=sender,
             identifier="ferry_enter",
             correlation_id=correlation_id
-        ).build()
+        )
 
     @staticmethod
     def sail_to(
-        sender: dict[str, Any],
+        sender: Sender,
         island_name: str,
-        correlation_id: Optional[Union[str, UUID]] = None
-    ) -> str:
+        correlation_id: str | UUID | None = None
+    ) -> RavenBotMessageBuilder:
         return RavenBotMessageBuilder(
             sender=sender,
             identifier="ferry_travel",
             content=island_name,
             correlation_id=correlation_id
-        ).build()
+        )
 
     @staticmethod
     def gift_item(
-        sender: dict[str, Any],
+        sender: Sender,
         recipient_user_name: str,
         item_name: str,
-        item_count: Optional[int] = 1,
-        correlation_id: Optional[Union[str, UUID]] = None,
-        return_dict: bool = False
-    ) -> Union[str, dict[str, Any]]:
+        item_count: int = 1,
+        correlation_id: str | UUID | None = None,
+    ) -> RavenBotMessageBuilder:
         a = RavenBotMessageBuilder(
             sender=sender,
             identifier="gift_item",
             correlation_id=correlation_id,
             content=f"{recipient_user_name} {item_name} {item_count}"
         )
-        if return_dict:
-            return a.build_dict()
-        return a.build()
+        return a
     
     @staticmethod
     def query_item_count(
-        sender: dict[str, Any],
+        sender: Sender,
         item_name: str,
-        correlation_id: Optional[Union[str, UUID]] = None,
-        return_dict: bool = False
-    ):
+        correlation_id: str | UUID | None = None,
+    ) -> RavenBotMessageBuilder:
         a = RavenBotMessageBuilder(
             sender=sender,
             identifier="get_item_count",
             correlation_id=correlation_id,
             content=f"{item_name}"
         )
-        if return_dict:
-            return a.build_dict()
-        return a.build()
+        return a
     
     @staticmethod
     def query_resources(
-        sender: dict[str, Any],
-        correlation_id: Optional[Union[str, UUID]] = None,
-        return_dict: bool = False
+        sender: Sender,
+        correlation_id: str | UUID | None = None,        
     ):
         a = RavenBotMessageBuilder(
             sender=sender,
             identifier="player_resources",
             correlation_id=correlation_id,
         )
-        if return_dict:
-            return a.build_dict()
-        return a.build()
+        return a
 
     @staticmethod
     def inspect(
         username: str,
-        correlation_id: Optional[Union[str, UUID]] = None,
-        return_dict: bool = False,
+        correlation_id: str | UUID | None = None,
     ):
         sender = SenderBuilder(
             username=username.lower(),
@@ -128,16 +118,14 @@ class RavenBotTemplates:
             identifier="inspect",
             correlation_id=correlation_id,
         )
-        if return_dict:
-            return a.build_dict()
-        return a.build()
+        return a
     
     @staticmethod
     def train(
-        sender: dict[str, Any],
+        sender: Sender,
         skill: str,
-        correlation_id: Optional[Union[str, UUID]] = None,
-        return_dict: bool = False
+        correlation_id: str | UUID | None = None,
+        
     ):
         skill = skill.lower()
         if skill == "alchemy":
@@ -156,7 +144,7 @@ class RavenBotTemplates:
                 }
             case "woodcutting" | "fishing" | "mining" | "crafting" | "cooking" | "farming" | "gathering" | "brewing":
                 identifier = "task"
-                content = {
+                content: dict[str, str | list[str]] = {
                     "Task": skill.capitalize(),
                     "Arguments": []
                 }
@@ -169,21 +157,19 @@ class RavenBotTemplates:
             content=content,
             correlation_id=correlation_id
         )
-        if return_dict:
-            return a.build_dict()
-        return a.build()
+        return a
     
 
-
+SYSTEM = RecipientBuilder.system().build()
 class RavenfallTemplates:
     """Predefined templates for Ravenfall messages."""
     
     @staticmethod
     def chat_message(
         message: str,
-        correlation_id: Optional[Union[str, UUID]] = None,
-        recipient: dict[str, Any] = RecipientBuilder.system().build()
-    ) -> str:
+        correlation_id: str | UUID | None = None,
+        recipient: Recipient = SYSTEM
+    ):
         """Create a chat message for Ravenfall.
         
         Args:
@@ -202,7 +188,7 @@ class RavenfallTemplates:
             args=[],
             identifier="message",
             correlation_id=correlation_id
-        ).build()
+        )
     
 
 

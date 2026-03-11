@@ -1,18 +1,17 @@
 import asyncio
 import datetime
+from datetime import timezone
 import json
 import logging
 import signal
 import uuid
-from typing import Any, Callable, TypedDict, TypeVar, NotRequired, cast
+from typing import Any, Callable, TypedDict, NotRequired, cast, Literal
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from websockets.asyncio.server import Server
 from websockets import ServerConnection
 import websockets
 from .models import RavenBotMessage, RavenfallMessage
-
-# Type variable for message content types
-T = TypeVar('T', bound=dict[str, Any])
 
 # Configure logging
 logger = logging.getLogger('new_message_processor')
@@ -25,7 +24,7 @@ class MessageMetadata:
     connection_id: str = "unknown"
     correlation_id: str = ""
     is_api: bool = False
-    timestamp: str = field(default_factory=lambda: datetime.datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.datetime.now(timezone.utc).isoformat())
     custom_metadata: dict[str, Any] = field(default_factory=dict)
     client_addr: str = ""
     server_addr: str = ""
@@ -39,6 +38,16 @@ class ProcessorResponse(TypedDict):
     message: NotRequired[dict[str, RavenBotMessage | RavenfallMessage | BlockResponse]]  # Modified message content (optional)
     error: NotRequired[str]  # Error message (optional)
     correlation_id: str  # Correlation ID for tracking
+
+class ProcessorMessage(TypedDict):
+    source: Literal["CLIENT", "SERVER", "API-CLIENT", "API-SERVER"]
+    client_addr: str
+    server_addr: str
+    connection_id: str
+    correlation_id: str
+    is_api: bool
+    timestamp: str
+    message: RavenBotMessage | RavenfallMessage
 
 # Define types for callbacks
 MessageCallback = Callable[
@@ -66,12 +75,12 @@ class MessageProcessor:
             port: Port to listen on
             max_message_size: Maximum message size in bytes (default: 10MB)
         """
-        self.host = host
-        self.port = port
-        self.max_message_size = max_message_size
-        self.server = None
+        self.host: str = host
+        self.port: int = port
+        self.max_message_size: int = max_message_size
+        self.server: None | Server = None
         self.clients: dict[str, ClientInfo] = {}
-        self.running = False
+        self.running: bool = False
         
         # Callback lists
         self.message_callbacks: list[MessageCallback] = []
@@ -109,19 +118,20 @@ class MessageProcessor:
         try:
             # Parse the message as JSON
             try:
-                message_data: dict[str, Any] = json.loads(message)
+                message_data = cast(ProcessorMessage, json.loads(message))
                 
                 # Create message metadata
                 metadata = MessageMetadata(
-                    source=message_data.pop('source', 'unknown'),
-                    connection_id=message_data.pop('connection_id', 'unknown'),
-                    correlation_id=message_data.pop('correlation_id', ''),
-                    is_api=message_data.pop('is_api', False),
-                    custom_metadata=message_data.pop('custom_metadata', {})
+                    source=message_data['source'],
+                    connection_id=message_data['connection_id'],
+                    correlation_id=message_data['correlation_id'],
+                    is_api=message_data['is_api'],
+                    custom_metadata=message_data.get('custom_metadata', {}),
+                    timestamp=message_data['timestamp']
                 )
                 
                 # The remaining data is the actual message content
-                message_content: RavenfallMessage | RavenBotMessage = message_data.pop('message', {})
+                message_content: RavenfallMessage | RavenBotMessage = message_data['message']
                 
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse message as JSON: {e}")
@@ -241,7 +251,7 @@ class MessageProcessor:
             logger.error(f"Error with client {client_id}: {e}", exc_info=True)
         finally:
             # Clean up
-            self.clients.pop(client_id, None)
+            _ = self.clients.pop(client_id, None)
             
             # Notify disconnection callbacks
             for callback in self.disconnection_callbacks:
@@ -282,7 +292,7 @@ class MessageProcessor:
                 logger.info(f"WebSocket server started on ws://{self.host}:{self.port}")
             
             # Schedule the server to start
-            loop.create_task(start_server())
+            __ = loop.create_task(start_server())
         else:
             # If no loop is running, use run_until_complete
             self.server = loop.run_until_complete(server_coro)
@@ -306,7 +316,7 @@ class MessageProcessor:
         self.running = False
         
         # Create a list to store any cleanup tasks
-        cleanup_tasks = []
+        cleanup_tasks: list[Coroutine[Any, Any, None]] = []
         
         # Close all client connections first
         if self.clients:
@@ -317,11 +327,7 @@ class MessageProcessor:
         # Close the server to prevent new connections
         if self.server:
             self.server.close()
-            # Add server close as a task
-            if hasattr(self.server, 'wait_closed'):
-                cleanup_tasks.append(self._safe_wait_closed(self.server))
-            else:
-                self.server = None
+            self.server = None
         
         # Wait for all cleanup tasks to complete with a timeout
         if cleanup_tasks:
@@ -329,7 +335,7 @@ class MessageProcessor:
                 # Use asyncio.shield only if the event loop is still running
                 loop = asyncio.get_running_loop()
                 if loop.is_running():
-                    await asyncio.wait_for(asyncio.gather(*cleanup_tasks, return_exceptions=True), timeout=2.0)
+                    _ = await asyncio.wait_for(asyncio.gather(*cleanup_tasks, return_exceptions=True), timeout=2.0)
             except (asyncio.TimeoutError, RuntimeError, asyncio.CancelledError) as e:
                 logger.debug(f"Cleanup completed with: {type(e).__name__}: {e}")
         
@@ -343,6 +349,6 @@ class MessageProcessor:
         """Synchronously stop the WebSocket server."""
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            loop.create_task(self.astop())
+            _ = loop.create_task(self.astop())
         else:
             loop.run_until_complete(self.astop())

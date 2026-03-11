@@ -1,5 +1,8 @@
+from bot.ravenfallmanager import RFChannelManager
+
+
 from enum import Enum
-from typing import NamedTuple
+from typing import Any, NamedTuple
 import logging
 from .multichat_command import get_char_info
 
@@ -36,7 +39,7 @@ ababab = str.maketrans({
     '\r': '\\r',
     '\t': '\\t',
 })
-def to_label(obj):
+def to_label(obj: object) -> str:
     if isinstance(obj, bool):
         return "true" if obj else "false"
     elif isinstance(obj, str):
@@ -49,34 +52,23 @@ class Metrics:
         self.definitions: dict[str, MetricDefinition] = {}
         self.metrics: dict[MetricEntry, float] = {}
         
-    def add_value(self, metric_name: str, value: float | int | bool, **labels):
-        if value is None:
-            print(f"Empty metric: {metric_name}, {labels}")
-            return
-        # b = ','.join([f'{x}=\"{json.dumps(y).strip('"')}\"' for x, y in labels.items()])
+    def add_value(self, metric_name: str, value: float | int | bool, **labels: str):
         b = ','.join([f'{x}=\"{to_label(y)}\"' for x, y in labels.items()])
                       
         a = MetricEntry(metric_name, b)
-        # if a in self.metrics:
-        #     raise AlreadyExists()
-        # if not a.name in self.definitions:
-        #     raise UndefinedMetric()
         if isinstance(value, bool):
             self.metrics[a] = 1 if value else 0
         self.metrics[a] = float(value)
     
-    def add_def(self, metric_name: str, description: str, type: MetricType=MetricType.GAUGE, *, value: float | int | bool = None, **labels):
-        # if metric_name in self.definitions:
-        #     raise AlreadyExists()
+    def add_def(self, metric_name: str, description: str, type: MetricType=MetricType.GAUGE, *, value: float | int | bool | None = None, **labels: str):
         self.definitions[metric_name] = MetricDefinition(metric_name, description, type)
         if value is not None:
             self.add_value(metric_name, value, **labels)
     
     def get_text(self):
-        # metrics = sorted(list(self.metrics.keys()), key=lambda x: x.name)
-        metrics = list(self.metrics.keys())
+        metrics: list[MetricEntry] = list(self.metrics.keys())
         defs = set(self.definitions.keys())
-        out_text = []
+        out_text: list[str] = []
         for m in metrics:
             if m.name in defs:
                 metric_def = self.definitions[m.name]
@@ -94,7 +86,8 @@ class Metrics:
             )
         return "\n".join(out_text)
 
-from typing import TYPE_CHECKING, list
+from typing import TYPE_CHECKING
+from collections.abc import Coroutine
 if TYPE_CHECKING:
     from .ravenfallmanager import RFChannelManager
 import psutil
@@ -103,8 +96,8 @@ import asyncio
 from utils.runshell import runshell
 
 class MetricsManager:
-    def __init__(self, rf_manager: 'RFChannelManager'):
-        self.rf_manager = rf_manager
+    def __init__(self, rf_manager: RFChannelManager):
+        self.rf_manager: RFChannelManager = rf_manager
 
     async def desync_info(self, m: Metrics):
         desync_info = await self.rf_manager.get_desync_info()
@@ -142,23 +135,29 @@ class MetricsManager:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
                 
-        tasks = []
+        tasks: list[Coroutine[Any, Any, Any]] = []
         for ch in self.rf_manager.channels:
             shellcmd = (
                 f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
             )
             tasks.append(runshell(shellcmd))
         responses: list[str | None] = await asyncio.gather(*tasks)
-        pid_lists = [x.splitlines() for code, x in responses]
-        box_pids = {}
+        pid_lists: list[list[str]] = []
+        if responses:
+            for response in responses:
+                if response:
+                    _, text = response
+                    pid_lists.append(text.splitlines())
+
+        box_pids: dict[str, list[int]] = {}
         for i in range(len(self.rf_manager.channels)):
-            box_pids[self.rf_manager.channels[i].channel_name] = pid_lists[i]
+            box_pids[self.rf_manager.channels[i].channel_name] = [int(pid) for pid in pid_lists[i]]
 
         m.add_def("rf_ext_ravenfall_info", "Information about ravenfall", MetricType.GAUGE)
         for ch in self.rf_manager.channels:
             for pid in box_pids[ch.channel_name]:
-                if int(pid) in ravenfall_pids:
-                    m.add_value("rf_ext_ravenfall_info", 1, channel=ch.channel_name, process_id=pid)
+                if pid in ravenfall_pids:
+                    m.add_value("rf_ext_ravenfall_info", 1, channel=ch.channel_name, process_id=str(pid))
 
     async def get_metrics(self) -> str:
         m = Metrics()
@@ -168,7 +167,7 @@ class MetricsManager:
             self.ravenfall_pids(m),
             self.char_data(m)
         ]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        _ = await asyncio.gather(*tasks, return_exceptions=True)
         return m.get_text()
 
         

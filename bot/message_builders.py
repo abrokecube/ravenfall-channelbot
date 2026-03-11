@@ -1,6 +1,7 @@
-from typing import Optional, Union, Any
+from typing import Any
 from uuid import UUID, uuid4
 import json
+from .models import Sender, Recipient, RavenBotMessage, RavenfallMessage
 
 class SenderBuilder:
     """Helper class to build a Sender object for RavenBot messages."""
@@ -8,12 +9,12 @@ class SenderBuilder:
     def __init__(
         self,
         username: str,
-        user_id: Union[str, UUID] = "00000000-0000-0000-0000-000000000000",
-        character_id: Union[str, UUID] = "00000000-0000-0000-0000-000000000000",
+        user_id: str | UUID = "00000000-0000-0000-0000-000000000000",
+        character_id: str | UUID = "00000000-0000-0000-0000-000000000000",
         display_name: str = "",
-        color: Optional[str] = None,
+        color: str | None = "",
         platform: str = "twitch",
-        platform_id: Optional[str] = None,
+        platform_id: str | None = None,
         is_broadcaster: bool = False,
         is_moderator: bool = False,
         is_subscriber: bool = False,
@@ -24,12 +25,12 @@ class SenderBuilder:
         identifier: str = "1"
     ):
         """Initialize the SenderBuilder with user information."""
-        self.sender_data = {
+        self.sender_data: Sender = {
             "Id": str(user_id),
             "CharacterId": str(character_id),
             "Username": username,
             "DisplayName": display_name or username,
-            "Color": color,
+            "Color": color or "#7F7F7F",
             "Platform": platform,
             "PlatformId": platform_id,
             "IsBroadcaster": is_broadcaster,
@@ -42,7 +43,7 @@ class SenderBuilder:
             "Identifier": identifier
         }
     
-    def build(self) -> dict[str, Any]:
+    def build(self) -> Sender:
         """Return the constructed sender dictionary."""
         return self.sender_data
 
@@ -54,12 +55,12 @@ class RecipientBuilder:
         self,
         platform_id: str = '',
         platform_username: str = '',
-        user_id: Union[str, UUID] = "00000000-0000-0000-0000-000000000000",
-        character_id: Union[str, UUID] = "00000000-0000-0000-0000-000000000000",
+        user_id: str = "00000000-0000-0000-0000-000000000000",
+        character_id: str = "00000000-0000-0000-0000-000000000000",
         platform: str = "twitch",
     ):
         """Initialize the RecipientBuilder with recipient information."""
-        self.recipient_data = {
+        self.recipient_data: Recipient = {
             "UserId": str(user_id),
             "CharacterId": str(character_id),
             "Platform": platform,
@@ -67,7 +68,7 @@ class RecipientBuilder:
             "PlatformUserName": platform_username
         }
     
-    def build(self) -> dict[str, Any]:
+    def build(self) -> Recipient:
         """Return the constructed recipient dictionary."""
         return self.recipient_data
 
@@ -85,8 +86,8 @@ class RecipientBuilder:
 class RavenBotMessageBuilder:
     """Helper class to build RavenBot messages."""
     
-    def __init__(self, sender: dict[str, Any], identifier: str, content: Any = {}, 
-                 correlation_id: Optional[Union[str, UUID]] = None):
+    def __init__(self, sender: Sender, identifier: str, content: Any = None, 
+                 correlation_id: str | UUID | None = None):
         """Initialize with required sender, content, and optional identifier and correlation ID.
         
         Args:
@@ -95,17 +96,17 @@ class RavenBotMessageBuilder:
             identifier: Message identifier (default: "message")
             correlation_id: Optional correlation ID (will generate a new UUID if not provided)
         """
-        if not sender:
-            raise ValueError("Sender is required")
+        if not content:
+            content = {}
             
-        self.message_data = {
+        self.message_data: RavenBotMessage = {
             "Identifier": identifier,
             "CorrelationId": str(correlation_id) if correlation_id else str(uuid4()),
             "Sender": sender,
             "Content": json.dumps(content)
         }
     
-    def with_sender(self, sender: dict[str, Any]) -> 'RavenBotMessageBuilder':
+    def with_sender(self, sender: Sender) -> 'RavenBotMessageBuilder':
         """Set the sender of the message."""
         self.message_data["Sender"] = sender
         return self
@@ -120,7 +121,7 @@ class RavenBotMessageBuilder:
         self.message_data["Identifier"] = identifier
         return self
     
-    def with_correlation_id(self, correlation_id: Union[str, UUID]) -> 'RavenBotMessageBuilder':
+    def with_correlation_id(self, correlation_id: str | UUID) -> 'RavenBotMessageBuilder':
         """Set a specific correlation ID."""
         self.message_data["CorrelationId"] = str(correlation_id)
         return self
@@ -129,7 +130,7 @@ class RavenBotMessageBuilder:
         """Build and return the message dictionary."""
         return json.dumps(self.build_dict())
 
-    def build_dict(self) -> dict[str, Any]:
+    def build_dict(self) -> RavenBotMessage:
         """Build and return the message dictionary."""
         if "Content" not in self.message_data:
             raise ValueError("Message content is required")
@@ -141,8 +142,8 @@ class RavenBotMessageBuilder:
 class RavenfallMessageBuilder:
     """Helper class to build Ravenfall messages."""
     
-    def __init__(self, recipient: dict[str, Any], format_str: str = "", args: Optional[list[str]] = None, 
-                 identifier: str = "message", correlation_id: Optional[Union[str, UUID]] = None):
+    def __init__(self, recipient: Recipient, format_str: str = "", args: list[str] | None = None, 
+                 identifier: str = "message", correlation_id: str | UUID | None = None):
         """Initialize with required recipient and optional format, args, identifier, and correlation ID.
         
         Args:
@@ -151,11 +152,8 @@ class RavenfallMessageBuilder:
             args: Optional list of format arguments
             identifier: Message identifier (default: "message")
             correlation_id: Optional correlation ID (will generate a new UUID if not provided)
-        """
-        if not recipient:
-            raise ValueError("Recipient is required")
-            
-        self.message_data = {
+        """            
+        self.message_data: RavenfallMessage = {
             "Identifier": identifier,
             "CorrelationId": str(correlation_id) if correlation_id else str(uuid4()),
             "Recipent": recipient,
@@ -165,7 +163,7 @@ class RavenfallMessageBuilder:
             "Category": ""
         }
     
-    def with_recipient(self, recipient: dict[str, Any]) -> 'RavenfallMessageBuilder':
+    def with_recipient(self, recipient: Recipient) -> 'RavenfallMessageBuilder':
         """Set the recipient of the message."""
         self.message_data["Recipent"] = recipient
         return self
@@ -206,7 +204,7 @@ class RavenfallMessageBuilder:
         self.message_data["Identifier"] = identifier
         return self
     
-    def with_correlation_id(self, correlation_id: Union[str, UUID]) -> 'RavenfallMessageBuilder':
+    def with_correlation_id(self, correlation_id: str | UUID) -> 'RavenfallMessageBuilder':
         """Set a specific correlation ID."""
         self.message_data["CorrelationId"] = str(correlation_id)
         return self
@@ -225,10 +223,10 @@ class MessageFactory:
     
     @staticmethod
     def create_ravenbot_message(
-        sender: dict[str, Any],
+        sender: Sender,
         content: str,
         identifier: str = "message",
-        correlation_id: Optional[Union[str, UUID]] = None
+        correlation_id: str | UUID | None = None
     ) -> str:
         """Create a RavenBot message.
         
@@ -250,13 +248,13 @@ class MessageFactory:
     
     @staticmethod
     def create_ravenfall_message(
-        recipient: dict[str, Any],
+        recipient: Recipient,
         format_str: str = "",
-        args: Optional[list[str]] = None,
-        tags: Optional[list[str]] = None,
+        args: list[str] | None = None,
+        tags: list[str] | None = None,
         category: str = "",
         identifier: str = "message",
-        correlation_id: Optional[Union[str, UUID]] = None
+        correlation_id: str | UUID | None = None
     ) -> str:
         """Create a Ravenfall message.
         
@@ -281,10 +279,10 @@ class MessageFactory:
         )
         
         if tags:
-            builder.with_tags(*tags)
+            _ = builder.with_tags(*tags)
             
         if category:
-            builder.with_category(category)
+            _ = builder.with_category(category)
             
         return builder.build()
 

@@ -1,4 +1,10 @@
-from typing import list, Tuple, Callable, TypeVar, Generic, Optional, Deque, Any
+from _asyncio import Future
+
+
+from asyncio.locks import Lock
+
+
+from typing import Callable, TypeVar, Generic
 import asyncio
 import time
 from collections import deque
@@ -16,13 +22,13 @@ class BaseMessageWaiter(Generic[T]):
         Args:
             max_message_age: Maximum age in seconds to keep messages in the queue
         """
-        self.waiting_messages: list[tuple[Callable[[T], bool], asyncio.Future]] = []
-        self.message_queue: Deque[tuple[float, T]] = deque()  # (timestamp, message) pairs
-        self.max_message_age = max_message_age
-        self._lock = asyncio.Lock()
+        self.waiting_messages: list[tuple[Callable[[T], bool], asyncio.Future[T]]] = []
+        self.message_queue: deque[tuple[float, T]] = deque()  # (timestamp, message) pairs
+        self.max_message_age: float = max_message_age
+        self._lock: Lock = asyncio.Lock()
     
     async def wait_for_message(self, check: Callable[[T], bool], timeout: float = 10.0, 
-                             max_age: Optional[float] = None) -> Optional[T]:
+                             max_age: float | None = None) -> T | None:
         """Wait for a message that matches the check function.
         
         Args:
@@ -50,7 +56,7 @@ class BaseMessageWaiter(Generic[T]):
         
         # If no matching message in queue, wait for a new one
         loop = asyncio.get_event_loop()
-        future = loop.create_future()
+        future: Future[T] = loop.create_future()
         
         async with self._lock:
             self.waiting_messages.append((check, future))
@@ -63,11 +69,11 @@ class BaseMessageWaiter(Generic[T]):
                 self._remove_future(future)
             return None
     
-    def _remove_future(self, future: asyncio.Future) -> None:
+    def _remove_future(self, future: asyncio.Future[T]) -> None:
         """Remove a future from the waiting list if it exists"""
         for i, (_, f) in enumerate(self.waiting_messages):
             if f == future:
-                self.waiting_messages.pop(i)
+                _ = self.waiting_messages.pop(i)
                 return
     
     async def process_message(self, message: T) -> None:
@@ -78,14 +84,14 @@ class BaseMessageWaiter(Generic[T]):
         async with self._lock:
             # Clean up old messages from the queue
             while self.message_queue and current_time - self.message_queue[0][0] > self.max_message_age:
-                self.message_queue.popleft()
+                _ = self.message_queue.popleft()
                 
             self.message_queue.append((current_time, message))
             
             if not self.waiting_messages:
                 return
                 
-            remaining = []
+            remaining: list[tuple[Callable[[T], bool], asyncio.Future[T]]] = []
             for check, future in self.waiting_messages:
                 if not future.done():
                     try:
@@ -110,8 +116,8 @@ class RavenBotMessageWaiter(BaseMessageWaiter[RavenBotMessage]):
     def __init__(self, max_message_age: float = 5.0):
         super().__init__(max_message_age)
     
-    async def wait_for_command(self, command: str, correlation_id: Optional[str] = None, 
-                                     timeout: float = 10.0) -> Optional[RavenBotMessage]:
+    async def wait_for_command(self, command: str, correlation_id: str | None = None, 
+                                     timeout: float = 10.0) -> RavenBotMessage | None:
         """Wait for a response to a specific command.
         
         Args:
@@ -135,7 +141,7 @@ class RavenBotMessageWaiter(BaseMessageWaiter[RavenBotMessage]):
 class RavenfallMessageWaiter(BaseMessageWaiter[RavenfallMessage]):
     """Waits for and processes messages from Ravenfall."""
     
-    async def wait_for_format_match(self, format_str: str, timeout: float = 10.0) -> Optional[RavenfallMessage]:
+    async def wait_for_format_match(self, format_str: str, timeout: float = 10.0) -> RavenfallMessage | None:
         """Wait for a message with a specific format string.
         
         Args:

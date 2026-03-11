@@ -202,15 +202,17 @@ class RFChannelManager:
                 logger.debug(f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}")
                 if channel.restart_task and channel.restart_task.get_time_left() > 120:
                     __ = channel.queue_restart(90, label="Town is desynced; multiplier is not updating", reason=RestartReason.MULTIPLIER_DESYNC)
-                r = await send_multichat_command(
-                    text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
-                    user_id=channel.channel_id,
-                    user_name=channel.channel_name,
-                    channel_id=channel.channel_id,
-                    channel_name=channel.channel_name
-                )
-                if r['status'] != 200:
+                try:
+                    r = await send_multichat_command(
+                        text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
+                        user_id=channel.channel_id,
+                        user_name=channel.channel_name,
+                        channel_id=channel.channel_id,
+                        channel_name=channel.channel_name
+                    )
+                except Exception as e:
                     await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
+                    logger.warning(f"Failed to send multiplier command to {channel.channel_name}: {e}")
     
     @alru_cache(ttl=10)
     async def check_update_endpoint(self):
@@ -226,13 +228,14 @@ class RFChannelManager:
 
     async def get_desync_info(self) -> dict[str, float]:
         ch_desyncs: dict[str, float] = {}
-        data = await get_desync_info()
+        try:
+            data = await get_desync_info()
+        except Exception as e:
+            logger.error(f"Failed to fetch desync info: {e}")
+            return {}
         if time.time() - data['data']['last_updated'] > 300:
             return ch_desyncs
 
-        if data['status'] != 200:
-            logger.error(f"Failed to fetch desync info: {data['error']}")
-            return ch_desyncs
         for channel_id in self.channel_id_to_channel.keys():
             if channel_id in data['data']['towns']:
                 channel_name = self.channel_id_to_channel[channel_id].channel_name
@@ -241,11 +244,12 @@ class RFChannelManager:
 
     async def get_total_item_count(self) -> dict[str, float]:
         total_item_data: dict[str, float] = {}
-        data = await get_total_item_count()
+        try:
+            data = await get_total_item_count()
+        except Exception as e:
+            logger.error(f"Failed to fetch total item count: {e}")
+            return {}
 
-        if data['status'] != 200:
-            logger.error(f"Failed to fetch desync info: {data['error']}")
-            return total_item_data
         for channel_id in self.channel_id_to_channel.keys():
             if channel_id in data['data']['towns']:
                 channel_name = self.channel_id_to_channel[channel_id].channel_name
@@ -258,15 +262,17 @@ class RFChannelManager:
         
         async def resync_task(channel: RFChannel):
             async with self.global_resync_lock:
-                r = await send_multichat_command(
-                    text="?resync",
-                    user_id=channel.channel_id,
-                    user_name=channel.channel_name,
-                    channel_id=channel.channel_id,
-                    channel_name=channel.channel_name
-                )
-                if r['status'] != 200:
+                try:
+                    r = await send_multichat_command(
+                        text="?resync",
+                        user_id=channel.channel_id,
+                        user_name=channel.channel_name,
+                        channel_id=channel.channel_id,
+                        channel_name=channel.channel_name
+                    )
+                except Exception as e:
                     await channel.send_chat_message("?resync")
+                    logger.warning(f"Failed to send resync command to {channel.channel_name}: {e}")
                 await asyncio.sleep(60)
                 
         tasks: list[Coroutine[Any, Any, None]] = []                
@@ -345,7 +351,7 @@ class RAMUsageAlertMonitor(BatchAlertMonitor):
             return {}
         tasks = []
         for ch in self.rfmanager.channels:
-            shellcmd = (
+            shellcmd: str = (
                 f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
             )
             tasks.append(runshell(shellcmd))

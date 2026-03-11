@@ -106,9 +106,9 @@ async def send_to_server_and_wait_response(connection_id: str, message: str, cor
     if correlation_id:
         data["correlationId"] = correlation_id
         
-    response, __ = await _call_middleman_api('/api/send-and-wait-response', 'POST', data)
+    response, __ = cast(tuple[SendAndWaitResult, int], await _call_middleman_api('/api/send-and-wait-response', 'POST', data))
     logger.debug(f"Response from server: {response}")
-    return cast(SendAndWaitResult, response)
+    return response
 
 async def ensure_connected(connection_id: str, timeout: int = 0) -> dict[str, Any]:
     """
@@ -135,7 +135,16 @@ class ConnectionStatus:
     server_connected: bool = False
     time_until_close: int = -1
 
+class ConnectionStatusTD(TypedDict):
+    connectionId: str
+    clientConnected: bool
+    serverConnected: bool
+    timeUntilClose: int
 
+class ConnStatusResponse(TypedDict):
+    success: bool
+    status: ConnectionStatusTD | None
+    
 async def get_connection_status(connection_id: str) -> tuple[ConnectionStatus | None, str | None]:
     """
     Get the status of a connection.
@@ -147,7 +156,7 @@ async def get_connection_status(connection_id: str) -> tuple[ConnectionStatus | 
         Tuple of (ConnectionStatus, error_message). If successful, error_message is None.
         On error, ConnectionStatus is None and error_message contains the error.
     """
-    response, status = await _call_middleman_api(f'/api/connection-status?connectionId={connection_id}', 'GET')
+    response, status = cast(tuple[ConnStatusResponse, int], await _call_middleman_api(f'/api/connection-status?connectionId={connection_id}', 'GET'))
     
     if status != 200:
         return None, response.get('error', 'Unknown error')
@@ -156,12 +165,14 @@ async def get_connection_status(connection_id: str) -> tuple[ConnectionStatus | 
         return None, response.get('error', 'Failed to get connection status')
     
     # Convert camelCase keys from API to snake_case for our class
-    status_dict = response.get('status', {})
+    status_dict = response.get('status', None)
+    if status_dict is None:
+        return None, "Failed to get connection status"
     status_data = ConnectionStatus(
-        connection_id=status_dict.get('connectionId', ''),
-        client_connected=status_dict.get('clientConnected', False),
-        server_connected=status_dict.get('serverConnected', False),
-        time_until_close=status_dict.get('timeUntilClose', 0)
+        connection_id=status_dict['connectionId'],
+        client_connected=status_dict['clientConnected'],
+        server_connected=status_dict['serverConnected'],
+        time_until_close=status_dict['timeUntilClose']
     )
     return status_data, None
 

@@ -1,18 +1,22 @@
-from aiohttp.client_reqrep import ClientResponse
-
-
-from aiohttp.client_reqrep import ClientResponse
-
+from aiohttp import ClientResponse
 
 import time
 import aiohttp
-from typing import TypedDict
+from typing import TypedDict, Any, cast
 import os
 
 class PrometheusMetric(TypedDict, extra_items=str):
     __name__: str
     job: str
     instance: str
+
+class PrometheusResult(TypedDict):
+    result: list[Any]
+    resultType: str
+
+class PrometheusResponse(TypedDict):
+    status: str
+    data: PrometheusResult
 
 class PromethusInstantResult(TypedDict):
     metric: PrometheusMetric
@@ -30,7 +34,7 @@ async def get_prometheus_series(query: str, duration_s: int, step_s: int = 20) -
         r: ClientResponse = await session.get(
             f"{url}/api/v1/query_range?query={query}&start={start}&end={now}&step={step_s}"
         )
-        result = await r.json()
+        result = cast(PrometheusResponse, await r.json())
     data = result['data']['result']
     return data
     
@@ -40,6 +44,6 @@ async def get_prometheus_instant(query: str) -> list[PromethusInstantResult]:
         r: ClientResponse = await session.get(
             f"{url}/api/v1/query?query={query}"
         )
-        result = await r.json()
+        result = cast(PrometheusResponse, await r.json())
     data = result['data']['result']
     return data

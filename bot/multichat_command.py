@@ -7,15 +7,40 @@ environment variables are properly set.
 """
 import aiohttp
 import os
-from typing import Any, TypedDict, Optional
+from typing import Any, TypedDict, NotRequired, Literal, cast
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Configuration - Update these values to match your setup
-COMMAND_SERVER_HOST = os.getenv("MULTICHAT_COMMAND_SERVER_HOST", None)
-COMMAND_SERVER_PORT = int(os.getenv("MULTICHAT_COMMAND_SERVER_PORT", None))
+COMMAND_SERVER_HOST = os.getenv("MULTICHAT_COMMAND_SERVER_HOST", "localhost")
+COMMAND_SERVER_PORT = int(os.getenv("MULTICHAT_COMMAND_SERVER_PORT", 8080))
 BASE_URL = f"http://{COMMAND_SERVER_HOST}:{COMMAND_SERVER_PORT}"
+
+async def get[T](url_suffix: str, t: type[T]) -> T:  # pyright: ignore[reportUnusedParameter]
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{BASE_URL}/{url_suffix.lstrip('/')}") as response:
+                response_data = cast(GenericApiResponse[T] | GenericApiErrorResponse, await response.json())
+                if response_data["status"] != 'success':
+                    raise ServerError(f"Failed to fetch: {response_data['error']}")
+                response.raise_for_status()
+                return response_data["data"]
+    except Exception as e:
+        logging.error(f"Failed to fetch: {str(e)}") 
+        raise ServerError(f"Failed to fetch: {str(e)}")
+
+async def post(url_suffix: str, payload: dict[str, Any]):  # pyright: ignore[reportExplicitAny]
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{BASE_URL}/{url_suffix.lstrip('/')}", json=payload) as response:
+                response_data = cast(GenericApiPostResponse | GenericApiErrorResponse, await response.json())
+                if response_data["status"] != 'success':
+                    raise ServerError(f"Failed to post: {response_data['error']}")
+                response.raise_for_status()
+    except Exception as e:
+        logging.error(f"Failed to post: {str(e)}") 
+        raise ServerError(f"Failed to post: {str(e)}")
 
 async def send_multichat_command(
     text: str,
@@ -23,7 +48,7 @@ async def send_multichat_command(
     user_name: str = "example_user",
     channel_id: str = "example_channel_id",
     channel_name: str = "example_channel"
-) -> dict[str, Any]:
+):
     """
     Send a command to the Ravenfall MultiChat server.
     
@@ -37,7 +62,6 @@ async def send_multichat_command(
     Returns:
         dict: The JSON response from the server
     """
-    url = f"{BASE_URL}/command"
     payload = {
         "text": text,
         "user_id": user_id,
@@ -46,74 +70,63 @@ async def send_multichat_command(
         "channel_name": channel_name
     }
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                response_data = await response.json()
-                logger.debug(f"Sent command to multichat: {text}, {user_name}, {user_id}, {channel_name}, {channel_id}")
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
-    except Exception as e:
-        logger.error(f"Failed to send command: {str(e)}", exc_info=True)
-        return {
-            "status": 500,
-            "error": f"Failed to send command: {str(e)}"
-        }
+    logger.debug(f"Sent command to multichat: {text}, {user_name}, {user_id}, {channel_name}, {channel_id}")
+    await post("command", payload)
         
 async def track_item_use(
     user_name: str,
     char_index: int,
     item_id: str,
     amount: int,
-) -> dict[str, Any]:
-    url = f"{BASE_URL}/track_item_use"
+):
+    """Track item usage for a character.
+    
+    Args:
+        user_name: The username of the character
+        char_index: The character index
+        item_id: The ID of the item used
+        amount: The amount of items used
+        
+    Returns:
+        dict: The JSON response from the server
+    """
     payload = {
         "user_name": user_name,
         "char_index": char_index,
         "item_id": item_id,
         "amount": amount
     }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
-    except Exception as e:
-        logger.error(f"Failed to send command: {str(e)}", exc_info=True)
-        return {
-            "status": 500,
-            "error": f"Failed to send command: {str(e)}"
-        }
+    await post("track_item_use", payload)
 
 async def track_coin_use(
     user_name: str,
     amount: int,
-) -> dict[str, Any]:
-    url = f"{BASE_URL}/track_item_use"
+):
+    """Track coin usage for a character.
+    
+    Args:
+        user_name: The username of the character
+        amount: The amount of coins used
+        
+    Returns:
+        dict: The JSON response from the server
+    """
     payload = {
         "user_name": user_name,
         "amount": amount
     }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
-    except Exception as e:
-        logger.error(f"Failed to send command: {str(e)}", exc_info=True)
-        return {
-            "status": 500,
-            "error": f"Failed to send command: {str(e)}"
-        }
+    await post("track_item_use", payload)
 
+class GenericApiResponse[T](TypedDict):
+    status: Literal['success']
+    data: T
+
+class GenericApiPostResponse(TypedDict):
+    status: Literal['success']
+
+class GenericApiErrorResponse(TypedDict):
+    status: Literal['error']
+    error: str
 
 class DesyncInfo(TypedDict):
     towns: dict[str, float]  # Channel ID to desync data mapping
@@ -122,7 +135,6 @@ class DesyncInfo(TypedDict):
 class DesyncResponse(TypedDict):
     status: int
     data: DesyncInfo
-    error: Optional[str]
 
 class TotalItemCountInfo(TypedDict):
     towns: dict[str, float]  # Channel ID to desync data mapping
@@ -130,7 +142,6 @@ class TotalItemCountInfo(TypedDict):
 class TotalItemCountResponse(TypedDict):
     status: int
     data: TotalItemCountInfo
-    error: Optional[str]
 
 class CharInfo(TypedDict):    
     name: str
@@ -147,7 +158,7 @@ class CharInfo(TypedDict):
 class CharInfoResponse(TypedDict):
     status: int
     data: list[CharInfo]
-    error: Optional[str]
+    error: str
 
 class CharCoins(TypedDict):
     twitch_id: str
@@ -158,7 +169,7 @@ class CharCoins(TypedDict):
 class CharCoinsResponse(TypedDict):
     status: int
     data: list[CharCoins]
-    error: Optional[str]
+    error: NotRequired[str]
 
 class CharItem(TypedDict):
     id: str
@@ -173,9 +184,8 @@ class CharItems(TypedDict):
     items: list[CharItem]
 
 class CharItemsResponse(TypedDict):
-    status: int
+    status: Literal["success"]
     data: list[CharItems]
-    error: Optional[str]
 
 ScrollCounts = TypedDict('ScrollCounts', {
     "Exp Multiplier Scroll": int,
@@ -189,8 +199,15 @@ class Scrolls(TypedDict):
     total: ScrollCounts
 
 class ScrollsResponse(TypedDict):
-    status: int
+    status: int 
     data: Scrolls
+
+class ErrorResponse(TypedDict):
+    status: int
+    error: str
+
+class ServerError(Exception):
+    pass
 
 async def get_desync_info() -> DesyncResponse:
     """Fetch desync information from the server.
@@ -198,109 +215,55 @@ async def get_desync_info() -> DesyncResponse:
     Returns:
         dict: The JSON response containing desync information
     """
-    url = f"{BASE_URL}/get_desync"
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
-    except Exception as e:
-        return {
-            "status": 500,
-            "error": f"Failed to fetch: {str(e)}"
-        }
+    return await get("get_desync", DesyncResponse)
+
 
 async def get_total_item_count() -> TotalItemCountResponse:
     """Fetch total item count from the server.
     
     Returns:
-        dict: The JSON response containing desync information
+        dict: The JSON response containing total item count information
     """
-    url = f"{BASE_URL}/get_total_item_count"
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
-    except Exception as e:
-        return {
-            "status": 500,
-            "error": f"Failed to fetch: {str(e)}"
-        }
+    return await get("get_total_item_count", TotalItemCountResponse)
 
 async def get_char_info() -> CharInfoResponse:
-    url = f"{BASE_URL}/get_char_data"
+    """Fetch character information from the server.
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
-    except Exception as e:
-        return {
-            "status": 500,
-            "error": f"Failed to fetch: {str(e)}"
-        }
+    Returns:
+        dict: The JSON response containing character information
+    """
+    return await get("get_char_data", CharInfoResponse)
 
 async def get_char_items(channel_id: str) -> CharItemsResponse:
-    url = f"{BASE_URL}/get_char_items/{channel_id}"
+    """Fetch character items from the server.
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
-    except Exception as e:
-        return {
-            "status": 500,
-            "error": f"Failed to fetch: {str(e)}"
-        }
+    Args:
+        channel_id: The channel ID to fetch items for
+    
+    Returns:
+        dict: The JSON response containing character items
+    """
+    return await get(f"get_char_items/{channel_id}", CharItemsResponse)
 
 async def get_char_coins(channel_id: str) -> CharCoinsResponse:
-    url = f"{BASE_URL}/get_char_coins/{channel_id}"
+    """Fetch character coins from the server.
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
-    except Exception as e:
-        return {
-            "status": 500,
-            "error": f"Failed to fetch: {str(e)}"
-        }
+    Args:
+        channel_id: The channel ID to fetch coins for
+    
+    Returns:
+        dict: The JSON response containing character coins
+    """
+    return await get(f"get_char_coins/{channel_id}", CharCoinsResponse)
 
 async def get_scroll_counts(channel_id: str) -> ScrollsResponse:
-    url = f"{BASE_URL}/get_scrolls/{channel_id}"
+    """Fetch scroll counts from the server.
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
-    except Exception as e:
-        return {
-            "status": 500,
-            "error": f"Failed to fetch: {str(e)}"
-        }
+    Args:
+        channel_id: The channel ID to fetch scroll counts for
+    
+    Returns:
+        dict: The JSON response containing scroll counts
+    """
+    return await get(f"get_scrolls/{channel_id}", ScrollsResponse)
 

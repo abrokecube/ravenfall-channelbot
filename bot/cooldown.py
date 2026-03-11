@@ -1,7 +1,7 @@
 """
 A cooldown system that tracks and enforces cooldowns for arbitrary keys with bucket support.
 """
-from typing import Optional
+from asyncio.locks import Lock
 import time
 import asyncio
 from dataclasses import dataclass
@@ -30,9 +30,9 @@ class CooldownScoped:
     """A scoped cooldown object for a specific key and bucket."""
 
     def __init__(self, cooldown: 'Cooldown', key: str, bucket: CooldownBucket):
-        self._cooldown = cooldown
-        self.key = key
-        self.bucket = bucket
+        self._cooldown: Cooldown = cooldown
+        self.key: str = key
+        self.bucket: CooldownBucket = bucket
 
     def is_rate_limited(self) -> bool:
         """Check if the scoped key is currently rate limited."""
@@ -91,9 +91,9 @@ class Cooldown:
 
     def __init__(self):
         self._cooldowns: dict[tuple[str, CooldownBucket], _CooldownState] = {}
-        self._lock = asyncio.Lock()
+        self._lock: Lock = asyncio.Lock()
 
-    def _get_state(self, key: str, bucket: CooldownBucket) -> Optional[_CooldownState]:
+    def _get_state(self, key: str, bucket: CooldownBucket) -> _CooldownState | None:
         """Get the current state for a key and bucket."""
         state = self._cooldowns.get((key, bucket))
         if state and time.time() > state.reset_time:
@@ -154,7 +154,7 @@ class Cooldown:
         """
         return CooldownScoped(self, key, bucket)
 
-    def clear(self, key: Optional[str] = None, bucket: Optional[CooldownBucket] = None):
+    def clear(self, key: str | None = None, bucket: CooldownBucket | None = None):
         """
         Clear cooldown entries.
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TypedDict, Literal, NamedTuple
+from typing import TypedDict, NamedTuple
 from collections.abc import Collection
 from enum import Enum, IntEnum
 from dataclasses import dataclass
@@ -78,6 +78,26 @@ class PlayerStat(TypedDict):
     maxlevel: int
     experience: float
 
+class PlayerStats(TypedDict):
+    combatlevel: int
+    attack: PlayerStat
+    defense: PlayerStat
+    strength: PlayerStat
+    health: PlayerStat
+    woodcutting: PlayerStat
+    fishing: PlayerStat
+    mining: PlayerStat
+    crafting: PlayerStat
+    cooking: PlayerStat
+    farming: PlayerStat
+    slayer: PlayerStat
+    magic: PlayerStat
+    ranged: PlayerStat
+    sailing: PlayerStat
+    healing: PlayerStat
+    gathering: PlayerStat
+    alchemy: PlayerStat
+
 class Player(TypedDict):
     id: str
     name: str
@@ -93,11 +113,7 @@ class Player(TypedDict):
     inraid: bool
     coins: int
     commandidletime: float
-    stats: dict[Literal[
-        "combatlevel", "attack", "defense", "strength", "health", "woodcutting",
-        "fishing", "mining", "crafting", "cooking", "farming", "slayer", "magic", "ranged",
-        "sailing", "healing", "gathering", "alchemy"
-    ], int | PlayerStat]
+    stats: PlayerStats
 
 class Village(TypedDict):
     name: str

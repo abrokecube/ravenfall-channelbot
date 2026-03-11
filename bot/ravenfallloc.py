@@ -153,11 +153,11 @@ class RavenfallLocalization:
                 strs = [trans_str]
             self.translated_strings[key] = TranslatedString(key, strs)
     
-    def _fill_args(self, in_str: str, in_args: list[str | int | float], named_args: dict[str, str] | None = None) -> str:
+    def _fill_args(self, in_str: str, in_args: list[str | float], named_args: dict[str, str | float] | None = None) -> str:
         """Fill in arguments in a format string."""
         if not named_args:
             named_args = {}
-        expl_args: dict[str, str] = {}
+        expl_args: dict[str, str | float] = {}
         results: list[str] = FSTRINGS.findall(in_str)
         for a in results:
             expl_args[a] = ''
@@ -175,7 +175,7 @@ class RavenfallLocalization:
                     return m
         return None
 
-    def translate_string(self, in_str: str, in_args: list[str | int | float], match: 'Match | None' = None, additional_args: dict[str, str] | None = None) -> str:
+    def translate_string(self, in_str: str, in_args: list[str | int | float], match: 'Match | None' = None, additional_args: dict[str, str | float] | None = None) -> str:
         """
         Translate a string using the loaded definitions and translations.
         
@@ -217,7 +217,7 @@ class RavenfallLocalization:
         translation_string = random.choice(translation.strings)
         return matched.translate(translation_string, in_str, in_args, additional_args)
     
-    def s(self, in_str: str, **kwargs) -> str:
+    def s(self, in_str: str, **kwargs: str | float) -> str:
         """
         Shorthand method to get a translated string with named arguments.
         
@@ -348,7 +348,9 @@ class Match:
 
         return mapped_args
             
-    def translate(self, trans_string: str, rf_string: str, rf_args: list[str | int | float] | dict[str, str | int | float], additional_args: dict[str, str] = {}) -> str:
+    def translate(self, trans_string: str, rf_string: str, rf_args: list[str | int | float] | dict[str, str | int | float], additional_args: dict[str, str | float] | None = None) -> str:
+        if not additional_args:
+            additional_args = {}
         if isinstance(rf_args, dict):
             mapped_args = rf_args
         else:

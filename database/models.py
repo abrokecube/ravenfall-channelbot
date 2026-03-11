@@ -1,15 +1,20 @@
 from database.db import engine
 
 from sqlalchemy import (
-    String, Integer, ForeignKey, Boolean, DateTime, Float, JSON
+    String, Integer, ForeignKey, Boolean, DateTime, Float, JSON, text, inspect
 )
 from sqlalchemy.orm import relationship, mapped_column
-from sqlalchemy.ext.asyncio import AsyncAttrs
+from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncConnection
 from sqlalchemy.orm import DeclarativeBase, Mapped, Relationship
+from sqlalchemy.engine import Result
+from sqlalchemy.sql.schema import Column, ColumnDefault
+from sqlalchemy.engine.reflection import Inspector
+import json
 
 import logging
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable
 
 if TYPE_CHECKING:
     from bot.models import QueuedScroll
@@ -140,98 +145,124 @@ async def create_all_tables():
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def update_schema():
+type ColumnMap = dict[str, Column[Any]]
+type ExistingColumnMap = dict[str, Any]
+
+
+async def update_schema() -> None:
     """
     Update the database schema by adding any missing columns to existing tables.
-    This is a non-destructive operation that only adds missing columns.
+
+    This operation is non-destructive: it only creates tables if missing and
+    adds columns that do not already exist.
     """
-    from sqlalchemy import inspect, text
-    
     async with engine.begin() as conn:
-        # Create all tables if they don't exist
         await conn.run_sync(Base.metadata.create_all)
-        
-        # Get all tables in the metadata
-        tables = Base.metadata.tables
-        
-        # Use a raw connection for inspection
+
+        dialect: str = engine.dialect.name
+        tables: dict[str, Any] = Base.metadata.tables
+
         async with engine.connect() as inspection_conn:
-            # Get the dialect-specific SQL for checking if a column exists
-            dialect = engine.dialect.name
-            
             for table_name, table in tables.items():
-                # Get columns that should exist according to our models
-                expected_columns = {column.name: column for column in table.columns}
-                
-                # Get existing columns from the database
-                if dialect == 'sqlite':
-                    # SQLite specific query
-                    result = await inspection_conn.execute(
-                        text(f"PRAGMA table_info({table_name})")
-                    )
-                    existing_columns = {row[1]: row for row in result.fetchall()}
-                elif dialect == 'postgresql':
-                    # PostgreSQL specific query
-                    result = await inspection_conn.execute(
-                        text("""
-                            SELECT column_name 
-                            FROM information_schema.columns 
-                            WHERE table_name = :table_name
-                        """),
-                        {'table_name': table_name}
-                    )
-                    existing_columns = {row[0]: row for row in result.fetchall()}
-                else:
-                    # Fallback for other databases
-                    inspector = inspect(engine)
-                    existing_columns = {
-                        col['name']: col 
-                        for col in await conn.run_sync(
-                            lambda conn: inspector.get_columns(table_name, connection=conn)
-                        )
-                    }
-                
-                # Find columns that are in our models but not in the database
-                columns_to_add = [
-                    column for column_name, column in expected_columns.items()
-                    if column_name not in existing_columns
-                ]
-                
-                # Add missing columns
-                for column in columns_to_add:
-                    column_type = column.type.compile(engine.dialect)
-                    column_name = column.name  # Get the raw column name without table prefix
-                    
-                    # Handle column defaults
-                    default = ""
-                    if column.default is not None:
-                        if column.default.is_scalar:
-                            # Properly quote string literals in SQL
-                            default_value = column.default.arg
-                            
-                            is_json = False
-                            if isinstance(column.type, JSON):
-                                is_json = True
-                            
-                            if is_json:
-                                import json
-                                default_value = f"'{json.dumps(default_value)}'"
-                            elif isinstance(default_value, str):
-                                default_value = f"'{default_value}'"
-                            
-                            default = f"DEFAULT {default_value}"
-                        elif column.default.is_callable:
-                            default = f"DEFAULT {column.default.arg()}"
-                    
-                    # Handle NULL/NOT NULL
-                    nullable = "NULL" if column.nullable else "NOT NULL"
-                    
-                    # Build and execute the ALTER TABLE statement
-                    alter_stmt = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type} {default} {nullable}"
-                    
-                    try:
-                        await conn.execute(text(alter_stmt))
-                        logger.info(f"Added column {column_name} to table {table_name}")
-                    except Exception as e:
-                        logger.error(f"Error adding column {column_name} to table {table_name}: {e}")
-                        logger.error(f"SQL: {alter_stmt}")
+                expected_columns: ColumnMap = {c.name: c for c in table.columns}
+
+                existing_columns = await _get_existing_columns(
+                    inspection_conn, conn, table_name, dialect
+                )
+
+                for column in _missing_columns(expected_columns, existing_columns):
+                    await _add_column(conn, table_name, column)
+
+
+async def _get_existing_columns(
+    inspection_conn: AsyncConnection,
+    conn: AsyncConnection,
+    table_name: str,
+    dialect: str,
+) -> ExistingColumnMap:
+    """Return a mapping of existing column names for a table."""
+
+    if dialect == "sqlite":
+        result: Result[Any] = await inspection_conn.execute(
+            text(f"PRAGMA table_info({table_name})")
+        )
+        rows = result.fetchall()
+        return {row[1]: row for row in rows}
+
+    if dialect == "postgresql":
+        result: Result[Any] = await inspection_conn.execute(
+            text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = :table_name
+                """
+            ),
+            {"table_name": table_name},
+        )
+        rows = result.fetchall()
+        return {row[0]: row for row in rows}
+
+    inspector: Inspector | None = inspect(engine)
+
+    if inspector is None:
+        raise ValueError("Inspector is None")
+
+    cols = await conn.run_sync(
+        lambda sync_conn: inspector.get_columns(table_name, connection=sync_conn)
+    )
+
+    return {c["name"]: c for c in cols}
+
+
+def _missing_columns(
+    expected: ColumnMap,
+    existing: ExistingColumnMap,
+) -> Iterable[Column[Any]]:
+    """Yield columns present in models but missing from the database."""
+    for name, column in expected.items():
+        if name not in existing:
+            yield column
+
+
+async def _add_column(
+    conn: AsyncConnection,
+    table_name: str,
+    column: Column[Any],
+) -> None:
+    """Generate and execute an ALTER TABLE statement for a column."""
+
+    column_name: str = column.name
+    column_type: str = column.type.compile(engine.dialect)
+
+    default_sql = ""
+
+    if (column.default is not None) and isinstance(column.default, ColumnDefault):
+        default: ColumnDefault = column.default
+        if default.is_scalar:
+            value: Any = default.arg
+
+            if isinstance(column.type, JSON):
+                value = f"'{json.dumps(value)}'"
+            elif isinstance(value, str):
+                value = f"'{value}'"
+
+            default_sql = f"DEFAULT {value}"
+
+        elif default.is_callable:
+            default_sql = f"DEFAULT {default.arg()}"
+
+    nullable_sql: str = "NULL" if column.nullable else "NOT NULL"
+
+    stmt: str = (
+        f"ALTER TABLE {table_name} "
+        f"ADD COLUMN {column_name} {column_type} {default_sql} {nullable_sql}"
+    )
+
+    try:
+        _ = await conn.execute(text(stmt))
+        logger.info("Added column %s to table %s", column_name, table_name)
+    except Exception as e:
+        logger.error("Error adding column %s to table %s: %s", column_name, table_name, e)
+        logger.error("SQL: %s", stmt)
+
