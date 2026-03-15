@@ -1,22 +1,26 @@
 import logging
 from types import NoneType
 import aiohttp
-from typing import Any, overload
+from typing import Any, overload, Callable, cast
+from collections.abc import Awaitable
 from msgspec import Struct, field, json
+from datetime import datetime
+import asyncio
+from utils.logging_fomatter import setup_logging
 
 # Configure logging
 logger = logging.getLogger('middleman')
 json_encode = json.Encoder()
-
+setup_logging()
 
 class Sender(Struct):
     id: str = field(name="Id")
     character_id: str = field(name="CharacterId")
     username: str = field(name="Username")
     display_name: str = field(name="DisplayName")
-    color: str = field(name="Color")
-    platform: str = field(name="Platform")
-    platform_id: str | None = field(name="PlatformId")
+    color: str | None = field(name="Color")
+    platform: str | None = field(name="Platform")
+    platform_id: str = field(name="PlatformId")
     is_broadcaster: bool = field(name="IsBroadcaster")
     is_moderator: bool = field(name="IsModerator")
     is_subscriber: bool = field(name="IsSubscriber")
@@ -24,19 +28,19 @@ class Sender(Struct):
     is_game_administrator: bool = field(name="IsGameAdministrator")
     is_game_moderator: bool = field(name="IsGameModerator")
     sub_tier: int = field(name="SubTier")
-    identifier: str = field(name="Identifier")
+    identifier: str | None = field(name="Identifier")
 
 class RavenBotMessage(Struct):
     identifier: str = field(name="Identifier")
     sender: Sender = field(name="Sender")
     content: str = field(name="Content")
-    correlation_id: str = field(name="CorrelationId")
+    correlation_id: str | None = field(name="CorrelationId")
 
 class Recipient(Struct):
     """Represents the recipient information in a Ravenfall message."""
     user_id: str = field(name="UserId")
     character_id: str = field(name="CharacterId")
-    platform: str = field(name="Platform")
+    platform: str | None = field(name="Platform")
     platform_id: str = field(name="PlatformId")
     platform_user_name: str = field(name="PlatformUserName")
 
@@ -45,10 +49,10 @@ class RavenfallMessage(Struct):
     identifier: str = field(name="Identifier")
     recipient: Recipient = field(name="Recipent")  # this typo is intentional
     format: str = field(name="Format")
-    args: list[str | int | float] = field(name="Args")
+    args: list[str | int | float | dict[str, Any]] = field(name="Args")
     tags: list[str] = field(name="Tags")
-    category: str = field(name="Category")
-    correlation_id: str = field(name="CorrelationId")
+    category: str | None = field(name="Category")
+    correlation_id: str | None = field(name="CorrelationId")
 
 class SendAndWaitResult(Struct):
     success: bool
@@ -95,6 +99,38 @@ class MiddlemanConfig(Struct):
     proxyMappings: list[ProxyMapping]
     messageProcessor: MessageProcessorConfig
 
+# class StreamMessageBase(Struct):
+#     # source: Literal["CLIENT", "SERVER", "API-CLIENT", "API-SERVER"]
+#     client_addr: str = field(name="clientAddr")
+#     server_addr: str = field(name="serverAddr")
+#     connection_id: str = field(name="connectionId")
+#     correlation_id: str = field(name="correlationId")
+#     is_api: bool = field(name="isApi")
+#     timestamp: datetime
+
+class StreamMessageBase(Struct):
+    # source: Literal["CLIENT", "SERVER", "API-CLIENT", "API-SERVER"]
+    client_addr: str
+    server_addr: str
+    connection_id: str
+    correlation_id: str
+    is_api: bool
+    timestamp: datetime
+
+class RavenfallStreamMessage(StreamMessageBase, tag_field="source", tag="SERVER"):
+    message: RavenfallMessage
+
+class RavenBotStreamMessage(StreamMessageBase, tag_field="source", tag="CLIENT"):
+    message: RavenBotMessage
+
+class RavenfallApiStreamMessage(StreamMessageBase, tag_field="source", tag="API-SERVER"):
+    message: RavenfallMessage
+
+class RavenBotApiStreamMessage(StreamMessageBase, tag_field="source", tag="API-CLIENT"):
+    message: RavenBotMessage
+
+StreamMessageType = RavenfallStreamMessage | RavenBotStreamMessage | RavenfallApiStreamMessage | RavenBotApiStreamMessage
+
 class ClientError(BaseException):
     pass
 
@@ -104,6 +140,11 @@ class MiddlemanError(BaseException):
 class MiddlemanClient:
     def __init__(self, base_url: str):
         self.base_url: str = base_url.rstrip("/")
+        self._websocket: aiohttp.ClientWebSocketResponse | None = None
+        self._session: aiohttp.ClientSession | None = None
+        self._message_hooks: list[Callable[[StreamMessageType], Awaitable[None]]] = []
+        self._ws_task: asyncio.Task[None] | None = None
+        self._connected: bool = False
 
     def _raise_on_code(self, code: int, response_data: Any):
         if not isinstance(response_data, dict):
@@ -243,3 +284,125 @@ class MiddlemanClient:
         """
         response = await self._get('/api/config', MiddlemanConfig)
         return response
+
+    def add_message_hook(self, hook: Callable[[StreamMessageType], Awaitable[None]]) -> None:
+        """
+        Add a hook function to receive WebSocket messages.
+        
+        Args:
+            hook: An async function that takes a StreamMessageType instance
+        """
+        self._message_hooks.append(hook)
+
+    def remove_message_hook(self, hook: Callable[[StreamMessageType], Awaitable[None]]) -> None:
+        """
+        Remove a message hook function.
+        
+        Args:
+            hook: The hook function to remove
+        """
+        if hook in self._message_hooks:
+            self._message_hooks.remove(hook)
+
+    async def connect_websocket(self) -> None:
+        """
+        Connect to the middleman's WebSocket stream.
+        """
+        if self._connected:
+            logger.warning("WebSocket is already connected")
+            return
+
+        ws_url = self.base_url.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws'
+        
+        try:
+            self._session = aiohttp.ClientSession()
+            self._websocket = await self._session.ws_connect(ws_url)
+            self._connected = True
+            logger.info(f"Connected to WebSocket at {ws_url}")
+            
+            # Start the message receiving task
+            self._ws_task = asyncio.create_task(self._receive_messages())
+            
+        except Exception as e:
+            logger.error(f"Failed to connect to WebSocket: {e}")
+            if self._session:
+                await self._session.close()
+                self._session = None
+            raise MiddlemanError(f"WebSocket connection failed: {e}")
+
+    async def disconnect_websocket(self) -> None:
+        """
+        Disconnect from the WebSocket stream.
+        """
+        if not self._connected:
+            logger.warning("WebSocket is not connected")
+            return
+
+        self._connected = False
+        
+        if self._ws_task:
+            _ = self._ws_task.cancel()
+            try:
+                await self._ws_task
+            except asyncio.CancelledError:
+                pass
+            self._ws_task = None
+
+        if self._websocket:
+            _ = await self._websocket.close()
+            self._websocket = None
+
+        if self._session:
+            await self._session.close()
+            self._session = None
+            
+        logger.info("Disconnected from WebSocket")
+
+    async def _receive_messages(self) -> None:
+        """
+        Internal method to receive and process messages from the WebSocket.
+        """
+        try:
+            while self._connected and self._websocket:
+                message_data_str: bytes = b''
+                try:
+                    message = await self._websocket.receive()
+                    
+                    if message.type == aiohttp.WSMsgType.TEXT:
+                        message_data_str = cast(bytes, message.data)
+                        parsed_message = cast(StreamMessageType, json.decode(
+                            message_data_str, 
+                            type=StreamMessageType
+                        ))
+                        
+                        # Call all registered hooks
+                        for hook in self._message_hooks:
+                            try:
+                                await hook(parsed_message)
+                            except Exception as e:
+                                logger.error(f"Error in message hook: {e}")
+                    
+                    elif message.type == aiohttp.WSMsgType.ERROR:
+                        logger.error(f"WebSocket error: {self._websocket.exception()}")
+                        break
+                    
+                    elif message.type == aiohttp.WSMsgType.CLOSE:
+                        logger.info("WebSocket connection closed")
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"Error receiving WebSocket message: {e}")
+                    logger.error(f"Message data: {message_data_str}")
+                    # break
+                    
+        except asyncio.CancelledError:
+            logger.info("WebSocket message receiver task cancelled")
+        finally:
+            self._connected = False
+
+    @property
+    def is_websocket_connected(self) -> bool:
+        """
+        Check if the WebSocket is connected.
+        """
+        return self._connected and self._websocket is not None and not self._websocket.closed
