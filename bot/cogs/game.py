@@ -32,7 +32,7 @@ from ravenpy.itemdefs import Items
 from utils.utils import upload_to_bin
 from ..models import RFChannelEvent, GameMultiplier
 from ..message_templates import RavenBotTemplates
-from ..middleman import send_to_server
+from ..ravenfall_middleman import send_to_server
 import logging
 logger = logging.getLogger(__name__)
 import asyncio

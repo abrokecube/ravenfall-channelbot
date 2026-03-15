@@ -1,9 +1,10 @@
 from typing import TYPE_CHECKING, cast, override, Any
 from collections.abc import Collection, Coroutine
 from .ravenfallchannel import RFChannel
-from .models import GameMultiplier, RFChannelEvent, Channel, RavenBotMessage, RavenfallMessage
+from .models import RFChannelEvent, Channel, RavenBotMessage, RavenfallMessage
+from .ravenfall_query import GameMultiplier
 from .multichat_command import send_multichat_command, get_desync_info, get_total_item_count
-from . import middleman
+from . import ravenfall_middleman
 from .messageprocessor import MessageCallback, MessageProcessor, MessageMetadata, ClientInfo, BlockResponse
 if TYPE_CHECKING:
     from twitchAPI.chat import ChatMessage
@@ -134,7 +135,7 @@ class RFChannelManager:
         self.middleman_connected = True
         self.middleman_enabled = True
         self.middleman_processor_server_client_count += 1
-        serverconf, err = await middleman.get_config()
+        serverconf, err = await ravenfall_middleman.get_config()
         if not err:
             if serverconf:
                 self.middleman_power_saving = not serverconf['disableTimeout']

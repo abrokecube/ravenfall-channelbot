@@ -17,7 +17,7 @@ from ..commands.exceptions import CommandError
 
 from ..ravenfallmanager import RFChannelManager
 from twitchAPI.twitch import Twitch
-from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
+from ..ravenfall_middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
 from ..exceptions import OutOfStockError
 from ..models import ScrollType, RFChannelEvent

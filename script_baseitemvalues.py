@@ -1,14 +1,14 @@
+
 import os
 import asyncio
 import json
 from dotenv import load_dotenv
 import ravenpy
-from typing import list, Tuple, Optional
 
 load_dotenv()
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
+    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER", ""), os.getenv("RAVENFALL_API_PASS", ""))
     await rf.login()
     await rf.refresh_items()
 

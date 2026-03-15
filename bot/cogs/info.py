@@ -24,7 +24,7 @@ from ..prometheus import get_prometheus_instant, get_prometheus_series
 from ..ravenfallmanager import RFChannelManager
 from ..models import Village, GameSession, GameMultiplier
 from .. import braille
-from ..ravenfall import Character, Skills
+from ..ravenfall_query import Character, Skills
 
 from ..ravenfallchannel import RFChannel
 from ..models import Player

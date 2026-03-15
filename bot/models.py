@@ -1,12 +1,8 @@
 from __future__ import annotations
-from typing import TypedDict, NamedTuple
+from typing import TypedDict
 from collections.abc import Collection
 from enum import Enum, IntEnum
 from dataclasses import dataclass
-
-class TownBoost(NamedTuple):
-    skill: str
-    multiplier: float
 
 class Channel(TypedDict):
     channel_id: str
@@ -27,114 +23,7 @@ class Channel(TypedDict):
     restart_timeout: int
     town_level_notifications: bool
     command_prefix: str
-
-class GameSession(TypedDict):
-    authenticated: bool
-    sessionstarted: bool
-    twitchusername: str
-    players: int
-    gameversion: str
-    secondssincestart: float
-
-class GameMultiplier(TypedDict):
-    eventname: str
-    active: bool
-    multiplier: float
-    elapsed: float
-    duration: float
-    timeleft: float
-    starttime: str
-    endtime: str
-
-class Boss(TypedDict):
-    health: int
-    maxhealth: int
-    healthpercent: int
-    combatlevel: int
-    
-class Dungeon(TypedDict):
-    started: bool
-    secondsuntilstart: int
-    name: str
-    room: int
-    players: int
-    playersalive: int
-    enemies: int
-    enemiesalive: int
-    elapsed: float
-    count: int
-    boss: Boss
-
-class Raid(TypedDict):
-    started: bool
-    players: int
-    timeleft: float
-    count: int
-    boss: Boss
-    
-class PlayerStat(TypedDict):
-    level: int
-    currentvalue: int
-    maxlevel: int
-    experience: float
-
-class PlayerStats(TypedDict):
-    combatlevel: int
-    attack: PlayerStat
-    defense: PlayerStat
-    strength: PlayerStat
-    health: PlayerStat
-    woodcutting: PlayerStat
-    fishing: PlayerStat
-    mining: PlayerStat
-    crafting: PlayerStat
-    cooking: PlayerStat
-    farming: PlayerStat
-    slayer: PlayerStat
-    magic: PlayerStat
-    ranged: PlayerStat
-    sailing: PlayerStat
-    healing: PlayerStat
-    gathering: PlayerStat
-    alchemy: PlayerStat
-
-class Player(TypedDict):
-    id: str
-    name: str
-    training: str
-    taskargument: str
-    island: str
-    sailing: bool
-    resting: bool
-    restedtime: float
-    inarena: bool
-    induel: bool
-    indungeon: bool
-    inraid: bool
-    coins: int
-    commandidletime: float
-    stats: PlayerStats
-
-class Village(TypedDict):
-    name: str
-    level: int
-    tier: int
-    boost: str
-
-class FerryCaptain(TypedDict):
-    name: str
-    sailinglevel: int
-
-class FerryBoost(TypedDict):
-    isactive: bool
-    remainingtime: float
-
-class Ferry(TypedDict):
-    destination: str
-    boost: FerryBoost
-    players: int
-    captain: FerryCaptain
-
+        
 class Sender(TypedDict):
     Id: str
     CharacterId: str
@@ -210,12 +99,12 @@ class QueuedScrollDC:
     scroll: ScrollType
     reward_id: str | None
     reward_redemption_id: str | None
-    user_id: str
+    user_id: str | None
     credits_spent: int
 
 class QueuedScroll(TypedDict):
     scroll: ScrollType
     reward_id: str | None
     reward_redemption_id: str | None
-    user_id: str
+    user_id: str | None
     credits_spent: int
