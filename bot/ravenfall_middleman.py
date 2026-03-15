@@ -1,15 +1,18 @@
 import logging
 from types import NoneType
 import aiohttp
-from typing import Any, overload, Callable, cast
+from aiohttp import web
+from typing import Any, overload, Callable, cast, Final
 from collections.abc import Awaitable
+import msgspec
 from msgspec import Struct, field, json
 from datetime import datetime
 import asyncio
 from utils.logging_fomatter import setup_logging
+from enum import StrEnum
 
 # Configure logging
-logger = logging.getLogger('middleman')
+logger = logging.getLogger('ravenfall_middleman')
 json_encode = json.Encoder()
 setup_logging()
 
@@ -108,6 +111,12 @@ class MiddlemanConfig(Struct):
 #     is_api: bool = field(name="isApi")
 #     timestamp: datetime
 
+class MessageOrigin(StrEnum):
+    RAVENFALL = "SERVER"
+    RAVENBOT = "CLIENT"
+    API_RAVENFALL = "API-SERVER"
+    API_RAVENBOT = "API-CLIENT"
+
 class StreamMessageBase(Struct):
     # source: Literal["CLIENT", "SERVER", "API-CLIENT", "API-SERVER"]
     client_addr: str
@@ -119,15 +128,17 @@ class StreamMessageBase(Struct):
 
 class RavenfallStreamMessage(StreamMessageBase, tag_field="source", tag="SERVER"):
     message: RavenfallMessage
+    origin: MessageOrigin = MessageOrigin.RAVENFALL
 
 class RavenBotStreamMessage(StreamMessageBase, tag_field="source", tag="CLIENT"):
     message: RavenBotMessage
+    origin: MessageOrigin = MessageOrigin.RAVENBOT
 
-class RavenfallApiStreamMessage(StreamMessageBase, tag_field="source", tag="API-SERVER"):
-    message: RavenfallMessage
+class RavenfallApiStreamMessage(RavenfallStreamMessage, tag="API-SERVER"):
+    origin: MessageOrigin = MessageOrigin.API_RAVENFALL
 
-class RavenBotApiStreamMessage(StreamMessageBase, tag_field="source", tag="API-CLIENT"):
-    message: RavenBotMessage
+class RavenBotApiStreamMessage(RavenBotStreamMessage, tag="API-CLIENT"):
+    origin: MessageOrigin = MessageOrigin.API_RAVENBOT
 
 StreamMessageType = RavenfallStreamMessage | RavenBotStreamMessage | RavenfallApiStreamMessage | RavenBotApiStreamMessage
 
@@ -142,7 +153,8 @@ class MiddlemanClient:
         self.base_url: str = base_url.rstrip("/")
         self._websocket: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
-        self._message_hooks: list[Callable[[StreamMessageType], Awaitable[None]]] = []
+        self._ravenbot_message_hooks: list[Callable[[RavenBotStreamMessage], Awaitable[None]]] = []
+        self._ravenfall_message_hooks: list[Callable[[RavenfallStreamMessage], Awaitable[None]]] = []
         self._ws_task: asyncio.Task[None] | None = None
         self._connected: bool = False
 
@@ -285,24 +297,43 @@ class MiddlemanClient:
         response = await self._get('/api/config', MiddlemanConfig)
         return response
 
-    def add_message_hook(self, hook: Callable[[StreamMessageType], Awaitable[None]]) -> None:
+    def add_ravenfall_message_hook(self, hook: Callable[[RavenfallStreamMessage], Awaitable[None]]) -> None:
         """
         Add a hook function to receive WebSocket messages.
         
         Args:
-            hook: An async function that takes a StreamMessageType instance
+            hook: An async function that takes a RavenfallStreamMessage instance
         """
-        self._message_hooks.append(hook)
+        self._ravenfall_message_hooks.append(hook)
 
-    def remove_message_hook(self, hook: Callable[[StreamMessageType], Awaitable[None]]) -> None:
+    def remove_ravenfall_message_hook(self, hook: Callable[[RavenfallStreamMessage], Awaitable[None]]) -> None:
         """
         Remove a message hook function.
         
         Args:
             hook: The hook function to remove
         """
-        if hook in self._message_hooks:
-            self._message_hooks.remove(hook)
+        if hook in self._ravenfall_message_hooks:
+            self._ravenfall_message_hooks.remove(hook)
+
+    def add_ravenbot_message_hook(self, hook: Callable[[RavenBotStreamMessage], Awaitable[None]]) -> None:
+        """
+        Add a hook function to receive WebSocket messages.
+        
+        Args:
+            hook: An async function that takes a RavenBotStreamMessage instance
+        """
+        self._ravenbot_message_hooks.append(hook)
+
+    def remove_ravenbot_message_hook(self, hook: Callable[[RavenBotStreamMessage], Awaitable[None]]) -> None:
+        """
+        Remove a message hook function.
+        
+        Args:
+            hook: The hook function to remove
+        """
+        if hook in self._ravenbot_message_hooks:
+            self._ravenbot_message_hooks.remove(hook)
 
     async def connect_websocket(self) -> None:
         """
@@ -375,12 +406,18 @@ class MiddlemanClient:
                             type=StreamMessageType
                         ))
                         
-                        # Call all registered hooks
-                        for hook in self._message_hooks:
-                            try:
-                                await hook(parsed_message)
-                            except Exception as e:
-                                logger.error(f"Error in message hook: {e}")
+                        if isinstance(parsed_message, RavenBotStreamMessage):
+                            for hook in self._ravenbot_message_hooks:
+                                try:
+                                    await hook(parsed_message)
+                                except Exception as e:
+                                    logger.error(f"Error in message hook: {e}")
+                        else:
+                            for hook in self._ravenfall_message_hooks:
+                                try:
+                                    await hook(parsed_message)
+                                except Exception as e:
+                                    logger.error(f"Error in message hook: {e}")
                     
                     elif message.type == aiohttp.WSMsgType.ERROR:
                         logger.error(f"WebSocket error: {self._websocket.exception()}")
@@ -406,3 +443,193 @@ class MiddlemanClient:
         Check if the WebSocket is connected.
         """
         return self._connected and self._websocket is not None and not self._websocket.closed
+
+
+class FrozenSender(Sender, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]
+    pass
+
+class FrozenRavenBotMessage(Struct, frozen=True):
+    identifier: str = field(name="Identifier")
+    sender: FrozenSender = field(name="Sender")
+    content: str = field(name="Content")
+    correlation_id: str | None = field(name="CorrelationId")
+
+class FrozenRecipient(Recipient, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]
+    pass
+
+class FrozenRavenfallMessage(Struct, frozen=True):
+    """Represents a message received from Ravenfall."""
+    identifier: str = field(name="Identifier")
+    recipient: FrozenRecipient = field(name="Recipent")  # this typo is intentional
+    format: str = field(name="Format")
+    args: list[str | int | float | dict[str, Any]] = field(name="Args")
+    tags: list[str] = field(name="Tags")
+    category: str | None = field(name="Category")
+    correlation_id: str | None = field(name="CorrelationId")
+
+class ProcessorMessageBase(Struct, kw_only=True):
+    client_addr: Final[str]
+    server_addr: Final[str]
+    connection_id: Final[str]
+    correlation_id: Final[str]
+    is_api: Final[bool]
+    timestamp: Final[datetime]
+    _block: bool = False
+
+    def block(self):
+        self._block = True
+
+class RavenfallProcessorMessage(ProcessorMessageBase):
+    message: RavenfallMessage
+    original_message: Final[FrozenRavenfallMessage]
+
+class RavenBotProcessorMessage(ProcessorMessageBase):
+    message: RavenBotMessage
+    original_message: Final[FrozenRavenBotMessage]
+
+class MessageProcessorServer:
+    def __init__(self, host: str = "0.0.0.0", port: int = 9000):
+        self.host: str = host
+        self.port: int = port
+        self._app: web.Application = web.Application()
+        self._runner: web.AppRunner | None = None
+        self._site: web.TCPSite | None = None
+        self._ravenbot_message_hooks: list[Callable[[RavenBotProcessorMessage], Awaitable[None]]] = []
+        self._ravenfall_message_hooks: list[Callable[[RavenfallProcessorMessage], Awaitable[None]]] = []
+        self._setup_routes()
+
+    def _setup_routes(self) -> None:
+        __ = self._app.router.add_get("/process", self._websocket_handler)
+
+    async def _websocket_handler(self, request: web.Request) -> web.WebSocketResponse:
+        ws = web.WebSocketResponse()
+        __ = await ws.prepare(request)
+        logger.info(f"Message processor client connected from {request.remote}")
+
+        try:
+            async for msg in ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    message_data = msg.data
+                    try:
+                        parsed_message = cast(StreamMessageType, json.decode(
+                            message_data,
+                            type=StreamMessageType
+                        ))
+                        if isinstance(parsed_message, RavenBotStreamMessage):
+                            frozen_message = msgspec.convert(
+                                parsed_message.message,
+                                type=FrozenRavenBotMessage,
+                                from_attributes=True
+                            )
+                            processor_message = RavenBotProcessorMessage(
+                                client_addr=parsed_message.client_addr,
+                                server_addr=parsed_message.server_addr,
+                                connection_id=parsed_message.connection_id,
+                                correlation_id=parsed_message.correlation_id,
+                                is_api=parsed_message.is_api,
+                                timestamp=parsed_message.timestamp,
+                                message=parsed_message.message,
+                                original_message=frozen_message
+                            )
+                            for hook in self._ravenbot_message_hooks:
+                                try:
+                                    await hook(processor_message)
+                                except Exception as e:
+                                    logger.error(f"Error in message processor hook: {e}")
+                        else:
+                            frozen_message = msgspec.convert(
+                                parsed_message.message,
+                                type=FrozenRavenfallMessage,
+                                from_attributes=True
+                            )
+                            processor_message = RavenfallProcessorMessage(
+                                client_addr=parsed_message.client_addr,
+                                server_addr=parsed_message.server_addr,
+                                connection_id=parsed_message.connection_id,
+                                correlation_id=parsed_message.correlation_id,
+                                is_api=parsed_message.is_api,
+                                timestamp=parsed_message.timestamp,
+                                message=parsed_message.message,
+                                original_message=frozen_message
+                            )
+                            for hook in self._ravenfall_message_hooks:
+                                try:
+                                    await hook(processor_message)
+                                except Exception as e:
+                                    logger.error(f"Error in message processor hook: {e}")
+
+                        response = {
+                            "correlation_id": processor_message.correlation_id,
+                            # "correlationId": processor_message.correlation_id,
+                            "block": processor_message._block,  # pyright: ignore[reportPrivateUsage]
+                            "message": processor_message.message
+                        }
+                        await ws.send_bytes(json_encode.encode(response))
+
+                    except Exception as e:
+                        logger.error(f"Error processing message: {e}")
+                        logger.error(f"Message data: {message_data}")
+                        try:
+                            data_dict = json.decode(message_data, type=dict)
+                            correlation_id = data_dict.get("correlation_id", None)
+                            # correlation_id = data_dict.get("correlationId", None)
+                            if correlation_id is not None:
+                                response = {
+                                    "correlation_id": correlation_id,
+                                    # "correlationId": correlation_id,
+                                    "block": False,
+                                    "error": str(e),
+                                    "message": None
+                                }
+                                await ws.send_bytes(json_encode.encode(response))
+                        except Exception as e2:
+                            logger.error(f"Error sending error response: {e2}")
+
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    logger.error(f"WebSocket error: {ws.exception()}")
+                    break
+
+                elif msg.type == aiohttp.WSMsgType.CLOSE:
+                    logger.info("Message processor client disconnected")
+                    break
+
+        except Exception as e:
+            logger.error(f"Error in WebSocket handler: {e}")
+        finally:
+            __ = await ws.close()
+            logger.info("Message processor WebSocket connection closed")
+
+        return ws
+
+    def add_ravenfall_message_hook(self, hook: Callable[[RavenfallProcessorMessage], Awaitable[None]]) -> None:
+        self._ravenfall_message_hooks.append(hook)
+
+    def remove_ravenfall_message_hook(self, hook: Callable[[RavenfallProcessorMessage], Awaitable[None]]) -> None:
+        if hook in self._ravenfall_message_hooks:
+            self._ravenfall_message_hooks.remove(hook)
+
+    def add_ravenbot_message_hook(self, hook: Callable[[RavenBotProcessorMessage], Awaitable[None]]) -> None:
+        self._ravenbot_message_hooks.append(hook)
+
+    def remove_ravenbot_message_hook(self, hook: Callable[[RavenBotProcessorMessage], Awaitable[None]]) -> None:
+        if hook in self._ravenbot_message_hooks:
+            self._ravenbot_message_hooks.remove(hook)
+
+    async def start(self) -> None:
+        self._runner = web.AppRunner(self._app)
+        await self._runner.setup()
+        self._site = web.TCPSite(self._runner, self.host, self.port)
+        await self._site.start()
+        logger.info(f"Message processor server started on ws://{self.host}:{self.port}/process")
+
+    async def stop(self) -> None:
+        if self._site:
+            await self._site.stop()
+            self._site = None
+        if self._runner:
+            await self._runner.cleanup()
+            self._runner = None
+        logger.info("Message processor server stopped")
+
+
+
