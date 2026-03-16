@@ -1,5 +1,4 @@
 import ravenpy
-from .models import *
 from datetime import datetime, timezone, timedelta
 from ravenpy import Skills, Islands
 import aiohttp

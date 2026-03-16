@@ -1,3 +1,5 @@
+# pyright: basic
+
 import asyncio
 import ravenpy
 from ravenpy import Item, Effects

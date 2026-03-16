@@ -23,7 +23,7 @@ from ..exceptions import OutOfStockError
 from ..models import ScrollType, RFChannelEvent
 from bot.multichat_command import get_char_coins, get_char_items, track_item_use, track_coin_use
 from bot.message_templates import RavenBotTemplates
-from bot.commands.services import DatabaseService
+from bot.core.services import DatabaseService
 from bot.messageprocessor import RavenfallMessage
 import logging
 import json

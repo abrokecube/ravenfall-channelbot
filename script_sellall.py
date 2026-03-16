@@ -1,3 +1,4 @@
+# pyright: basic
 import os
 import math
 import asyncio

@@ -139,7 +139,7 @@ class TwitchAPIEventSource(BaseEventSource):
         from twitchAPI.chat import Chat
         from twitchAPI.type import ChatEvent
         from twitchAPI.eventsub.websocket import EventSubWebsocket
-        from bot.commands.services import DatabaseService
+        from bot.core.services import DatabaseService
         from twitchAPI import helper
         
         self.db_service = event_manager.global_context.require_service(DatabaseService)

@@ -39,7 +39,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from bot.commands.event_manager import EventManager
+    from bot.core.event_manager import EventManager
 
 import re
 

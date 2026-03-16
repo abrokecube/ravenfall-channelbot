@@ -4,7 +4,6 @@ import aiohttp
 from aiohttp import web
 from typing import Any, overload, Callable, cast, Final
 from collections.abc import Awaitable
-import msgspec
 from msgspec import Struct, field, json
 from datetime import datetime
 import asyncio
@@ -102,29 +101,19 @@ class MiddlemanConfig(Struct):
     proxyMappings: list[ProxyMapping]
     messageProcessor: MessageProcessorConfig
 
-# class StreamMessageBase(Struct):
-#     # source: Literal["CLIENT", "SERVER", "API-CLIENT", "API-SERVER"]
-#     client_addr: str = field(name="clientAddr")
-#     server_addr: str = field(name="serverAddr")
-#     connection_id: str = field(name="connectionId")
-#     correlation_id: str = field(name="correlationId")
-#     is_api: bool = field(name="isApi")
-#     timestamp: datetime
+class StreamMessageBase(Struct):
+    client_addr: str = field(name="clientAddr")
+    server_addr: str = field(name="serverAddr")
+    connection_id: str = field(name="connectionId")
+    correlation_id: str = field(name="correlationId")
+    is_api: bool = field(name="isApi")
+    timestamp: datetime
 
 class MessageOrigin(StrEnum):
     RAVENFALL = "SERVER"
     RAVENBOT = "CLIENT"
     API_RAVENFALL = "API-SERVER"
     API_RAVENBOT = "API-CLIENT"
-
-class StreamMessageBase(Struct):
-    # source: Literal["CLIENT", "SERVER", "API-CLIENT", "API-SERVER"]
-    client_addr: str
-    server_addr: str
-    connection_id: str
-    correlation_id: str
-    is_api: bool
-    timestamp: datetime
 
 class RavenfallStreamMessage(StreamMessageBase, tag_field="source", tag="SERVER"):
     message: RavenfallMessage
@@ -468,24 +457,34 @@ class FrozenRavenfallMessage(Struct, frozen=True):
     correlation_id: str | None = field(name="CorrelationId")
 
 class ProcessorMessageBase(Struct, kw_only=True):
-    client_addr: Final[str]
-    server_addr: Final[str]
-    connection_id: Final[str]
-    correlation_id: Final[str]
-    is_api: Final[bool]
+    client_addr: Final[str] = field(name="clientAddr")
+    server_addr: Final[str] = field(name="serverAddr")
+    connection_id: Final[str] = field(name="connectionId")
+    correlation_id: Final[str] = field(name="correlationId")
+    is_api: Final[bool] = field(name="isApi")
     timestamp: Final[datetime]
     _block: bool = False
 
     def block(self):
         self._block = True
 
-class RavenfallProcessorMessage(ProcessorMessageBase):
+class RavenfallProcessorMessage(ProcessorMessageBase, tag_field="source", tag="SERVER"):
     message: RavenfallMessage
-    original_message: Final[FrozenRavenfallMessage]
+    original_message: Final[FrozenRavenfallMessage] = field(name="originalMessage")
+    origin: Final[MessageOrigin] = MessageOrigin.RAVENFALL
 
-class RavenBotProcessorMessage(ProcessorMessageBase):
+class RavenBotProcessorMessage(ProcessorMessageBase, tag_field="source", tag="CLIENT"):
     message: RavenBotMessage
-    original_message: Final[FrozenRavenBotMessage]
+    original_message: Final[FrozenRavenBotMessage] = field(name="originalMessage")
+    origin: Final[MessageOrigin] = MessageOrigin.RAVENBOT
+
+class RavenfallApiProcessorMessage(RavenfallProcessorMessage, tag_field="source", tag="API-SERVER"):
+    origin: Final[MessageOrigin] = MessageOrigin.RAVENFALL  # pyright: ignore[reportGeneralTypeIssues]
+
+class RavenBotApiProcessorMessage(RavenBotProcessorMessage, tag_field="source", tag="API-CLIENT"):
+    origin: Final[MessageOrigin] = MessageOrigin.RAVENBOT  # pyright: ignore[reportGeneralTypeIssues]
+
+ProcessorMessageType = RavenfallProcessorMessage | RavenBotProcessorMessage | RavenfallApiProcessorMessage | RavenBotApiProcessorMessage
 
 class MessageProcessorServer:
     def __init__(self, host: str = "0.0.0.0", port: int = 9000):
@@ -509,60 +508,29 @@ class MessageProcessorServer:
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
-                    message_data = msg.data
+                    message_data = msg.data  # pyright: ignore[reportAny]
                     try:
-                        parsed_message = cast(StreamMessageType, json.decode(
-                            message_data,
-                            type=StreamMessageType
+                        parsed_message = cast(ProcessorMessageType, json.decode(
+                            message_data,  # pyright: ignore[reportAny]
+                            type=ProcessorMessageType
                         ))
-                        if isinstance(parsed_message, RavenBotStreamMessage):
-                            frozen_message = msgspec.convert(
-                                parsed_message.message,
-                                type=FrozenRavenBotMessage,
-                                from_attributes=True
-                            )
-                            processor_message = RavenBotProcessorMessage(
-                                client_addr=parsed_message.client_addr,
-                                server_addr=parsed_message.server_addr,
-                                connection_id=parsed_message.connection_id,
-                                correlation_id=parsed_message.correlation_id,
-                                is_api=parsed_message.is_api,
-                                timestamp=parsed_message.timestamp,
-                                message=parsed_message.message,
-                                original_message=frozen_message
-                            )
+                        if isinstance(parsed_message, RavenBotProcessorMessage):
                             for hook in self._ravenbot_message_hooks:
                                 try:
-                                    await hook(processor_message)
+                                    await hook(parsed_message)
                                 except Exception as e:
                                     logger.error(f"Error in message processor hook: {e}")
                         else:
-                            frozen_message = msgspec.convert(
-                                parsed_message.message,
-                                type=FrozenRavenfallMessage,
-                                from_attributes=True
-                            )
-                            processor_message = RavenfallProcessorMessage(
-                                client_addr=parsed_message.client_addr,
-                                server_addr=parsed_message.server_addr,
-                                connection_id=parsed_message.connection_id,
-                                correlation_id=parsed_message.correlation_id,
-                                is_api=parsed_message.is_api,
-                                timestamp=parsed_message.timestamp,
-                                message=parsed_message.message,
-                                original_message=frozen_message
-                            )
                             for hook in self._ravenfall_message_hooks:
                                 try:
-                                    await hook(processor_message)
+                                    await hook(parsed_message)
                                 except Exception as e:
                                     logger.error(f"Error in message processor hook: {e}")
 
                         response = {
-                            "correlation_id": processor_message.correlation_id,
-                            # "correlationId": processor_message.correlation_id,
-                            "block": processor_message._block,  # pyright: ignore[reportPrivateUsage]
-                            "message": processor_message.message
+                            "correlationId": parsed_message.correlation_id,
+                            "block": parsed_message._block,  # pyright: ignore[reportPrivateUsage]
+                            "message": parsed_message.message
                         }
                         await ws.send_bytes(json_encode.encode(response))
 
@@ -571,12 +539,10 @@ class MessageProcessorServer:
                         logger.error(f"Message data: {message_data}")
                         try:
                             data_dict = json.decode(message_data, type=dict)
-                            correlation_id = data_dict.get("correlation_id", None)
-                            # correlation_id = data_dict.get("correlationId", None)
+                            correlation_id = data_dict.get("correlationId", None)
                             if correlation_id is not None:
                                 response = {
-                                    "correlation_id": correlation_id,
-                                    # "correlationId": correlation_id,
+                                    "correlationId": correlation_id,
                                     "block": False,
                                     "error": str(e),
                                     "message": None
@@ -630,6 +596,3 @@ class MessageProcessorServer:
             await self._runner.cleanup()
             self._runner = None
         logger.info("Message processor server stopped")
-
-
-

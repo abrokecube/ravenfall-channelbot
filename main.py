@@ -11,11 +11,11 @@ import logging
 
 import ravenpy
 
-from bot.commands.global_context import GlobalContext
-from bot.commands.event_sources import TwitchAPIEventSource
-from bot.commands.event_manager import EventManager
-from bot.commands.dispatchers import CommandDispatcher, TwitchRedeemDispatcher
-from bot.commands.events import MessageEvent
+from bot.core.global_context import GlobalContext
+from bot.core.event_sources import TwitchAPIEventSource
+from bot.core.event_manager import EventManager
+from bot.core.dispatchers import CommandDispatcher, TwitchRedeemDispatcher
+from bot.core.events import MessageEvent
 
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager

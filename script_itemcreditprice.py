@@ -1,3 +1,4 @@
+# pyright: basic
 import os
 import asyncio
 import json
