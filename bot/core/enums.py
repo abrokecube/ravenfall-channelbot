@@ -27,7 +27,7 @@ class BucketType(IntEnum):
     GUILD = auto()
     GLOBAL = auto()
 
-class ParameterKind(IntEnum):
+class ParameterType(IntEnum):
     POSITIONAL_ONLY = auto()
     POSITIONAL_OR_KEYWORD = auto()
     VAR_POSITIONAL = auto()
@@ -43,13 +43,13 @@ class UserRole(StrEnum):
     def level(self) -> int:
         return USER_ROLE_HIERARCHY_VALUES.get(self, 0)
 
-USER_ROLE_HIERARCHY = (
+USER_ROLE_HIERARCHY: tuple[UserRole | tuple[UserRole, ...], ...] = (
     UserRole.BOT_ADMINISTRATOR,
     UserRole.ADMINISTRATOR,
     UserRole.MODERATOR,
     UserRole.USER
 )
-USER_ROLE_HIERARCHY_VALUES: dict[UserRole, int] = {}
+USER_ROLE_HIERARCHY_VALUES: dict[str, int] = {}
 for i, u in enumerate(reversed(USER_ROLE_HIERARCHY)):
     if isinstance(u, tuple):
         for su in u:
@@ -61,3 +61,4 @@ class TwitchCustomRewardRedemptionStatus(Enum):
     UNFULFILLED = 'UNFULFILLED'
     FULFILLED = 'FULFILLED'
     CANCELED = 'CANCELED'
+    

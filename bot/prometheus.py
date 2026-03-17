@@ -11,7 +11,7 @@ class PrometheusMetric(TypedDict, extra_items=str):
     instance: str
 
 class PrometheusResult(TypedDict):
-    result: list[Any]
+    result: list[Any]  # pyright: ignore[reportExplicitAny]
     resultType: str
 
 class PrometheusResponse(TypedDict):

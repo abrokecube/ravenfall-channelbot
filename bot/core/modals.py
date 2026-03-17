@@ -1,12 +1,15 @@
+# pyright: reportAny=false, reportExplicitAny=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, NamedTuple, Any, override
-from .enums import EventCategory, EventSource, ParameterKind
+from .enums import EventCategory, EventSource, ParameterType
 import inspect
 from dataclasses import dataclass, field
-from utils.utils import strjoin
+from utils.strutils import strjoin
+import re
 
 if TYPE_CHECKING:
     from .listeners import CommandListener
+    from .converters import BaseConverter
 
 class MetaFilter(NamedTuple):
     categories: list[EventCategory]
@@ -24,25 +27,32 @@ class Parameter:
     display_name: str
     raw_annotation: Any
     annotation: Any
+    converter: BaseConverter | type
+    kind: ParameterType
     default: Any = inspect.Parameter.empty
     aliases: list[str] = field(default_factory=list)
     greedy: bool = False
     hidden: bool = False
-    kind: ParameterKind = ParameterKind.POSITIONAL_OR_KEYWORD
-    converter: Any | None = None
     is_optional: bool = False
     type_title: str | None = None
     type_short_help: str | None = None
     type_help: str | None = None
     help: str | None = None
-    command: "CommandListener | None" = None
-    regex: str | None = None
+    command: CommandListener | None = None
+    regex: str | re.Pattern[str] | None = None
+    _regex_compiled: re.Pattern[str] | None = None
+
+    def __post_init__(self):
+        if isinstance(self.regex, str):
+            self._regex_compiled = re.compile(self.regex)
+        elif isinstance(self.regex, re.Pattern):
+            self._regex_compiled = self.regex
     
     def get_parameter_display(self, invoked_name: str | None = None) -> str:
         param_str = invoked_name or self.display_name
         if self.type_title:
             param_str += f": {self.type_title}"
-        if self.kind == ParameterKind.KEYWORD_ONLY:
+        if self.kind == ParameterType.KEYWORD_ONLY:
             if len(param_str) == 1:
                 param_str = f"(-{param_str})"
             else:
@@ -69,9 +79,9 @@ class Parameter:
         help_text = self.help
         type_help = self.type_short_help or self.type_help or None            
         if not help_text:
-            if self.kind == ParameterKind.VAR_KEYWORD:
+            if self.kind == ParameterType.VAR_KEYWORD:
                 help_text = "Command accepts any named argument"
-            elif self.kind == ParameterKind.VAR_POSITIONAL:
+            elif self.kind == ParameterType.VAR_POSITIONAL:
                 help_text = "Command accepts any additional arguments"
             elif type_help:
                 help_text = type_help
@@ -83,7 +93,7 @@ class Parameter:
             properties.append("optional")
         else:
             properties.append("required")
-        if self.kind == ParameterKind.KEYWORD_ONLY:
+        if self.kind == ParameterType.KEYWORD_ONLY:
             properties.append("keyword-only")
         out_str.append(f"{', '.join(properties)}".capitalize())
         if self.default != inspect.Parameter.empty and self.default != False:

@@ -1,3 +1,4 @@
+# pyright: reportAny=false, reportExplicitAny=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ class Cog:
                 )
                 continue
             init_params = getattr(attr, "_listener_init_params", {})
-            listener_cls = getattr(attr, "_listener_class", None) or d._func_listener
+            listener_cls = getattr(attr, "_listener_class", None) or d._func_listener  # pyright: ignore[reportPrivateUsage]
             new_listener = listener_cls(attr, **init_params)
             self.listeners.append(new_listener)
             new_listener.cog = self
@@ -42,7 +43,4 @@ class Cog:
     async def stop(self):
         """Called when cog is being removed"""
         pass
-    
-if __name__ == '__main__':
-    c = Cog()
-    
+        

@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     from .command_parser import CommandArgs
 
 @dataclass(kw_only=True)
-class CommandEvent:
+class CommandEvent(BaseEvent):
     message: MessageEvent
     prefix: str
     invoked_with: str
@@ -120,7 +120,7 @@ class TwitchMessageEvent(MessageEvent):
 @dataclass(kw_only=True)
 class TwitchRedemptionEvent(TwitchMessageEvent):
     categories: Collection[EventCategory] = (EventCategory.Generic,)
-    data: ChannelPointsCustomRewardRedemptionData
+    data: ChannelPointsCustomRewardRedemptionData  # pyright: ignore[reportIncompatibleVariableOverride]
     redeem_name: str
     redeem_id: str
     redeem_cost: str
