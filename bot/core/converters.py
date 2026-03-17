@@ -1,28 +1,29 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, NamedTuple, Any, list
+from typing import TYPE_CHECKING, Any, override
 if TYPE_CHECKING:
-    from ..commands.global_context import GlobalContext
+    from .global_context import GlobalContext
 from .events import CommandEvent, TwitchMessageEvent
 
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item as RFItem
     
-from utils.utils import strjoin
+from utils.strutils import strjoin
 from .exceptions import ArgumentConversionError, ListenerError
+import re
+import glob 
 
 class BaseConverter:
     """To display a custom error message when conversion fails,
     raise command_exceptions.ArgumentConversionError in the convert method."""
-    title: str = None
-    short_help: str = None
-    help: str = None
+    title: str = ""
+    short_help: str = ""
+    help: str = ""
 
-    @staticmethod
-    async def convert(g_ctx: GlobalContext, event: CommandEvent, arg: str) -> Any:
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> Any:  # pyright: ignore[reportUnusedParameter, reportAny, reportExplicitAny]
         raise NotImplementedError
 
 class Choice(BaseConverter):
-    def __init__(self, definition: list[str] | dict[str, list[str]], title=None, case_sensitive=False):
+    def __init__(self, definition: list[str] | dict[str, list[str]], title: str | None = None, case_sensitive: bool = False):
         super().__init__()
         string_map = {}
         choices = []
@@ -32,7 +33,7 @@ class Choice(BaseConverter):
             else:
                 string_map = {x.lower(): x for x in definition}
             choices = definition
-        elif isinstance(definition, dict):
+        else:
             choices = list(definition.keys())
             if case_sensitive:
                 string_map = {x: x for x in choices}
@@ -42,59 +43,55 @@ class Choice(BaseConverter):
                 string_map = {x.lower(): x for x in choices}
                 for k, v in definition.items():
                     string_map.update({x.lower(): k for x in v})
-        else:
-            raise TypeError()
         
         if title:
-            self.title = title
+            self.title: str = title
         else:
             self.title = f"Choice ({len(choices)})"
-        self.short_help = f"One of the following: {strjoin(', ', *choices, before_end='or ', include_conn_char_before_end=True)}"
-        self.help = self.short_help
-        self.case_sensitive = case_sensitive
-        self.string_map = string_map
-        
-    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> str:
+        self.short_help: str = f"One of the following: {strjoin(', ', *choices, before_end='or ', include_conn_char_before_end=True)}"
+        self.help: str = self.short_help
+        self.case_sensitive: bool = case_sensitive
+        self.string_map: dict[str, str] = string_map
+    
+    @override
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> str:
         if not arg in self.string_map:
             raise ArgumentConversionError(f"Choice '{arg}' is not a valid option. Valid choices: {self.short_help}")
         return self.string_map[arg]
 
-import re
-import glob 
-
 class Regex(BaseConverter):
-    title = "Regex"
-    short_help = "A python regular expression"
-    help = "A python regular expression"
+    title: str = "Regex"
+    short_help: str = "A python regular expression"
+    help: str = "A python regular expression"
     
-    @staticmethod
-    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> re.Pattern:
+    @override
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> re.Pattern[str]:
         try:
             return re.compile(arg)
-        except Exception as e:
+        except Exception:
             raise ArgumentConversionError("Couldn't compile regex")
 
 class Glob(BaseConverter):
-    title = "Glob"
-    short_help = "A glob pattern"
-    help = "A glob pattern"
+    title: str = "Glob"
+    short_help: str = "A glob pattern"
+    help: str = "A glob pattern"
     
-    @staticmethod
-    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> re.Pattern:
+    @override
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> re.Pattern[str]:
         try:
             return re.compile(glob.translate(arg))
-        except Exception as e:
+        except Exception:
             raise ArgumentConversionError("Couldn't compile glob expression")
         
 class RangeInt(BaseConverter):
     def __init__(self, min_: int | None, max_: int | None):
         super().__init__()
-        self.min = min_
-        self.max = max_
+        self.min: int | None = min_
+        self.max: int | None = max_
         if min_ is not None and max_ is not None:
-            self.title = f"Number ({min_}-{max_})"
-            self.short_help = f"An integer in the range {min_} to {max_}"
-            self.help = f"A whole number in the range {min_} to {max_}"
+            self.title: str = f"Number ({min_}-{max_})"
+            self.short_help: str = f"An integer in the range {min_} to {max_}"
+            self.help: str = f"A whole number in the range {min_} to {max_}"
         elif min_ is None and max_ is not None:
             self.title = f"Number ({max_}-)"
             self.short_help = f"An integer less than or equal to {max_}"
@@ -105,11 +102,12 @@ class RangeInt(BaseConverter):
             self.help = f"A whole number greater than or equal to {min_}"
         else:
             raise ValueError("min_ or max_ need to be a number")
-        
-    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> int:
+    
+    @override
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> int:
         try:
             number = int(arg)
-        except ValueError as e:
+        except ValueError:
             raise ArgumentConversionError("Expected an integer")
         
         if self.max is not None and number > self.max:
@@ -122,12 +120,12 @@ class RangeInt(BaseConverter):
 class RangeFloat(BaseConverter):
     def __init__(self, min_: float | None, max_: float | None):
         super().__init__()
-        self.min = min_
-        self.max = max_
+        self.min: float | None = min_
+        self.max: float | None = max_
         if min_ is not None and max_ is not None:
-            self.title = f"Decimal ({min_}-{max_})"
-            self.short_help = f"A decimal number in the range {min_} to {max_}"
-            self.help = f"A decimal number in the range {min_} to {max_}"
+            self.title: str = f"Decimal ({min_}-{max_})"
+            self.short_help: str = f"A decimal number in the range {min_} to {max_}"
+            self.help: str = f"A decimal number in the range {min_} to {max_}"
         elif min_ is None and max_ is not None:
             self.title = f"Decimal ({max_}+)"
             self.short_help = f"A decimal number less than or equal to {max_}"
@@ -139,10 +137,11 @@ class RangeFloat(BaseConverter):
         else:
             raise ValueError("min_ or max_ need to be a number")
         
-    async def convert(self, g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> float:
+    @override
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> float:
         try:
-            number = int(arg)
-        except ValueError as e:
+            number = float(arg)
+        except ValueError:
             raise ArgumentConversionError("Expected a number")
         
         if self.max is not None and number > self.max:
@@ -161,15 +160,15 @@ class GameNotConnected(ListenerError):
         super().__init__(message)
 
 class RFChannelConverter(BaseConverter):
-    title = "RFChannel"
-    short_help = "A Ravenfall channel name"
-    help = "A Ravenfall channel monitored by the bot."
+    title: str = "RFChannel"
+    short_help: str = "A Ravenfall channel name"
+    help: str = "A Ravenfall channel monitored by the bot."
 
-    @staticmethod
-    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> RFChannel:
+    @override
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> RFChannel:
         if arg == 'this':
-            if isinstance(ctx.message, TwitchMessageEvent):
-                query = ctx.message.room_name
+            if isinstance(event.message, TwitchMessageEvent):
+                query = event.message.room_name
             else:
                 raise ArgumentConversionError("A channel must be specified.")
         else:
@@ -189,12 +188,12 @@ class RFChannelConverter(BaseConverter):
 
 
 class RFItemConverter(BaseConverter):
-    title = "Item"
-    short_help = "An item name"
-    help = "An item name"
+    title: str = "Item"
+    short_help: str = "An item name"
+    help: str = "An item name"
     
-    @staticmethod
-    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str) -> RFItem:
+    @override
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> RFItem:
         item_search_results = ravenpy.search_item(arg, limit=1)
         if not item_search_results:
             raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
@@ -204,26 +203,26 @@ class RFItemConverter(BaseConverter):
 
 tw_username_re = re.compile(r"^@?[a-zA-Z0-9][\w]{2,24}$")
 tw_username_f_re = re.compile(r"^@?[a-zA-Z0-9/|][\w/|]{2,24}$")
-def is_twitch_username(text: str, pre_filter=False):
+def is_twitch_username(text: str, pre_filter: bool = False):
     if pre_filter:
         return bool(tw_username_f_re.match(text))
     else:
         return bool(tw_username_re.match(text))
 
 class TwitchUsername(BaseConverter):
-    title = "Twitch username"
-    short_help = "A valid Twitch username"
-    help = "A valid Twitch username"
+    title: str = "Twitch username"
+    short_help: str = "A valid Twitch username"
+    help: str = "A valid Twitch username"
     
-    @staticmethod
-    async def convert(g_ctx: GlobalContext, ctx: CommandEvent, arg: str):
+    @override
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str):
         is_valid = is_twitch_username(arg)
         if not is_valid:
             raise ArgumentConversionError("Not a valid username.")
         return arg.lstrip("@").replace("\U000e0000", '').replace("|","").replace("/","")
 
 class _RFSkill(Choice):
-    def __init__(self, case_sensitive=False):
+    def __init__(self, case_sensitive: bool = False):
         definition = {
             "Attack": ['atk', 'att'],
             "Defense": ['def'],

@@ -6,7 +6,7 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
 
-from .enums import EventCategory, EventSource, UserRole, TwitchCustomRewardRedemptionStatus
+from .enums import EventCategory, EventSource, UserRole, TwitchCustomRewardRedemptionStatus, BucketType
 from .modals import ChatRoomCapabilities
 from twitchAPI.type import TwitchResourceNotFound
 from twitchAPI.type import CustomRewardRedemptionStatus
@@ -17,6 +17,13 @@ class BaseEvent:
     categories: Collection[EventCategory]
     platform: EventSource = EventSource.Unknown
     data: Any
+
+    async def get_bucket_key(self, bucket_type: BucketType) -> str:  # pyright: ignore[reportUnusedParameter]
+        """Return a string key used for rate limiting/bucketing.
+        
+        Subclasses should override this to provide meaningful bucket keys.
+        """
+        return ""
 
 @dataclass(kw_only=True)
 class MessageEvent(BaseEvent):

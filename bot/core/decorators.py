@@ -1,5 +1,5 @@
-from typing import list, Callable, Type
-from .enums import EventCategory, EventSource, Dispatcher, BucketType
+from typing import Callable
+from .enums import EventCategory, Dispatcher, BucketType
 from .modals import MetaFilter
 from .cooldown import Cooldown
 from .converters import BaseConverter

@@ -1,3 +1,6 @@
+from typing import Any
+
+
 from .modals import Flag
 import re
 
@@ -18,7 +21,7 @@ class CommandArgs:
             return
         
         in_quotes = None  # None if not in quotes, otherwise the quote char (' or ")
-        current = []
+        current: list[str] = []
         args: list[str] = []
         i = 0
         n = len(self.text)
@@ -65,9 +68,9 @@ class CommandArgs:
             is_quoted = arg[0] == '"' and arg[-1] == '"'
             if RE_FLAG.match(arg):
                 flag_name: str = arg.lstrip('-')
-                flag_value: str | None = True
+                flag_value: str | None = None
                 if has_delimiter:
-                    if delimiter_char in flag_name:
+                    if delimiter_char and delimiter_char in flag_name:
                         flag_name, flag_value = flag_name.split(delimiter_char, 1)
                 if isinstance(flag_value, str) and flag_value[0] == '"' and flag_value[-1] == '"':
                     flag_value = flag_value[1:-1]
@@ -94,11 +97,11 @@ class CommandArgs:
             grouped.append(' '.join(current_group))
         self.grouped_args = grouped
 
-    def get_flag(self, name: str | list[str], case_sensitive: bool = False, default: str | None = None) -> Flag | None:
-        names = name if isinstance(name, list) else [name]
-        for flag in self.flags:
-            if case_sensitive and flag.name in names:
-                return flag
-            elif not case_sensitive and flag.name.lower() in [n.lower() for n in names]:
-                return flag
-        return Flag(name, default)
+    # def get_flag(self, name: str | list[str], case_sensitive: bool = False, default: str | None = None) -> Flag | None:
+    #     names = name if isinstance(name, list) else [name]
+    #     for flag in self.flags:
+    #         if case_sensitive and flag.name in names:
+    #             return flag
+    #         elif not case_sensitive and flag.name.lower() in [n.lower() for n in names]:
+    #             return flag
+    #     return Flag(name, default)

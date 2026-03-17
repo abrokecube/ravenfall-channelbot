@@ -1,25 +1,25 @@
 from __future__ import annotations
-from typing import Union, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 from .enums import BucketType
 
 if TYPE_CHECKING:
     from .events import BaseEvent
 
 class Cooldown:
-    def __init__(self, rate: int, per: float, bucket: Union[BucketType, list[BucketType]] = BucketType.USER):
-        self.rate = rate
-        self.per = per
+    def __init__(self, rate: int, per: float, bucket: BucketType | list[BucketType] = BucketType.USER):
+        self.rate: int = rate
+        self.per: float = per
 
         if not isinstance(bucket, list):
             bucket = [bucket]
-        self.bucket = bucket
-        self._windows: dict[Any, list[float]] = {}
+        self.bucket: list[BucketType] = bucket
+        self._windows: dict[str, list[float]] = {}
     
     def _get_bucket_key(self, event: BaseEvent) -> str:
         if hasattr(event, "get_bucket_key"):
-            keys = [str(event.get_bucket_key(t)) for t in self.bucket]
+            keys: list[str] = [str(event.get_bucket_key(t)) for t in self.bucket]
             return ":".join(keys)
-        return None
+        return ""
 
     def get_retry_after(self, event: BaseEvent) -> float:
         import time
