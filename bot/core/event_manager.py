@@ -1,12 +1,14 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Callable, Awaitable, Type, Optional, Sequence, ParamSpec
-from types import MethodType
+from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Coroutine, Collection
 from collections import defaultdict
+from types import MethodType
 import logging
 if TYPE_CHECKING:
     from .event_sources import BaseEventSource
     from .dispatchers import BaseDispatcher
     from .cog import Cog
+    from .types import EventProcessor
     
 from .events import BaseEvent, MessageEvent
 from .global_context import GlobalContext
@@ -14,32 +16,31 @@ from .enums import Dispatcher, UserRole
 from .dispatchers import SimpleDispatcher, CommandDispatcher
 from .listeners import BaseListener
 from .modals import ChatRoomCapabilities, CommandResponse, CommandExecutionResult
-from . import middlewares
+from . import event_processors
 import asyncio
 import dataclasses
+import importlib
+import sys
 
 LOGGER = logging.getLogger(__name__)
 
-MiddlewareFunc = Callable[[GlobalContext, BaseEvent], BaseEvent | Awaitable[BaseEvent]]
 
 class EventManager:
     def __init__(self, global_context: GlobalContext):
         self.event_sources: list[BaseEventSource] = []
-        self.event_middlewares: dict[type[BaseEvent], list[MiddlewareFunc]] = defaultdict(list)
+        self.event_processors: dict[type[BaseEvent], list[EventProcessor]] = defaultdict(list)
         self.dispatchers: dict[Dispatcher, BaseDispatcher] = {
             Dispatcher.Generic: SimpleDispatcher()
         }
         self.cogs: dict[str, Cog] = {}
         self.global_context: GlobalContext = global_context
         
-        self.add_event_middleware(MessageEvent, middlewares.filter_message_event_text)
+        self.add_event_processor(MessageEvent, cast(EventProcessor, event_processors.filter_message_event_text))
         
     async def add_event_source(self, source: BaseEventSource):
         source.event_processor_callback = self.process_event
         self.event_sources.append(source)
-        setup_func = getattr(source, "setup", None)
-        if callable(setup_func):
-            await setup_func(self)
+        await source.setup(self)
         
     async def remove_event_source(self, source: BaseEventSource):
         try:
@@ -48,40 +49,28 @@ class EventManager:
             raise ValueError("Source not found")
         self.event_sources[source_idx].event_processor_callback = None
         removed_source = self.event_sources.pop(source_idx)
-        teardown_func = getattr(removed_source, "teardown", None)
-        if callable(teardown_func):
-            await teardown_func()
+        await removed_source.teardown()
         
     async def add_dispatcher(self, dispatcher: BaseDispatcher):
-        if dispatcher._id in self.dispatchers:
-            raise ValueError(f"Dispatcher with id '{dispatcher._id}' has already been added!")
-        self.dispatchers[dispatcher._id] = dispatcher
-        setup_func = getattr(dispatcher, "setup", None)
-        if callable(setup_func):
-            await setup_func(self)
+        if dispatcher.id in self.dispatchers:
+            raise ValueError(f"Dispatcher with id '{dispatcher.id}' has already been added!")
+        self.dispatchers[dispatcher.id] = dispatcher
+        await dispatcher.setup(self)
         
     async def remove_dispatcher(self, dispatcher: BaseDispatcher):
-        if not dispatcher._id in self.dispatchers:
-            raise ValueError(f"Dispatcher with id '{dispatcher._id}' was not found!")
-        removed_dispatcher = self.dispatchers.pop(dispatcher._id)
-        teardown_func = getattr(removed_dispatcher, "teardown", None)
-        if callable(teardown_func):
-            await teardown_func()
+        if not dispatcher.id in self.dispatchers:
+            raise ValueError(f"Dispatcher with id '{dispatcher.id}' was not found!")
+        removed_dispatcher = self.dispatchers.pop(dispatcher.id)
+        await removed_dispatcher.teardown()
     
-    def add_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
-        if isinstance(listener, BaseListener):
-            expd_dispatcher = listener.expected_dispatcher
-        else:
-            expd_dispatcher = getattr(listener, "_listener_dispatcher", Dispatcher.Generic)
+    def add_listener(self, listener: BaseListener):
+        expd_dispatcher = listener.expected_dispatcher
         if not expd_dispatcher in self.dispatchers:
             raise ValueError(f"No dispatcher exists for listener {listener}")
         self.dispatchers[expd_dispatcher].add_listener(listener)
     
-    def remove_listener(self, listener: BaseListener | Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]):
-        if isinstance(listener, BaseListener):
-            expd_dispatcher = listener.expected_dispatcher
-        else:
-            expd_dispatcher = getattr(listener, "_listener_dispatcher", Dispatcher.Generic)
+    def remove_listener(self, listener: BaseListener):
+        expd_dispatcher = listener.expected_dispatcher
         if not expd_dispatcher in self.dispatchers:
             raise ValueError(f"No dispatcher exists for listener {listener}")
         self.dispatchers[expd_dispatcher].remove_listener(listener)
@@ -105,7 +94,7 @@ class EventManager:
             cog_name = cog_cls.__name__
             
         if cog_name not in self.cogs:
-            raise ValueError(f"Cog {cog_cls.__name__} is not loaded.")
+            raise ValueError(f"Cog {cog_name} is not loaded.")
                 
         cog_instance = self.cogs[cog_name]
         
@@ -120,12 +109,9 @@ class EventManager:
         except Exception as e:
             LOGGER.error(f"Error occured while stopping cog: {e}", exc_info=True)
                    
-        del self.cogs[cog_cls.__name__]
+        del self.cogs[cog_name]
         
-    async def reload_cog(self, cog_cls: Type[Cog]) -> Type[Cog]:
-        import importlib
-        import sys
-        
+    async def reload_cog(self, cog_cls: type[Cog]) -> type[Cog]:       
         module_name = cog_cls.__module__
         cog_name = cog_cls.__name__
         
@@ -141,19 +127,21 @@ class EventManager:
         else:
             module = importlib.import_module(module_name)
             
-        new_cog_cls = getattr(module, cog_name)
+        new_cog_cls = getattr(module, cog_name)  # pyright: ignore[reportAny]
+        if not isinstance(new_cog_cls, type) or not issubclass(new_cog_cls, Cog):
+            raise ValueError(f"Module {module_name} does not contain a Cog class.")
         await self.add_cog(new_cog_cls)
         
         return new_cog_cls
 
-    def add_event_middleware(self, target_event_cls: Type[BaseEvent], func: MiddlewareFunc):
-        self.event_middlewares[target_event_cls].append(func)
+    def add_event_processor(self, target_event_cls: type[BaseEvent], func: EventProcessor):
+        self.event_processors[target_event_cls].append(func)
     
-    def remove_event_middleware(self, func: MiddlewareFunc, target_event_cls: Type[BaseEvent] | None = None):
+    def remove_event_processor(self, func: EventProcessor, target_event_cls: type[BaseEvent] | None = None):
         if target_event_cls:
-            self.event_middlewares[target_event_cls].remove(func)
+            self.event_processors[target_event_cls].remove(func)
             return
-        for t, m in self.event_middlewares.items():
+        for t, m in self.event_processors.items():
             for mware in m:
                 if mware == func:
                     m.remove(func)
@@ -161,14 +149,14 @@ class EventManager:
 
     async def process_event(self, event: BaseEvent):
         LOGGER.debug(f"Processing event {event}")
-        matching_middlewares: list[MiddlewareFunc] = []
-        for t, m in self.event_middlewares.items():
+        matching_processors: list[EventProcessor] = []
+        for t, m in self.event_processors.items():
             if isinstance(event, t):
-                matching_middlewares.extend(m)
+                matching_processors.extend(m)
                 
-        for m in matching_middlewares:
+        for processor in matching_processors:
             event = dataclasses.replace(event)
-            result = m(self.global_context, event)
+            result = processor(self.global_context, event)
             if asyncio.iscoroutine(result):
                 result = await result
             if isinstance(result, BaseEvent):
@@ -189,15 +177,17 @@ class EventManager:
                 LOGGER.error(f"Exception while sending event to dispatcher: {e}", exc_info=True)
     
     async def stop_all(self):
-        tasks = []
+        tasks: list[Coroutine[None, None, None]] = []
         for cog in self.cogs.keys():
             tasks.append(self.remove_cog(cog))
-        await asyncio.gather(*tasks, return_exceptions=True)
+        __ = await asyncio.gather(*tasks, return_exceptions=True)
         
     async def execute_text(
         self, text: str, event: MessageEvent | None = None,
-        roles: Sequence[UserRole] = [UserRole.USER], capture_responses: bool = False
+        roles: Collection[UserRole] | None = None, capture_responses: bool = False
         ) -> CommandExecutionResult:
+        if not roles:
+            roles = [UserRole.USER]
         if not Dispatcher.Command in self.dispatchers:
             raise Exception("The event manager doesn't have a Command dispatcher registered.")
         if event:
@@ -209,21 +199,24 @@ class EventManager:
                 author_login="bot",
                 author_name="bot",
                 author_id="bot",
-                author_roles=roles,
+                author_roles=set(roles),
                 room_name="bot",
                 room_id="bot",
                 room_capabilities=ChatRoomCapabilities(False, 999999),
                 bot_user_login="bot",
                 bot_user_name="bot",
-                bot_user_id="bot"
+                bot_user_id="bot",
+                data={}
             )
         responses: list[CommandResponse] = []
         if capture_responses:
-            async def message(self, text: str, *args, **kwargs):
+            async def message(_: MessageEvent, text: str, *args: Any, **kwargs: Any):
                 responses.append(CommandResponse(text, args, kwargs))
             event.reply = MethodType(message, event)
             event.send = MethodType(message, event)
-        d: CommandDispatcher = self.dispatchers[Dispatcher.Command]
+        d: BaseDispatcher = self.dispatchers[Dispatcher.Command]
+        if not isinstance(d, CommandDispatcher):
+            raise TypeError(f"Expected CommandDispatcher, got {type(d)}")
         command_exception = None
         try:
             result = await d.dispatch(

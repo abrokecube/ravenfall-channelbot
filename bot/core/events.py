@@ -15,7 +15,7 @@ from utils.strutils import split_by_utf16_bytes
 @dataclass(kw_only=True)
 class BaseEvent:
     categories: Collection[EventCategory]
-    platform: EventSource = EventSource.Unknown
+    platform: EventSource = EventSource.Any
     data: Any
 
     async def get_bucket_key(self, bucket_type: BucketType) -> str:  # pyright: ignore[reportUnusedParameter]
@@ -28,7 +28,7 @@ class BaseEvent:
 @dataclass(kw_only=True)
 class MessageEvent(BaseEvent):
     categories: Collection[EventCategory] = (EventCategory.Message, EventCategory.Generic)
-    platform: EventSource = EventSource.Unknown
+    platform: EventSource = EventSource.Any
     text: str
     id: str
     author_login: str
@@ -62,12 +62,16 @@ if TYPE_CHECKING:
 
 @dataclass(kw_only=True)
 class CommandEvent(BaseEvent):
+    categories: Collection[EventCategory] = (EventCategory.Command,)
+    platform: EventSource = EventSource.Any
+    data: Any | None = None
     message: MessageEvent
     prefix: str
     invoked_with: str
     parsed_args: CommandArgs
     parameters_text: str
     specified_parameters: set[str] = field(default_factory=set)
+
 
 if TYPE_CHECKING:
     from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData

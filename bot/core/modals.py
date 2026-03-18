@@ -1,6 +1,7 @@
 # pyright: reportAny=false, reportExplicitAny=false
 from __future__ import annotations
 from typing import TYPE_CHECKING, NamedTuple, Any, override
+from collections.abc import Collection
 from .enums import EventCategory, EventSource, ParameterType
 import inspect
 from dataclasses import dataclass, field
@@ -12,9 +13,9 @@ if TYPE_CHECKING:
     from .converters import BaseConverter
 
 class MetaFilter(NamedTuple):
-    categories: list[EventCategory]
+    categories: Collection[EventCategory]
     invert_categories: bool  # only include the listed categories
-    platforms: list[EventSource]
+    platforms: Collection[EventSource]
     invert_platforms: bool  # only include the listed platforms
 
 class ChatRoomCapabilities(NamedTuple):

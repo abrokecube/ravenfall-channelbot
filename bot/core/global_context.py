@@ -1,14 +1,11 @@
 # pyright: reportAny=false, reportExplicitAny=false
 from __future__ import annotations
-from dataclasses import dataclass, field
 from typing import Any
 
-@dataclass
 class GlobalContext:
-    # 2. Add a private dictionary to hold modular services/data
-    _services: dict[type[Any], Any] = field(default_factory=dict)   
+    def __init__(self):
+        self._services: dict[type[Any], Any] = {}
         
-    # 3. Add methods to register and retrieve services by their type
     def register_service[T](self, service_type: type[T], instance: T) -> None:
         """Registers a service for cross-module sharing."""
         self._services[service_type] = instance

@@ -1,15 +1,24 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, override
+from typing import TYPE_CHECKING, override
 if TYPE_CHECKING:
     from .events import CommandEvent
     from .global_context import GlobalContext
+    from .types import CheckFuncType
 from .events import BaseEvent
 from .enums import UserRole, EventSource
+from inspect import isawaitable
 
 class BaseCheck:
-    """To display a custom error message when conversion fails,
-    raise command_exceptions.CheckError in the convert method."""
+    """
+    Base class for all checks.
+    
+    Checks are used to validate whether a user is allowed to execute a command.
+    They can return True to indicate success, or a string with an error message.
+    
+    To display a custom error message when conversion fails,
+    raise command_exceptions.CheckError in the convert method.
+    """
     title: str | None = None
     short_help: str | None = None
     help: str | None = None
@@ -18,18 +27,20 @@ class BaseCheck:
     async def check(self, g_ctx: GlobalContext, event: BaseEvent) -> bool | str:  # pyright: ignore[reportUnusedParameter]
         raise NotImplementedError
 
-
-CheckFunc = Callable[[BaseEvent], bool]
 class FunctionCheck(BaseCheck):
-    def __init__(self, predicate: CheckFunc):
-        self.predicate: CheckFunc = predicate
+    """Check using a function that returns bool or str (failure message)."""
+    
+    def __init__(self, predicate: CheckFuncType):
+        self.predicate: CheckFuncType = predicate
         self.title: str | None = predicate.__name__.replace('_', ' ').title()
         self.help: str | None = getattr(predicate, '__doc__', '')
     
     @override
     async def check(self, g_ctx: GlobalContext, event: BaseEvent):
-        return self.predicate(event)
-
+        result = self.predicate(event)
+        if isawaitable(result):
+            result = await result
+        return result
 
 class HasRole(BaseCheck):
     """Check if the user has at least one of the specified roles."""

@@ -9,7 +9,7 @@ class EventCategory(IntEnum):
     RavenfallMessage = auto()
 
 class EventSource(IntEnum):
-    Unknown = auto()
+    Any = auto()
     Twitch = auto()
     RavenBot = auto()
     Ravenfall = auto()

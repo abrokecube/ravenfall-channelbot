@@ -1,3 +1,6 @@
+from bot.models import Channel
+
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Awaitable, Set
 if TYPE_CHECKING:
@@ -13,8 +16,8 @@ LOGGER = logging.getLogger(__name__)
 class BaseEventSource:
     def __init__(self):
         # self.event_manager: EventManager = None
-        self.event_platform: EventSource = EventSource.Unknown
-        self.event_processor_callback: Callable[[BaseEvent], None | Awaitable[None]] | None = None
+        self.event_platform: EventSource = EventSource.Any
+        self.event_processor_callback: Callable[[BaseEvent], Awaitable[None]] | None = None
         
     async def setup(self, event_manager: EventManager):
         pass
@@ -24,7 +27,7 @@ class BaseEventSource:
         
     async def send_event(self, event: BaseEvent):
         if self.event_processor_callback:
-            await self.event_processor_callback(event)
+            _ = await self.event_processor_callback(event)
 
 if TYPE_CHECKING:
     from twitchAPI.chat import Chat, ChatMessage, ChatUser
@@ -60,12 +63,12 @@ class TwitchUtils:
 class TwitchAPIEventSource(BaseEventSource):
     def __init__(self, channels: list[Channel], bot_admin_uids: set[str], bot_user_id: str, twitch_app_id: str, twitch_app_secret: str):
         super().__init__()
-        self.event_platform = EventSource.Twitch
-        self.channels = channels
-        self.bot_admin_uids = bot_admin_uids
-        self.bot_user_id = bot_user_id
-        self.twitch_app_id = twitch_app_id
-        self.twitch_app_secret = twitch_app_secret
+        self.event_platform: EventSource = EventSource.Twitch
+        self.channels: list[Channel] = channels
+        self.bot_admin_uids: set[str] = bot_admin_uids
+        self.bot_user_id: str = bot_user_id
+        self.twitch_app_id: str = twitch_app_id
+        self.twitch_app_secret: str = twitch_app_secret
 
         self.chat: Chat | None = None
         self.bot_twitch: Twitch | None = None

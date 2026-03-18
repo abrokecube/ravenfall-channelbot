@@ -1,7 +1,7 @@
 # pyright: reportAny=false, reportExplicitAny=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, get_origin, get_args, Any, override, get_type_hints
+from typing import TYPE_CHECKING, Callable, get_origin, get_args, Any, override, get_type_hints, Concatenate
 from collections.abc import Awaitable
 from types import UnionType
 from uuid import uuid4
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .cooldown import Cooldown
     from .checks import BaseCheck
     from .cog import Cog
+    from .types import VerifierType
 from .global_context import GlobalContext
 from .converters import BaseConverter
 from .modals import MetaFilter, Parameter, BUILTIN_TYPE_DOCS, Flag
@@ -39,7 +40,7 @@ LOGGER = logging.getLogger(__name__)
 
 class BaseListener:
     def __init__(self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], cog: Cog | None = None):
-        self._id: str = f"{func.__name__}_{uuid4()}"
+        self.id: str = f"{func.__name__}_{uuid4()}"
         self.expected_dispatcher: Dispatcher = Dispatcher.Base
         self.func: Callable[..., None | Awaitable[None]] = func
         self.cog: Cog | None = None
@@ -125,13 +126,13 @@ class CommandListener(GenericListener):
         aliases: list[str] | None = None, 
         cooldown: Cooldown | None = None, 
         checks: list[BaseCheck] | None = None,
-        verifier: Callable[[BaseEvent, ], bool] | None = None, 
+        verifier: VerifierType | None = None, 
         hidden: bool = False, 
         help: str | None = None, short_help: str | None = None, title: str | None = None,
         expected_dispatcher: Dispatcher = Dispatcher.Command
         ):
         super().__init__(func, cog, cooldown, expected_dispatcher)
-        self.verifier: Callable[[BaseEvent], bool | Awaitable[bool]] | None = getattr(func, '_listener_command_verifier', verifier)
+        self.verifier: VerifierType | None = getattr(func, '_listener_command_verifier', verifier)
         
         self.checks: list[BaseCheck] = []
         if checks:
@@ -305,11 +306,11 @@ class CommandListener(GenericListener):
                 raise e
                 # raise (f"Check raised an error: {e}")
 
-    async def _run_verification(self, event: CommandEvent, *args: Any, **kwargs: Any):
+    async def _run_verification(self, g_ctx: GlobalContext, event: CommandEvent, *args: Any, **kwargs: Any):
         # Run verifier if present
         if self.verifier:
             try:
-                verify_result = self.verifier(event, *args, **kwargs)
+                verify_result = self.verifier(g_ctx, event, *args, **kwargs)
                 if asyncio.iscoroutine(verify_result):
                     verify_result = await verify_result
                 
@@ -522,7 +523,7 @@ class CommandListener(GenericListener):
             specified_params, parsed_kwargs = await self._parse_arguments(event, global_ctx)
             event.specified_parameters = specified_params
             kwargs = {**kwargs, **parsed_kwargs}
-        await self._run_verification(event, *args, **kwargs)
+        await self._run_verification(global_ctx, event, *args, **kwargs)
         await self._run_func(global_ctx, event, *args, **kwargs)
 
     def get_usage_text(self, prefix: str, invoked_name: str | None = None):
