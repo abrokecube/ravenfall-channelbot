@@ -9,7 +9,7 @@ import aiohttp
 import logging
 import asyncio
 from msgspec import Struct, field, json
-from typing import Any, cast
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ class RavenfallMultichatClient:
             try:
                 async with session.get(f"{self.base_url}/{url_suffix.lstrip('/')}") as response:
                     text = await response.text()
-                    response_data = cast(GenericApiResponse[T] | GenericApiErrorResponse, json.decode(text, type=GenericApiResponse[T] | GenericApiErrorResponse))
+                    response_data = json.decode(text, type=GenericApiResponse[T] | GenericApiErrorResponse)
                     if isinstance(response_data, GenericApiErrorResponse):
                         logger.error(f"Failed to fetch: {response_data.error}")
                         raise ServerError(f"Failed to fetch: {response_data.error}")
@@ -140,7 +140,7 @@ class RavenfallMultichatClient:
             try:
                 async with session.post(f"{self.base_url}/{url_suffix.lstrip('/')}", json=payload) as response:
                     text = await response.text()
-                    response_data = cast(GenericApiPostResponse | GenericApiErrorResponse, json.decode(text, type=GenericApiPostResponse | GenericApiErrorResponse))
+                    response_data = json.decode(text, type=GenericApiPostResponse | GenericApiErrorResponse)
                     if isinstance(response_data, GenericApiErrorResponse):
                         logger.error(f"Failed to post: {response_data.error}")
                         raise ServerError(f"Failed to post: {response_data.error}")

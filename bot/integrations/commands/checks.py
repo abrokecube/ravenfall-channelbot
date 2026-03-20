@@ -1,5 +1,5 @@
-from bot.core.components import BaseCheck, GlobalContext, BaseEvent
-from . import UserRole, MessageEvent
+from bot.core.components import GlobalContext, BaseEvent
+from bot.integrations.chat_messages import BaseCheck, UserRole, MessageEvent
 from typing import override
 
 class HasRole(BaseCheck):

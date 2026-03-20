@@ -1,34 +1,17 @@
 from bot.core.exceptions import ListenerError
-from bot.core.components import Cooldown
+from . import Parameter
+from .enums import ParameterType
+from typing import Any
 
 class CommandError(ListenerError):
     """Raised when a non-fatal error occurs in a command"""
     def __init__(self, message: str = "Command error"):
         super().__init__(message)
         
-class CheckFailure(ListenerError):
-    """Raised when a listener check fails."""
-    def __init__(self, message: str = "Check failed"):
-        super().__init__(message)
-
 class VerificationFailure(ListenerError):
     """Raised when a listener verification fails."""
     def __init__(self, message: str = "Verification failed"):
         super().__init__(message)
-
-class ListenerOnCooldown(ListenerError):
-    """Raised when a listener is on cooldown."""
-    def __init__(self, cooldown: Cooldown, retry_after: float):
-        self.retry_after: float = retry_after
-        self.cooldown: Cooldown = cooldown
-        super().__init__(f"Listener is on cooldown. Try again in {retry_after:.2f}s")
-
-class ListenerRegistrationError(ListenerError):
-    """Raised when there's an error registering a listener or redeem."""
-    def __init__(self, name: str, item_type: str = "Listener"):
-        self.display_name: str = name
-        self.item_type: str = item_type
-        super().__init__(f"{item_type} '{name}' already exists")
 
 class ArgumentError(ListenerError):
     """Base exception for argument parsing errors."""

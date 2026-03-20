@@ -1,12 +1,41 @@
 from __future__ import annotations
-from typing import Any, override, NamedTuple
-from bot.core.components import GlobalContext, BaseEvent
-from bot.integrations.chat_messages import MessageEvent
-from bot.core.enums import EventCategory, EventSource
+from typing import Any, override, NamedTuple, Callable, get_type_hints, get_origin, get_args
+from bot.core.components import GlobalContext, BaseEvent, Cog, BaseDispatcher, BaseListener, Cooldown
+from bot.core.enums import EventCategory, EventSource, Dispatcher
+from bot.core.listeners import GenericListener
+from bot.core.exceptions import ListenerError, ListenerOnCooldown
+from bot.integrations.chat_messages.exceptions import (
+    CheckFailure
+)
+from .exceptions import (
+    CommandError,
+    VerificationFailure,
+    ArgumentError,
+    UnknownFlagError,
+    DuplicateParameterError,
+    MissingRequiredArgumentError,
+    UnknownArgumentError,
+    ArgumentConversionError,
+    EmptyFlagValueError
+)
+from bot.integrations.chat_messages import MessageEvent, BaseCheck, BucketType
+from .types import VerifierType
+from types import UnionType
 from .enums import ParameterType
 from dataclasses import dataclass, field
-from collections.abc import Collection
+from collections.abc import Collection, Awaitable
 import re
+import inspect
+from utils.strutils import strjoin
+from utils.format_time import format_seconds, TimeSize
+
+import docstring_parser
+import logging
+import asyncio
+
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BaseConverter:
@@ -166,7 +195,7 @@ class Parameter:
     def get_help_text(self, invoked_name: str | None = None) -> str:
         param_aliases = self.aliases[:]
         
-        if invoked_name in param_aliases:
+        if invoked_name and invoked_name in param_aliases:
             param_aliases.remove(invoked_name)
             param_aliases.append(self.name)
         if self.display_name != self.name and invoked_name == self.name:
@@ -196,7 +225,7 @@ class Parameter:
         if self.kind == ParameterType.KEYWORD_ONLY:
             properties.append("keyword-only")
         out_str.append(f"{', '.join(properties)}".capitalize())
-        if self.default != inspect.Parameter.empty and self.default != False:
+        if self.default != inspect.Parameter.empty and self.default:
             out_str.append(f"Default: {self.default}")
         if type_help:
             out_str.append(f"Expects {self.type_title}: {type_help}")
@@ -266,7 +295,7 @@ class CommandListener(GenericListener):
             self.checks.extend(checks)
         self.checks.extend(getattr(func, '_listener_command_checks', []))
         
-        self.name: str = name or func.__name__
+        self.name: str = name or func.__name__  # ty:ignore[unresolved-attribute]
         self.aliases: list[str] = []
         if aliases:
             self.aliases.extend(aliases)
@@ -378,7 +407,7 @@ class CommandListener(GenericListener):
                 display_name=display_name,
                 raw_annotation=raw_annotation,
                 annotation=annotation,
-                converter=converter,
+                converter=converter,  # pyrefly: ignore[bad-argument-type]
                 is_optional=is_optional,
                 default=param.default,
                 aliases=param_aliases,
@@ -394,7 +423,7 @@ class CommandListener(GenericListener):
             is_subclass = isinstance(converter, type) and issubclass(converter, BaseConverter)
             is_instance = isinstance(converter, BaseConverter)
             if is_subclass or is_instance:
-                p.type_title = getattr(converter, 'title', None) or converter.__name__
+                p.type_title = getattr(converter, 'title', None) or converter.__name__  # pyrefly: ignore[missing-attribute]
                 p.type_short_help = getattr(converter, 'short_help', None)
                 p.type_help = getattr(converter, 'help', None) or converter.__doc__
             elif converter in BUILTIN_TYPE_DOCS:
@@ -687,7 +716,7 @@ class CommandListener(GenericListener):
             restrictions = f"Limited to: {', '.join(restriction_list).capitalize()}"
         cooldowns = ""
         if self.cooldown:
-            cd_buckets = ', '.join([b.name.lower() for b in self.cooldown.bucket])
+            cd_buckets = ', '.join([b.lower() for b in self.cooldown.bucket])
             if self.cooldown.rate == 1:
                 cooldowns = f"Cooldown: {self.cooldown.per}s ({cd_buckets})"
             else:
@@ -709,9 +738,6 @@ class CommandDispatchResult(NamedTuple):
     listener: "CommandListener | None"
     error: Exception | None
 
-
-
-
 @dataclass
 class Flag:
     name: str
@@ -720,4 +746,199 @@ class Flag:
     @override
     def __repr__(self) -> str:
         return f"Flag({self.name}, {self.value})"
+
+class CommandDispatcher(BaseDispatcher):
+    def __init__(self, case_sensitive: bool = False):
+        super().__init__()
+        self._id: Dispatcher = Dispatcher.Command
+        self._func_listener: type[BaseListener] = CommandListener
+        self.categories: set[EventCategory] = set([EventCategory.Message])
+        self.listeners: dict[str, BaseListener] = {}
+        self.listeners_and_aliases: dict[str, CommandListener] = {}
+        self.error_cooldown: Cooldown = Cooldown(1, 5, [BucketType.USER, BucketType.CHANNEL])
+        self.case_sensitive: bool = case_sensitive
+
+    @override
+    def add_listener(self, listener: BaseListener):
+        if listener.expected_dispatcher != self._id:
+            raise ValueError(f"Listener {listener} cannot be assigned to this dispatcher!")
+        
+        if isinstance(listener, CommandListener):
+            name: str = listener.id
+            aliases: list[str] = listener.aliases.copy()
+            cog_name: str = listener.cog.__qualname__
+        else:
+            raise ValueError(f"Listener {listener} cannot be assigned to this dispatcher!")
+
+        if not self.case_sensitive:
+            name = name.lower()
+            aliases = [a.lower() for a in aliases]
+        
+        if name in self.listeners:
+            other = self.listeners[name]
+            raise ValueError(f"Command name '{name}' ({cog_name}) is taken by command '{other.id}' ({other.cog.__qualname__})")
+        if name in self.listeners_and_aliases:
+            other = self.listeners_and_aliases[name]
+            raise ValueError(f"Command name '{name}' ({cog_name}) is taken by an alias of '{other.id}' ({other.cog.__qualname__})")
+        for alias in aliases:
+            if alias in self.listeners:
+                other = self.listeners[alias]
+                raise ValueError(f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken by command '{other.id}' ({other.cog.__qualname__})")
+            if alias in self.listeners_and_aliases:
+                other = self.listeners_and_aliases[alias]
+                raise ValueError(f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken by an alias of '{other.id}' ({other.cog.__qualname__})")
+            
+        self.listeners[name] = listener
+        self.listeners_and_aliases[name] = listener
+        for alias in aliases:
+            self.listeners_and_aliases[alias] = listener
     
+    @override
+    def remove_listener(self, listener: BaseListener):
+        name: str = ""
+        aliases: list[str] = []
+        if isinstance(listener, CommandListener):
+            name = listener.id
+            aliases = listener.aliases.copy()
+        else:
+            name = listener.id
+            aliases = []
+            
+        if not self.case_sensitive:
+            name = name.lower()
+            aliases = [a.lower() for a in aliases]
+            
+        if not name in self.listeners:
+            raise ValueError(f"Dispatcher '{self.__qualname__}' does not have a listener with the name '{listener.id}'")
+            
+        __ = self.listeners.pop(name)
+        __ = self.listeners_and_aliases.pop(name)
+        for alias in aliases:
+            __ = self.listeners_and_aliases.pop(alias)
+
+    def _find_command(self, text: str) -> tuple[str, str]:
+        norm_text = text
+        if not self.case_sensitive:
+            norm_text = text.lower()
+        for cmd in sorted(self.listeners_and_aliases.keys(), key=len, reverse=True):
+            if norm_text == cmd or norm_text.startswith(cmd + ' '):
+                return cmd, text[len(cmd):].strip()
+        return "", text
+
+    @override
+    async def dispatch(
+        self, global_context: GlobalContext, event: BaseEvent, 
+        *args: Any,
+        respond_to_errors: bool = True, no_prefix: bool = False,
+        **kwargs: Any,
+        ) -> CommandDispatchResult:
+        if isinstance(event, MessageEvent):            
+            if no_prefix:
+                prefix = ""
+            else:
+                prefix = await self.get_prefix(global_context, event)
+            used_prefix = ""
+            if isinstance(prefix, list):
+                for p in prefix:
+                    if event.text.startswith(p):
+                        used_prefix = p
+                        break
+                else:
+                    return CommandDispatchResult(None, None)
+            else:
+                if not event.text.startswith(prefix):
+                    return CommandDispatchResult(None, None)
+                used_prefix = prefix
+            content = event.text[len(used_prefix):]
+            
+            command_name, remaining_text = self._find_command(content)
+            if not command_name or command_name not in self.listeners_and_aliases:
+                return CommandDispatchResult(None, None)
+
+            command = self.listeners_and_aliases[command_name]
+
+            new_event = CommandEvent(
+                message=event,
+                prefix=used_prefix,
+                invoked_with=content[:len(command_name)],
+                parameters_text=remaining_text,
+                parsed_args=CommandArgs(remaining_text)
+            )
+        elif isinstance(event, CommandEvent):
+            new_event = event
+            command_name, remaining_text = self._find_command(event.message.text[len(event.prefix):])
+            command = self.listeners_and_aliases.get(command_name)
+            if not command:
+                return CommandDispatchResult(None, None)
+        else:
+            raise ValueError(f"Command dispatcher does not support event type '{event.__class__.__name__}'")
+
+        try:
+            await command.invoke(global_context, new_event)
+            return CommandDispatchResult(command, None)
+        except Exception as error:
+            if not isinstance(error, ListenerError):
+                LOGGER.error(f"Error occurred during command invocation: {error}", exc_info=True)
+            else:
+                LOGGER.error(f"Error handled during command invocation: {error}")
+            if not respond_to_errors:
+                raise error
+            await self.on_invoke_error(global_context, new_event, error, command=command)
+            return CommandDispatchResult(command, error)
+
+    @override    
+    async def on_invoke_error(self, g_ctx: GlobalContext, event: BaseEvent, error: Exception, *args: Any, command: CommandListener | None = None, **kwargs: Any):
+        if command is None:
+            return
+        if not isinstance(event, CommandEvent):
+            return
+        usage_text = command.get_usage_text(event.prefix, event.invoked_with)
+        if isinstance(error, ListenerOnCooldown):
+            if error.cooldown.per >= 60 and self.error_cooldown.get_retry_after(event) <= 0:
+                await event.message.reply(f"❌ Listener '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}.")
+                self.error_cooldown.update_rate_limit(event)
+        elif isinstance(error, MissingRequiredArgumentError):
+            await event.message.reply(f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}")
+        elif isinstance(error, EmptyFlagValueError):
+            if not error.parameter:
+                logging.error("EmptyFlagValueError does not have an assigned parameter")
+                await event.message.reply("❌ Expected a value for an argument")
+            else:
+                await event.message.reply(f"❌ Expected a value for argument '{error.parameter.name}' (type: {error.parameter.type_title})")
+        elif isinstance(error, ArgumentConversionError):
+            if not error.parameter:
+                out_text = "❌ Error parsing an argument"
+                logging.error("ArgumentConversionError does not have an assigned parameter")
+            else:
+                if not error.parameter.name in event.specified_parameters:
+                    if error.message:
+                        out_text = f"❌ Error parsing argument '{error.parameter.name}' (default value): {error.message}"
+                    else:
+                        out_text = f"❌ '{error.value}' ({error.parameter.name} default value) is not a valid {error.parameter.type_title}"
+                else:
+                    if error.message:
+                        out_text = f"❌ Error parsing argument '{error.parameter.name}': {error.message}"
+                    else:
+                        out_text = f"❌ '{error.value}' ({error.parameter.name}) is not a valid {error.parameter.type_title}"
+            await event.message.reply(out_text)
+        elif isinstance(error, UnknownArgumentError):
+            await event.message.reply(f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}")
+        elif isinstance(error, UnknownFlagError):
+            await event.message.reply(f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}")
+        elif isinstance(error, CheckFailure):
+            if self.error_cooldown.get_retry_after(event) <= 0:
+                await event.message.reply(f"❌ {error.message}")
+                self.error_cooldown.update_rate_limit(event)
+        elif isinstance(error, VerificationFailure):
+            await event.message.reply(f"❌ {error.message}")
+        elif isinstance(error, ArgumentError):
+            await event.message.reply(f"❌ {error.message}")
+        elif isinstance(error, CommandError):
+            await event.message.reply(f"❌ {error.message}")
+        elif isinstance(error, ListenerError):
+            await event.message.reply(f"❌ {error.message}")
+        else:
+            await event.message.reply(f"❌ An unknown error occurred")
+                
+    async def get_prefix(self, global_context: GlobalContext, event: MessageEvent) -> str:  # pyright: ignore[reportUnusedParameter]
+        return "!"

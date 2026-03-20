@@ -138,7 +138,7 @@ class MiddlemanError(BaseException):
     pass
 
 class MiddlemanClient:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str) -> None:
         self.base_url: str = base_url.rstrip("/")
         self._websocket: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
@@ -147,7 +147,7 @@ class MiddlemanClient:
         self._ws_task: asyncio.Task[None] | None = None
         self._connected: bool = False
 
-    def _raise_on_code(self, code: int, response_data: Any):
+    def _raise_on_code(self, code: int, response_data: Any) -> None:
         if not isinstance(response_data, dict):
             raise ClientError(f"Invalid response from middleman API: {response_data}")
         if code == 400:
@@ -164,9 +164,9 @@ class MiddlemanClient:
     @overload
     async def _get(self, endpoint: str, out_type: None = None) -> None: ...
     @overload
-    async def _get[T](self, endpoint: str, out_type: type[T] = NoneType) -> T: ...
+    async def _get[T](self, endpoint: str, out_type: type[T] = None) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
 
-    async def _get[T](self, endpoint: str, out_type: type[T] | None = NoneType) -> T | None:
+    async def _get[T](self, endpoint: str, out_type: type[T] | None = None) -> T | None:
         headers = {'Content-Type': 'application/json'}
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{self.base_url}/{endpoint}", headers=headers) as response:
@@ -181,9 +181,9 @@ class MiddlemanClient:
     @overload
     async def _post(self, endpoint: str, out_type: None = None, data: dict[str, Any] | None = None) -> None: ...
     @overload
-    async def _post[T](self, endpoint: str, out_type: type[T] = NoneType, data: dict[str, Any] | None = None) -> T: ...
+    async def _post[T](self, endpoint: str, out_type: type[T] = None, data: dict[str, Any] | None = None) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
     
-    async def _post[T](self, endpoint: str, out_type: type[T] | None = NoneType, data: dict[str, Any] | None = None) -> T | None:
+    async def _post[T](self, endpoint: str, out_type: type[T] | None = None, data: dict[str, Any] | None = None) -> T | None:
         headers = {'Content-Type': 'application/json'}
         async with aiohttp.ClientSession() as session:
             encoded = json_encode.encode(data)
@@ -390,10 +390,10 @@ class MiddlemanClient:
                     
                     if message.type == aiohttp.WSMsgType.TEXT:
                         message_data_str = cast(bytes, message.data)
-                        parsed_message = cast(StreamMessageType, json.decode(
+                        parsed_message = json.decode(
                             message_data_str, 
                             type=StreamMessageType
-                        ))
+                        )
                         
                         if isinstance(parsed_message, RavenBotStreamMessage):
                             for hook in self._ravenbot_message_hooks:
@@ -434,7 +434,7 @@ class MiddlemanClient:
         return self._connected and self._websocket is not None and not self._websocket.closed
 
 
-class FrozenSender(Sender, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]
+class FrozenSender(Sender, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[invalid-frozen-dataclass-subclass]
     pass
 
 class FrozenRavenBotMessage(Struct, frozen=True):
@@ -443,7 +443,7 @@ class FrozenRavenBotMessage(Struct, frozen=True):
     content: str = field(name="Content")
     correlation_id: str | None = field(name="CorrelationId")
 
-class FrozenRecipient(Recipient, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]
+class FrozenRecipient(Recipient, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[invalid-frozen-dataclass-subclass]
     pass
 
 class FrozenRavenfallMessage(Struct, frozen=True):
@@ -479,10 +479,10 @@ class RavenBotProcessorMessage(ProcessorMessageBase, tag_field="source", tag="CL
     origin: Final[MessageOrigin] = MessageOrigin.RAVENBOT
 
 class RavenfallApiProcessorMessage(RavenfallProcessorMessage, tag_field="source", tag="API-SERVER"):
-    origin: Final[MessageOrigin] = MessageOrigin.RAVENFALL  # pyright: ignore[reportGeneralTypeIssues]
+    origin: Final[MessageOrigin] = MessageOrigin.RAVENFALL  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[override-of-final-variable]  # pyrefly:ignore[bad-override]
 
 class RavenBotApiProcessorMessage(RavenBotProcessorMessage, tag_field="source", tag="API-CLIENT"):
-    origin: Final[MessageOrigin] = MessageOrigin.RAVENBOT  # pyright: ignore[reportGeneralTypeIssues]
+    origin: Final[MessageOrigin] = MessageOrigin.RAVENBOT  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[override-of-final-variable]  # pyrefly:ignore[bad-override]
 
 ProcessorMessageType = RavenfallProcessorMessage | RavenBotProcessorMessage | RavenfallApiProcessorMessage | RavenBotApiProcessorMessage
 
@@ -510,10 +510,10 @@ class MessageProcessorServer:
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     message_data = msg.data  # pyright: ignore[reportAny]
                     try:
-                        parsed_message = cast(ProcessorMessageType, json.decode(
+                        parsed_message = json.decode(
                             message_data,  # pyright: ignore[reportAny]
                             type=ProcessorMessageType
-                        ))
+                        )
                         if isinstance(parsed_message, RavenBotProcessorMessage):
                             for hook in self._ravenbot_message_hooks:
                                 try:

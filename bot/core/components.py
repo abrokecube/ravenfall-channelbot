@@ -20,56 +20,58 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class BaseDispatcher:
+class GlobalContext:
     def __init__(self):
-        self.id: Dispatcher = Dispatcher.Base
-        self._func_listener: type[BaseListener] = BaseListener
-        self.listeners: dict[str, BaseListener] = {}
-        self.categories: set[EventCategory] = set([EventCategory.Generic])
+        self._services: dict[type[Any], Any] = {}
         
-    async def setup(self, event_manager: EventManager):  # pyright: ignore[reportUnusedParameter]
+    def register_service[T](self, service_type: type[T], instance: T) -> None:
+        """Registers a service for cross-module sharing."""
+        self._services[service_type] = instance
+        
+    def get_service[T](self, service_type: type[T]) -> T | None:
+        """Retrieves a service. Returns None if not found."""
+        return self._services.get(service_type)
+        
+    def require_service[T](self, service_type: type[T]) -> T:
+        """Retrieves a service, raising an error if it doesn't exist."""
+        service = self.get_service(service_type)
+        if service is None:
+            raise RuntimeError(f"Required service {service_type.__name__} is not registered in GlobalContext")
+        return service
+
+
+class BaseEventSource:
+    requirements: list[str] = []
+    event_platform: EventSource = EventSource.Any
+
+    def __init__(self):
+        self.event_processor_callback: Callable[[BaseEvent], Awaitable[None]] | None = None
+        
+    async def setup(self, event_manager: EventManager):
         pass
 
     async def teardown(self):
         pass
-                
-    def add_listener(self, listener: BaseListener):
-        if listener.id in self.listeners:
-            raise ValueError(f"Listener with id '{listener.id}' already exists!")
-        if listener.expected_dispatcher != self.id:
-            raise ValueError(f"Listener {listener} cannot be assigned to this dispatcher!")
-        self.listeners[listener.id] = listener
-    
-    def remove_listener(self, listener: BaseListener):
-        listener_id = listener.id
-        if listener_id not in self.listeners:
-            raise ValueError(f"Listener with id '{listener_id}' doesn't exist!")
-        __ = self.listeners.pop(listener_id)
-    
-    async def _invoke_listener(self, listener: BaseListener, g_ctx: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any):
-        try:
-            await listener.invoke(g_ctx, event, *args, **kwargs)
-        except Exception as error:
-            if not isinstance(error, ListenerError):
-                LOGGER.error(f"Error in {listener.func.__name__} occurred during command invocation: {error}", exc_info=True)
-            else:
-                LOGGER.error(f"Error in {listener.func.__name__} handled during command invocation: {error}")
-            await self.on_invoke_error(g_ctx, event, error)
-    
-    async def dispatch(self, global_context: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any) -> Any:
-        for l in self.listeners.values():
-            match_result = False
-            try:
-                match_result = await l.check_for_match(event)
-            except Exception as e:
-                LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
+        
+    async def send_event(self, event: BaseEvent):
+        if self.event_processor_callback:
+            _ = await self.event_processor_callback(event)
+
+
+@dataclass(kw_only=True)
+class BaseEvent:
+    categories: Collection[EventCategory]
+    platform: EventSource = EventSource.Any
+    data: Any
+
+    async def get_bucket_key(self, bucket_type: str) -> str:  # pyright: ignore[reportUnusedParameter]
+        """Return a string key used for rate limiting/bucketing.
+        
+        Subclasses should override this to provide meaningful bucket keys.
+        """
+        return ""
             
-            if match_result:
-                await self._invoke_listener(l, global_context, event)
-                
-    async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception, *args: Any, **kwargs: Any) -> None:  # pyright: ignore[reportUnusedParameter]
-        pass
-            
+
 class EventManager:
     def __init__(self, global_context: GlobalContext):
         self.event_sources: list[BaseEventSource] = []
@@ -276,54 +278,57 @@ class EventManager:
     #         responses, command_exception
     #     )
 
-class BaseEventSource:
-    requirements: list[str] = []
-    event_platform: EventSource = EventSource.Any
 
+class BaseDispatcher:
     def __init__(self):
-        self.event_processor_callback: Callable[[BaseEvent], Awaitable[None]] | None = None
+        self.id: Dispatcher = Dispatcher.Base
+        self._func_listener: type[BaseListener] = BaseListener
+        self.listeners: dict[str, BaseListener] = {}
+        self.categories: set[EventCategory] = set([EventCategory.Generic])
         
-    async def setup(self, event_manager: EventManager):
+    async def setup(self, event_manager: EventManager):  # pyright: ignore[reportUnusedParameter]
         pass
 
     async def teardown(self):
         pass
-        
-    async def send_event(self, event: BaseEvent):
-        if self.event_processor_callback:
-            _ = await self.event_processor_callback(event)
+                
+    def add_listener(self, listener: BaseListener):
+        if listener.id in self.listeners:
+            raise ValueError(f"Listener with id '{listener.id}' already exists!")
+        if listener.expected_dispatcher != self.id:
+            raise ValueError(f"Listener {listener} cannot be assigned to this dispatcher!")
+        self.listeners[listener.id] = listener
+    
+    def remove_listener(self, listener: BaseListener):
+        listener_id = listener.id
+        if listener_id not in self.listeners:
+            raise ValueError(f"Listener with id '{listener_id}' doesn't exist!")
+        __ = self.listeners.pop(listener_id)
+    
+    async def _invoke_listener(self, listener: BaseListener, g_ctx: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any):
+        try:
+            await listener.invoke(g_ctx, event, *args, **kwargs)
+        except Exception as error:
+            if not isinstance(error, ListenerError):
+                LOGGER.error(f"Error in {listener.func.__name__} occurred during command invocation: {error}", exc_info=True)
+            else:
+                LOGGER.error(f"Error in {listener.func.__name__} handled during command invocation: {error}")
+            await self.on_invoke_error(g_ctx, event, error)
+    
+    async def dispatch(self, global_context: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any) -> Any:
+        for l in self.listeners.values():
+            match_result = False
+            try:
+                match_result = await l.check_for_match(event)
+            except Exception as e:
+                LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
+            
+            if match_result:
+                await self._invoke_listener(l, global_context, event)
+                
+    async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception, *args: Any, **kwargs: Any) -> None:  # pyright: ignore[reportUnusedParameter]
+        pass
 
-@dataclass(kw_only=True)
-class BaseEvent:
-    categories: Collection[EventCategory]
-    platform: EventSource = EventSource.Any
-    data: Any
-
-    async def get_bucket_key(self, bucket_type: str) -> str:  # pyright: ignore[reportUnusedParameter]
-        """Return a string key used for rate limiting/bucketing.
-        
-        Subclasses should override this to provide meaningful bucket keys.
-        """
-        return ""
-
-class GlobalContext:
-    def __init__(self):
-        self._services: dict[type[Any], Any] = {}
-        
-    def register_service[T](self, service_type: type[T], instance: T) -> None:
-        """Registers a service for cross-module sharing."""
-        self._services[service_type] = instance
-        
-    def get_service[T](self, service_type: type[T]) -> T | None:
-        """Retrieves a service. Returns None if not found."""
-        return self._services.get(service_type)
-        
-    def require_service[T](self, service_type: type[T]) -> T:
-        """Retrieves a service, raising an error if it doesn't exist."""
-        service = self.get_service(service_type)
-        if service is None:
-            raise RuntimeError(f"Required service {service_type.__name__} is not registered in GlobalContext")
-        return service
 
 class BaseListener:
     def __init__(self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], cog: Cog | None = None):
@@ -387,3 +392,52 @@ class Cog:
     async def stop(self):
         """Called when cog is being removed"""
         pass
+
+class Cooldown:
+    def __init__(self, rate: int, per: float, bucket: str | list[str] = 'user'):
+        self.rate: int = rate
+        self.per: float = per
+
+        if not isinstance(bucket, list):
+            bucket = [bucket]
+        self.bucket: list[str] = bucket
+        self._windows: dict[str, list[float]] = {}
+    
+    def _get_bucket_key(self, event: BaseEvent) -> str:
+        if hasattr(event, "get_bucket_key"):
+            keys: list[str] = [str(event.get_bucket_key(t)) for t in self.bucket]
+            return ":".join(keys)
+        return ""
+
+    def get_retry_after(self, event: BaseEvent) -> float:
+        import time
+        now = time.time()
+        key = self._get_bucket_key(event)
+        
+        if key not in self._windows:
+            return 0.0
+            
+        window = self._windows[key]
+        # Remove expired timestamps
+        window = [t for t in window if now - t < self.per]
+        self._windows[key] = window
+        
+        if len(window) < self.rate:
+            return 0.0
+            
+        return self.per - (now - window[0])
+
+    def update_rate_limit(self, event: BaseEvent):
+        import time
+        now = time.time()
+        key = self._get_bucket_key(event)
+        
+        if key not in self._windows:
+            self._windows[key] = []
+            
+        window = self._windows[key]
+        # Remove expired timestamps
+        window = [t for t in window if now - t < self.per]
+        window.append(now)
+        self._windows[key] = window
+

@@ -1,5 +1,5 @@
-from .events import MessageEvent
-from .components import GlobalContext
+from bot.core.components import GlobalContext
+from . import MessageEvent
 
 TEXT_REPLACEMENTS = {
     "\U000e0000": None,

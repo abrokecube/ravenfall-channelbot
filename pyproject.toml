@@ -45,3 +45,20 @@ dependencies = [
     "websockets==15.0.1",
     "yarl==1.22.0",
 ]
+
+[tool.ty.rules]
+all = "error"
+
+[tool.pyrefly]
+
+[tool.pyrefly.errors]
+implicit-any="warn"
+implicitly-defined-attribute="warn"
+unannotated-attribute="warn"
+unannotated-parameter="warn"
+untyped-import="warn"
+missing-source="warn"
+unused-ignore="warn"
+missing-override-decorator="warn"
+not-required-key-access="warn"
+open-unpacking="warn"

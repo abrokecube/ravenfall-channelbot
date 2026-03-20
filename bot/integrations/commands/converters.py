@@ -2,16 +2,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, override
 if TYPE_CHECKING:
     from bot.core.components import GlobalContext
-from .events import CommandEvent, TwitchMessageEvent
+from . import CommandEvent
 
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item as RFItem
     
 from utils.strutils import strjoin
-from .exceptions import ArgumentConversionError, ListenerError
+from .exceptions import ArgumentConversionError
 import re
 import glob 
-from .components import BaseConverter
+from . import BaseConverter
 
 
 class Choice(BaseConverter):
@@ -143,13 +143,9 @@ class RangeFloat(BaseConverter):
 
         return number
 
-if TYPE_CHECKING:
-    from bot.ravenfallmanager import RFChannelManager
-    from bot.ravenfallchannel import RFChannel
-
-class GameNotConnected(ListenerError):
-    def __init__(self, message: str = "Game is not connected. Please try again later."):
-        super().__init__(message)
+# class GameNotConnected(ListenerError):
+#     def __init__(self, message: str = "Game is not connected. Please try again later."):
+#         super().__init__(message)
 
 # class RFChannelConverter(BaseConverter):
 #     title: str = "RFChannel"
@@ -193,47 +189,47 @@ class RFItemConverter(BaseConverter):
             raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
         return item_search_results[0][0]
 
-tw_username_re = re.compile(r"^@?[a-zA-Z0-9][\w]{2,24}$")
-tw_username_f_re = re.compile(r"^@?[a-zA-Z0-9/|][\w/|]{2,24}$")
-def is_twitch_username(text: str, pre_filter: bool = False):
-    if pre_filter:
-        return bool(tw_username_f_re.match(text))
-    else:
-        return bool(tw_username_re.match(text))
+# tw_username_re = re.compile(r"^@?[a-zA-Z0-9][\w]{2,24}$")
+# tw_username_f_re = re.compile(r"^@?[a-zA-Z0-9/|][\w/|]{2,24}$")
+# def is_twitch_username(text: str, pre_filter: bool = False):
+#     if pre_filter:
+#         return bool(tw_username_f_re.match(text))
+#     else:
+#         return bool(tw_username_re.match(text))
 
-class TwitchUsername(BaseConverter):
-    title: str = "Twitch username"
-    short_help: str = "A valid Twitch username"
-    help: str = "A valid Twitch username"
+# class TwitchUsername(BaseConverter):
+#     title: str = "Twitch username"
+#     short_help: str = "A valid Twitch username"
+#     help: str = "A valid Twitch username"
     
-    @override
-    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str):
-        is_valid = is_twitch_username(arg)
-        if not is_valid:
-            raise ArgumentConversionError("Not a valid username.")
-        return arg.lstrip("@").replace("\U000e0000", '').replace("|","").replace("/","")
+#     @override
+#     async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str):
+#         is_valid = is_twitch_username(arg)
+#         if not is_valid:
+#             raise ArgumentConversionError("Not a valid username.")
+#         return arg.lstrip("@").replace("\U000e0000", '').replace("|","").replace("/","")
 
-class _RFSkill(Choice):
-    def __init__(self, case_sensitive: bool = False):
-        definition = {
-            "Attack": ['atk', 'att'],
-            "Defense": ['def'],
-            "Strength": ['str'],
-            "Health": ['hp'],
-            "Woodcutting": ['wood', 'chop', 'wdc', 'chomp'],
-            "Mining": ['mine', 'min'],
-            "Crafting": ['craft'],
-            "Cooking": ['cook', "ckn"],
-            "Farming": ['farm', 'fm'],
-            "Slayer": ['slay'],
-            "Magic": [],
-            "Ranged": ["range"],
-            "Sailing": ['sail'],
-            "Healing": ['heal'],
-            "Gathering": ["gath"],
-            "Alchemy": ["brew", "alch"],
-            "CombatLevel": ["combat"]
-        }
-        super().__init__(definition, "Ravenfall skill", case_sensitive)
+# class _RFSkill(Choice):
+#     def __init__(self, case_sensitive: bool = False):
+#         definition = {
+#             "Attack": ['atk', 'att'],
+#             "Defense": ['def'],
+#             "Strength": ['str'],
+#             "Health": ['hp'],
+#             "Woodcutting": ['wood', 'chop', 'wdc', 'chomp'],
+#             "Mining": ['mine', 'min'],
+#             "Crafting": ['craft'],
+#             "Cooking": ['cook', "ckn"],
+#             "Farming": ['farm', 'fm'],
+#             "Slayer": ['slay'],
+#             "Magic": [],
+#             "Ranged": ["range"],
+#             "Sailing": ['sail'],
+#             "Healing": ['heal'],
+#             "Gathering": ["gath"],
+#             "Alchemy": ["brew", "alch"],
+#             "CombatLevel": ["combat"]
+#         }
+#         super().__init__(definition, "Ravenfall skill", case_sensitive)
 
-RFSkill = _RFSkill()
+# RFSkill = _RFSkill()

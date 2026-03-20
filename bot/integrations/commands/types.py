@@ -12,4 +12,4 @@ class ParameterConfig(TypedDict):
     help: str
     regex: str
     display_name: str
-    converter: BaseConverter | type[BaseConverter]
+    converter: BaseConverter | type[BaseConverter] | None

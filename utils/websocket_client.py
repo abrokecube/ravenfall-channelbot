@@ -161,7 +161,7 @@ class AutoReconnectingWebSocket:
             self._ws = await self._session.ws_connect(
                 self.url,
                 heartbeat=30,
-                timeout=aiohttp.ClientWSTimeout(ws_close=30)  # pyright: ignore [reportCallIssue]
+                timeout=aiohttp.ClientWSTimeout(ws_close=30)  # pyright: ignore [reportCallIssue]  # ty:ignore[unknown-argument]
             )
             
             self._is_connected = True

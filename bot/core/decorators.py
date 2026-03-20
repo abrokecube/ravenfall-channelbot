@@ -1,12 +1,8 @@
-from typing import Callable, Any, cast
-from .enums import EventCategory, Dispatcher, BucketType
+from typing import Callable, Any
+from .enums import Dispatcher
 from .modals import MetaFilter
-from .cooldown import Cooldown
-from .converters import BaseConverter
-from .checks import BaseCheck, FunctionCheck
-from .events import BaseEvent, TwitchRedemptionEvent, MessageEvent
+from .components import Cooldown, BaseEvent
 from .listeners import LambdaListener, GenericListener
-from .types import VerifierType, ParameterConfig, CheckFuncType
 
 # Matchers
 
@@ -43,28 +39,19 @@ def on_match[E: BaseEvent](event_types: type[E] | list[type[E]], match_fn: Calla
     return lambda_filter_decorator(event_types, match_fn)
 
 
-def command[T: Callable[..., Any]](
-    name: str | None = None, short_help: str | None = None, help: str | None = None,
-    aliases: list[str] | None = None, verifier: VerifierType | None = None, hidden: bool = False, **kwargs: Any) -> Callable[[T], T]:
-    if not aliases:
-        aliases = []
-    def decorator(func: T):
-        kwargs.update({
-            "name": name,
-            "short_help": short_help,
-            "help": help,
-            "aliases": aliases,
-            "verifier": verifier,
-            "hidden": hidden
-        })
-        setattr(func, "_listener_init_params", kwargs)
-        setattr(func, "_listener_meta_filter", MetaFilter(
-            (EventCategory.Message,), True,
-            [], False
-        ))
-        setattr(func, "_listener_dispatcher", Dispatcher.Command)
+def cooldown[T: Callable[..., Any]](rate: int, per: float, type: str | list[str] = "user") -> Callable[[T], T]:
+    """Decorator to apply a cooldown to a command.
+    
+    Args:
+        rate: Number of uses allowed.
+        per: Time period in seconds.
+        type: The bucket type for the cooldown.
+    """
+    def decorator(func: T) -> T:
+        setattr(func, "_listener_cooldown", Cooldown(rate, per, type))
         return func
     return decorator
+
 
 # Add-ons
 
