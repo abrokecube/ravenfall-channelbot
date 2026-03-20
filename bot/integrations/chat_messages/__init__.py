@@ -42,12 +42,6 @@ class UserRole(StrEnum):
     def level(self) -> int:
         return USER_ROLE_HIERARCHY_VALUES.get(self, 0)
 
-class BucketType(StrEnum):
-    USER = "user"
-    CHANNEL = "channel"
-    GUILD = "guild"
-    GLOBAL = "global"
-
 USER_ROLE_HIERARCHY: tuple[UserRole | tuple[UserRole, ...], ...] = (
     UserRole.BOT_ADMINISTRATOR,
     UserRole.ADMINISTRATOR,

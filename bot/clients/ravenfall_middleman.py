@@ -164,7 +164,7 @@ class MiddlemanClient:
     @overload
     async def _get(self, endpoint: str, out_type: None = None) -> None: ...
     @overload
-    async def _get[T](self, endpoint: str, out_type: type[T] = None) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
+    async def _get[T](self, endpoint: str, out_type: type[T] = NoneType) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
 
     async def _get[T](self, endpoint: str, out_type: type[T] | None = None) -> T | None:
         headers = {'Content-Type': 'application/json'}
@@ -181,7 +181,7 @@ class MiddlemanClient:
     @overload
     async def _post(self, endpoint: str, out_type: None = None, data: dict[str, Any] | None = None) -> None: ...
     @overload
-    async def _post[T](self, endpoint: str, out_type: type[T] = None, data: dict[str, Any] | None = None) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
+    async def _post[T](self, endpoint: str, out_type: type[T] = NoneType, data: dict[str, Any] | None = None) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
     
     async def _post[T](self, endpoint: str, out_type: type[T] | None = None, data: dict[str, Any] | None = None) -> T | None:
         headers = {'Content-Type': 'application/json'}

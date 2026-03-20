@@ -20,4 +20,8 @@ class Dispatcher(StrEnum):
     Generic = "generic"
     Command = "command"
 
-
+class BucketType(StrEnum):
+    USER = "user"
+    CHANNEL = "channel"
+    GUILD = "guild"
+    GLOBAL = "global"

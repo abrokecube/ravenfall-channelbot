@@ -4,9 +4,9 @@ import string
 from collections.abc import Collection, Callable
 from typing import cast, NamedTuple
 
-import thefuzz.process  # pyright: ignore [reportMissingTypeStubs]
+import thefuzz.process
 import os
-import thefuzz  # pyright: ignore [reportMissingTypeStubs]
+import thefuzz
 
 import ravenpy
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any, override, NamedTuple, Callable, get_type_hints, get_origin, get_args
 from bot.core.components import GlobalContext, BaseEvent, Cog, BaseDispatcher, BaseListener, Cooldown
-from bot.core.enums import EventCategory, EventSource, Dispatcher
+from bot.core.enums import EventCategory, EventSource, Dispatcher, BucketType
 from bot.core.listeners import GenericListener
 from bot.core.exceptions import ListenerError, ListenerOnCooldown
 from bot.integrations.chat_messages.exceptions import (
@@ -18,7 +18,7 @@ from .exceptions import (
     ArgumentConversionError,
     EmptyFlagValueError
 )
-from bot.integrations.chat_messages import MessageEvent, BaseCheck, BucketType
+from bot.integrations.chat_messages import MessageEvent, BaseCheck
 from .types import VerifierType
 from types import UnionType
 from .enums import ParameterType

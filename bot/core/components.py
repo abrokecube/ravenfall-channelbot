@@ -11,7 +11,7 @@ import asyncio
 import logging
 from uuid import uuid4
 
-from .enums import Dispatcher, EventCategory, EventSource
+from .enums import Dispatcher, EventCategory, EventSource, BucketType
 from .exceptions import ListenerError
 
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ class BaseEvent:
     platform: EventSource = EventSource.Any
     data: Any
 
-    async def get_bucket_key(self, bucket_type: str) -> str:  # pyright: ignore[reportUnusedParameter]
+    async def get_bucket_key(self, bucket_type: str | BucketType) -> str:  # pyright: ignore[reportUnusedParameter]
         """Return a string key used for rate limiting/bucketing.
         
         Subclasses should override this to provide meaningful bucket keys.
