@@ -1,13 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Any, override
-from collections.abc import Awaitable
+from typing import TYPE_CHECKING, Any, override
 import logging
 
 if TYPE_CHECKING:
     from .listeners import BaseListener
     from .global_context import GlobalContext
-    from .event_manager import EventManager
-    from .types import ListenerFuncType
 from .events import (
     BaseEvent, 
     MessageEvent
@@ -38,7 +35,7 @@ from .exceptions import (
 from .modals import CommandDispatchResult
 from .command_parser import CommandArgs
 from utils.format_time import format_seconds, TimeSize
-from .cooldown import Cooldown
+from .components import Cooldown, BaseDispatcher
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,56 +48,6 @@ def filter_text(text: str):
     text = text.strip()
     return text
 
-class BaseDispatcher:
-    def __init__(self):
-        self.id: Dispatcher = Dispatcher.Base
-        self._func_listener: type[BaseListener] = BaseListener
-        self.listeners: dict[str, BaseListener] = {}
-        self.categories: set[EventCategory] = set([EventCategory.Generic])
-        
-    async def setup(self, event_manager: EventManager):  # pyright: ignore[reportUnusedParameter]
-        pass
-
-    async def teardown(self):
-        pass
-                
-    def add_listener(self, listener: BaseListener):
-        if listener.id in self.listeners:
-            raise ValueError(f"Listener with id '{listener.id}' already exists!")
-        if listener.expected_dispatcher != self.id:
-            raise ValueError(f"Listener {listener} cannot be assigned to this dispatcher!")
-        self.listeners[listener.id] = listener
-    
-    def remove_listener(self, listener: BaseListener):
-        listener_id = listener.id
-        if listener_id not in self.listeners:
-            raise ValueError(f"Listener with id '{listener_id}' doesn't exist!")
-        __ = self.listeners.pop(listener_id)
-    
-    async def _invoke_listener(self, listener: BaseListener, g_ctx: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any):
-        try:
-            await listener.invoke(g_ctx, event, *args, **kwargs)
-        except Exception as error:
-            if not isinstance(error, ListenerError):
-                LOGGER.error(f"Error in {listener.func.__name__} occurred during command invocation: {error}", exc_info=True)
-            else:
-                LOGGER.error(f"Error in {listener.func.__name__} handled during command invocation: {error}")
-            await self.on_invoke_error(g_ctx, event, error)
-    
-    async def dispatch(self, global_context: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any) -> Any:
-        for l in self.listeners.values():
-            match_result = False
-            try:
-                match_result = await l.check_for_match(event)
-            except Exception as e:
-                LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
-            
-            if match_result:
-                await self._invoke_listener(l, global_context, event)
-                
-    async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception, *args: Any, **kwargs: Any) -> None:  # pyright: ignore[reportUnusedParameter]
-        pass
-            
 class SimpleDispatcher(BaseDispatcher):
     def __init__(self) -> None:
         super().__init__()

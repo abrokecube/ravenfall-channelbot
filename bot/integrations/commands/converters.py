@@ -1,7 +1,7 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, override
 if TYPE_CHECKING:
-    from .global_context import GlobalContext
+    from bot.core.components import GlobalContext
 from .events import CommandEvent, TwitchMessageEvent
 
 from ravenpy import ravenpy
@@ -11,16 +11,8 @@ from utils.strutils import strjoin
 from .exceptions import ArgumentConversionError, ListenerError
 import re
 import glob 
+from .components import BaseConverter
 
-class BaseConverter:
-    """To display a custom error message when conversion fails,
-    raise command_exceptions.ArgumentConversionError in the convert method."""
-    title: str = ""
-    short_help: str = ""
-    help: str = ""
-
-    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> Any:  # pyright: ignore[reportUnusedParameter, reportAny, reportExplicitAny]
-        raise NotImplementedError
 
 class Choice(BaseConverter):
     def __init__(self, definition: list[str] | dict[str, list[str]], title: str | None = None, case_sensitive: bool = False):
@@ -159,32 +151,32 @@ class GameNotConnected(ListenerError):
     def __init__(self, message: str = "Game is not connected. Please try again later."):
         super().__init__(message)
 
-class RFChannelConverter(BaseConverter):
-    title: str = "RFChannel"
-    short_help: str = "A Ravenfall channel name"
-    help: str = "A Ravenfall channel monitored by the bot."
+# class RFChannelConverter(BaseConverter):
+#     title: str = "RFChannel"
+#     short_help: str = "A Ravenfall channel name"
+#     help: str = "A Ravenfall channel monitored by the bot."
 
-    @override
-    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> RFChannel:
-        if arg == 'this':
-            if isinstance(event.message, TwitchMessageEvent):
-                query = event.message.room_name
-            else:
-                raise ArgumentConversionError("A channel must be specified.")
-        else:
-            query = arg
-        rf_manager = g_ctx.require_service(RFChannelManager)
-        if not rf_manager:
-            raise GameNotConnected()
-        channel_by_name = rf_manager.get_channel(channel_name=query)
-        channel_by_id = rf_manager.get_channel(channel_id=query)
-        channel = channel_by_name or channel_by_id
-        if channel is None:
-            if arg == 'this':
-                raise ArgumentConversionError("A channel must be specified.")
-            else:
-                raise ArgumentConversionError(f"Ravenfall channel '{arg}' not found.")
-        return channel
+#     @override
+#     async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> RFChannel:
+#         if arg == 'this':
+#             if isinstance(event.message, TwitchMessageEvent):
+#                 query = event.message.room_name
+#             else:
+#                 raise ArgumentConversionError("A channel must be specified.")
+#         else:
+#             query = arg
+#         rf_manager = g_ctx.require_service(RFChannelManager)
+#         if not rf_manager:
+#             raise GameNotConnected()
+#         channel_by_name = rf_manager.get_channel(channel_name=query)
+#         channel_by_id = rf_manager.get_channel(channel_id=query)
+#         channel = channel_by_name or channel_by_id
+#         if channel is None:
+#             if arg == 'this':
+#                 raise ArgumentConversionError("A channel must be specified.")
+#             else:
+#                 raise ArgumentConversionError(f"Ravenfall channel '{arg}' not found.")
+#         return channel
 
 
 class RFItemConverter(BaseConverter):

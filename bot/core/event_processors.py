@@ -1,5 +1,5 @@
 from .events import MessageEvent
-from .global_context import GlobalContext
+from .components import GlobalContext
 
 TEXT_REPLACEMENTS = {
     "\U000e0000": None,

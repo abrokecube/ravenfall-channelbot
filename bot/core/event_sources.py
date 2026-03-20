@@ -1,10 +1,9 @@
-from bot.models import Channel
-
-
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, Awaitable, Set
+
+from typing import TYPE_CHECKING, Callable
+from collections.abc import Awaitable, Collection
 if TYPE_CHECKING:
-    from .event_manager import EventManager
+    from .components import BaseEventSource
 
 from .enums import EventSource, UserRole
 from .events import BaseEvent, MessageEvent, TwitchMessageEvent, TwitchRedemptionEvent
@@ -13,22 +12,6 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
     
-class BaseEventSource:
-    def __init__(self):
-        # self.event_manager: EventManager = None
-        self.event_platform: EventSource = EventSource.Any
-        self.event_processor_callback: Callable[[BaseEvent], Awaitable[None]] | None = None
-        
-    async def setup(self, event_manager: EventManager):
-        pass
-
-    async def teardown(self):
-        pass
-        
-    async def send_event(self, event: BaseEvent):
-        if self.event_processor_callback:
-            _ = await self.event_processor_callback(event)
-
 if TYPE_CHECKING:
     from twitchAPI.chat import Chat, ChatMessage, ChatUser
     from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData, ChannelPointsCustomRewardRedemptionAddEvent
@@ -61,11 +44,11 @@ class TwitchUtils:
         self.twitches: dict[str, Twitch] = twitch_event_src.channel_twitches
 
 class TwitchAPIEventSource(BaseEventSource):
-    def __init__(self, channels: list[Channel], bot_admin_uids: set[str], bot_user_id: str, twitch_app_id: str, twitch_app_secret: str):
+    def __init__(self, channels: list[Channel], bot_admin_uids: Collection[str], bot_user_id: str, twitch_app_id: str, twitch_app_secret: str):
         super().__init__()
         self.event_platform: EventSource = EventSource.Twitch
         self.channels: list[Channel] = channels
-        self.bot_admin_uids: set[str] = bot_admin_uids
+        self.bot_admin_uids: set[str] = set(bot_admin_uids)
         self.bot_user_id: str = bot_user_id
         self.twitch_app_id: str = twitch_app_id
         self.twitch_app_secret: str = twitch_app_secret
