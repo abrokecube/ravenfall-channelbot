@@ -1,21 +1,27 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, override
-if TYPE_CHECKING:
-    from bot.core.components import GlobalContext
-from . import CommandEvent
+
+from typing import override
+
+from bot.core.components import GlobalContext
+import glob
+import re
 
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item as RFItem
-    
 from utils.strutils import strjoin
-from .exceptions import ArgumentConversionError
-import re
-import glob 
+
 from . import BaseConverter
+from .events import CommandEvent
+from .exceptions import ArgumentConversionError
 
 
 class Choice(BaseConverter):
-    def __init__(self, definition: list[str] | dict[str, list[str]], title: str | None = None, case_sensitive: bool = False):
+    def __init__(
+        self,
+        definition: list[str] | dict[str, list[str]],
+        title: str | None = None,
+        case_sensitive: bool = False,
+    ):
         super().__init__()
         string_map = {}
         choices = []
@@ -35,7 +41,7 @@ class Choice(BaseConverter):
                 string_map = {x.lower(): x for x in choices}
                 for k, v in definition.items():
                     string_map.update({x.lower(): k for x in v})
-        
+
         if title:
             self.title: str = title
         else:
@@ -44,37 +50,46 @@ class Choice(BaseConverter):
         self.help: str = self.short_help
         self.case_sensitive: bool = case_sensitive
         self.string_map: dict[str, str] = string_map
-    
+
     @override
     async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> str:
         if not arg in self.string_map:
-            raise ArgumentConversionError(f"Choice '{arg}' is not a valid option. Valid choices: {self.short_help}")
+            raise ArgumentConversionError(
+                f"Choice '{arg}' is not a valid option. Valid choices: {self.short_help}"
+            )
         return self.string_map[arg]
+
 
 class Regex(BaseConverter):
     title: str = "Regex"
     short_help: str = "A python regular expression"
     help: str = "A python regular expression"
-    
+
     @override
-    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> re.Pattern[str]:
+    async def convert(
+        self, g_ctx: GlobalContext, event: CommandEvent, arg: str
+    ) -> re.Pattern[str]:
         try:
             return re.compile(arg)
         except Exception:
             raise ArgumentConversionError("Couldn't compile regex")
 
+
 class Glob(BaseConverter):
     title: str = "Glob"
     short_help: str = "A glob pattern"
     help: str = "A glob pattern"
-    
+
     @override
-    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> re.Pattern[str]:
+    async def convert(
+        self, g_ctx: GlobalContext, event: CommandEvent, arg: str
+    ) -> re.Pattern[str]:
         try:
             return re.compile(glob.translate(arg))
         except Exception:
             raise ArgumentConversionError("Couldn't compile glob expression")
-        
+
+
 class RangeInt(BaseConverter):
     def __init__(self, min_: int | None, max_: int | None):
         super().__init__()
@@ -94,20 +109,25 @@ class RangeInt(BaseConverter):
             self.help = f"A whole number greater than or equal to {min_}"
         else:
             raise ValueError("min_ or max_ need to be a number")
-    
+
     @override
     async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> int:
         try:
             number = int(arg)
         except ValueError:
             raise ArgumentConversionError("Expected an integer")
-        
+
         if self.max is not None and number > self.max:
-            raise ArgumentConversionError(f"Number is out of range! Maximum value: {self.max}")
+            raise ArgumentConversionError(
+                f"Number is out of range! Maximum value: {self.max}"
+            )
         if self.min is not None and number < self.min:
-            raise ArgumentConversionError(f"Number is out of range! Minimum value: {self.min}")
-    
+            raise ArgumentConversionError(
+                f"Number is out of range! Minimum value: {self.min}"
+            )
+
         return number
+
 
 class RangeFloat(BaseConverter):
     def __init__(self, min_: float | None, max_: float | None):
@@ -128,20 +148,27 @@ class RangeFloat(BaseConverter):
             self.help = f"A decimal number greater than or equal to {min_}"
         else:
             raise ValueError("min_ or max_ need to be a number")
-        
+
     @override
-    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> float:
+    async def convert(
+        self, g_ctx: GlobalContext, event: CommandEvent, arg: str
+    ) -> float:
         try:
             number = float(arg)
         except ValueError:
             raise ArgumentConversionError("Expected a number")
-        
+
         if self.max is not None and number > self.max:
-            raise ArgumentConversionError(f"Number is out of range! Maximum value: {self.max}")
+            raise ArgumentConversionError(
+                f"Number is out of range! Maximum value: {self.max}"
+            )
         if self.min is not None and number < self.min:
-            raise ArgumentConversionError(f"Number is out of range! Minimum value: {self.min}")
+            raise ArgumentConversionError(
+                f"Number is out of range! Minimum value: {self.min}"
+            )
 
         return number
+
 
 # class GameNotConnected(ListenerError):
 #     def __init__(self, message: str = "Game is not connected. Please try again later."):
@@ -179,15 +206,22 @@ class RFItemConverter(BaseConverter):
     title: str = "Item"
     short_help: str = "An item name"
     help: str = "An item name"
-    
+
     @override
-    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> RFItem:
+    async def convert(
+        self, g_ctx: GlobalContext, event: CommandEvent, arg: str
+    ) -> RFItem:
         item_search_results = ravenpy.search_item(arg, limit=1)
         if not item_search_results:
-            raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
+            raise ArgumentConversionError(
+                f"Could not identify item '{arg}'. Please check your spelling"
+            )
         if item_search_results[0][1] < 85:
-            raise ArgumentConversionError(f"Could not identify item '{arg}'. Please check your spelling")
+            raise ArgumentConversionError(
+                f"Could not identify item '{arg}'. Please check your spelling"
+            )
         return item_search_results[0][0]
+
 
 # tw_username_re = re.compile(r"^@?[a-zA-Z0-9][\w]{2,24}$")
 # tw_username_f_re = re.compile(r"^@?[a-zA-Z0-9/|][\w/|]{2,24}$")
@@ -201,7 +235,7 @@ class RFItemConverter(BaseConverter):
 #     title: str = "Twitch username"
 #     short_help: str = "A valid Twitch username"
 #     help: str = "A valid Twitch username"
-    
+
 #     @override
 #     async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str):
 #         is_valid = is_twitch_username(arg)

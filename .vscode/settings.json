@@ -7,5 +7,6 @@
         "Ravenfall",
         "Recipent",
         "Sandboxie"
-    ]
+    ],
+    "python.languageServer": "None"
 }

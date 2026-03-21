@@ -1,3 +1,10 @@
+"""Client library for interacting with the Ravenfall middleman server.
+
+This module provides classes and utilities for connecting to and communicating
+with the Ravenfall middleman WebSocket server, including message handling,
+connection management, and API interactions.
+"""
+
 import logging
 from types import NoneType
 import aiohttp
@@ -9,13 +16,17 @@ from datetime import datetime
 import asyncio
 from utils.logging_fomatter import setup_logging
 from enum import StrEnum
+import contextlib
 
 # Configure logging
-logger = logging.getLogger('ravenfall_middleman')
+logger = logging.getLogger("ravenfall_middleman")
 json_encode = json.Encoder()
 setup_logging()
 
+
 class Sender(Struct):
+    """Represents the sender information in a RavenBot message."""
+
     id: str = field(name="Id")
     character_id: str = field(name="CharacterId")
     username: str = field(name="Username")
@@ -32,22 +43,29 @@ class Sender(Struct):
     sub_tier: int = field(name="SubTier")
     identifier: str | None = field(name="Identifier")
 
+
 class RavenBotMessage(Struct):
+    """Represents a message sent to RavenBot."""
+
     identifier: str = field(name="Identifier")
     sender: Sender = field(name="Sender")
     content: str = field(name="Content")
     correlation_id: str | None = field(name="CorrelationId")
 
+
 class Recipient(Struct):
     """Represents the recipient information in a Ravenfall message."""
+
     user_id: str = field(name="UserId")
     character_id: str = field(name="CharacterId")
     platform: str | None = field(name="Platform")
     platform_id: str = field(name="PlatformId")
     platform_user_name: str = field(name="PlatformUserName")
 
+
 class RavenfallMessage(Struct):
     """Represents a message received from Ravenfall."""
+
     identifier: str = field(name="Identifier")
     recipient: Recipient = field(name="Recipent")  # this typo is intentional
     format: str = field(name="Format")
@@ -56,7 +74,10 @@ class RavenfallMessage(Struct):
     category: str | None = field(name="Category")
     correlation_id: str | None = field(name="CorrelationId")
 
+
 class SendAndWaitResult(Struct):
+    """Represents the result of a send-and-wait operation."""
+
     success: bool
     correlation_id: str = field(name="correlationId")
     responses: list[RavenfallMessage]
@@ -65,43 +86,63 @@ class SendAndWaitResult(Struct):
     expected_count: int = field(name="expectedCount")
     timeout: bool
 
+
 class EnsureConnectionResult(Struct):
+    """Represents the result of a connection ensure operation."""
+
     success: bool
     message: str
     reconnected: bool
     connected: bool
 
+
 class ConnectionStatus(Struct):
+    """Represents the status of a WebSocket connection."""
+
     connection_id: str = field(name="connectionId")
     client_connected: bool = field(name="clientConnected")
     server_connected: bool = field(name="serverConnected")
     time_until_close: int = field(name="timeUntilClose")
 
+
 class ConnStatusResponse(Struct):
+    """Response wrapper for connection status queries."""
+
     success: bool
     status: ConnectionStatus
 
+
 class ProxyMapping(Struct):
+    """Represents a proxy mapping configuration."""
+
     client_port: int = field(name="clientPort")
     server_host: str = field(name="serverHost")
     server_port: int = field(name="serverPort")
 
+
 class MessageProcessorConfig(Struct):
+    """Configuration for the message processor."""
+
     enabled: bool
     url: str
 
+
 class MiddlemanConfig(Struct):
-    """Type definition for server configuration."""
-    enableMessageLogging: bool
-    disableTimeout: bool
-    defaultTimeoutSeconds: int
-    noIdentifierTimeoutSeconds: int
-    apiPort: int
-    identifierTimeouts: dict[str, int]
-    proxyMappings: list[ProxyMapping]
-    messageProcessor: MessageProcessorConfig
+    """Middleman server configuration."""
+
+    enable_message_logging: bool = field(name="enableMessageLogging")
+    disable_timeout: bool = field(name="disableTimeout")
+    default_timeout_seconds: int = field(name="defaultTimeoutSeconds")
+    no_identifier_timeout_seconds: int = field(name="noIdentifierTimeoutSeconds")
+    api_port: int = field(name="apiPort")
+    identifier_timeouts: dict[str, int] = field(name="identifierTimeouts")
+    proxy_mappings: list[ProxyMapping] = field(name="proxyMappings")
+    message_processor: MessageProcessorConfig = field(name="messageProcessor")
+
 
 class StreamMessageBase(Struct):
+    """Base class for stream messages with common metadata."""
+
     client_addr: str = field(name="clientAddr")
     server_addr: str = field(name="serverAddr")
     connection_id: str = field(name="connectionId")
@@ -109,57 +150,99 @@ class StreamMessageBase(Struct):
     is_api: bool = field(name="isApi")
     timestamp: datetime
 
+
 class MessageOrigin(StrEnum):
+    """Enumeration of possible message origins."""
+
     RAVENFALL = "SERVER"
     RAVENBOT = "CLIENT"
     API_RAVENFALL = "API-SERVER"
     API_RAVENBOT = "API-CLIENT"
 
+
 class RavenfallStreamMessage(StreamMessageBase, tag_field="source", tag="SERVER"):
+    """Stream message originating from Ravenfall server."""
+
     message: RavenfallMessage
     origin: MessageOrigin = MessageOrigin.RAVENFALL
 
+
 class RavenBotStreamMessage(StreamMessageBase, tag_field="source", tag="CLIENT"):
+    """Stream message originating from RavenBot client."""
+
     message: RavenBotMessage
     origin: MessageOrigin = MessageOrigin.RAVENBOT
 
+
 class RavenfallApiStreamMessage(RavenfallStreamMessage, tag="API-SERVER"):
+    """API stream message originating from Ravenfall server."""
+
     origin: MessageOrigin = MessageOrigin.API_RAVENFALL
 
+
 class RavenBotApiStreamMessage(RavenBotStreamMessage, tag="API-CLIENT"):
+    """API stream message originating from RavenBot client."""
+
     origin: MessageOrigin = MessageOrigin.API_RAVENBOT
 
-StreamMessageType = RavenfallStreamMessage | RavenBotStreamMessage | RavenfallApiStreamMessage | RavenBotApiStreamMessage
+
+StreamMessageType = (
+    RavenfallStreamMessage
+    | RavenBotStreamMessage
+    | RavenfallApiStreamMessage
+    | RavenBotApiStreamMessage
+)
+
 
 class ClientError(BaseException):
+    """Exception raised for client-side errors."""
+
     pass
+
 
 class MiddlemanError(BaseException):
+    """Exception raised for middleman server errors."""
+
     pass
 
+
 class MiddlemanClient:
+    """Client for interacting with the Ravenfall middleman server."""
+    
     def __init__(self, base_url: str) -> None:
+        """Initialize the middleman client.
+
+        Args:
+            base_url: Base URL of middleman server
+
+        """
         self.base_url: str = base_url.rstrip("/")
         self._websocket: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
-        self._ravenbot_message_hooks: list[Callable[[RavenBotStreamMessage], Awaitable[None]]] = []
-        self._ravenfall_message_hooks: list[Callable[[RavenfallStreamMessage], Awaitable[None]]] = []
+        self._ravenbot_message_hooks: list[
+            Callable[[RavenBotStreamMessage], Awaitable[None]]
+        ] = []
+        self._ravenfall_message_hooks: list[
+            Callable[[RavenfallStreamMessage], Awaitable[None]]
+        ] = []
         self._ws_task: asyncio.Task[None] | None = None
         self._connected: bool = False
 
     def _raise_on_code(self, code: int, response_data: Any) -> None:
         if not isinstance(response_data, dict):
-            raise ClientError(f"Invalid response from middleman API: {response_data}")
-        if code == 400:
-            raise ClientError(f"Middleman API returned error: {response_data}")
-        elif code == 404:
-            raise ClientError(f"Middleman API returned error: {response_data}")
-        elif code == 500:
-            raise MiddlemanError(f"Middleman API returned error: {response_data}")
-        elif code == 200:
+            msg = f"Invalid response from middleman API: {response_data}"
+            raise ClientError(msg)
+        if code == 400 or code == 404:
+            msg = f"Middleman API returned error: {response_data}"
+            raise ClientError(msg)
+        if code == 500:
+            msg = f"Middleman API returned error: {response_data}"
+            raise MiddlemanError(msg)
+        if code == 200:
             pass
         else:
-            raise ClientError(f"Middleman API returned error: {response_data}")
+            msg = f"Middleman API returned error: {response_data}"
+            raise ClientError(msg)
 
     @overload
     async def _get(self, endpoint: str, out_type: None = None) -> None: ...
@@ -167,205 +250,211 @@ class MiddlemanClient:
     async def _get[T](self, endpoint: str, out_type: type[T] = NoneType) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
 
     async def _get[T](self, endpoint: str, out_type: type[T] | None = None) -> T | None:
-        headers = {'Content-Type': 'application/json'}
+        headers = {"Content-Type": "application/json"}
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{self.base_url}/{endpoint}", headers=headers) as response:
+            async with session.get(
+                f"{self.base_url}/{endpoint}", headers=headers
+            ) as response:
                 response_text = await response.text()
                 self._raise_on_code(response.status, response_text)
             if isinstance(out_type, NoneType):
                 return None
-            else:
-                out_data = json.decode(response_text, type=out_type)
-                return out_data
+            return json.decode(response_text, type=out_type)
 
     @overload
-    async def _post(self, endpoint: str, out_type: None = None, data: dict[str, Any] | None = None) -> None: ...
+    async def _post(
+        self, endpoint: str, out_type: None = None, data: dict[str, Any] | None = None
+    ) -> None: ...
     @overload
-    async def _post[T](self, endpoint: str, out_type: type[T] = NoneType, data: dict[str, Any] | None = None) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
-    
-    async def _post[T](self, endpoint: str, out_type: type[T] | None = None, data: dict[str, Any] | None = None) -> T | None:
-        headers = {'Content-Type': 'application/json'}
+    async def _post[T](
+        self,
+        endpoint: str,
+        out_type: type[T] = NoneType,
+        data: dict[str, Any] | None = None,
+    ) -> T: ...  # ty:ignore[invalid-parameter-default]  # pyrefly: ignore[bad-function-definition]
+
+    async def _post[T](
+        self,
+        endpoint: str,
+        out_type: type[T] | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> T | None:
+        headers = {"Content-Type": "application/json"}
         async with aiohttp.ClientSession() as session:
             encoded = json_encode.encode(data)
-            async with session.post(f"{self.base_url}/{endpoint}", data=encoded, headers=headers) as response:
+            async with session.post(
+                f"{self.base_url}/{endpoint}", data=encoded, headers=headers
+            ) as response:
                 response_text = await response.text()
                 self._raise_on_code(response.status, response_text)
             if isinstance(out_type, NoneType):
                 return None
-            else:
-                out_data = json.decode(response_text, type=out_type)
-                return out_data
+            return json.decode(response_text, type=out_type)
 
-    async def force_reconnect(self, connection_id: str, timeout: int = 0) -> None:
-        """
-        Force the middleman to reconnect to Ravenfall.
-        
+    async def force_reconnect(self, connection_id: str, timeout_seconds: int = 0) -> None:
+        """Force the middleman to reconnect to Ravenfall.
+
         Args:
             connection_id: The connection ID to reconnect
-            timeout: Timeout in seconds for the request
-        """
-        data = {
-            "connectionId": connection_id,
-            "timeout": timeout
-        }
-        await self._post('/api/reconnect', None, data)
+            timeout_seconds: Timeout in seconds for the request
 
-    async def send_to_ravenbot(self, connection_id: str, message: RavenBotMessage) -> None:
         """
-        Send RavenBot a message.
-        
+        data = {"connectionId": connection_id, "timeout": timeout_seconds}
+        await self._post("/api/reconnect", None, data)
+
+    async def send_to_ravenbot(
+        self, connection_id: str, message: RavenBotMessage
+    ) -> None:
+        """Send RavenBot a message.
+
         Args:
             connection_id: The connection ID to send the message to
             message: The message to send
-        """
-        data = {
-            "connectionId": connection_id,
-            "data": json_encode.encode(message)
-        }
-        await self._post('/api/send-to-client', None, data)
 
-    async def send_to_ravenfall(self, connection_id: str, message: RavenfallMessage) -> None:
         """
-        Send Ravenfall a message.
-        
+        data = {"connectionId": connection_id, "data": json_encode.encode(message)}
+        await self._post("/api/send-to-client", None, data)
+
+    async def send_to_ravenfall(
+        self, connection_id: str, message: RavenfallMessage
+    ) -> None:
+        """Send Ravenfall a message.
+
         Args:
             connection_id: The connection ID to send the message to
             message: The message to send
-        """
-        data = {
-            "connectionId": connection_id,
-            "data": json_encode.encode(message)
-        }
-        await self._post('/api/send-to-server', None, data)
 
-
-    async def send_to_ravenfall_and_wait_for_response(self, connection_id: str, message: SendAndWaitResult) -> SendAndWaitResult:
         """
-        Send Ravenfall a message and wait for a response.
-        
+        data = {"connectionId": connection_id, "data": json_encode.encode(message)}
+        await self._post("/api/send-to-server", None, data)
+
+    async def send_to_ravenfall_and_wait_for_response(
+        self, connection_id: str, message: SendAndWaitResult
+    ) -> SendAndWaitResult:
+        """Send Ravenfall a message and wait for a response.
+
         Args:
             connection_id: The connection ID to send the message to
             message: The message to send
-        """
-        data = {
-            "connectionId": connection_id,
-            "data": json_encode.encode(message)
-        }
-        response = await self._post('/api/send-to-server-and-wait', SendAndWaitResult, data)
-        return response
 
-    async def ensure_connection(self, connection_id: str, timeout_extension: int = 30) -> EnsureConnectionResult:
         """
-        Ensure the connection is active by extending its timeout.
-        
+        data = {"connectionId": connection_id, "data": json_encode.encode(message)}
+        return await self._post("/api/send-to-server-and-wait", SendAndWaitResult, data)
+
+    async def ensure_connection(
+        self, connection_id: str, timeout_extension: int = 30
+    ) -> EnsureConnectionResult:
+        """Ensure the connection is active by extending its timeout.
+
         Args:
             connection_id: The connection ID to extend
             timeout_extension: The timeout extension in seconds (default: 30)
+
         """
-        data = {
-            "connectionId": connection_id,
-            "timeout": timeout_extension
-        }
-        response = await self._post('/api/ensure-connected', EnsureConnectionResult, data)
-        return response
+        data = {"connectionId": connection_id, "timeout": timeout_extension}
+        return await self._post("/api/ensure-connected", EnsureConnectionResult, data)
 
     async def get_connection_status(self, connection_id: str) -> ConnStatusResponse:
-        """
-        Get the status of a connection.
-        
+        """Get the status of a connection.
+
         Args:
             connection_id: The connection ID to get the status for
+
         """
-        response = await self._get('/api/connection-status?connectionId=' + connection_id, ConnStatusResponse)
-        return response
+        return await self._get(
+            "/api/connection-status?connectionId=" + connection_id, ConnStatusResponse
+        )
 
     async def get_config(self) -> MiddlemanConfig:
-        """
-        Get the configuration of the middleman.
-        """
-        response = await self._get('/api/config', MiddlemanConfig)
-        return response
+        """Get the configuration of the middleman."""
+        return await self._get("/api/config", MiddlemanConfig)
 
-    def add_ravenfall_message_hook(self, hook: Callable[[RavenfallStreamMessage], Awaitable[None]]) -> None:
-        """
-        Add a hook function to receive WebSocket messages.
-        
+    def add_ravenfall_message_hook(
+        self, hook: Callable[[RavenfallStreamMessage], Awaitable[None]]
+    ) -> None:
+        """Add a hook function to receive WebSocket messages.
+
         Args:
             hook: An async function that takes a RavenfallStreamMessage instance
+
         """
         self._ravenfall_message_hooks.append(hook)
 
-    def remove_ravenfall_message_hook(self, hook: Callable[[RavenfallStreamMessage], Awaitable[None]]) -> None:
-        """
-        Remove a message hook function.
-        
+    def remove_ravenfall_message_hook(
+        self, hook: Callable[[RavenfallStreamMessage], Awaitable[None]]
+    ) -> None:
+        """Remove a message hook function.
+
         Args:
             hook: The hook function to remove
+
         """
         if hook in self._ravenfall_message_hooks:
             self._ravenfall_message_hooks.remove(hook)
 
-    def add_ravenbot_message_hook(self, hook: Callable[[RavenBotStreamMessage], Awaitable[None]]) -> None:
-        """
-        Add a hook function to receive WebSocket messages.
-        
+    def add_ravenbot_message_hook(
+        self, hook: Callable[[RavenBotStreamMessage], Awaitable[None]]
+    ) -> None:
+        """Add a hook function to receive WebSocket messages.
+
         Args:
             hook: An async function that takes a RavenBotStreamMessage instance
+
         """
         self._ravenbot_message_hooks.append(hook)
 
-    def remove_ravenbot_message_hook(self, hook: Callable[[RavenBotStreamMessage], Awaitable[None]]) -> None:
-        """
-        Remove a message hook function.
-        
+    def remove_ravenbot_message_hook(
+        self, hook: Callable[[RavenBotStreamMessage], Awaitable[None]]
+    ) -> None:
+        """Remove a message hook function.
+
         Args:
             hook: The hook function to remove
+
         """
         if hook in self._ravenbot_message_hooks:
             self._ravenbot_message_hooks.remove(hook)
 
     async def connect_websocket(self) -> None:
-        """
-        Connect to the middleman's WebSocket stream.
-        """
+        """Connect to the middleman's WebSocket stream."""
         if self._connected:
             logger.warning("WebSocket is already connected")
             return
 
-        ws_url = self.base_url.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws'
-        
+        ws_url = (
+            self.base_url.replace("http://", "ws://").replace("https://", "wss://")
+            + "/ws"
+        )
+
         try:
             self._session = aiohttp.ClientSession()
             self._websocket = await self._session.ws_connect(ws_url)
             self._connected = True
-            logger.info(f"Connected to WebSocket at {ws_url}")
-            
+            logger.info("Connected to WebSocket at %s", ws_url)
+
             # Start the message receiving task
             self._ws_task = asyncio.create_task(self._receive_messages())
-            
+
         except Exception as e:
-            logger.error(f"Failed to connect to WebSocket: {e}")
+            logger.error("Failed to connect to WebSocket: %s", e)
             if self._session:
                 await self._session.close()
                 self._session = None
-            raise MiddlemanError(f"WebSocket connection failed: {e}")
+            msg = f"WebSocket connection failed: {e}"
+            raise MiddlemanError(msg) from e
 
     async def disconnect_websocket(self) -> None:
-        """
-        Disconnect from the WebSocket stream.
-        """
+        """Disconnect from the WebSocket stream."""
         if not self._connected:
             logger.warning("WebSocket is not connected")
             return
 
         self._connected = False
-        
+
         if self._ws_task:
             _ = self._ws_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._ws_task
-            except asyncio.CancelledError:
-                pass
             self._ws_task = None
 
         if self._websocket:
@@ -375,26 +464,23 @@ class MiddlemanClient:
         if self._session:
             await self._session.close()
             self._session = None
-            
+
         logger.info("Disconnected from WebSocket")
 
     async def _receive_messages(self) -> None:
-        """
-        Internal method to receive and process messages from the WebSocket.
-        """
+        """Receive and process messages from the WebSocket."""
         try:
             while self._connected and self._websocket:
-                message_data_str: bytes = b''
+                message_data_str: bytes = b""
                 try:
                     message = await self._websocket.receive()
-                    
+
                     if message.type == aiohttp.WSMsgType.TEXT:
                         message_data_str = cast(bytes, message.data)
                         parsed_message = json.decode(
-                            message_data_str, 
-                            type=StreamMessageType
+                            message_data_str, type=StreamMessageType
                         )
-                        
+
                         if isinstance(parsed_message, RavenBotStreamMessage):
                             for hook in self._ravenbot_message_hooks:
                                 try:
@@ -407,20 +493,20 @@ class MiddlemanClient:
                                     await hook(parsed_message)
                                 except Exception as e:
                                     logger.error(f"Error in message hook: {e}")
-                    
+
                     elif message.type == aiohttp.WSMsgType.ERROR:
                         logger.error(f"WebSocket error: {self._websocket.exception()}")
                         break
-                    
+
                     elif message.type == aiohttp.WSMsgType.CLOSE:
                         logger.info("WebSocket connection closed")
                         break
-                        
+
                 except Exception as e:
                     logger.error(f"Error receiving WebSocket message: {e}")
                     logger.error(f"Message data: {message_data_str}")
                     # break
-                    
+
         except asyncio.CancelledError:
             logger.info("WebSocket message receiver task cancelled")
         finally:
@@ -428,26 +514,38 @@ class MiddlemanClient:
 
     @property
     def is_websocket_connected(self) -> bool:
-        """
-        Check if the WebSocket is connected.
-        """
-        return self._connected and self._websocket is not None and not self._websocket.closed
+        """Check if the WebSocket is connected."""
+        return (
+            self._connected
+            and self._websocket is not None
+            and not self._websocket.closed
+        )
 
 
 class FrozenSender(Sender, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[invalid-frozen-dataclass-subclass]
+    """Frozen version of Sender for immutable message data."""
+
     pass
 
+
 class FrozenRavenBotMessage(Struct, frozen=True):
+    """Frozen version of RavenBotMessage for immutable message data."""
+
     identifier: str = field(name="Identifier")
     sender: FrozenSender = field(name="Sender")
     content: str = field(name="Content")
     correlation_id: str | None = field(name="CorrelationId")
 
+
 class FrozenRecipient(Recipient, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[invalid-frozen-dataclass-subclass]
+    """Frozen version of Recipient for immutable message data."""
+
     pass
+
 
 class FrozenRavenfallMessage(Struct, frozen=True):
     """Represents a message received from Ravenfall."""
+
     identifier: str = field(name="Identifier")
     recipient: FrozenRecipient = field(name="Recipent")  # this typo is intentional
     format: str = field(name="Format")
@@ -456,7 +554,10 @@ class FrozenRavenfallMessage(Struct, frozen=True):
     category: str | None = field(name="Category")
     correlation_id: str | None = field(name="CorrelationId")
 
+
 class ProcessorMessageBase(Struct, kw_only=True):
+    """Base class for processor messages with common metadata."""
+
     client_addr: Final[str] = field(name="clientAddr")
     server_addr: Final[str] = field(name="serverAddr")
     connection_id: Final[str] = field(name="connectionId")
@@ -466,35 +567,72 @@ class ProcessorMessageBase(Struct, kw_only=True):
     _block: bool = False
 
     def block(self):
+        """Mark this message to be blocked from further processing."""
         self._block = True
 
+
 class RavenfallProcessorMessage(ProcessorMessageBase, tag_field="source", tag="SERVER"):
+    """Processor message originating from Ravenfall server."""
+
     message: RavenfallMessage
     original_message: Final[FrozenRavenfallMessage] = field(name="originalMessage")
     origin: Final[MessageOrigin] = MessageOrigin.RAVENFALL
 
+
 class RavenBotProcessorMessage(ProcessorMessageBase, tag_field="source", tag="CLIENT"):
+    """Processor message originating from RavenBot client."""
+
     message: RavenBotMessage
     original_message: Final[FrozenRavenBotMessage] = field(name="originalMessage")
     origin: Final[MessageOrigin] = MessageOrigin.RAVENBOT
 
-class RavenfallApiProcessorMessage(RavenfallProcessorMessage, tag_field="source", tag="API-SERVER"):
-    origin: Final[MessageOrigin] = MessageOrigin.RAVENFALL  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[override-of-final-variable]  # pyrefly:ignore[bad-override]
 
-class RavenBotApiProcessorMessage(RavenBotProcessorMessage, tag_field="source", tag="API-CLIENT"):
-    origin: Final[MessageOrigin] = MessageOrigin.RAVENBOT  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[override-of-final-variable]  # pyrefly:ignore[bad-override]
+class RavenfallApiProcessorMessage(
+    RavenfallProcessorMessage, tag_field="source", tag="API-SERVER"
+):
+    """API processor message originating from Ravenfall server."""
 
-ProcessorMessageType = RavenfallProcessorMessage | RavenBotProcessorMessage | RavenfallApiProcessorMessage | RavenBotApiProcessorMessage
+    origin: Final[MessageOrigin] = MessageOrigin.API_RAVENFALL  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[override-of-final-variable]  # pyrefly:ignore[bad-override]
+
+
+class RavenBotApiProcessorMessage(
+    RavenBotProcessorMessage, tag_field="source", tag="API-CLIENT"
+):
+    """API processor message originating from RavenBot client."""
+
+    origin: Final[MessageOrigin] = MessageOrigin.API_RAVENBOT  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[override-of-final-variable]  # pyrefly:ignore[bad-override]
+
+
+ProcessorMessageType = (
+    RavenfallProcessorMessage
+    | RavenBotProcessorMessage
+    | RavenfallApiProcessorMessage
+    | RavenBotApiProcessorMessage
+)
+
 
 class MessageProcessorServer:
+    """WebSocket server for processing Ravenfall messages."""
+
     def __init__(self, host: str = "0.0.0.0", port: int = 9000):
+        """Initialize the message processor server.
+        
+        Args:
+            host: Host address to bind to (default: "0.0.0.0")
+            port: Port to listen on (default: 9000)
+
+        """
         self.host: str = host
         self.port: int = port
         self._app: web.Application = web.Application()
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
-        self._ravenbot_message_hooks: list[Callable[[RavenBotProcessorMessage], Awaitable[None]]] = []
-        self._ravenfall_message_hooks: list[Callable[[RavenfallProcessorMessage], Awaitable[None]]] = []
+        self._ravenbot_message_hooks: list[
+            Callable[[RavenBotProcessorMessage], Awaitable[None]]
+        ] = []
+        self._ravenfall_message_hooks: list[
+            Callable[[RavenfallProcessorMessage], Awaitable[None]]
+        ] = []
         self._setup_routes()
 
     def _setup_routes(self) -> None:
@@ -512,25 +650,29 @@ class MessageProcessorServer:
                     try:
                         parsed_message = json.decode(
                             message_data,  # pyright: ignore[reportAny]
-                            type=ProcessorMessageType
+                            type=ProcessorMessageType,
                         )
                         if isinstance(parsed_message, RavenBotProcessorMessage):
                             for hook in self._ravenbot_message_hooks:
                                 try:
                                     await hook(parsed_message)
                                 except Exception as e:
-                                    logger.error(f"Error in message processor hook: {e}")
+                                    logger.error(
+                                        f"Error in message processor hook: {e}"
+                                    )
                         else:
                             for hook in self._ravenfall_message_hooks:
                                 try:
                                     await hook(parsed_message)
                                 except Exception as e:
-                                    logger.error(f"Error in message processor hook: {e}")
+                                    logger.error(
+                                        f"Error in message processor hook: {e}"
+                                    )
 
                         response = {
                             "correlationId": parsed_message.correlation_id,
                             "block": parsed_message._block,  # pyright: ignore[reportPrivateUsage]
-                            "message": parsed_message.message
+                            "message": parsed_message.message,
                         }
                         await ws.send_bytes(json_encode.encode(response))
 
@@ -545,7 +687,7 @@ class MessageProcessorServer:
                                     "correlationId": correlation_id,
                                     "block": False,
                                     "error": str(e),
-                                    "message": None
+                                    "message": None,
                                 }
                                 await ws.send_bytes(json_encode.encode(response))
                         except Exception as e2:
@@ -567,28 +709,66 @@ class MessageProcessorServer:
 
         return ws
 
-    def add_ravenfall_message_hook(self, hook: Callable[[RavenfallProcessorMessage], Awaitable[None]]) -> None:
+    def add_ravenfall_message_hook(
+        self, hook: Callable[[RavenfallProcessorMessage], Awaitable[None]]
+    ) -> None:
+        """Add a hook function to receive Ravenfall processor messages.
+        
+        Args:
+            hook: An async function that takes a RavenfallProcessorMessage instance
+
+        """
         self._ravenfall_message_hooks.append(hook)
 
-    def remove_ravenfall_message_hook(self, hook: Callable[[RavenfallProcessorMessage], Awaitable[None]]) -> None:
+    def remove_ravenfall_message_hook(
+        self, hook: Callable[[RavenfallProcessorMessage], Awaitable[None]]
+    ) -> None:
+        """Remove a Ravenfall message hook function.
+        
+        Args:
+            hook: The hook function to remove
+
+        """
         if hook in self._ravenfall_message_hooks:
             self._ravenfall_message_hooks.remove(hook)
 
-    def add_ravenbot_message_hook(self, hook: Callable[[RavenBotProcessorMessage], Awaitable[None]]) -> None:
+    def add_ravenbot_message_hook(
+        self, hook: Callable[[RavenBotProcessorMessage], Awaitable[None]]
+    ) -> None:
+        """Add a hook function to receive RavenBot processor messages.
+        
+        Args:
+            hook: An async function that takes a RavenBotProcessorMessage instance
+
+        """
         self._ravenbot_message_hooks.append(hook)
 
-    def remove_ravenbot_message_hook(self, hook: Callable[[RavenBotProcessorMessage], Awaitable[None]]) -> None:
+    def remove_ravenbot_message_hook(
+        self, hook: Callable[[RavenBotProcessorMessage], Awaitable[None]]
+    ) -> None:
+        """Remove a RavenBot message hook function.
+        
+        Args:
+            hook: The hook function to remove
+
+        """
         if hook in self._ravenbot_message_hooks:
             self._ravenbot_message_hooks.remove(hook)
 
     async def start(self) -> None:
+        """Start the message processor server."""
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
         self._site = web.TCPSite(self._runner, self.host, self.port)
         await self._site.start()
-        logger.info(f"Message processor server started on ws://{self.host}:{self.port}/process")
+        logger.info(
+            "Message processor server started on ws://%s:%s/process",
+            self.host,
+            self.port,
+        )
 
     async def stop(self) -> None:
+        """Stop the message processor server."""
         if self._site:
             await self._site.stop()
             self._site = None

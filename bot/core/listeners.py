@@ -17,16 +17,23 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
 
+
 class GenericListener(BaseListener):
     def __init__(
-        self, func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], cog: Cog | None = None,
-        cooldown: Cooldown | None | None = None, 
-        expected_dispatcher: Dispatcher = Dispatcher.Generic
-        ):
+        self,
+        func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]],
+        cog: Cog | None = None,
+        cooldown: Cooldown | None | None = None,
+        expected_dispatcher: Dispatcher = Dispatcher.Generic,
+    ):
         super().__init__(func, cog)
-        self.expected_dispatcher: Dispatcher = getattr(func, '_listener_dispatcher', expected_dispatcher)
-        self.meta_filter: MetaFilter = getattr(func, '_listener_meta_filter', MetaFilter([], False, [], False))
-        self.cooldown: Cooldown | None = getattr(func, '_listener_cooldown', cooldown)
+        self.expected_dispatcher: Dispatcher = getattr(
+            func, "_listener_dispatcher", expected_dispatcher
+        )
+        self.meta_filter: MetaFilter = getattr(
+            func, "_listener_meta_filter", MetaFilter([], False, [], False)
+        )
+        self.cooldown: Cooldown | None = getattr(func, "_listener_cooldown", cooldown)
 
     @override
     async def check_for_match(self, event: BaseEvent):
@@ -44,25 +51,36 @@ class GenericListener(BaseListener):
             if retry_after > 0:
                 raise ListenerOnCooldown(self.cooldown, retry_after)
             self.cooldown.update_rate_limit(event)
-    
+
     @override
-    async def invoke(self, global_ctx: GlobalContext, event: BaseEvent, match_result: Any):
+    async def invoke(
+        self,
+        global_ctx: GlobalContext,
+        event: BaseEvent,
+        match_result: Any,
+        *args: Any,
+        **kwargs: Any,
+    ):
         await self._check_cooldown(event)
         await self._run_func(global_ctx, event, match_result)
 
+
 class LambdaListener(GenericListener):
-    def __init__(self, func: Callable[..., Any], cog: Cog | None = None, cooldown: Cooldown | None = None,
+    def __init__(
+        self,
+        func: Callable[..., Any],
+        cog: Cog | None = None,
+        cooldown: Cooldown | None = None,
         event_types: list[type[BaseEvent]] | None = None,
         match_fn: Callable[[BaseEvent], bool] = lambda x: True,
-        expected_dispatcher: Dispatcher = Dispatcher.Generic
-        ):
+        expected_dispatcher: Dispatcher = Dispatcher.Generic,
+    ):
         super().__init__(func, cog, cooldown, expected_dispatcher)
         self.event_types: tuple[type[BaseEvent], ...] = tuple(event_types or [])
         self.match_fn: Callable[[BaseEvent], bool] = match_fn
-        
+
     @override
     async def check_for_match(self, event: BaseEvent) -> bool:
         if not isinstance(event, self.event_types):
             return False
         return self.match_fn(event)
-

@@ -46,6 +46,9 @@ dependencies = [
     "yarl==1.22.0",
 ]
 
+[tool.basedpyright]
+reportImportCycles="information"
+
 [tool.ty.rules]
 all = "error"
 
@@ -62,3 +65,7 @@ unused-ignore="warn"
 missing-override-decorator="warn"
 not-required-key-access="warn"
 open-unpacking="warn"
+
+[tool.ruff.lint]
+select = ["F", "LOG", "G", "T20", "SIM", "ASYNC", "B", "A", "DTZ", "T10", "EM", "INT", "RET", "PTH", "N", "DOC", "D"]
+ignore = ["F821", "G004"]

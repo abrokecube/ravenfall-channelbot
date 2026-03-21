@@ -13,40 +13,52 @@ LOGGER = logging.getLogger(__name__)
 
 TEXT_REPLACEMENTS: dict[int, str | int | None] = {
     ord("\U000e0000"): None,
-    ord("\u034f"): None
+    ord("\u034f"): None,
 }
+
+
 def filter_text(text: str):
     text = text.translate(TEXT_REPLACEMENTS)
     text = text.strip()
     return text
+
 
 class SimpleDispatcher(BaseDispatcher):
     def __init__(self) -> None:
         super().__init__()
         self._id: Dispatcher = Dispatcher.Generic
         self._func_listener: type[BaseListener] = GenericListener
-        self.categories: set[EventCategory] = set([
-            EventCategory.Generic, EventCategory.Message, EventCategory.RavenBotMessage,
-            EventCategory.RavenfallMessage
-        ])
+        self.categories: set[EventCategory] = set(
+            [
+                EventCategory.Generic,
+                EventCategory.Message,
+                EventCategory.RavenBotMessage,
+                EventCategory.RavenfallMessage,
+            ]
+        )
 
     @override
-    async def dispatch(self, global_context: GlobalContext, event: BaseEvent):
-        for l in self.listeners.values():
+    async def dispatch(
+        self, global_context: GlobalContext, event: BaseEvent, *args, **kwargs
+    ):
+        for listener in self.listeners.values():
             match_result = False
             try:
-                match_result = await l.check_for_match(event)
+                match_result = await listener.check_for_match(event)
             except Exception as e:
                 LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
-            
+
             if match_result:
-                await self._invoke_listener(l, global_context, event, match_result)
+                await self._invoke_listener(
+                    listener, global_context, event, match_result
+                )
+
 
 # class TwitchRedeemDispatcher(SimpleDispatcher):
 #     def __init__(self):
 #         super().__init__()
 #         self._id: Dispatcher = Dispatcher.TwitchRedeem
-    
+
 #     @override
 #     async def on_invoke_error(self, global_context: GlobalContext, event: BaseEvent, error: Exception, *args: Any, **kwargs: Any) -> None:
 #         if not isinstance(event, TwitchRedemptionEvent):

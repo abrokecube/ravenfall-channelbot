@@ -3,7 +3,10 @@ from typing import TypedDict, Concatenate
 from collections.abc import Callable, Awaitable
 from bot.core.components import GlobalContext, BaseEvent
 
-VerifierType = Callable[Concatenate[GlobalContext, BaseEvent, ...], bool | str | Awaitable[bool | str]]
+VerifierType = Callable[
+    Concatenate[GlobalContext, BaseEvent, ...], bool | str | Awaitable[bool | str]
+]
+
 
 class ParameterConfig(TypedDict):
     aliases: list[str]
