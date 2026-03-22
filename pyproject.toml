@@ -41,6 +41,7 @@ dependencies = [
     "thefuzz==0.22.1",
     "tinydb==4.8.2",
     "tqdm==4.67.1",
+    "twitchapi",
     "typing-extensions==4.15.0",
     "websockets==15.0.1",
     "yarl==1.22.0",
@@ -74,3 +75,9 @@ unsafe-fixes = true
 future-annotations = true
 select = ["F", "LOG", "G", "T20", "SIM", "ASYNC", "B", "A", "DTZ", "T10", "EM", "INT", "RET", "PTH", "N", "DOC", "D"]
 ignore = ["F821", "G004", "D100", "D104", "D105", "D107", "ASYNC109", "B010"]
+
+[tool.ruff.format]
+exclude = ["./twitchAPI/**"]
+
+[tool.uv.sources]
+twitchapi = { git = "https://github.com/abrokecube/pyTwitchAPI.git" }
