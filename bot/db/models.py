@@ -1,11 +1,20 @@
-from database.db import engine
+from . import Base
+from .db import engine
 
 from sqlalchemy import (
-    String, Integer, ForeignKey, Boolean, DateTime, Float, JSON, text, inspect
+    String,
+    Integer,
+    ForeignKey,
+    Boolean,
+    DateTime,
+    Float,
+    JSON,
+    text,
+    inspect,
 )
 from sqlalchemy.orm import relationship, mapped_column
-from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncConnection
-from sqlalchemy.orm import DeclarativeBase, Mapped, Relationship
+from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.orm import Mapped, Relationship
 from sqlalchemy.engine import Result
 from sqlalchemy.sql.schema import Column, ColumnDefault
 from sqlalchemy.engine.reflection import Inspector
@@ -21,56 +30,66 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-class Base(AsyncAttrs, DeclarativeBase):
-    pass
-
 
 class User(Base):
-    __tablename__: str = 'users'
+    __tablename__: str = "users"
 
     twitch_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name_tag_color: Mapped[str] = mapped_column(String, default="#7F7F7F")
     name: Mapped[str] = mapped_column(String)
     display_name: Mapped[str] = mapped_column(String)
-    
-    characters: Relationship[list["Character"]] = relationship("Character", back_populates='user')
+
+    characters: Relationship[list["Character"]] = relationship(
+        "Character", back_populates="user"
+    )
 
 
 class Channel(Base):
-    __tablename__: str = 'channels'
+    __tablename__: str = "channels"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     idle_earn_rate: Mapped[int] = mapped_column(Integer, default=5)
-    idle_earn_interval: Mapped[int] = mapped_column(Integer, default=5*60)  # add credits every 5 minutes
+    idle_earn_interval: Mapped[int] = mapped_column(
+        Integer, default=5 * 60
+    )  # add credits every 5 minutes
     prefix: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=["!"])
-    scroll_queue: Mapped[list[QueuedScroll]] = mapped_column(JSON, nullable=False, default=[])
+    scroll_queue: Mapped[list[QueuedScroll]] = mapped_column(
+        JSON, nullable=False, default=[]
+    )
 
 
 class Character(Base):
-    __tablename__: str = 'characters'
-    
+    __tablename__: str = "characters"
+
     id: Mapped[str] = mapped_column(String, primary_key=True)
 
-    twitch_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.twitch_id'))
+    twitch_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.twitch_id"))
     training: Mapped[str] = mapped_column(String, default="None")
-    user: Relationship["User"] = relationship("User", back_populates='characters')
+    user: Relationship["User"] = relationship("User", back_populates="characters")
 
-    auto_raid_status: Relationship["AutoRaidStatus"] = relationship("AutoRaidStatus", back_populates='char', uselist=False)
-    user_credit_idle_earn: Relationship["UserCreditIdleEarn"] = relationship("UserCreditIdleEarn", back_populates='char', uselist=False)
+    auto_raid_status: Relationship["AutoRaidStatus"] = relationship(
+        "AutoRaidStatus", back_populates="char", uselist=False
+    )
+    user_credit_idle_earn: Relationship["UserCreditIdleEarn"] = relationship(
+        "UserCreditIdleEarn", back_populates="char", uselist=False
+    )
 
 
 class AutoRaidStatus(Base):
-    __tablename__: str = 'auto_raid_status'
-    
+    __tablename__: str = "auto_raid_status"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    char_id: Mapped[str] = mapped_column(String, ForeignKey('characters.id'), unique=True)
+    char_id: Mapped[str] = mapped_column(String, ForeignKey("characters.id"), unique=True)
     auto_raid_count: Mapped[int] = mapped_column(Integer, default=-1)
-    char: Relationship["Character"] = relationship("Character", back_populates='auto_raid_status')
+    char: Relationship["Character"] = relationship(
+        "Character", back_populates="auto_raid_status"
+    )
+
 
 class SenderData(Base):
-    __tablename__: str = 'sender_data'
-    
+    __tablename__: str = "sender_data"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     channel_platform: Mapped[str] = mapped_column(String)
     channel_platform_id: Mapped[str] = mapped_column(String)
@@ -90,59 +109,71 @@ class SenderData(Base):
     sub_tier: Mapped[int] = mapped_column(Integer)
     identifier: Mapped[str] = mapped_column(String)
 
+
 class TwitchAuth(Base):
-    __tablename__: str = 'twitch_auth'
-    
+    __tablename__: str = "twitch_auth"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer)
     user_name: Mapped[str] = mapped_column(String)
     access_token: Mapped[str] = mapped_column(String)
     refresh_token: Mapped[str] = mapped_column(String)
 
+
 class UserCredits(Base):
-    __tablename__: str = 'user_credits'
-    
+    __tablename__: str = "user_credits"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer)
     credits: Mapped[int] = mapped_column(Integer, default=0)
 
+
 class UserCreditIdleEarn(Base):
-    __tablename__: str = 'user_credit_idle_earn'
-    
+    __tablename__: str = "user_credit_idle_earn"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    char_id: Mapped[str] = mapped_column(String, ForeignKey('characters.id'), unique=True)
+    char_id: Mapped[str] = mapped_column(String, ForeignKey("characters.id"), unique=True)
     total_time: Mapped[float] = mapped_column(Float, default=0)  # in seconds
     last_seen_timestamp: Mapped[DateTime] = mapped_column(DateTime)
-    
-    char: Relationship["Character"] = relationship('Character', back_populates='user_credit_idle_earn')
+
+    char: Relationship["Character"] = relationship(
+        "Character", back_populates="user_credit_idle_earn"
+    )
+
 
 class UserCreditTransaction(Base):
-    __tablename__: str = 'user_credit_transaction'
-    
+    __tablename__: str = "user_credit_transaction"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer)
     credits: Mapped[int] = mapped_column(Integer)
     description: Mapped[str] = mapped_column(String)
     timestamp: Mapped[DateTime] = mapped_column(DateTime)
-    
+
+
+class KeyValue(Base):
+    __tablename__: str = "key_value"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[object] = mapped_column(JSON, nullable=True)
+
+
 class ChatMessage(Base):
-    __tablename__: str = 'chat_messages'
-    
+    __tablename__: str = "chat_messages"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     room_name: Mapped[str] = mapped_column(String, nullable=False)
     user_name: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(String, nullable=False)
     timestamp: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    reply_to_id: Mapped[int] = mapped_column(Integer, ForeignKey('chat_messages.id'), nullable=True)
+    reply_to_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("chat_messages.id"), nullable=True
+    )
     user_id: Mapped[str] = mapped_column(String, nullable=True)
-    
-    
-    reply_to: Relationship["ChatMessage"] = relationship("ChatMessage", remote_side=[id], backref="replies")
-    
 
-async def create_all_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    reply_to: Relationship["ChatMessage"] = relationship(
+        "ChatMessage", remote_side=[id], backref="replies"
+    )
 
 
 type ColumnMap = dict[str, Column[Any]]
@@ -150,8 +181,7 @@ type ExistingColumnMap = dict[str, Any]
 
 
 async def update_schema() -> None:
-    """
-    Update the database schema by adding any missing columns to existing tables.
+    """Update the database schema by adding any missing columns to existing tables.
 
     This operation is non-destructive: it only creates tables if missing and
     adds columns that do not already exist.
@@ -181,7 +211,6 @@ async def _get_existing_columns(
     dialect: str,
 ) -> ExistingColumnMap:
     """Return a mapping of existing column names for a table."""
-
     if dialect == "sqlite":
         result: Result[Any] = await inspection_conn.execute(
             text(f"PRAGMA table_info({table_name})")
@@ -231,7 +260,6 @@ async def _add_column(
     column: Column[Any],
 ) -> None:
     """Generate and execute an ALTER TABLE statement for a column."""
-
     column_name: str = column.name
     column_type: str = column.type.compile(engine.dialect)
 
@@ -265,4 +293,3 @@ async def _add_column(
     except Exception as e:
         logger.error("Error adding column %s to table %s: %s", column_name, table_name, e)
         logger.error("SQL: %s", stmt)
-

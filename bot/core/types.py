@@ -8,3 +8,4 @@ ListenerFuncType = Callable[
 EventProcessor = Callable[
     [GlobalContext, BaseEvent], None | BaseEvent | Awaitable[None | BaseEvent]
 ]
+EventProcessorCallback = Callable[[BaseEvent], Awaitable[None]] | None

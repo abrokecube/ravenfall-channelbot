@@ -66,6 +66,11 @@ missing-override-decorator="warn"
 not-required-key-access="warn"
 open-unpacking="warn"
 
+[tool.ruff]
+line-length = 90
+unsafe-fixes = true
+
 [tool.ruff.lint]
+future-annotations = true
 select = ["F", "LOG", "G", "T20", "SIM", "ASYNC", "B", "A", "DTZ", "T10", "EM", "INT", "RET", "PTH", "N", "DOC", "D"]
-ignore = ["F821", "G004", "D100", "D104"]
+ignore = ["F821", "G004", "D100", "D104", "D105", "D107", "ASYNC109", "B010"]

@@ -1,8 +1,9 @@
 # db_session.py
 from contextlib import asynccontextmanager
-from database.db import engine
+from .db import engine
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
 
 @asynccontextmanager
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:

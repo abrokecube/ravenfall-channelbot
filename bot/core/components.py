@@ -1,15 +1,22 @@
 from __future__ import annotations
 
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable, cast, TYPE_CHECKING, override
 from collections import defaultdict
 from collections.abc import Coroutine, Collection, Awaitable
 import sys
 import importlib
 import dataclasses
+import contextlib
 from dataclasses import dataclass
 import asyncio
 import logging
 from uuid import uuid4
+
+"""Event handling core components.
+
+This module defines the event manager architecture used by the ravenfall channel bot.
+It includes event sources, dispatchers, listeners, cogs, and rate-limiting helpers.
+"""
 
 from .enums import Dispatcher, EventCategory, EventSource, BucketType
 from .exceptions import ListenerError
@@ -20,54 +27,245 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class GlobalContext:
-    def __init__(self):
-        self._services: dict[type[Any], Any] = {}
+class ServiceResolutionError(RuntimeError):
+    """Raised when required services remain unresolved at context exit."""
 
-    def register_service[T](self, service_type: type[T], instance: T) -> None:
+
+class ServiceResolutionContext:
+    """Context for waiting for required services before continuing."""
+
+    def __init__(self, global_context: GlobalContext, max_wait: float | None = None):
+        self.global_context: GlobalContext = global_context
+        self.max_wait: float | None = max_wait
+        self.required_services: set[type[BaseService]] = set()
+        self.resolved_services: dict[type[BaseService], BaseService] = {}
+
+    async def __aenter__(self) -> ServiceResolutionContext:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type,
+        exc_val,
+        exc_tb,
+    ):
+        unresolved = [
+            t for t in self.required_services if t not in self.resolved_services
+        ]
+        if unresolved:
+            # Cancel any pending waiters for unresolved services
+            for service_type in unresolved:
+                waiters = self.global_context._service_waiters.get(service_type, [])
+                for waiter in waiters:
+                    if not waiter.done():
+                        waiter.cancel()
+                # Clear the waiters list for this service type
+                self.global_context._service_waiters.pop(service_type, None)
+
+            unresolved_list = ", ".join([t.__name__ for t in unresolved])
+            error_msg = f"Unresolved services at context exit: {unresolved_list}"
+            raise ServiceResolutionError(error_msg) from exc_val
+
+        # Preserve raised exception from context body if there was one.
+        return False
+
+    async def require_service[T: BaseService](
+        self,
+        service_type: type[T],
+        timeout: float | None = None,
+    ) -> T:
+        """Require a service to be resolved before continuing.
+
+        Args:
+            service_type: The type of service to wait for
+            timeout: Maximum time to wait, None for no timeout
+
+        Returns:
+            The resolved service instance
+
+        Raises:
+            asyncio.TimeoutError: If the timeout is exceeded
+
+        """
+        self.required_services.add(service_type)
+        service = await self.global_context.wait_for_service(
+            service_type, max_wait=timeout if timeout is not None else self.max_wait
+        )
+        self.resolved_services[service_type] = service
+        return service
+
+
+class GlobalContext:
+    """Global dependency injection and service registry.
+
+    Stores singleton service objects by type, enabling retrieval from
+    across modules and cogs.
+    """
+
+    def __init__(self):
+        """Initialize the global service registry."""
+        self._services: dict[type[BaseService], BaseService] = {}
+        self._service_events: dict[type[BaseService], asyncio.Event] = {}
+        self._service_waiters: dict[
+            type[BaseService], list[asyncio.Future[BaseService]]
+        ] = {}
+
+    def register_service[T: BaseService](
+        self, service_type: type[T], instance: T
+    ) -> None:
         """Register a service for cross-module sharing."""
         self._services[service_type] = instance
 
-    def get_service[T](self, service_type: type[T]) -> T | None:
-        """Retrieve a service. Returns None if not found."""
-        return self._services.get(service_type)
+        ev = self._service_events.get(service_type)
+        if ev is None:
+            ev = asyncio.Event()
+            self._service_events[service_type] = ev
+        ev.set()
 
-    def require_service[T](self, service_type: type[T]) -> T:
+        waiters = self._service_waiters.pop(service_type, [])
+        for waiter in waiters:
+            if not waiter.done():
+                waiter.set_result(instance)
+
+    def get_service[T: BaseService](self, service_type: type[T]) -> T | None:
+        """Retrieve a service. Returns None if not found."""
+        service = self._services.get(service_type)
+        return cast(T | None, service)
+
+    def require_service[T: BaseService](self, service_type: type[T]) -> T:
         """Retrieve a service, raising an error if it doesn't exist."""
         service = self.get_service(service_type)
         if service is None:
             msg = f"Required service {service_type.__name__} is not registered in GlobalContext"
-            raise RuntimeError(
-                msg
-            )
+            raise RuntimeError(msg)
         return service
+
+    async def wait_for_service[T: BaseService](
+        self,
+        service_type: type[T],
+        max_wait: float | None = None,
+    ) -> T:
+        """Wait for a service to become available, with optional timeout.
+
+        Args:
+            service_type: The type of service to wait for
+            max_wait: Maximum time to wait, None for no timeout
+
+        Returns:
+            The service instance when available
+
+        Raises:
+            asyncio.TimeoutError: If the timeout is exceeded
+
+        """
+        existing = self.get_service(service_type)
+        if existing is not None:
+            return existing
+
+        loop = asyncio.get_running_loop()
+        waiter: asyncio.Future[T] = loop.create_future()
+
+        self._service_waiters.setdefault(service_type, []).append(
+            cast(asyncio.Future[BaseService], waiter)
+        )
+
+        # re-check in case the service arrived before the waiter was registered
+        existing = self.get_service(service_type)
+        if existing is not None and not waiter.done():
+            waiter.set_result(existing)
+
+        try:
+            if max_wait is None:
+                instance = await waiter
+            else:
+                instance = await asyncio.wait_for(waiter, max_wait)
+            return instance
+        finally:
+            waiters = self._service_waiters.get(service_type)
+            if waiters and waiter in waiters:
+                waiters.remove(cast(asyncio.Future[BaseService], waiter))
+
+    def service_resolution_context(
+        self, max_wait: float | None = None
+    ) -> ServiceResolutionContext:
+        """Create an async context where required services can be awaited."""
+        return ServiceResolutionContext(self, max_wait)
+
+
+class DummyGlobalContext(GlobalContext):
+    """Dummy global context for classes that get a global context from the event manager."""
+
+    def __init__(self):
+        super().__init__()
+
+    def raise_error(self):
+        """Raise the error."""
+        msg = "This object must be added to an event manager!"
+        raise RuntimeError(msg)
+
+    @override
+    def register_service[T](self, service_type: type[T], instance: T) -> None:
+        self.raise_error()
+
+    @override
+    def get_service[T](self, service_type: type[T]) -> T | None:
+        self.raise_error()
+
+    @override
+    def require_service[T](self, service_type: type[T]) -> T:
+        self.raise_error()
+
+    @override
+    async def wait_for_service[T](
+        self, service_type: type[T], max_wait: float | None = None
+    ) -> T:
+        self.raise_error()
+
+
+class BaseService:
+    """Base class for a GlobalContext service."""
+
+    def __init__(self) -> None:
+        pass
 
 
 class BaseEventSource:
-    requirements: list[str] = []
+    """Base class for event sources.
+
+    Subclasses should implement setup/teardown and send events via
+    `event_processor_callback` to the registered event manager.
+    """
+
     event_platform: EventSource = EventSource.Any
 
     def __init__(self):
+        """Initialize the base event source."""
         self.event_processor_callback: Callable[[BaseEvent], Awaitable[None]] | None = (
             None
         )
+        self.global_context: GlobalContext = DummyGlobalContext()
 
     async def setup(self, event_manager: EventManager):
+        """Set up the source with an EventManager reference."""
         pass
 
     async def teardown(self):
+        """Tear down the source, releasing resources."""
         pass
 
     async def send_event(self, event: BaseEvent):
+        """Forward an event to the registered event processor."""
         if self.event_processor_callback:
             _ = await self.event_processor_callback(event)
 
 
 @dataclass(kw_only=True)
 class BaseEvent:
+    """Base event type passed through the event system."""
+
     categories: Collection[EventCategory]
     platform: EventSource = EventSource.Any
-    data: Any
+    data: object
 
     async def get_bucket_key(self, bucket_type: str | BucketType) -> str:  # pyright: ignore[reportUnusedParameter]
         """Return a string key used for rate limiting/bucketing.
@@ -78,10 +276,17 @@ class BaseEvent:
 
 
 class EventManager:
+    """Coordinates event sources, processors, dispatchers, and cogs.
+
+    EventManager receives events from event sources, applies event processors,
+    and dispatches to the appropriate dispatcher(s) based on event categories.
+    """
+
     def __init__(self, global_context: GlobalContext):
+        """Initialize the event manager with context and empty registries."""
         self.event_sources: list[BaseEventSource] = []
-        self.event_processors: dict[type[BaseEvent], list[EventProcessor]] = (
-            defaultdict(list)
+        self.event_processors: dict[type[BaseEvent], list[EventProcessor]] = defaultdict(
+            list
         )
         self.dispatchers: dict[Dispatcher, BaseDispatcher] = {
             # Dispatcher.Generic: SimpleDispatcher()
@@ -92,48 +297,61 @@ class EventManager:
         # self.add_event_processor(MessageEvent, cast(EventProcessor, event_processors.filter_message_event_text))
 
     async def add_event_source(self, source: BaseEventSource):
+        """Add a source to begin receiving events."""
         source.event_processor_callback = self.process_event
+        source.global_context = self.global_context
         self.event_sources.append(source)
         await source.setup(self)
 
     async def remove_event_source(self, source: BaseEventSource):
+        """Remove an event source and tear it down."""
         try:
             source_idx = self.event_sources.index(source)
-        except:
-            raise ValueError("Source not found")
+        except ValueError as exc:
+            msg = "Source not found"
+            raise ValueError(msg) from exc
         self.event_sources[source_idx].event_processor_callback = None
+        self.event_sources[source_idx].global_context = None
         removed_source = self.event_sources.pop(source_idx)
         await removed_source.teardown()
 
     async def add_dispatcher(self, dispatcher: BaseDispatcher):
+        """Register a dispatcher that will route events to listeners."""
         if dispatcher.id in self.dispatchers:
-            raise ValueError(
-                f"Dispatcher with id '{dispatcher.id}' has already been added!"
-            )
+            msg = f"Dispatcher with id '{dispatcher.id}' has already been added!"
+            raise ValueError(msg)
         self.dispatchers[dispatcher.id] = dispatcher
         await dispatcher.setup(self)
 
     async def remove_dispatcher(self, dispatcher: BaseDispatcher):
+        """Unregister and tear down a dispatcher."""
         if dispatcher.id not in self.dispatchers:
-            raise ValueError(f"Dispatcher with id '{dispatcher.id}' was not found!")
+            msg = f"Dispatcher with id '{dispatcher.id}' was not found!"
+            raise ValueError(msg)
         removed_dispatcher = self.dispatchers.pop(dispatcher.id)
         await removed_dispatcher.teardown()
 
     def add_listener(self, listener: BaseListener):
+        """Register a listener with its expected dispatcher."""
         expd_dispatcher = listener.expected_dispatcher
         if expd_dispatcher not in self.dispatchers:
-            raise ValueError(f"No dispatcher exists for listener {listener}")
+            msg = f"No dispatcher exists for listener {listener}"
+            raise ValueError(msg)
         self.dispatchers[expd_dispatcher].add_listener(listener)
 
     def remove_listener(self, listener: BaseListener):
+        """Remove a listener from its dispatcher."""
         expd_dispatcher = listener.expected_dispatcher
         if expd_dispatcher not in self.dispatchers:
-            raise ValueError(f"No dispatcher exists for listener {listener}")
+            msg = f"No dispatcher exists for listener {listener}"
+            raise ValueError(msg)
         self.dispatchers[expd_dispatcher].remove_listener(listener)
 
-    async def add_cog(self, cog_cls: type[Cog], *args: Any, **kwargs: Any) -> None:  # pyright: ignore [reportExplicitAny, reportAny]
+    async def add_cog(self, cog_cls: type[Cog], *args: object, **kwargs: object) -> None:
+        """Load a new cog and register its listeners."""
         if cog_cls in self.cogs:
-            raise ValueError(f"Cog {cog_cls.__name__} is already loaded.")
+            msg = f"Cog {cog_cls.__name__} is already loaded."
+            raise ValueError(msg)
 
         cog_instance = cog_cls(self, *args, **kwargs)
         self.cogs[cog_cls.__name__] = cog_instance
@@ -144,30 +362,28 @@ class EventManager:
         await cog_instance.setup()
 
     async def remove_cog(self, cog_cls: type[Cog] | str):
-        if isinstance(cog_cls, str):
-            cog_name = cog_cls
-        else:
-            cog_name = cog_cls.__name__
+        """Unload a cog and clean up its listeners."""
+        cog_name = cog_cls if isinstance(cog_cls, str) else cog_cls.__name__
 
         if cog_name not in self.cogs:
-            raise ValueError(f"Cog {cog_name} is not loaded.")
+            msg = f"Cog {cog_name} is not loaded."
+            raise ValueError(msg)
 
         cog_instance = self.cogs[cog_name]
 
         for listener in cog_instance.listeners:
-            try:
+            with contextlib.suppress(ValueError):
                 self.remove_listener(listener)
-            except ValueError:
-                pass
 
         try:
             await cog_instance.stop()
         except Exception as e:
-            LOGGER.error(f"Error occured while stopping cog: {e}", exc_info=True)
+            LOGGER.exception(f"Error occured while stopping cog: {e}")
 
         del self.cogs[cog_name]
 
     async def reload_cog(self, cog_cls: type[Cog]) -> type[Cog]:
+        """Reload a cog module and replace the existing cog instance."""
         module_name = cog_cls.__module__
         cog_name = cog_cls.__name__
 
@@ -185,7 +401,8 @@ class EventManager:
 
         new_cog_cls = getattr(module, cog_name)  # pyright: ignore[reportAny]
         if not isinstance(new_cog_cls, type) or not issubclass(new_cog_cls, Cog):
-            raise ValueError(f"Module {module_name} does not contain a Cog class.")
+            msg = f"Module {module_name} does not contain a Cog class."
+            raise ValueError(msg)
         await self.add_cog(new_cog_cls)
 
         return new_cog_cls
@@ -193,31 +410,36 @@ class EventManager:
     def add_event_processor(
         self, target_event_cls: type[BaseEvent], func: EventProcessor
     ):
+        """Register an event processor middleware for a specific event type."""
         self.event_processors[target_event_cls].append(func)
 
     def remove_event_processor(
         self, func: EventProcessor, target_event_cls: type[BaseEvent] | None = None
     ):
+        """Remove an event processor from registry."""
         if target_event_cls:
             self.event_processors[target_event_cls].remove(func)
             return
-        for t, m in self.event_processors.items():
-            for mware in m:
+        for _, processors in self.event_processors.items():
+            for mware in processors:
                 if mware == func:
-                    m.remove(func)
+                    processors.remove(func)
                     return
 
     async def process_event(self, event: BaseEvent):
+        """Apply processors and dispatch the event to matching dispatchers."""
         LOGGER.debug(f"Processing event {event}")
         matching_processors: list[EventProcessor] = []
-        for t, m in self.event_processors.items():
-            if isinstance(event, t):
-                matching_processors.extend(m)
+        for event_type, processors in self.event_processors.items():
+            if isinstance(event, event_type):
+                matching_processors.extend(processors)
 
         for processor in matching_processors:
             event = dataclasses.replace(event)
-            result = processor(self.global_context, event)
-            if asyncio.iscoroutine(result):
+            result: None | BaseEvent | Awaitable[None | BaseEvent] = processor(
+                self.global_context, event
+            )
+            if isinstance(result, Awaitable):
                 result = await result
             if isinstance(result, BaseEvent):
                 event = result
@@ -234,13 +456,12 @@ class EventManager:
             try:
                 await dispatcher.dispatch(self.global_context, event)
             except Exception as e:
-                LOGGER.error(
-                    f"Exception while sending event to dispatcher: {e}", exc_info=True
-                )
+                LOGGER.exception(f"Exception while sending event to dispatcher: {e}")
 
     async def stop_all(self):
+        """Stop all loaded cogs gracefully."""
         tasks: list[Coroutine[None, None, None]] = []
-        for cog in self.cogs.keys():
+        for cog in list(self.cogs):
             tasks.append(self.remove_cog(cog))
         __ = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -295,31 +516,39 @@ class EventManager:
 
 
 class BaseDispatcher:
+    """Base dispatcher for routing events to listeners."""
+
     def __init__(self):
+        """Initialize dispatcher container and assignment metadata."""
         self.id: Dispatcher = Dispatcher.Base
         self._func_listener: type[BaseListener] = BaseListener
         self.listeners: dict[str, BaseListener] = {}
         self.categories: set[EventCategory] = set([EventCategory.Generic])
 
-    async def setup(self, event_manager: EventManager):  # pyright: ignore[reportUnusedParameter]
+    async def setup(self, _event_manager: EventManager):
+        """Set up dispatcher resources."""
         pass
 
     async def teardown(self):
+        """Tear down dispatcher resources."""
         pass
 
     def add_listener(self, listener: BaseListener):
+        """Add a listener to this dispatcher."""
         if listener.id in self.listeners:
-            raise ValueError(f"Listener with id '{listener.id}' already exists!")
+            msg = f"Listener with id '{listener.id}' already exists!"
+            raise ValueError(msg)
         if listener.expected_dispatcher != self.id:
-            raise ValueError(
-                f"Listener {listener} cannot be assigned to this dispatcher!"
-            )
+            msg = f"Listener {listener} cannot be assigned to this dispatcher!"
+            raise ValueError(msg)
         self.listeners[listener.id] = listener
 
     def remove_listener(self, listener: BaseListener):
+        """Unregister a listener from its dispatcher."""
         listener_id = listener.id
         if listener_id not in self.listeners:
-            raise ValueError(f"Listener with id '{listener_id}' doesn't exist!")
+            msg = f"Listener with id '{listener_id}' doesn't exist!"
+            raise ValueError(msg)
         __ = self.listeners.pop(listener_id)
 
     async def _invoke_listener(
@@ -327,32 +556,40 @@ class BaseDispatcher:
         listener: BaseListener,
         g_ctx: GlobalContext,
         event: BaseEvent,
-        *args: Any,
-        **kwargs: Any,
+        *_args: object,
+        **_kwargs: object,
     ):
         try:
-            await listener.invoke(g_ctx, event, *args, **kwargs)
+            await listener.invoke(g_ctx, event, *_args, **_kwargs)
         except Exception as error:
             if not isinstance(error, ListenerError):
-                LOGGER.error(
-                    f"Error in {listener.func.__name__} occurred during command invocation: {error}",
-                    exc_info=True,
+                LOGGER.exception(
+                    "Error in %s occurred during command invocation: %s",
+                    listener.func.__name__,
+                    error,
                 )  # ty:ignore[unresolved-attribute]
             else:
-                LOGGER.error(
-                    f"Error in {listener.func.__name__} handled during command invocation: {error}"
+                LOGGER.exception(
+                    "Error in %s handled during command invocation: %s",
+                    listener.func.__name__,
+                    error,
                 )  # ty:ignore[unresolved-attribute]
             await self.on_invoke_error(g_ctx, event, error)
 
     async def dispatch(
-        self, global_context: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any
-    ) -> Any:
+        self,
+        global_context: GlobalContext,
+        event: BaseEvent,
+        *_args: object,
+        **_kwargs: object,
+    ) -> None:
+        """Check and invoke listeners matching the event."""
         for l in self.listeners.values():
             match_result = False
             try:
                 match_result = await l.check_for_match(event)
             except Exception as e:
-                LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
+                LOGGER.exception("Listener matcher returned an error: %s", e)
 
             if match_result:
                 await self._invoke_listener(l, global_context, event)
@@ -362,29 +599,44 @@ class BaseDispatcher:
         global_context: GlobalContext,
         event: BaseEvent,
         error: Exception,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:  # pyright: ignore[reportUnusedParameter]
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        """Handle listener invocation errors."""
         pass
 
 
 class BaseListener:
+    """Base listener wrapping a callback and match logic."""
+
+    id: str
+    expected_dispatcher: Dispatcher
+    func: Callable[..., None | Awaitable[None]]
+    cog: Cog | None
+
     def __init__(
         self,
         func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]],
         cog: Cog | None = None,
     ):
-        self.id: str = f"{func.__name__}_{uuid4()}"
-        self.expected_dispatcher: Dispatcher = Dispatcher.Base
-        self.func: Callable[..., None | Awaitable[None]] = func
-        self.cog: Cog | None = None
+        """Initialize a listener wrapper for the target callback."""
+        self.id = f"{func.__name__}_{uuid4()}"
+        self.expected_dispatcher = Dispatcher.Base
+        self.func = func
+        self.cog = cog
 
-    async def check_for_match(self, event: BaseEvent) -> bool:  # pyright: ignore[reportUnusedParameter]
+    async def check_for_match(self, _event: BaseEvent) -> bool:
+        """Return whether the listener should run for the given event."""
         return True
 
     async def _run_func(
-        self, global_ctx: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any
+        self,
+        global_ctx: GlobalContext,
+        event: BaseEvent,
+        *args: object,
+        **kwargs: object,
     ) -> None:
+        """Execute the wrapped function with proper context and exception handling."""
         try:
             if self.cog is not None:
                 result = self.func(event, *args, **kwargs)
@@ -399,59 +651,94 @@ class BaseListener:
             raise e
 
     async def invoke(
-        self, global_ctx: GlobalContext, event: BaseEvent, *args: Any, **kwargs: Any
+        self,
+        global_ctx: GlobalContext,
+        event: BaseEvent,
+        *_args: object,
+        **_kwargs: object,
     ) -> None:
-        await self._run_func(global_ctx, event, *args, **kwargs)
+        """Invoke the listener action."""
+        await self._run_func(global_ctx, event, *_args, **_kwargs)
 
     async def on_func_exception(
         self,
         global_ctx: GlobalContext,
         event: BaseEvent,
         error: Exception,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:  # pyright: ignore[reportUnusedParameter]
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        """Handle exceptions that occur during function execution.
+
+        Args:
+            global_ctx: The global context
+            event: The event being processed
+            error: The exception that occurred
+            *args: Additional positional arguments
+            **kwargs: Additional keyword arguments
+
+        """
         pass
 
 
 class Cog:
+    """Cog is a pluggable module containing listeners and lifecycle hooks."""
+
     def __init__(self, event_manager: EventManager):
+        """Initialize cog with event manager reference and attach listeners."""
         self.event_manager: EventManager = event_manager
         self.global_context: GlobalContext = event_manager.global_context
         self.g_ctx: GlobalContext = event_manager.global_context
         self.name: str = self.__class__.__name__
         self.listeners: list[BaseListener] = []
         for attr_name in dir(self):
-            attr: Any = getattr(self, attr_name)
+            attr_obj = cast(object, getattr(self, attr_name))
             listener_dispatcher: Dispatcher | None = getattr(
-                attr, "_listener_dispatcher", None
+                attr_obj, "_listener_dispatcher", None
             )
             if not listener_dispatcher:
                 continue
             d = event_manager.dispatchers.get(listener_dispatcher, None)
             if not d:
                 LOGGER.warning(
-                    f"Cog {self.name}: Listener '{attr_name}' could not be added. "
-                    + f"The event manager does not have a '{listener_dispatcher.name}' dispatcher registered."
+                    "Cog %s: Listener %s could not be added. The event manager does not have a %s dispatcher registered.",
+                    self.name,
+                    attr_name,
+                    listener_dispatcher.name,
                 )
                 continue
-            init_params = getattr(attr, "_listener_init_params", {})
-            listener_cls = getattr(attr, "_listener_class", None) or d._func_listener  # pyright: ignore[reportPrivateUsage]
-            new_listener = listener_cls(attr, **init_params)
+            init_params = cast(
+                dict[str, object], getattr(attr_obj, "_listener_init_params", {})
+            )
+            listener_cls = (
+                getattr(attr_obj, "_listener_class", None) or d._func_listener  # pyright: ignore[reportPrivateUsage]
+            )
+            callback = cast(
+                Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], attr_obj
+            )
+            listener_kwargs = {k: v for k, v in init_params.items() if k != "cog"}
+            new_listener = listener_cls(callback, self, **listener_kwargs)
             self.listeners.append(new_listener)
             new_listener.cog = self
 
     async def setup(self):
-        """Called when cog is being added"""
+        """Set up resources after cog is added."""
         pass
 
     async def stop(self):
-        """Called when cog is being removed"""
+        """Tear down resources before cog is removed."""
         pass
 
 
 class Cooldown:
+    """Simple rate limiting bucket per key.
+
+    Use this helper in listeners/dispatchers to prevent rapid repeated
+    event handling for the same bucket key.
+    """
+
     def __init__(self, rate: int, per: float, bucket: str | list[str] = "user"):
+        """Initialize a cooldown bucket with rate and period."""
         self.rate: int = rate
         self.per: float = per
 
@@ -461,12 +748,14 @@ class Cooldown:
         self._windows: dict[str, list[float]] = {}
 
     def _get_bucket_key(self, event: BaseEvent) -> str:
+        """Create a bucket key from event-specific bucket types."""
         if hasattr(event, "get_bucket_key"):
             keys: list[str] = [str(event.get_bucket_key(t)) for t in self.bucket]
             return ":".join(keys)
         return ""
 
     def get_retry_after(self, event: BaseEvent) -> float:
+        """Return seconds until the next allowed invocation for this bucket."""
         import time
 
         now = time.time()
@@ -486,6 +775,7 @@ class Cooldown:
         return self.per - (now - window[0])
 
     def update_rate_limit(self, event: BaseEvent):
+        """Record an event occurrence for rate limit tracking."""
         import time
 
         now = time.time()
