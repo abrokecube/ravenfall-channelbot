@@ -3,8 +3,7 @@ from bot.core.components import BaseEvent, GlobalContext
 
 
 class BaseCheck:
-    """
-    Base class for all checks.
+    """Base class for all checks.
 
     Checks are used to validate whether a user is allowed to execute a command.
     They can return True to indicate success, or a string with an error message.
@@ -16,7 +15,7 @@ class BaseCheck:
     title: str | None = None
     short_help: str | None = None
     help: str | None = None
-    hide_in_help: bool = False
+    hides_command_from_help: bool = False
 
     async def check(self, g_ctx: GlobalContext, event: BaseEvent) -> bool | str:  # pyright: ignore[reportUnusedParameter]
         raise NotImplementedError

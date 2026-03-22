@@ -68,4 +68,4 @@ open-unpacking="warn"
 
 [tool.ruff.lint]
 select = ["F", "LOG", "G", "T20", "SIM", "ASYNC", "B", "A", "DTZ", "T10", "EM", "INT", "RET", "PTH", "N", "DOC", "D"]
-ignore = ["F821", "G004"]
+ignore = ["F821", "G004", "D100", "D104"]
