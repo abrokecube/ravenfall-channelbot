@@ -15,8 +15,8 @@ class TwitchAuth(Base):
     refresh_token: Mapped[str] = mapped_column(String)
 
 
-class TwitchChannel(Base):
-    __tablename__: str = "twitch_channel"
+class TwitchChannelSettings(Base):
+    __tablename__: str = "twitch_channel_settings"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     message_delivery_mode: Mapped[str] = mapped_column(

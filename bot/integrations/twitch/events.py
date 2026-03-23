@@ -3,11 +3,13 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast, override
 
+from twitchAPI.object.eventsub import ChannelChatMessageData
 from twitchAPI.type import CustomRewardRedemptionStatus, TwitchResourceNotFound
 
 from bot.core.enums import EventCategory, EventSource
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.models import ChatRoomCapabilities
+from bot.integrations.twitch.services import TwitchService
 from utils.strutils import split_by_utf16_bytes
 
 from .enums import TwitchCustomRewardRedemptionStatus
@@ -37,7 +39,7 @@ class TwitchMessageEvent(MessageEvent):
     platform: EventSource = EventSource.Twitch
     bot_twitch: Twitch
     channel_twitch: Twitch
-    twitch_chat: TwitchChat
+    twitch_service: TwitchService
     data: TwitchChatMessage
     room_capabilities: ChatRoomCapabilities = ChatRoomCapabilities(
         multiline=False, max_message_length=500
@@ -92,6 +94,17 @@ class TwitchMessageEvent(MessageEvent):
         )
         for text_ in filter_text(self, text, max_length=char_limit):
             await self._send(text_, use_http=use_http, reply_id=self.id)
+
+
+@dataclass(kw_only=True)
+class TwitchEventSubMessageEvent(MessageEvent):
+    bot_twitch: Twitch
+    channel_twitch: Twitch
+    twitch_service: TwitchService
+    data: ChannelChatMessageData
+    room_capabilities: ChatRoomCapabilities = ChatRoomCapabilities(
+        multiline=False, max_message_length=500
+    )
 
 
 @dataclass(kw_only=True)

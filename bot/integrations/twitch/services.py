@@ -12,3 +12,6 @@ class TwitchService(BaseService):
         super().__init__()
         self.event_source: TwitchEventSource = twitch_event_source
         self.twitches: dict[str, Twitch] = {}
+
+    def get_twitch(self, channel_id: str):
+        return self.twitches.get(channel_id)

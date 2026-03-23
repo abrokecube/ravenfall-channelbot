@@ -114,7 +114,11 @@ class GlobalContext:
         self, service_type: type[T], instance: T
     ) -> None:
         """Register a service for cross-module sharing."""
+        if service_type in self._services:
+            msg = "Service of the same type already exists"
+            raise ValueError(msg)
         self._services[service_type] = instance
+        instance.global_context = self
 
         ev = self._service_events.get(service_type)
         if ev is None:
@@ -226,7 +230,7 @@ class BaseService:
     """Base class for a GlobalContext service."""
 
     def __init__(self) -> None:
-        pass
+        self.global_context: GlobalContext = DummyGlobalContext()
 
 
 class BaseEventSource:

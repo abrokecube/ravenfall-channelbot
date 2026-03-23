@@ -1,4 +1,4 @@
-from enum import Enum, StrEnum
+from enum import Enum, StrEnum, auto
 
 
 class TwitchCustomRewardRedemptionStatus(Enum):
@@ -22,3 +22,7 @@ class MessageRateMode(StrEnum):
     UPGRADED = (
         "upgraded"  # 100 msgs per 30 seconds globally (still adds to the 20/30 bucket)
     )
+
+
+class EventSubTopic(Enum):
+    CHANNEL_CHAT_MESSAGE = auto()
