@@ -1,1 +1,2 @@
 - Add help for types and checks in the help command
+- Restart when a raid bugs out. This can be detected by checking if players are 'in a raid' while the raid endpoint says a raid is not active. Ideally we could also restore player training

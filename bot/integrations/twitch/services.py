@@ -1,5 +1,6 @@
 from __future__ import annotations
 from bot.core.components import BaseService
+from .event_sources import TwitchEventSource
 
 from twitchAPI.twitch import Twitch
 
@@ -7,7 +8,7 @@ from twitchAPI.twitch import Twitch
 class TwitchService(BaseService):
     """Service for twitch related stuff."""
 
-    def __init__(self) -> None:
+    def __init__(self, twitch_event_source: TwitchEventSource) -> None:
         super().__init__()
-        # self.twitches: dict[str, Twitch] = {}
-        # yo instead of initializing a Twitch every time just call set_user_authentication with verify=false
+        self.event_source: TwitchEventSource = twitch_event_source
+        self.twitches: dict[str, Twitch] = {}

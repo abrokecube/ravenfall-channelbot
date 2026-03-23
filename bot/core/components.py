@@ -265,7 +265,7 @@ class BaseEvent:
 
     categories: Collection[EventCategory]
     platform: EventSource = EventSource.Any
-    data: object
+    data: Any  # pyright: ignore[reportExplicitAny]
 
     async def get_bucket_key(self, bucket_type: str | BucketType) -> str:  # pyright: ignore[reportUnusedParameter]
         """Return a string key used for rate limiting/bucketing.
@@ -311,7 +311,7 @@ class EventManager:
             msg = "Source not found"
             raise ValueError(msg) from exc
         self.event_sources[source_idx].event_processor_callback = None
-        self.event_sources[source_idx].global_context = None
+        self.event_sources[source_idx].global_context = DummyGlobalContext()
         removed_source = self.event_sources.pop(source_idx)
         await removed_source.teardown()
 

@@ -4,7 +4,6 @@ from .models import (
     Channel,
     Character,
     SenderData,
-    TwitchAuth,
     UserCredits,
     UserCreditTransaction,
     KeyValue,
@@ -25,7 +24,8 @@ async def get_user(
     elif name:
         result = await session.execute(select(User).where(User.name == name))
     else:
-        raise ValueError("Either id or name must be provided")
+        msg = "Either id or name must be provided"
+        raise ValueError(msg)
 
     user_obj = result.scalar_one_or_none()
     if user_obj is None:
@@ -75,7 +75,8 @@ async def get_channel(
     elif name:
         result = await session.execute(select(Channel).where(Channel.name == name))
     else:
-        raise ValueError("Either id or name must be provided")
+        msg = "Either id or name must be provided"
+        raise ValueError(msg)
 
     user_obj = result.scalar_one_or_none()
     if user_obj is None:
@@ -120,8 +121,7 @@ async def get_sender_data(
             (SenderData.username == user_name) | (SenderData.display_name == user_name),
         )
     )
-    sender_data = result.scalar_one_or_none()
-    return sender_data
+    return result.scalar_one_or_none()
 
 
 async def get_formatted_sender_data(
@@ -270,46 +270,6 @@ async def record_sender_data(
     sender_data.identifier = sender_json.get("Identifier")
 
     return sender_data
-
-
-async def get_twitch_tokens_raw(
-    session: AsyncSession, user_id: int | str
-) -> TwitchAuth | None:
-    result = await session.execute(
-        select(TwitchAuth).where(TwitchAuth.user_id == user_id)
-    )
-    return result.scalar_one_or_none()
-
-
-async def get_twitch_tokens(
-    session: AsyncSession, user_id: int | str
-) -> tuple[str, str] | None:
-    a = await get_twitch_tokens_raw(session, user_id)
-    if a:
-        return str(a.access_token), str(a.refresh_token)
-    return None
-
-
-async def update_twitch_tokens(
-    session: AsyncSession,
-    user_id: int | str,
-    access_token: str,
-    refresh_token: str,
-    user_name: str,
-) -> None:
-    result = await get_twitch_tokens_raw(session, user_id)
-    if result is None:
-        result = TwitchAuth(
-            user_id=user_id,
-            access_token=access_token,
-            refresh_token=refresh_token,
-            user_name=user_name,
-        )
-        session.add(result)
-    else:
-        result.access_token = access_token
-        result.refresh_token = refresh_token
-        result.user_name = user_name
 
 
 async def get_user_credits_raw(session: AsyncSession, user_id: int | str) -> UserCredits:

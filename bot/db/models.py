@@ -110,16 +110,6 @@ class SenderData(Base):
     identifier: Mapped[str] = mapped_column(String)
 
 
-class TwitchAuth(Base):
-    __tablename__: str = "twitch_auth"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer)
-    user_name: Mapped[str] = mapped_column(String)
-    access_token: Mapped[str] = mapped_column(String)
-    refresh_token: Mapped[str] = mapped_column(String)
-
-
 class UserCredits(Base):
     __tablename__: str = "user_credits"
 

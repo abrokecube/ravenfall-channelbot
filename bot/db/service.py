@@ -5,7 +5,6 @@ from .models import (
     Channel,
     Character,
     SenderData,
-    TwitchAuth,
     UserCredits,
     KeyValue,
 )
@@ -148,32 +147,6 @@ class DatabaseService(BaseService):
             return await db_utils.record_sender_data(
                 s, channel_platform, channel_platform_id, sender_json
             )
-
-    async def get_twitch_tokens(
-        self, user_id: int | str, session: AsyncSession | None = None
-    ) -> tuple[str, str] | None:
-        if session:
-            return await db_utils.get_twitch_tokens(session, user_id)
-        async with get_async_session() as s:
-            return await db_utils.get_twitch_tokens(s, user_id)
-
-    async def update_twitch_tokens(
-        self,
-        user_id: int | str,
-        access_token: str,
-        refresh_token: str,
-        user_name: str,
-        session: AsyncSession | None = None,
-    ) -> None:
-        if session:
-            await db_utils.update_twitch_tokens(
-                session, user_id, access_token, refresh_token, user_name
-            )
-        else:
-            async with get_async_session() as s:
-                await db_utils.update_twitch_tokens(
-                    s, user_id, access_token, refresh_token, user_name
-                )
 
     def namespaced_store(self, namespace: str) -> NamespacedKeyValueStore:
         return NamespacedKeyValueStore(self, namespace)
