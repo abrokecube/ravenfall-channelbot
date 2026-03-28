@@ -1192,6 +1192,7 @@ class RedeemRFCog(Cog):
         queue_content_text = []
         last = ScrollType.NONE
         streak = 0
+        total_unit_usage = 0
         for item in [x.scroll for x in channel.scroll_queue] + [ScrollType.NONE]:
             if item == last:
                 streak += 1
@@ -1200,10 +1201,12 @@ class RedeemRFCog(Cog):
                 queue_content_text.append(
                     f"{streak}x Raid"
                 )
+                total_unit_usage += streak * RAID_SCROLL_SIZE
             elif last == ScrollType.DUNGEON:
                 queue_content_text.append(
                     f"{streak}x Dungeon"
                 )
+                total_unit_usage += streak * DUNGEON_SCROLL_SIZE
             streak = 1
             last = item
             
@@ -1211,7 +1214,7 @@ class RedeemRFCog(Cog):
             await ctx.message.reply("The queue is empty.")
             return
         await ctx.message.reply(
-            f"{total} {pl(total, 'scroll', 'scrolls')} {pl(total, 'is', 'are')} in the queue. "
+            f"{total} {pl(total, 'scroll', 'scrolls')} {pl(total, 'is', 'are')} in the queue. ({total_unit_usage}/{MAX_QUEUE_SIZE} units)"
             f"Contents: {', '.join(queue_content_text)}"
         )
         
