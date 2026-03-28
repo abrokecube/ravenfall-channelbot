@@ -1214,7 +1214,7 @@ class RedeemRFCog(Cog):
             await ctx.message.reply("The queue is empty.")
             return
         await ctx.message.reply(
-            f"{total} {pl(total, 'scroll', 'scrolls')} {pl(total, 'is', 'are')} in the queue. ({total_unit_usage}/{MAX_QUEUE_SIZE} units)"
+            f"{total} {pl(total, 'scroll', 'scrolls')} {pl(total, 'is', 'are')} in the queue. ({total_unit_usage}/{MAX_QUEUE_SIZE} units) "
             f"Contents: {', '.join(queue_content_text)}"
         )
         
