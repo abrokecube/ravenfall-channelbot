@@ -13,6 +13,7 @@ dependencies = [
     "anyio==4.9.0",
     "async-lru==2.0.5",
     "attrs==25.4.0",
+    "bidict>=0.23.1",
     "certifi==2025.4.26",
     "colorama==0.4.6",
     "docstring-parser>=0.17.0",
@@ -73,7 +74,7 @@ unsafe-fixes = true
 
 [tool.ruff.lint]
 future-annotations = true
-select = ["F", "LOG", "G", "T20", "SIM", "ASYNC", "B", "A", "DTZ", "T10", "EM", "INT", "RET", "PTH", "N", "DOC", "D"]
+select = ["F", "LOG", "G", "T20", "ASYNC", "B", "A", "DTZ", "T10", "EM", "INT", "RET", "PTH", "N", "DOC", "D"]
 ignore = ["F821", "G004", "D100", "D104", "D105", "D107", "ASYNC109", "B010"]
 
 [tool.ruff.format]

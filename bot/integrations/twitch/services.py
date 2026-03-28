@@ -14,4 +14,7 @@ class TwitchService(BaseService):
         self.twitches: dict[str, Twitch] = {}
 
     def get_twitch(self, channel_id: str):
+        """Get an authenticated Twitch instance."""
         return self.twitches.get(channel_id)
+    
+    async def send_message(self, )

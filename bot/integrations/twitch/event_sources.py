@@ -1,10 +1,11 @@
 import asyncio
 import functools
 import logging
-from collections.abc import Collection
-from twitchAPI.object.eventsub import ChannelChatMessageEvent, ChatMessageBadge
+from collections.abc import Awaitable, Callable, Collection
+from sqlalchemy.ext.asyncio import AsyncSession
+from twitchAPI.object import eventsub
 from twitchAPI.twitch import Twitch
-from typing import Any, cast, override
+from typing import Any, Concatenate, Protocol, cast, override
 
 from colorama import Back, Fore
 from sqlalchemy import select
@@ -12,19 +13,27 @@ from twitchAPI import helper
 from twitchAPI.chat import Chat, ChatMessage, ChatUser
 from twitchAPI.oauth import UserAuthenticator
 from twitchAPI.object.api import TwitchUser
-from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope as TWAuthScope
-from twitchAPI.type import InvalidTokenException, MissingScopeException, ChatEvent
+from twitchAPI.type import (
+    InvalidTokenException,
+    MissingScopeException,
+    ChatEvent,
+    EventSubSubscriptionConflict,
+)
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 
 from bot.core.components import BaseEventSource, EventManager
 from bot.integrations.chat_messages.enums import UserRole
 from bot.db.service import DatabaseService
+from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailure
 
 from . import TwitchAuth, TwitchChannelSettings
 from .services import TwitchService
 from .events import TwitchEventSubMessageEvent, TwitchMessageEvent
 from .enums import MessageReceiveMode, EventSubTopic
+from .models import EventSubChannelTopic, EventSubRevocationDict, ConnectedChat
+import contextlib
+from bidict import bidict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -63,6 +72,8 @@ class TwitchEventSource(BaseEventSource):
         self._auth_lock: asyncio.Lock = asyncio.Lock()
         self.bot_user: TwitchUser | None = None
         self.eventsub_ws: EventSubWebsocket | None = None
+        self.eventsub_subs: bidict[EventSubChannelTopic, str] = bidict()
+        self.connected_chats: dict[str, ConnectedChat] = {}
 
     async def _save_user_token(
         self,
@@ -203,18 +214,16 @@ class TwitchEventSource(BaseEventSource):
                 continue
             return twitch
 
-    async def _fetch_channel_settings(self, channel_id: str) -> TwitchChannelSettings:
-        db = self.global_context.require_service(DatabaseService)
-        async with db.get_session() as session:
-            db_result = await session.execute(
-                select(TwitchChannelSettings).where(
-                    TwitchChannelSettings.id == channel_id
-                )
-            )
-            result = db_result.scalar_one_or_none()
-            if not result:
-                result = TwitchChannelSettings(id=channel_id)
-                await session.flush()
+    async def _fetch_channel_settings(
+        self, channel_id: str, session: AsyncSession
+    ) -> TwitchChannelSettings:
+        db_result = await session.execute(
+            select(TwitchChannelSettings).where(TwitchChannelSettings.id == channel_id)
+        )
+        result = db_result.scalar_one_or_none()
+        if not result:
+            result = TwitchChannelSettings(id=channel_id)
+            await session.flush()
         return result
 
     async def authenticate_user(
@@ -226,6 +235,7 @@ class TwitchEventSource(BaseEventSource):
         return t
 
     def is_user_authenticated(self, user_id: str) -> bool:
+        """Check if a user id has been authenticated."""
         return user_id in self._twitch_service.twitches
 
     @override
@@ -244,37 +254,90 @@ class TwitchEventSource(BaseEventSource):
         self.twitch_chat.register_event(ChatEvent.MESSAGE, self._chat_on_message)
         self.global_context.register_service(TwitchService, self._twitch_service)
 
-        self.eventsub_ws = EventSubWebsocket(self.bot_twitch)
-
-    async def join_chat(self, channel_name: str | Collection[str]) -> list[str]:
+    async def join_chat(
+        self,
+        *,
+        channel_id: str | Collection[str] | None = None,
+        channel_name: str | Collection[str] | None = None,
+        mode: MessageReceiveMode | None = None,
+    ) -> list[str]:
         """Connect to a channel's chat."""
+        db = self.global_context.require_service(DatabaseService)
         if (not self.twitch_chat) or (not self.bot_twitch):
             msg = "Twitch event source has not been initialized."
             raise RuntimeError(msg)
-        if isinstance(channel_name, str):
-            channel_name = [channel_name]
-        else:
-            channel_name = list(channel_name)
+        if channel_id is not None and channel_name is not None:
+            msg = "Only one of channel_id and channel_name can be specified"
+            raise ValueError(msg)
+        channel_list = []
+        if channel_name is not None:
+            if isinstance(channel_name, str):
+                channel_name = [channel_name]
+            else:
+                channel_name = list(channel_name)
+            channel_list = channel_name
+        if channel_id is not None:
+            if isinstance(channel_id, str):
+                channel_id = [channel_id]
+            else:
+                channel_id = list(channel_id)
+            channel_list = channel_id
         failed: list[str] = []
         idx = 0
-        async for user in self.bot_twitch.get_users(logins=channel_name):
-            if not user:
-                failed.append(channel_name[idx])
-                continue
-            settings = await self._fetch_channel_settings(user.id)
-            if settings.message_receive_mode == MessageReceiveMode.IRC:
-                failed.extend(
-                    cast(list[str], await self.twitch_chat.join_room(user.login))
-                )
-            elif settings.message_receive_mode == MessageReceiveMode.EVENTSUB:
-                try:
-                    await self.add_eventsub_subscriptions(
-                        user.id, EventSubTopic.CHANNEL_CHAT_MESSAGE
+        async with db.get_session() as session:
+            async for user in self.bot_twitch.get_users(
+                logins=channel_name, user_ids=channel_id
+            ):
+                if not user:
+                    failed.append(channel_list[idx])
+                    continue
+                if user.id in self.connected_chats:
+                    LOGGER.info(
+                        f"Twitch: Already connected to {user.login}:{user.id}, skipping"
                     )
-                except:
-                    failed.append(user.login)
-            idx += 1
-        return failed
+                    continue
+                settings = await self._fetch_channel_settings(user.id, session)
+                if mode:
+                    settings.message_receive_mode = mode
+                has_failed = False
+                if settings.message_receive_mode == MessageReceiveMode.IRC:
+                    result = cast(list[str], await self.twitch_chat.join_room(user.login))
+                    if result:
+                        failed.extend(result)
+                        has_failed = True
+                elif settings.message_receive_mode == MessageReceiveMode.EVENTSUB:
+                    try:
+                        await self._add_eventsub_chat_message_subscription(settings)
+                    except:
+                        failed.append(user.login)
+                        has_failed = True
+                if not has_failed:
+                    self.connected_chats[user.id] = ConnectedChat(settings)
+                idx += 1
+            return failed
+
+    async def leave_chat(
+        self,
+        *,
+        channel_id: str | Collection[str] | None = None,
+        channel_name: str | Collection[str] | None = None,
+    ):
+        if (not self.twitch_chat) or (not self.bot_twitch):
+            msg = "Twitch event source has not been initialized."
+            raise RuntimeError(msg)
+        if channel_id is not None and channel_name is not None:
+            msg = "Only one of channel_id and channel_name can be specified"
+            raise ValueError(msg)
+        if channel_name is not None:
+            if isinstance(channel_name, str):
+                channel_name = [channel_name]
+            else:
+                channel_name = list(channel_name)
+        if channel_id is not None:
+            if isinstance(channel_id, str):
+                channel_id = [channel_id]
+            else:
+                channel_id = list(channel_id)
 
     def _get_user_roles(self, user: ChatUser, room_id: str | None):
         roles: set[UserRole] = set()
@@ -300,7 +363,7 @@ class TwitchEventSource(BaseEventSource):
             return
         channel_id = message.room.room_id
         channel_login = message.room.name
-        channel_twitch = self._twitch_service.twitches.get(channel_id or "")
+        channel_twitch = self._twitch_service.twitches.get(channel_id or " ")
         if not channel_twitch:
             LOGGER.warning(
                 f"Received a message from {channel_login}, but the bot has no authentication stored for this channel."
@@ -326,13 +389,28 @@ class TwitchEventSource(BaseEventSource):
             )
         )
 
+    async def _eventsub_revocation_handler(self, thing: Any):  # pyright: ignore[reportAny, reportExplicitAny]
+        data = cast(EventSubRevocationDict, thing)
+        sub_id = data.get("subscription", {}).get("id")
+        if not sub_id in self.eventsub_subs.inverse:
+            LOGGER.warning(
+                f"Revoked subscription id {sub_id} was not recorded during subscription"
+            )
+            return
+        del self.eventsub_subs.inverse[sub_id]
+
     async def add_eventsub_subscriptions(
         self, channel_id: str, subscriptions: EventSubTopic | Collection[EventSubTopic]
     ):
         """Subscribe to eventsub subscriptions."""
-        if not self.eventsub_ws:
+        if not self.bot_twitch:
             msg = "Twitch event source has not been initialized."
             raise RuntimeError(msg)
+        if not self.eventsub_ws:
+            self.eventsub_ws = EventSubWebsocket(
+                self.bot_twitch, revocation_handler=self._eventsub_revocation_handler
+            )
+            self.eventsub_ws.start()
         if not self.is_user_authenticated(channel_id):
             msg = "This channel has not been authenticated. Call authenticate_user first."
             raise ValueError(msg)
@@ -341,7 +419,8 @@ class TwitchEventSource(BaseEventSource):
         else:
             subscriptions = list(subscriptions)
         for s in subscriptions:
-            await self._add_eventsub_subscription(channel_id, s)
+            with contextlib.suppress(EventSubSubscriptionConflict):
+                await self._add_eventsub_subscription(channel_id, s)
 
     async def _add_eventsub_subscription(
         self, channel_id: str, subscription: EventSubTopic
@@ -350,14 +429,67 @@ class TwitchEventSource(BaseEventSource):
         if not self.eventsub_ws:
             msg = "Twitch event source has not been initialized."
             raise RuntimeError(msg)
+        ch_t = EventSubChannelTopic(channel_id=channel_id, topic=subscription)
+        if ch_t in self.eventsub_subs:
+            return
+        sub_id = ""
         match subscription:
             case EventSubTopic.CHANNEL_CHAT_MESSAGE:
-                __ = await self.eventsub_ws.listen_channel_chat_message(
-                    channel_id, self.bot_user_id, self._ev_on_chat_message
+                # sub_id = await self.eventsub_ws.listen_channel_chat_message(
+                #     channel_id, self.bot_user_id, self._ev_on_chat_message
+                # )
+                msg = (
+                    "Use TwitchEventSource.join_chat to subscribe to chat message events."
                 )
+                raise ValueError(msg)
+        if sub_id:
+            self.eventsub_subs[ch_t] = sub_id
+
+    async def _add_eventsub_chat_message_subscription(
+        self, channel_settings: TwitchChannelSettings
+    ):
+        if not self.eventsub_ws:
+            msg = "Twitch event source has not been initialized."
+            raise RuntimeError(msg)
+        ch_t = EventSubChannelTopic(
+            channel_id=channel_settings.id, topic=EventSubTopic.CHANNEL_CHAT_MESSAGE
+        )
+        if ch_t in self.eventsub_subs:
+            return
+        sub_id = await self.eventsub_ws.listen_channel_chat_message(
+            channel_settings.id, self.bot_user_id, self._ev_on_chat_message
+        )
+        if sub_id:
+            self.eventsub_subs[ch_t] = sub_id
+
+    async def _remove_eventsub_subscription(self, subscription_id: str):
+        if not self.eventsub_ws:
+            msg = "Twitch event source has not been initialized."
+            raise RuntimeError(msg)
+        if not subscription_id in self.eventsub_subs.inv:
+            msg = f"Subscription id {subscription_id} was not found"
+            raise ValueError(msg)
+        success = await self.eventsub_ws.unsubscribe_topic(subscription_id)
+        if not success:
+            msg = f"Failed to unsubscribe to {subscription_id}"
+            raise EventSubUnsubscriptionFailure(msg)
+        removed_topic = self.eventsub_subs.inverse.pop(subscription_id)
+        if removed_topic.topic == EventSubTopic.CHANNEL_CHAT_MESSAGE:
+            if not removed_topic.channel_id in self.connected_chats:
+                LOGGER.warning(
+                    f"Unsubscribed to a chat message topic in {removed_topic.channel_id}, but the subscription was not registered as a connected chat beforehand"
+                )
+                return
+            connected_chat = self.connected_chats[removed_topic.channel_id]
+            if connected_chat.message_receive_mode != MessageReceiveMode.EVENTSUB:
+                LOGGER.warning(
+                    f"Unsubscribed to a chat message topic in {removed_topic.channel_id}, but the message_receive_mode was not EventSub"
+                )
+                return
+            del self.connected_chats[removed_topic.channel_id]
 
     def _get_user_roles_eventsub(
-        self, user_id: str, room_id: str, badges: list[ChatMessageBadge]
+        self, user_id: str, room_id: str, badges: list[eventsub.ChatMessageBadge]
     ):
         roles: set[UserRole] = set()
         if user_id in self.bot_admin_uids:
@@ -377,9 +509,8 @@ class TwitchEventSource(BaseEventSource):
         roles.add(UserRole.USER)
         return roles
 
-    async def _ev_on_chat_message(self, event: ChannelChatMessageEvent):
+    async def _ev_on_chat_message(self, event: eventsub.ChannelChatMessageEvent):
         if not self.bot_user:
-            # msg = "Event source has not finished setup"
             return
         if not self.bot_twitch:
             return

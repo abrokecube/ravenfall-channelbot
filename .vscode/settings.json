@@ -8,5 +8,6 @@
         "Recipent",
         "Sandboxie"
     ],
-    "python.languageServer": "None"
+    "python.languageServer": "None",
+    "python.REPL.enableREPLSmartSend": false
 }
