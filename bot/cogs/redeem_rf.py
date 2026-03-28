@@ -1114,7 +1114,12 @@ class RedeemRFCog(Cog):
         if not any(role.level() >= UserRole.MODERATOR.level() for role in ctx.message.author_roles):
             user_maximum = NON_MOD_MAX_BATCH_SCROLLS
 
+        queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
+        queue_was_empty = queue_is_empty
+
         max_queue_add = available_space // scroll_size
+        if queue_is_empty:
+            max_queue_add += 1
         max_user_add = user_maximum // scroll_size
         max_can_add = min(max_queue_add, max_user_add)
         
@@ -1136,8 +1141,6 @@ class RedeemRFCog(Cog):
                 total_cost = to_add * cost
 
         added_count = 0
-        queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
-        queue_was_empty = queue_is_empty
         try:
             for _ in range(to_add):
                 if queue_is_empty:
