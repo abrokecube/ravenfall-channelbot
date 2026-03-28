@@ -50,7 +50,7 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 RAID_SCROLL_SIZE = 1
-DUNGEON_SCROLL_SIZE = 8
+DUNGEON_SCROLL_SIZE = 6
 MAX_QUEUE_SIZE = 25
 NON_MOD_MAX_BATCH_SCROLLS = 99
 
@@ -1110,7 +1110,12 @@ class RedeemRFCog(Cog):
         if not any(role.level() >= UserRole.MODERATOR.level() for role in ctx.message.author_roles):
             user_maximum = NON_MOD_MAX_BATCH_SCROLLS
 
+        queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
+        queue_was_empty = queue_is_empty
+
         max_queue_add = available_space // scroll_size
+        if queue_is_empty:
+            max_queue_add += 1
         max_user_add = user_maximum // scroll_size
         max_can_add = min(max_queue_add, max_user_add)
         
@@ -1132,8 +1137,6 @@ class RedeemRFCog(Cog):
             total_cost = to_add * cost
 
         added_count = 0
-        queue_is_empty = queue_size == 0 and (not channel.event in (RFChannelEvent.DUNGEON, RFChannelEvent.RAID))
-        queue_was_empty = queue_is_empty
         try:
             for _ in range(to_add):
                 if queue_is_empty:
@@ -1185,6 +1188,7 @@ class RedeemRFCog(Cog):
         queue_content_text = []
         last = ScrollType.NONE
         streak = 0
+        total_unit_usage = 0
         for item in [x.scroll for x in channel.scroll_queue] + [ScrollType.NONE]:
             if item == last:
                 streak += 1
@@ -1193,10 +1197,12 @@ class RedeemRFCog(Cog):
                 queue_content_text.append(
                     f"{streak}x Raid"
                 )
+                total_unit_usage += streak * RAID_SCROLL_SIZE
             elif last == ScrollType.DUNGEON:
                 queue_content_text.append(
                     f"{streak}x Dungeon"
                 )
+                total_unit_usage += streak * DUNGEON_SCROLL_SIZE
             streak = 1
             last = item
             
@@ -1204,7 +1210,7 @@ class RedeemRFCog(Cog):
             await ctx.message.reply("The queue is empty.")
             return
         await ctx.message.reply(
-            f"{total} {pl(total, 'scroll', 'scrolls')} {pl(total, 'is', 'are')} in the queue. "
+            f"{total} {pl(total, 'scroll', 'scrolls')} {pl(total, 'is', 'are')} in the queue. ({total_unit_usage}/{MAX_QUEUE_SIZE} units) "
             f"Contents: {', '.join(queue_content_text)}"
         )
         
