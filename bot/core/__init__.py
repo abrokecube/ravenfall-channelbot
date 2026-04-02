@@ -1,0 +1,2 @@
+EVENT_CATEGORY_GENERIC = "generic"
+EVENT_SOURCE_ANY = "any"

@@ -12,7 +12,7 @@ class ParameterConfig(TypedDict):
     aliases: list[str]
     greedy: bool
     hidden: bool
-    help: str
+    help_: str
     regex: str
     display_name: str
     converter: BaseConverter | type[BaseConverter] | None

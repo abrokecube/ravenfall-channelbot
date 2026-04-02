@@ -4,20 +4,20 @@ import inspect
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-    NamedTuple,
-    override,
-)
+from typing import Any, NamedTuple, override, TYPE_CHECKING
 
 from bot.core.components import GlobalContext
 from utils.strutils import strjoin
 
 from .enums import ParameterType
-from .events import CommandEvent
-from .listeners import CommandListener
+
+if TYPE_CHECKING:
+    from .events import CommandEvent
+    from .listeners import CommandListener
 
 LOGGER = logging.getLogger(__name__)
+
+EVENT_CATEGORY_COMMAND = "command"
 
 
 class BaseConverter:

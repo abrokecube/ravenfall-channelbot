@@ -1,7 +1,9 @@
+from bot.core import EVENT_CATEGORY_GENERIC, EVENT_SOURCE_ANY
 from bot.core.components import BaseEvent
-from bot.core.enums import EventCategory, EventSource
 from dataclasses import dataclass
 from collections.abc import Collection
+
+from bot.integrations.chat_messages import EVENT_CATEGORY_MESSAGE
 from .enums import UserRole
 from .models import ChatRoomCapabilities
 from typing import Any
@@ -9,11 +11,11 @@ from typing import Any
 
 @dataclass(kw_only=True)
 class MessageEvent(BaseEvent):
-    categories: Collection[EventCategory] = (
-        EventCategory.Message,
-        EventCategory.Generic,
+    categories: Collection[str] = (
+        EVENT_CATEGORY_MESSAGE,
+        EVENT_CATEGORY_GENERIC,
     )
-    platform: EventSource = EventSource.Any
+    platform: str = EVENT_SOURCE_ANY
     text: str
     id: str
     author_login: str

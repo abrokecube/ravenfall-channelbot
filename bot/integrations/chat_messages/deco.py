@@ -1,6 +1,6 @@
 from bot.core.decorators import lambda_filter_decorator
 from bot.integrations.chat_messages.events import MessageEvent
-from bot.core.enums import Dispatcher
+from bot.core.components import BaseDispatcher
 from .checks import FunctionCheck
 from collections.abc import Callable
 from typing import Any, cast
@@ -10,17 +10,18 @@ from .types import CheckFuncType
 
 def on_message(match_fn: Callable[[MessageEvent], bool]):
     return lambda_filter_decorator(
-        [MessageEvent], match_fn, dispatcher_type=Dispatcher.Generic
+        [MessageEvent], match_fn, dispatcher_type=BaseDispatcher
     )
 
 
 def checks[T: Callable[..., Any]](
     *predicates: CheckFuncType | BaseCheck | type[BaseCheck],
 ) -> Callable[[T], T]:
-    """Decorator to add checks to a command.
+    """Add checks to a command.
 
     Args:
         *predicates: One or more functions or Check classes/instances.
+
     """
 
     def decorator(func: T) -> T:

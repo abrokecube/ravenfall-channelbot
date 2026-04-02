@@ -22,11 +22,10 @@ import json
 
 import logging
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from collections.abc import Iterable
 
-if TYPE_CHECKING:
-    from bot.models import QueuedScroll
+from bot.models import QueuedScroll
 
 logger = logging.getLogger(__name__)
 

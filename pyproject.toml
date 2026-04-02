@@ -75,10 +75,10 @@ unsafe-fixes = true
 [tool.ruff.lint]
 future-annotations = true
 select = ["F", "LOG", "G", "T20", "ASYNC", "B", "A", "DTZ", "T10", "EM", "INT", "RET", "PTH", "N", "DOC", "D"]
-ignore = ["F821", "G004", "D100", "D104", "D105", "D107", "ASYNC109", "B010"]
+ignore = ["F821", "G004", "D100", "D104", "D105", "D107", "ASYNC109", "B010", "B009"]
 
 [tool.ruff.format]
 exclude = ["./twitchAPI/**"]
 
 [tool.uv.sources]
-twitchapi = { git = "https://github.com/abrokecube/pyTwitchAPI.git" }
+twitchapi = { git = "https://github.com/abrokecube/pyTwitchAPI", rev = "master" }

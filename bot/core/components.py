@@ -1,16 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, Callable, cast, TYPE_CHECKING, override
-from collections import defaultdict
-from collections.abc import Coroutine, Collection, Awaitable
-import sys
-import importlib
-import dataclasses
-import contextlib
-from dataclasses import dataclass
 import asyncio
+import contextlib
+import dataclasses
 import logging
+from collections import defaultdict
+from collections.abc import Awaitable, Collection, Coroutine
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, cast, override
 from uuid import uuid4
+
+from . import exceptions
+
+# import sys
+# import importlib
 
 """Event handling core components.
 
@@ -18,7 +21,8 @@ This module defines the event manager architecture used by the ravenfall channel
 It includes event sources, dispatchers, listeners, cogs, and rate-limiting helpers.
 """
 
-from .enums import Dispatcher, EventCategory, EventSource, BucketType
+from . import EVENT_CATEGORY_GENERIC, EVENT_SOURCE_ANY
+from .enums import BucketType
 from .exceptions import ListenerError
 
 if TYPE_CHECKING:
@@ -240,7 +244,7 @@ class BaseEventSource:
     `event_processor_callback` to the registered event manager.
     """
 
-    event_platform: EventSource = EventSource.Any
+    event_platform: str = EVENT_SOURCE_ANY
 
     def __init__(self):
         """Initialize the base event source."""
@@ -267,8 +271,8 @@ class BaseEventSource:
 class BaseEvent:
     """Base event type passed through the event system."""
 
-    categories: Collection[EventCategory]
-    platform: EventSource = EventSource.Any
+    categories: Collection[str]
+    platform: str = EVENT_SOURCE_ANY
     data: Any  # pyright: ignore[reportExplicitAny]
 
     async def get_bucket_key(self, bucket_type: str | BucketType) -> str:  # pyright: ignore[reportUnusedParameter]
@@ -289,11 +293,11 @@ class EventManager:
     def __init__(self, global_context: GlobalContext):
         """Initialize the event manager with context and empty registries."""
         self.event_sources: list[BaseEventSource] = []
-        self.event_processors: dict[type[BaseEvent], list[EventProcessor]] = defaultdict(
-            list
+        self.event_processors: dict[type[BaseEvent], list[EventProcessor[Any]]] = (
+            defaultdict(list)
         )
-        self.dispatchers: dict[Dispatcher, BaseDispatcher] = {
-            # Dispatcher.Generic: SimpleDispatcher()
+        self.dispatchers: dict[type[BaseDispatcher], BaseDispatcher] = {
+            BaseDispatcher: BaseDispatcher()
         }
         self.cogs: dict[str, Cog] = {}
         self.global_context: GlobalContext = global_context
@@ -321,18 +325,21 @@ class EventManager:
 
     async def add_dispatcher(self, dispatcher: BaseDispatcher):
         """Register a dispatcher that will route events to listeners."""
-        if dispatcher.id in self.dispatchers:
-            msg = f"Dispatcher with id '{dispatcher.id}' has already been added!"
+        if dispatcher.identifier in self.dispatchers:
+            msg = f"A dispatcher of type '{dispatcher.identifier}' already exists"
             raise ValueError(msg)
-        self.dispatchers[dispatcher.id] = dispatcher
+        if not isinstance(dispatcher, dispatcher.identifier):
+            msg = f"Dispatcher {dispatcher} is not an instance of its identifier {dispatcher.identifier}"
+            raise ValueError(msg)
+        self.dispatchers[dispatcher.identifier] = dispatcher
         await dispatcher.setup(self)
 
     async def remove_dispatcher(self, dispatcher: BaseDispatcher):
         """Unregister and tear down a dispatcher."""
-        if dispatcher.id not in self.dispatchers:
-            msg = f"Dispatcher with id '{dispatcher.id}' was not found!"
+        if dispatcher.identifier not in self.dispatchers:
+            msg = f"Dispatcher '{dispatcher.identifier}' was not found"
             raise ValueError(msg)
-        removed_dispatcher = self.dispatchers.pop(dispatcher.id)
+        removed_dispatcher = self.dispatchers.pop(dispatcher.identifier)
         await removed_dispatcher.teardown()
 
     def add_listener(self, listener: BaseListener):
@@ -380,45 +387,45 @@ class EventManager:
                 self.remove_listener(listener)
 
         try:
-            await cog_instance.stop()
+            await cog_instance.teardown()
         except Exception as e:
             LOGGER.exception(f"Error occured while stopping cog: {e}")
 
         del self.cogs[cog_name]
 
-    async def reload_cog(self, cog_cls: type[Cog]) -> type[Cog]:
-        """Reload a cog module and replace the existing cog instance."""
-        module_name = cog_cls.__module__
-        cog_name = cog_cls.__name__
+    # async def reload_cog(self, cog_cls: type[Cog]) -> type[Cog]:
+    #     """Reload a cog module and replace the existing cog instance."""
+    #     module_name = cog_cls.__module__
+    #     cog_name = cog_cls.__name__
 
-        if cog_cls in self.cogs:
-            await self.remove_cog(cog_cls)
+    #     if cog_cls in self.cogs:
+    #         await self.remove_cog(cog_cls)
 
-        if module_name in sys.modules:
-            try:
-                module = importlib.reload(sys.modules[module_name])
-            except Exception as e:
-                LOGGER.error(f"Failed to reload module {module_name}: {e}")
-                raise e
-        else:
-            module = importlib.import_module(module_name)
+    #     if module_name in sys.modules:
+    #         try:
+    #             module = importlib.reload(sys.modules[module_name])
+    #         except Exception as e:
+    #             LOGGER.error(f"Failed to reload module {module_name}: {e}")
+    #             raise e
+    #     else:
+    #         module = importlib.import_module(module_name)
 
-        new_cog_cls = getattr(module, cog_name)  # pyright: ignore[reportAny]
-        if not isinstance(new_cog_cls, type) or not issubclass(new_cog_cls, Cog):
-            msg = f"Module {module_name} does not contain a Cog class."
-            raise ValueError(msg)
-        await self.add_cog(new_cog_cls)
+    #     new_cog_cls = getattr(module, cog_name)  # pyright: ignore[reportAny]
+    #     if not isinstance(new_cog_cls, type) or not issubclass(new_cog_cls, Cog):
+    #         msg = f"Module {module_name} does not contain a Cog class."
+    #         raise ValueError(msg)
+    #     await self.add_cog(new_cog_cls)
 
-        return new_cog_cls
+    #     return new_cog_cls
 
-    def add_event_processor(
-        self, target_event_cls: type[BaseEvent], func: EventProcessor
+    def add_event_processor[T: BaseEvent](
+        self, target_event_cls: type[BaseEvent], func: EventProcessor[T]
     ):
         """Register an event processor middleware for a specific event type."""
         self.event_processors[target_event_cls].append(func)
 
-    def remove_event_processor(
-        self, func: EventProcessor, target_event_cls: type[BaseEvent] | None = None
+    def remove_event_processor[T: BaseEvent](
+        self, func: EventProcessor[T], target_event_cls: type[T] | None = None
     ):
         """Remove an event processor from registry."""
         if target_event_cls:
@@ -433,7 +440,7 @@ class EventManager:
     async def process_event(self, event: BaseEvent):
         """Apply processors and dispatch the event to matching dispatchers."""
         LOGGER.debug(f"Processing event {event}")
-        matching_processors: list[EventProcessor] = []
+        matching_processors: list[EventProcessor[BaseEvent]] = []
         for event_type, processors in self.event_processors.items():
             if isinstance(event, event_type):
                 matching_processors.extend(processors)
@@ -524,10 +531,10 @@ class BaseDispatcher:
 
     def __init__(self):
         """Initialize dispatcher container and assignment metadata."""
-        self.id: Dispatcher = Dispatcher.Base
+        self.identifier: type[BaseDispatcher] = BaseDispatcher
         self._func_listener: type[BaseListener] = BaseListener
         self.listeners: dict[str, BaseListener] = {}
-        self.categories: set[EventCategory] = set([EventCategory.Generic])
+        self.categories: set[str] = set([EVENT_CATEGORY_GENERIC])
 
     async def setup(self, _event_manager: EventManager):
         """Set up dispatcher resources."""
@@ -542,7 +549,7 @@ class BaseDispatcher:
         if listener.id in self.listeners:
             msg = f"Listener with id '{listener.id}' already exists!"
             raise ValueError(msg)
-        if listener.expected_dispatcher != self.id:
+        if listener.expected_dispatcher != self.identifier:
             msg = f"Listener {listener} cannot be assigned to this dispatcher!"
             raise ValueError(msg)
         self.listeners[listener.id] = listener
@@ -596,7 +603,7 @@ class BaseDispatcher:
                 LOGGER.exception("Listener matcher returned an error: %s", e)
 
             if match_result:
-                await self._invoke_listener(l, global_context, event)
+                await self._invoke_listener(l, global_context, event, match_result)
 
     async def on_invoke_error(
         self,
@@ -613,25 +620,30 @@ class BaseDispatcher:
 class BaseListener:
     """Base listener wrapping a callback and match logic."""
 
-    id: str
-    expected_dispatcher: Dispatcher
-    func: Callable[..., None | Awaitable[None]]
-    cog: Cog | None
+    expected_dispatcher: type[BaseDispatcher] = BaseDispatcher
 
     def __init__(
         self,
         func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]],
         cog: Cog | None = None,
+        cooldown: Cooldown | None | None = None,
     ):
         """Initialize a listener wrapper for the target callback."""
-        self.id = f"{func.__name__}_{uuid4()}"
-        self.expected_dispatcher = Dispatcher.Base
-        self.func = func
-        self.cog = cog
+        self.id: str = f"{func.__name__}_{uuid4()}"
+        self.func: Callable[..., None | Awaitable[None]] = func
+        self.cog: Cog | None = cog
+        self.cooldown: Cooldown | None = getattr(func, "_listener_cooldown", cooldown)
 
     async def check_for_match(self, _event: BaseEvent) -> bool:
         """Return whether the listener should run for the given event."""
         return True
+
+    async def _check_cooldown(self, event: BaseEvent):
+        if self.cooldown:
+            retry_after = self.cooldown.get_retry_after(event)
+            if retry_after > 0:
+                raise exceptions.ListenerOnCooldown(self.cooldown, retry_after)
+            self.cooldown.update_rate_limit(event)
 
     async def _run_func(
         self,
@@ -662,6 +674,7 @@ class BaseListener:
         **_kwargs: object,
     ) -> None:
         """Invoke the listener action."""
+        await self._check_cooldown(event)
         await self._run_func(global_ctx, event, *_args, **_kwargs)
 
     async def on_func_exception(
@@ -697,7 +710,7 @@ class Cog:
         self.listeners: list[BaseListener] = []
         for attr_name in dir(self):
             attr_obj = cast(object, getattr(self, attr_name))
-            listener_dispatcher: Dispatcher | None = getattr(
+            listener_dispatcher: type[BaseDispatcher] | None = getattr(
                 attr_obj, "_listener_dispatcher", None
             )
             if not listener_dispatcher:
@@ -708,7 +721,7 @@ class Cog:
                     "Cog %s: Listener %s could not be added. The event manager does not have a %s dispatcher registered.",
                     self.name,
                     attr_name,
-                    listener_dispatcher.name,
+                    listener_dispatcher,
                 )
                 continue
             init_params = cast(
@@ -721,7 +734,9 @@ class Cog:
                 Callable[[GlobalContext, BaseEvent], None | Awaitable[None]], attr_obj
             )
             listener_kwargs = {k: v for k, v in init_params.items() if k != "cog"}
-            new_listener = listener_cls(callback, self, **listener_kwargs)
+            new_listener = listener_cls(
+                func=callback, cog=self, cooldown=None, **listener_kwargs
+            )
             self.listeners.append(new_listener)
             new_listener.cog = self
 
@@ -729,7 +744,7 @@ class Cog:
         """Set up resources after cog is added."""
         pass
 
-    async def stop(self):
+    async def teardown(self):
         """Tear down resources before cog is removed."""
         pass
 

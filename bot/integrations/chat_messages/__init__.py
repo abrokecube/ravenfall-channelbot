@@ -1,6 +1,8 @@
 from __future__ import annotations
 from bot.core.components import BaseEvent, GlobalContext
 
+EVENT_CATEGORY_MESSAGE = "message"
+
 
 class BaseCheck:
     """Base class for all checks.

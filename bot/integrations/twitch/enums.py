@@ -1,10 +1,8 @@
 from enum import Enum, StrEnum, auto
+from twitchAPI.type import CustomRewardRedemptionStatus
 
 
-class TwitchCustomRewardRedemptionStatus(Enum):
-    UNFULFILLED = "UNFULFILLED"
-    FULFILLED = "FULFILLED"
-    CANCELED = "CANCELED"
+TwitchCustomRewardRedemptionStatus = CustomRewardRedemptionStatus
 
 
 class MessageDeliveryMode(StrEnum):
@@ -26,3 +24,7 @@ class MessageRateMode(StrEnum):
 
 class EventSubTopic(Enum):
     CHANNEL_CHAT_MESSAGE = auto()
+    CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD = auto()
+
+
+TOPIC_REQUIRES_TARGET_CHANNEL = set([EventSubTopic.CHANNEL_CHAT_MESSAGE])

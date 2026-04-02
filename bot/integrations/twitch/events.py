@@ -1,14 +1,20 @@
 import logging
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import Any, override
 
-from twitchAPI.object.eventsub import ChannelChatMessageData
-from twitchAPI.type import CustomRewardRedemptionStatus, TwitchResourceNotFound
+from twitchAPI.chat import ChatMessage as TwitchChatMessage
+from twitchAPI.object.eventsub import (
+    ChannelChatMessageData,
+    ChannelPointsCustomRewardRedemptionData,
+)
+from twitchAPI.twitch import Twitch
+from twitchAPI.type import TwitchResourceNotFound
 
-from bot.core.enums import EventCategory, EventSource
+from bot.core import EVENT_CATEGORY_GENERIC
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.models import ChatRoomCapabilities
+from bot.integrations.twitch import EVENT_SOURCE_TWITCH
 from bot.integrations.twitch.services import TwitchService
 from utils.strutils import split_by_utf16_bytes
 
@@ -17,7 +23,7 @@ from .enums import TwitchCustomRewardRedemptionStatus
 LOGGER = logging.getLogger(__name__)
 
 
-def filter_text(context: MessageEvent, text: str, *, max_length: int | None = None):
+def _filter_text(context: MessageEvent, text: str, *, max_length: int | None = None):
     if not context.room_capabilities.multiline:
         text = " - ".join(text.splitlines())
     split_text = [text]
@@ -27,16 +33,11 @@ def filter_text(context: MessageEvent, text: str, *, max_length: int | None = No
     return split_text
 
 
-if TYPE_CHECKING:
-    from twitchAPI.chat import Chat as TwitchChat
-    from twitchAPI.chat import ChatMessage as TwitchChatMessage
-    from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
-    from twitchAPI.twitch import Twitch
-
-
 @dataclass(kw_only=True)
-class TwitchMessageEvent(MessageEvent):
-    platform: EventSource = EventSource.Twitch
+class TwitchIRCMessageEvent(MessageEvent):
+    """Twitch chat message event."""
+
+    platform: str = EVENT_SOURCE_TWITCH
     bot_twitch: Twitch
     channel_twitch: Twitch
     twitch_service: TwitchService
@@ -44,30 +45,6 @@ class TwitchMessageEvent(MessageEvent):
     room_capabilities: ChatRoomCapabilities = ChatRoomCapabilities(
         multiline=False, max_message_length=500
     )
-
-    async def _send_irc(self, text: str, *, reply_id: str | None = None):
-        await self.twitch_chat.send_message(self.room_name, text, reply_id)
-
-    async def _send_http(self, text: str, *, reply_id: str | None = None):
-        _ = await self.channel_twitch.send_chat_message(
-            self.room_id, self.bot_user_id, text, reply_id
-        )
-
-    async def _send(
-        self, text: str, *, use_http: bool = True, reply_id: str | None = None
-    ):
-        methods = []
-        if use_http:
-            methods = [self._send_http, self._send_irc]
-        else:
-            methods = [self._send_irc, self._send_http]
-        for m in methods:
-            try:
-                await m(text, reply_id=reply_id)
-                break
-            except Exception:
-                LOGGER.warning("Failed to send message", exc_info=True)
-                continue
 
     @override
     async def send(
@@ -82,18 +59,22 @@ class TwitchMessageEvent(MessageEvent):
         char_limit = self.room_capabilities.max_message_length
         if me:
             char_limit -= 4
-        for text_ in filter_text(self, text, max_length=char_limit):
+        for text_ in _filter_text(self, text, max_length=char_limit):
             if me:
                 text_ = f"/me {text_}"
-            await self._send(text_, use_http=use_http, reply_id=reply_id)
+            await self.twitch_service.send_chat_message(
+                self.room_id, text_, use_http=use_http, reply_id=reply_id
+            )
 
     @override
     async def reply(self, text: str, *, use_http: bool = True, **kwargs: Any):
         char_limit = (
             self.room_capabilities.max_message_length - len(self.author_login) - 2
         )
-        for text_ in filter_text(self, text, max_length=char_limit):
-            await self._send(text_, use_http=use_http, reply_id=self.id)
+        for text_ in _filter_text(self, text, max_length=char_limit):
+            await self.twitch_service.send_chat_message(
+                self.room_id, text_, use_http=use_http, reply_id=self.id
+            )
 
 
 @dataclass(kw_only=True)
@@ -106,25 +87,53 @@ class TwitchEventSubMessageEvent(MessageEvent):
         multiline=False, max_message_length=500
     )
 
+    @override
+    async def send(
+        self,
+        text: str,
+        *,
+        me: bool = False,
+        use_http: bool = True,
+        reply_id: str | None = None,
+        **kwargs: Any,
+    ):
+        char_limit = self.room_capabilities.max_message_length
+        if me:
+            char_limit -= 4
+        for text_ in _filter_text(self, text, max_length=char_limit):
+            if me:
+                text_ = f"/me {text_}"
+            await self.twitch_service.send_chat_message(
+                self.room_id, text_, use_http=use_http, reply_id=reply_id
+            )
+
+    @override
+    async def reply(self, text: str, *, use_http: bool = True, **kwargs: Any):
+        char_limit = (
+            self.room_capabilities.max_message_length - len(self.author_login) - 2
+        )
+        for text_ in _filter_text(self, text, max_length=char_limit):
+            await self.twitch_service.send_chat_message(
+                self.room_id, text_, use_http=use_http, reply_id=self.id
+            )
+
 
 @dataclass(kw_only=True)
-class TwitchRedemptionEvent(TwitchMessageEvent):
-    categories: Collection[EventCategory] = (EventCategory.Generic,)
+class TwitchRedemptionEvent(TwitchIRCMessageEvent):
+    categories: Collection[str] = (EVENT_CATEGORY_GENERIC,)
     data: ChannelPointsCustomRewardRedemptionData  # pyright: ignore[reportIncompatibleVariableOverride]
     redeem_name: str
     redeem_id: str
-    redeem_cost: str
+    redeem_cost: int
 
-    async def update_status(
-        self, status: CustomRewardRedemptionStatus | TwitchCustomRewardRedemptionStatus
-    ):
+    async def update_status(self, status: TwitchCustomRewardRedemptionStatus):
         if self.data.status == "unfulfilled":
             try:
                 _ = await self.channel_twitch.update_redemption_status(
                     self.data.broadcaster_user_id,
                     self.data.reward.id,
                     self.data.id,
-                    cast("CustomRewardRedemptionStatus", status),
+                    status,
                 )
             except TwitchResourceNotFound:
                 LOGGER.warning(

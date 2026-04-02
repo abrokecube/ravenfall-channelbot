@@ -4,6 +4,8 @@ from sqlalchemy import Integer, String
 
 from .enums import MessageDeliveryMode, MessageReceiveMode, MessageRateMode
 
+EVENT_SOURCE_TWITCH = "twitch"
+
 
 class TwitchAuth(Base):
     __tablename__: str = "twitch_auth"

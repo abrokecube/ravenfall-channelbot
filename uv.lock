@@ -755,7 +755,7 @@ requires-dist = [
     { name = "thefuzz", specifier = "==0.22.1" },
     { name = "tinydb", specifier = "==4.8.2" },
     { name = "tqdm", specifier = "==4.67.1" },
-    { name = "twitchapi", git = "https://github.com/abrokecube/pyTwitchAPI.git" },
+    { name = "twitchapi", git = "https://github.com/abrokecube/pyTwitchAPI?rev=master" },
     { name = "typing-extensions", specifier = "==4.15.0" },
     { name = "websockets", specifier = "==15.0.1" },
     { name = "yarl", specifier = "==1.22.0" },
@@ -865,7 +865,7 @@ wheels = [
 [[package]]
 name = "twitchapi"
 version = "4.5.0"
-source = { git = "https://github.com/abrokecube/pyTwitchAPI.git#5398b564196ddb160caddc66ecd1d398242c5bf5" }
+source = { git = "https://github.com/abrokecube/pyTwitchAPI?rev=master#6d068dc0708889e6c6d38cea720173fe978c9aec" }
 dependencies = [
     { name = "aiohttp" },
     { name = "enum-tools" },

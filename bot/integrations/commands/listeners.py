@@ -16,12 +16,12 @@ from typing import (
 import docstring_parser
 
 from bot.core.components import (
+    BaseDispatcher,
     BaseEvent,
     Cog,
     Cooldown,
     GlobalContext,
 )
-from bot.core.enums import Dispatcher
 from bot.core.listeners import GenericListener
 from bot.integrations.chat_messages import BaseCheck
 from bot.integrations.chat_messages.exceptions import CheckFailure
@@ -56,12 +56,14 @@ class CommandListener(GenericListener):
         checks: list[BaseCheck] | None = None,
         verifier: VerifierType | None = None,
         hidden: bool = False,
-        help: str | None = None,
+        help_: str | None = None,
         short_help: str | None = None,
         title: str | None = None,
-        expected_dispatcher: Dispatcher = Dispatcher.Command,
     ):
-        super().__init__(func, cog, cooldown, expected_dispatcher)
+        # prevent circular import :)
+        from bot.integrations.commands.dispatchers import CommandDispatcher
+
+        super().__init__(func, cog, cooldown, CommandDispatcher)
         self.verifier: VerifierType | None = getattr(
             func, "_listener_command_verifier", verifier
         )
@@ -82,7 +84,7 @@ class CommandListener(GenericListener):
 
         self.title: str = title or self.name.replace("_", " ").title()
         self.short_help: str | None = short_help or doc.short_description
-        self.help: str | None = help or doc.long_description or doc.short_description
+        self.help: str | None = help_ or doc.long_description or doc.short_description
 
         self.hidden: bool = hidden
 
@@ -248,7 +250,8 @@ class CommandListener(GenericListener):
                 if isinstance(check_result, str):
                     raise CheckFailure(check_result)
                 if not check_result:
-                    raise CheckFailure(f"Check failed for command '{self.name}'")
+                    msg = f"Check failed for command '{self.name}'"
+                    raise CheckFailure(msg)
             except CheckFailure:
                 raise
             except Exception as e:
@@ -268,14 +271,14 @@ class CommandListener(GenericListener):
                 if isinstance(verify_result, str):
                     raise VerificationFailure(verify_result)
                 if verify_result is False:
-                    raise VerificationFailure(
-                        f"Verification failed for command '{self.name}'"
-                    )
+                    msg = f"Verification failed for command '{self.name}'"
+                    raise VerificationFailure(msg)
             except VerificationFailure:
                 raise
             except Exception as e:
                 LOGGER.error("Verification raised an error: %s", e)
-                raise VerificationFailure("An unknown error occurred")
+                msg = "An unknown error occurred"
+                raise VerificationFailure(msg) from e
 
     async def _convert_argument(
         self,
@@ -309,36 +312,39 @@ class CommandListener(GenericListener):
                     return await result
                 return result
             except ArgumentConversionError as e:
-                raise ArgumentConversionError(e.message, value, param)
+                raise ArgumentConversionError(e.message, value, param) from None
             except Exception as e:
+                msg = f"An error occurred while converting the argument: {e}"
                 raise ArgumentConversionError(
-                    f"An error occurred while converting the argument: {e}",
+                    msg,
                     value,
                     param,
                     e,
-                )
+                ) from e
         elif conv_obj is bool:
             if isinstance(value, bool):
                 return value
-            elif isinstance(value, str):
+            if isinstance(value, str):
                 if value.lower() in ("true", "yes", "1", "on"):
                     return True
-                elif value.lower() in ("false", "no", "0", "off"):
+                if value.lower() in ("false", "no", "0", "off"):
                     return False
-                else:
-                    raise ArgumentConversionError("Expected a boolean", value, param)
-            else:
-                raise ArgumentConversionError("Expected a boolean", value, param)
+                msg = "Expected a boolean"
+                raise ArgumentConversionError(msg, value, param)
+            msg = "Expected a boolean"
+            raise ArgumentConversionError(msg, value, param)
         elif conv_obj is int:
             try:
                 return int(value)
             except ValueError as e:
-                raise ArgumentConversionError("Expected an integer", value, param, e)
+                msg = "Expected an integer"
+                raise ArgumentConversionError(msg, value, param, e) from None
         elif conv_obj is float:
             try:
                 return float(value)
             except ValueError as e:
-                raise ArgumentConversionError("Expected a number", value, param, e)
+                msg = "Expected a number"
+                raise ArgumentConversionError(msg, value, param, e) from None
         elif conv_obj is str:
             if value == True:
                 raise EmptyFlagValueError(param)
@@ -348,9 +354,8 @@ class CommandListener(GenericListener):
             try:
                 return conv_obj(value)
             except Exception as e:
-                raise ArgumentConversionError(
-                    f"Could not convert to {conv_obj.__name__}", value, param, e
-                )
+                msg = f"Could not convert to {conv_obj.__name__}"
+                raise ArgumentConversionError(msg, value, param, e) from e
 
     async def _parse_arguments(
         self, ctx: CommandEvent, g_ctx: GlobalContext
@@ -381,8 +386,8 @@ class CommandListener(GenericListener):
                 if param_name in named_args:
                     if param_name in self.parameters_map:
                         raise DuplicateParameterError(self.parameters_map[param_name])
-                    else:
-                        raise ArgumentError(f"Duplicate argument: {param_name}")
+                    msg = f"Duplicate argument: {param_name}"
+                    raise ArgumentError(msg)
 
                 named_args[param_name] = item.value
             else:
@@ -546,12 +551,13 @@ class CommandListener(GenericListener):
             if self.cooldown.rate == 1:
                 cooldowns = f"Cooldown: {self.cooldown.per}s ({cd_buckets})"
             else:
-                cooldowns = f"Cooldown: {self.cooldown.rate}x/{self.cooldown.per}s ({cd_buckets})"
+                cooldowns = (
+                    f"Cooldown: {self.cooldown.rate}x/{self.cooldown.per}s ({cd_buckets})"
+                )
 
-        response = strjoin(
+        return strjoin(
             " – ", name_and_usage, description, restrictions, aliases, cooldowns
         )
-        return response
 
 
 BUILTIN_TYPE_DOCS = {

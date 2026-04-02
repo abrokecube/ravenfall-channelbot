@@ -5,7 +5,6 @@ import logging
 if TYPE_CHECKING:
     from .listeners import GenericListener
     from .components import GlobalContext, BaseEvent, BaseListener
-from .enums import EventCategory, Dispatcher
 
 from .components import BaseDispatcher
 
@@ -21,37 +20,6 @@ def filter_text(text: str):
     text = text.translate(TEXT_REPLACEMENTS)
     text = text.strip()
     return text
-
-
-class SimpleDispatcher(BaseDispatcher):
-    def __init__(self) -> None:
-        super().__init__()
-        self._id: Dispatcher = Dispatcher.Generic
-        self._func_listener: type[BaseListener] = GenericListener
-        self.categories: set[EventCategory] = set(
-            [
-                EventCategory.Generic,
-                EventCategory.Message,
-                EventCategory.RavenBotMessage,
-                EventCategory.RavenfallMessage,
-            ]
-        )
-
-    @override
-    async def dispatch(
-        self, global_context: GlobalContext, event: BaseEvent, *args, **kwargs
-    ):
-        for listener in self.listeners.values():
-            match_result = False
-            try:
-                match_result = await listener.check_for_match(event)
-            except Exception as e:
-                LOGGER.error(f"Listener matcher returned an error: {e}", exc_info=True)
-
-            if match_result:
-                await self._invoke_listener(
-                    listener, global_context, event, match_result
-                )
 
 
 # class TwitchRedeemDispatcher(SimpleDispatcher):

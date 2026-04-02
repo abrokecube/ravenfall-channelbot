@@ -5,13 +5,12 @@ from sqlalchemy import select
 
 from . import TwitchChannelSettings
 from .enums import EventSubTopic, MessageDeliveryMode, MessageRateMode, MessageReceiveMode
-from dataclasses import dataclass
 
 
 class EventSubChannelTopic(NamedTuple):
     """EventSub channel and topic."""
 
-    channel_id: str
+    channel_id: str | None
     topic: EventSubTopic
 
 
@@ -50,8 +49,11 @@ class EventSubRevocationDict(TypedDict):
 class ConnectedChat:
     """Represent a EventSub/IRC Twitch chat connection."""
 
-    def __init__(self, channel_settings: TwitchChannelSettings) -> None:
+    def __init__(
+        self, channel_settings: TwitchChannelSettings, channel_login: str
+    ) -> None:
         self.channel_id: str = channel_settings.id
+        self.channel_name: str = channel_login
         self.message_receive_mode: MessageReceiveMode = cast(
             MessageReceiveMode, channel_settings.message_receive_mode
         )

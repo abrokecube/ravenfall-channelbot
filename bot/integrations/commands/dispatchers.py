@@ -11,8 +11,9 @@ from bot.core.components import (
     Cooldown,
     GlobalContext,
 )
-from bot.core.enums import BucketType, Dispatcher, EventCategory
+from bot.core.enums import BucketType
 from bot.core.exceptions import ListenerError, ListenerOnCooldown
+from bot.integrations.chat_messages import EVENT_CATEGORY_MESSAGE
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.exceptions import CheckFailure
 from utils.format_time import TimeSize, format_seconds
@@ -37,9 +38,9 @@ LOGGER = logging.getLogger(__name__)
 class CommandDispatcher(BaseDispatcher):
     def __init__(self, case_sensitive: bool = False):
         super().__init__()
-        self._id: Dispatcher = Dispatcher.Command
+        self.identifier = CommandDispatcher
         self._func_listener: type[BaseListener] = CommandListener
-        self.categories: set[EventCategory] = set([EventCategory.Message])
+        self.categories: set[str] = set([EVENT_CATEGORY_MESSAGE])
         self.listeners: dict[str, BaseListener] = {}
         self.listeners_and_aliases: dict[str, CommandListener] = {}
         self.error_cooldown: Cooldown = Cooldown(
@@ -49,19 +50,19 @@ class CommandDispatcher(BaseDispatcher):
 
     @override
     def add_listener(self, listener: BaseListener):
-        if listener.expected_dispatcher != self._id:
-            raise ValueError(
-                f"Listener {listener} cannot be assigned to this dispatcher!"
-            )
+        if listener.expected_dispatcher != self.identifier:
+            msg = f"Listener {listener} cannot be assigned to this dispatcher!"
+            raise ValueError(msg)
 
         if isinstance(listener, CommandListener):
-            name: str = listener.id
+            name: str = listener.name
             aliases: list[str] = listener.aliases.copy()
-            cog_name: str = listener.cog.__qualname__
+            cog_name = ""
+            if listener.cog:
+                cog_name: str = listener.cog.name
         else:
-            raise ValueError(
-                f"Listener {listener} cannot be assigned to this dispatcher!"
-            )
+            msg = f"Listener {listener} cannot be assigned to this dispatcher!"
+            raise ValueError(msg)
 
         if not self.case_sensitive:
             name = name.lower()
@@ -69,25 +70,21 @@ class CommandDispatcher(BaseDispatcher):
 
         if name in self.listeners:
             other = self.listeners[name]
-            raise ValueError(
-                f"Command name '{name}' ({cog_name}) is taken by command '{other.id}' ({other.cog.__qualname__})"
-            )
+            msg = f"Command name '{name}' ({cog_name}) is taken by command '{other.id}' ({other.cog.__qualname__})"
+            raise ValueError(msg)
         if name in self.listeners_and_aliases:
             other = self.listeners_and_aliases[name]
-            raise ValueError(
-                f"Command name '{name}' ({cog_name}) is taken by an alias of '{other.id}' ({other.cog.__qualname__})"
-            )
+            msg = f"Command name '{name}' ({cog_name}) is taken by an alias of '{other.id}' ({other.cog.__qualname__})"
+            raise ValueError(msg)
         for alias in aliases:
             if alias in self.listeners:
                 other = self.listeners[alias]
-                raise ValueError(
-                    f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken by command '{other.id}' ({other.cog.__qualname__})"
-                )
+                msg = f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken by command '{other.id}' ({other.cog.__qualname__})"
+                raise ValueError(msg)
             if alias in self.listeners_and_aliases:
                 other = self.listeners_and_aliases[alias]
-                raise ValueError(
-                    f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken by an alias of '{other.id}' ({other.cog.__qualname__})"
-                )
+                msg = f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken by an alias of '{other.id}' ({other.cog.__qualname__})"
+                raise ValueError(msg)
 
         self.listeners[name] = listener
         self.listeners_and_aliases[name] = listener
@@ -110,9 +107,8 @@ class CommandDispatcher(BaseDispatcher):
             aliases = [a.lower() for a in aliases]
 
         if name not in self.listeners:
-            raise ValueError(
-                f"Dispatcher '{self.__qualname__}' does not have a listener with the name '{listener.id}'"
-            )
+            msg = f"Dispatcher '{self.__qualname__}' does not have a listener with the name '{listener.id}'"
+            raise ValueError(msg)
 
         __ = self.listeners.pop(name)
         __ = self.listeners_and_aliases.pop(name)
@@ -129,7 +125,7 @@ class CommandDispatcher(BaseDispatcher):
         return "", text
 
     @override
-    async def dispatch(
+    async def dispatch(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         global_context: GlobalContext,
         event: BaseEvent,
@@ -179,9 +175,8 @@ class CommandDispatcher(BaseDispatcher):
             if not command:
                 return CommandDispatchResult(None, None)
         else:
-            raise ValueError(
-                f"Command dispatcher does not support event type '{event.__class__.__name__}'"
-            )
+            msg = f"Command dispatcher does not support event type '{event.__class__.__name__}'"
+            raise ValueError(msg)
 
         try:
             await command.invoke(global_context, new_event)
@@ -193,9 +188,7 @@ class CommandDispatcher(BaseDispatcher):
                 LOGGER.error("Error handled during command invocation: %s", error)
             if not respond_to_errors:
                 raise error
-            await self.on_invoke_error(
-                global_context, new_event, error, command=command
-            )
+            await self.on_invoke_error(global_context, new_event, error, command=command)
             return CommandDispatchResult(command, error)
 
     @override
@@ -271,7 +264,5 @@ class CommandDispatcher(BaseDispatcher):
         else:
             await event.message.reply("❌ An unknown error occurred")
 
-    async def get_prefix(
-        self, global_context: GlobalContext, event: MessageEvent
-    ) -> str:
+    async def get_prefix(self, global_context: GlobalContext, event: MessageEvent) -> str:
         return "!"

@@ -2,10 +2,10 @@ from typing import Concatenate, Callable
 from collections.abc import Awaitable
 from .components import GlobalContext, BaseEvent
 
-ListenerFuncType = Callable[
+type ListenerFuncType = Callable[
     Concatenate[GlobalContext, BaseEvent, ...], None | Awaitable[None]
 ]
-EventProcessor = Callable[
-    [GlobalContext, BaseEvent], None | BaseEvent | Awaitable[None | BaseEvent]
+type EventProcessor[T: BaseEvent] = Callable[
+    [GlobalContext, T], None | T | Awaitable[None | T]
 ]
-EventProcessorCallback = Callable[[BaseEvent], Awaitable[None]] | None
+type EventProcessorCallback[T: BaseEvent] = Callable[[T], Awaitable[None]] | None

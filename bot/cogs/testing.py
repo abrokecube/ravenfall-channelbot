@@ -3,52 +3,62 @@
 Contains simple ping/hi commands and test redeems used in development.
 """
 
-from typing import Optional, Any
-from ..commands.cog import Cog
-from ..commands.events import CommandEvent, TwitchRedemptionEvent, MessageEvent
-from ..commands.exceptions import CommandError
-from ..commands.decorators import command, on_match, on_twitch_redeem, checks, on_message
-from ..commands.checks import MinPermissionLevel
-from ..commands.enums import UserRole
+from bot.core.components import Cog
+from bot.integrations.chat_messages.enums import UserRole
+from bot.integrations.chat_messages.deco import checks
+from bot.integrations.commands.checks import MinPermissionLevel
+from bot.integrations.commands.events import CommandEvent
+from bot.integrations.commands.deco import command
+from bot.integrations.commands.exceptions import CommandError
+from bot.integrations.twitch.deco import on_twitch_redeem
+from bot.integrations.twitch.events import TwitchRedemptionEvent
 
-import re
 
 class TestingCog(Cog):
     """Small set of test commands and redeems for development.
 
     Includes basic chat commands and sample redeems used in CI/manual testing.
-    """    
-    @command(name="test", help="Test command")
+    """
+
+    @command(name="test")
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     async def test(self, ctx: CommandEvent):
+        """Test command."""
         await ctx.message.reply("Hello, world! Args: " + str(ctx.parsed_args.args))
 
     @command(name="test_error", help="Test error command")
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     async def test_error(self, ctx: CommandEvent):
-        raise Exception("Test error")
+        """Test error command."""
+        msg = "Test error"
+        raise Exception(msg)
 
     @command(name="test_error_listener", help="Test error command")
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     async def test_error_listener(self, ctx: CommandEvent):
-        raise CommandError("Test error but cool")
-    
+        """Test error command."""
+        msg = "Test error but cool"
+        raise CommandError(msg)
+
     @on_twitch_redeem(lambda e: e.redeem_name.lower() == "test redeem")
     async def test_redeem(self, ctx: TwitchRedemptionEvent, match_result: bool):
+        """Test redeem."""
         await ctx.reply(f"Test redeem text: {ctx.text}")
 
     @on_twitch_redeem(lambda e: e.redeem_name.lower() == "test error redeem")
     async def test_error_redeem(self, ctx: TwitchRedemptionEvent, match_result: bool):
-        raise CommandError("boom i exploded")
+        """Test error redeem."""
+        msg = "boom i exploded"
+        raise CommandError(msg)
 
     @command(name="ping", help="Pong!")
     async def ping(self, ctx: CommandEvent):
-        """Simple ping command that replies with 'Pong!'."""
+        """Command that replies with 'Pong!'."""
         await ctx.message.reply("Pong!")
 
-    @on_message(lambda e: re.match(r"^\?ping", e.text, re.IGNORECASE))
-    async def ping_alias(self, ctx: MessageEvent, result: re.Match):
-        await self.event_manager.execute_text("ping", ctx)
+    # @on_message(lambda e: re.match(r"^\?ping", e.text, re.IGNORECASE))
+    # async def ping_alias(self, ctx: MessageEvent, result: re.Match):
+    #     await self.event_manager.execute_text("ping", ctx)
 
     # @on_message(lambda e: bool(re.match(r"^\?\?(ping)", e.text, re.IGNORECASE)))
     # async def ping_alias(self, ctx: MessageEvent, result: re.Match):
@@ -62,9 +72,10 @@ class TestingCog(Cog):
     @command()
     async def roles(self, ctx: CommandEvent):
         """Show your current roles.
-        
+
         Examples:
             !roles
+
         """
         role_names = [role.value for role in ctx.message.author_roles]
         await ctx.message.reply(f"Your roles: {', '.join(role_names)}")
@@ -80,4 +91,3 @@ class TestingCog(Cog):
     #     raise Exception("Test error")
     #     await ctx.send("You shouldnt be seeing this")
     #     await ctx.update_status(CustomRewardRedemptionStatus.FULFILLED)
-

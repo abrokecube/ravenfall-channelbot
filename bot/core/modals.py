@@ -2,11 +2,10 @@
 from __future__ import annotations
 from typing import NamedTuple
 from collections.abc import Collection
-from .enums import EventCategory, EventSource
 
 
 class MetaFilter(NamedTuple):
-    categories: Collection[EventCategory]
+    categories: Collection[str]
     invert_categories: bool  # only include the listed categories
-    platforms: Collection[EventSource]
+    platforms: Collection[str]
     invert_platforms: bool  # only include the listed platforms

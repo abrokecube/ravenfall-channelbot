@@ -4,6 +4,8 @@ from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.chat_messages.events import MessageEvent
 from typing import override
 
+from bot.integrations.commands.events import CommandEvent
+
 
 class HasRole(BaseCheck):
     """Check if the user has at least one of the specified roles."""
@@ -24,14 +26,15 @@ class HasRole(BaseCheck):
     @override
     async def check(self, g_ctx: GlobalContext, event: BaseEvent):
         if not isinstance(event, MessageEvent):
-            raise ValueError("HasRole check can only be used with MessageEvent")
+            msg = "HasRole check can only be used with MessageEvent"
+            raise ValueError(msg)
         if not any(role in event.author_roles for role in self.required_roles):
             return "You do not have permission to use this command."
         return True
 
 
 class MinPermissionLevel(BaseCheck):
-    """Check if the user is at or above a permission level"""
+    """Check if the user is at or above a permission level."""
 
     def __init__(
         self, minimum_role: UserRole, *, extra_roles: list[UserRole] | None = None
@@ -51,13 +54,14 @@ class MinPermissionLevel(BaseCheck):
 
     @override
     async def check(self, g_ctx: GlobalContext, event: BaseEvent):
-        if not isinstance(event, MessageEvent):
-            raise ValueError(
-                "MinPermissionLevel check can only be used with MessageEvent"
-            )
-
+        if not isinstance(event, (MessageEvent, CommandEvent)):
+            msg = "MinPermissionLevel check can only be used with MessageEvent and CommandEvent"
+            raise ValueError(msg)
+        if isinstance(event, CommandEvent):
+            event = event.message
         if any(r.level() >= self.min_level for r in event.author_roles):
             return True
         if any(r in self.extra_roles for r in event.author_roles):
             return True
+
         return "You do not have permission to use this command."

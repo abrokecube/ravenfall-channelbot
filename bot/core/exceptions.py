@@ -1,6 +1,10 @@
 # pyright: reportAny=false, reportExplicitAny=false
 from __future__ import annotations
-from bot.core.components import Cooldown
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bot.core.components import Cooldown
 
 
 class ListenerError(Exception):

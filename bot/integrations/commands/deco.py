@@ -1,9 +1,10 @@
+from bot.integrations.chat_messages import EVENT_CATEGORY_MESSAGE
 from .types import VerifierType, ParameterConfig
 from typing import Any, cast
 from collections.abc import Callable
-from bot.core.enums import EventCategory, Dispatcher
 from bot.core.modals import MetaFilter
 from . import BaseConverter
+from .dispatchers import CommandDispatcher
 
 
 def command[T: Callable[..., Any]](
@@ -23,7 +24,7 @@ def command[T: Callable[..., Any]](
             {
                 "name": name,
                 "short_help": short_help,
-                "help": help,
+                "help_": help,
                 "aliases": aliases,
                 "verifier": verifier,
                 "hidden": hidden,
@@ -33,9 +34,9 @@ def command[T: Callable[..., Any]](
         setattr(
             func,
             "_listener_meta_filter",
-            MetaFilter((EventCategory.Message,), True, [], False),
+            MetaFilter((EVENT_CATEGORY_MESSAGE,), True, [], False),
         )
-        setattr(func, "_listener_dispatcher", Dispatcher.Command)
+        setattr(func, "_listener_dispatcher", CommandDispatcher)
         return func
 
     return decorator
@@ -46,12 +47,12 @@ def parameter[T: Callable[..., Any]](
     aliases: str | list[str] | None = None,
     greedy: bool = False,
     hidden: bool = False,
-    help: str = "",
+    help_: str = "",
     regex: str = "",
     display_name: str = "",
     converter: BaseConverter | type[BaseConverter] | None = None,
 ) -> Callable[[T], T]:
-    """Decorator to configure a command parameter.
+    """Configure a command parameter.
 
     Args:
         name: The name of the parameter to configure.
@@ -60,6 +61,7 @@ def parameter[T: Callable[..., Any]](
         hidden: If True, the parameter will be hidden from help documentation.
         help: Help text for the parameter.
         regex: Regex pattern to match for this parameter.
+
     """
     if not aliases:
         aliases = []
@@ -76,7 +78,7 @@ def parameter[T: Callable[..., Any]](
             "aliases": aliases,
             "greedy": greedy,
             "hidden": hidden,
-            "help": help,
+            "help_": help_,
             "regex": regex,
             "display_name": display_name,
             "converter": converter,
@@ -89,7 +91,7 @@ def parameter[T: Callable[..., Any]](
 def verification[T: Callable[..., Any]](
     verifier_func: VerifierType,
 ) -> Callable[[T], T]:
-    """Decorator to add a verification function to a command.
+    """Add a verification function to a command.
 
     The verifier function should accept (ctx, *args, **kwargs) matching the command's signature.
     It should return True (pass), False (fail), or a string (fail with message).
