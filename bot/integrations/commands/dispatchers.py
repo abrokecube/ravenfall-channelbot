@@ -38,7 +38,7 @@ LOGGER = logging.getLogger(__name__)
 class CommandDispatcher(BaseDispatcher):
     def __init__(self, case_sensitive: bool = False):
         super().__init__()
-        self.identifier = CommandDispatcher
+        self.identifier: type[BaseDispatcher] = CommandDispatcher
         self._func_listener: type[BaseListener] = CommandListener
         self.categories: set[str] = set([EVENT_CATEGORY_MESSAGE])
         self.listeners: dict[str, BaseListener] = {}
@@ -96,7 +96,7 @@ class CommandDispatcher(BaseDispatcher):
         name: str = ""
         aliases: list[str] = []
         if isinstance(listener, CommandListener):
-            name = listener.id
+            name = listener.name
             aliases = listener.aliases.copy()
         else:
             name = listener.id
@@ -107,7 +107,7 @@ class CommandDispatcher(BaseDispatcher):
             aliases = [a.lower() for a in aliases]
 
         if name not in self.listeners:
-            msg = f"Dispatcher '{self.__qualname__}' does not have a listener with the name '{listener.id}'"
+            msg = f"Dispatcher '{type(self)}' does not have a listener with the name '{name}'"
             raise ValueError(msg)
 
         __ = self.listeners.pop(name)

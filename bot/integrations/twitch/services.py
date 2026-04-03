@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from twitchAPI.twitch import Twitch
 
@@ -82,3 +82,9 @@ class TwitchService(BaseService):
             except Exception:
                 LOGGER.warning("Failed to send message", exc_info=True)
                 continue
+
+    @override
+    async def teardown(self):
+        for t in self.twitches.values():
+            await t.close()
+        return await super().teardown()

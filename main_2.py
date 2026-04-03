@@ -7,6 +7,7 @@ from bot.db.service import DatabaseService
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.commands.dispatchers import CommandDispatcher
 from bot.integrations.chat_messages.event_processors import filter_message_event_text
+from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
 from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
 
@@ -118,6 +119,7 @@ async def run():
         event_manager = EventManager(global_ctx)
         command_d = MyCmdDispatcher()
         await event_manager.add_dispatcher(command_d)
+        await event_manager.add_dispatcher(TwitchRedeemDispatcher())
         event_manager.add_event_processor(MessageEvent, filter_message_event_text)
         twitch = TwitchEventSource(
             os.getenv("TWITCH_APP_ID", ""),
@@ -161,6 +163,8 @@ async def run():
         __ = await wait_forever.wait()
     except asyncio.CancelledError:
         logger.info("Bot is shutting down")
+        await event_manager.teardown()
+        await global_ctx.stop_all()
 
 
 if __name__ == "__main__":

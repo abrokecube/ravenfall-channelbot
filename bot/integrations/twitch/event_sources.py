@@ -3,7 +3,7 @@ import asyncio
 import contextlib
 import functools
 import logging
-from collections.abc import Collection
+from collections.abc import Awaitable, Collection
 from typing import Any, cast, overload, override
 
 from bidict import bidict
@@ -194,6 +194,10 @@ class TwitchEventSub:
         self.eventsub_ws.start()
         for topic in topics:
             __ = await self.add_eventsub_subscription(topic.topic, topic.channel_id)
+
+    async def stop(self):
+        if self.eventsub_ws:
+            await self.eventsub_ws.stop()
 
 
 class TwitchEventSource(BaseEventSource):
@@ -424,6 +428,13 @@ class TwitchEventSource(BaseEventSource):
     async def teardown(self):
         if self.twitch_chat:
             self.twitch_chat.stop()
+        tasks: list[Awaitable[None]] = []
+        if self.bot_eventsub:
+            tasks.append(self.bot_eventsub.stop())
+        for ev in self.eventsubs.values():
+            tasks.append(ev.stop())
+        tasks.append(self._twitch_service.teardown())
+        __ = await asyncio.gather(*tasks, return_exceptions=True)
 
     async def join_chat(
         self,

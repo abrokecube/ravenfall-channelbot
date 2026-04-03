@@ -199,6 +199,14 @@ class GlobalContext:
         """Create an async context where required services can be awaited."""
         return ServiceResolutionContext(self, max_wait)
 
+    async def stop_all(self):
+        """Stop all services."""
+        tasks: list[Awaitable[None]] = []
+        for s in self._services.values():
+            tasks.append(s.teardown())
+        __ = await asyncio.gather(*tasks)
+        self._services.clear()
+
 
 class DummyGlobalContext(GlobalContext):
     """Dummy global context for classes that get a global context from the event manager."""
@@ -235,6 +243,9 @@ class BaseService:
 
     def __init__(self) -> None:
         self.global_context: GlobalContext = DummyGlobalContext()
+
+    async def teardown(self):
+        pass
 
 
 class BaseEventSource:
@@ -389,7 +400,7 @@ class EventManager:
         try:
             await cog_instance.teardown()
         except Exception as e:
-            LOGGER.exception(f"Error occured while stopping cog: {e}")
+            LOGGER.exception(f"Error occurred while stopping cog: {e}")
 
         del self.cogs[cog_name]
 
@@ -469,12 +480,21 @@ class EventManager:
             except Exception as e:
                 LOGGER.exception(f"Exception while sending event to dispatcher: {e}")
 
-    async def stop_all(self):
-        """Stop all loaded cogs gracefully."""
+    async def teardown(self):
+        """Stop and remove all loaded components."""
         tasks: list[Coroutine[None, None, None]] = []
         for cog in list(self.cogs):
             tasks.append(self.remove_cog(cog))
         __ = await asyncio.gather(*tasks, return_exceptions=True)
+        tasks = []
+        for src in self.event_sources:
+            tasks.append(src.teardown())
+        for disp in self.dispatchers.values():
+            tasks.append(disp.teardown())
+        __ = await asyncio.gather(*tasks, return_exceptions=True)
+        self.event_sources.clear()
+        self.dispatchers.clear()
+        self.event_processors.clear()
 
     # async def execute_text(
     #     self, text: str, event: MessageEvent | None = None,
