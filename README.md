@@ -1,3 +1,7 @@
+branch for major overhaul + rewrite for better maintainability  
+introduces use of the basedpyright type checker and the ruff linter  
+the rest of the readme contents may be outdated
+
 # ravenfall-channelbot
 Runs under the username `CubedHelperBot` in my Ravenfall towns. It is not very configurable (you will have to edit the code directly). Code written with AI assistance.
 
