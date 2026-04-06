@@ -9,13 +9,15 @@ from bot.core.components import (
     BaseEvent,
     BaseListener,
     Cooldown,
+    EventManager,
     GlobalContext,
 )
 from bot.core.enums import BucketType
-from bot.core.exceptions import ListenerError, ListenerOnCooldown
+from bot.core.exceptions import ListenerError, ListenerOnCooldownError
 from bot.integrations.chat_messages import EVENT_CATEGORY_MESSAGE
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.exceptions import CheckFailure
+from bot.integrations.commands.services import CommandService
 from utils.format_time import TimeSize, format_seconds
 
 from . import CommandArgs, CommandDispatchResult
@@ -47,6 +49,12 @@ class CommandDispatcher(BaseDispatcher):
             1, 5, [BucketType.USER, BucketType.CHANNEL]
         )
         self.case_sensitive: bool = case_sensitive
+        self.service: CommandService | None = None
+
+    @override
+    async def setup(self, event_manager: EventManager):
+        self.service = CommandService(self)
+        self.global_context.register_service(CommandService, self.service)
 
     @override
     def add_listener(self, listener: BaseListener):
@@ -175,17 +183,20 @@ class CommandDispatcher(BaseDispatcher):
             if not command:
                 return CommandDispatchResult(None, None)
         else:
-            msg = f"Command dispatcher does not support event type '{event.__class__.__name__}'"
-            raise ValueError(msg)
+            msg = (
+                f"Command dispatcher does not support event type "
+                f"'{event.__class__.__name__}'"
+            )
+            raise TypeError(msg)
 
         try:
             await command.invoke(global_context, new_event)
             return CommandDispatchResult(command, None)
         except Exception as error:
             if not isinstance(error, ListenerError):
-                LOGGER.exception("Error occurred during command invocation: %s", error)
+                LOGGER.exception("Error occurred during command invocation")
             else:
-                LOGGER.error("Error handled during command invocation: %s", error)
+                LOGGER.warning(f"Error handled - {command.__class__.__name__}: {error}")
             if not respond_to_errors:
                 raise error
             await self.on_invoke_error(global_context, new_event, error, command=command)
@@ -206,13 +217,14 @@ class CommandDispatcher(BaseDispatcher):
         if not isinstance(event, CommandEvent):
             return
         usage_text = command.get_usage_text(event.prefix, event.invoked_with)
-        if isinstance(error, ListenerOnCooldown):
+        if isinstance(error, ListenerOnCooldownError):
             if (
                 error.cooldown.per >= 60
                 and self.error_cooldown.get_retry_after(event) <= 0
             ):
                 await event.message.reply(
-                    f"❌ Listener '{command.name}' is on cooldown. Try again in {format_seconds(error.retry_after, TimeSize.LONG)}."
+                    f"❌ Listener '{command.name}' is on cooldown. "
+                    f"Try again in {format_seconds(error.retry_after, TimeSize.LONG)}."
                 )
                 self.error_cooldown.update_rate_limit(event)
         elif isinstance(error, MissingRequiredArgumentError):
@@ -225,7 +237,8 @@ class CommandDispatcher(BaseDispatcher):
                 await event.message.reply("❌ Expected a value for an argument")
             else:
                 await event.message.reply(
-                    f"❌ Expected a value for argument '{error.parameter.name}' (type: {error.parameter.type_title})"
+                    f"❌ Expected a value for argument '{error.parameter.name}' "
+                    f"(type: {error.parameter.type_title})"
                 )
         elif isinstance(error, ArgumentConversionError):
             if not error.parameter:
@@ -233,17 +246,26 @@ class CommandDispatcher(BaseDispatcher):
                 LOGGER.error(
                     "ArgumentConversionError does not have an assigned parameter"
                 )
-            else:
-                if error.parameter.name not in event.specified_parameters:
-                    if error.message:
-                        out_text = f"❌ Error parsing argument '{error.parameter.name}' (default value): {error.message}"
-                    else:
-                        out_text = f"❌ '{error.value}' ({error.parameter.name} default value) is not a valid {error.parameter.type_title}"
+            elif error.parameter.name not in event.specified_parameters:
+                if error.message:
+                    out_text = (
+                        f"❌ Error parsing argument '{error.parameter.name}' "
+                        f"(default value): {error.message}"
+                    )
                 else:
-                    if error.message:
-                        out_text = f"❌ Error parsing argument '{error.parameter.name}': {error.message}"
-                    else:
-                        out_text = f"❌ '{error.value}' ({error.parameter.name}) is not a valid {error.parameter.type_title}"
+                    out_text = (
+                        f"❌ '{error.value}' ({error.parameter.name} "
+                        f"default value) is not a valid {error.parameter.type_title}"
+                    )
+            elif error.message:
+                out_text = (
+                    f"❌ Error parsing argument '{error.parameter.name}': {error.message}"
+                )
+            else:
+                out_text = (
+                    f"❌ '{error.value}' ({error.parameter.name}) is not a valid "
+                    f"{error.parameter.type_title}"
+                )
             await event.message.reply(out_text)
         elif isinstance(error, UnknownArgumentError):
             await event.message.reply(

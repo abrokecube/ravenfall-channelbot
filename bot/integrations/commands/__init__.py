@@ -31,6 +31,12 @@ class BaseConverter:
     async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> Any:  # pyright: ignore[reportUnusedParameter, reportAny, reportExplicitAny]
         raise NotImplementedError
 
+    @classmethod
+    async def cls_convert(
+        cls, g_ctx: GlobalContext, event: CommandEvent, arg: str
+    ) -> Any:
+        raise NotImplementedError
+
 
 DELIMETERS = ("=", ":")
 RE_FLAG = re.compile(r"[-a-zA-Z]{2}[a-zA-Z]+[:=]+.+|-[a-zA-Z]\b|--[a-zA-Z_]+\b")

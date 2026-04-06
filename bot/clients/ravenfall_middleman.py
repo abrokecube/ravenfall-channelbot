@@ -5,21 +5,27 @@ with the Ravenfall middleman WebSocket server, including message handling,
 connection management, and API interactions.
 """
 
+from __future__ import annotations
+
+import asyncio
+import contextlib
 import logging
+from enum import StrEnum
 from types import NoneType
+from typing import TYPE_CHECKING, Any, Final, cast, overload
+
 import aiohttp
 from aiohttp import web
-from typing import Any, overload, Callable, cast, Final
-from collections.abc import Awaitable
 from msgspec import Struct, field, json
-from datetime import datetime
-import asyncio
+
 from utils.logging_fomatter import setup_logging
-from enum import StrEnum
-import contextlib
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+    from datetime import datetime
 
 # Configure logging
-logger = logging.getLogger("ravenfall_middleman")
+LOGGER = logging.getLogger("ravenfall_middleman")
 json_encode = json.Encoder()
 setup_logging()
 
@@ -197,18 +203,14 @@ StreamMessageType = (
 class ClientError(BaseException):
     """Exception raised for client-side errors."""
 
-    pass
-
 
 class MiddlemanError(BaseException):
     """Exception raised for middleman server errors."""
 
-    pass
-
 
 class MiddlemanClient:
     """Client for interacting with the Ravenfall middleman server."""
-    
+
     def __init__(self, base_url: str) -> None:
         """Initialize the middleman client.
 
@@ -232,13 +234,13 @@ class MiddlemanClient:
         if not isinstance(response_data, dict):
             msg = f"Invalid response from middleman API: {response_data}"
             raise ClientError(msg)
-        if code == 400 or code == 404:
+        if code in {400, 404}:
             msg = f"Middleman API returned error: {response_data}"
             raise ClientError(msg)
-        if code == 500:
+        if code == 500:  # noqa: PLR2004
             msg = f"Middleman API returned error: {response_data}"
             raise MiddlemanError(msg)
-        if code == 200:
+        if code == 200:  # noqa: PLR2004
             pass
         else:
             msg = f"Middleman API returned error: {response_data}"
@@ -253,7 +255,8 @@ class MiddlemanClient:
         headers = {"Content-Type": "application/json"}
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"{self.base_url}/{endpoint}", headers=headers
+                f"{self.base_url}/{endpoint}",
+                headers=headers,
             ) as response:
                 response_text = await response.text()
                 self._raise_on_code(response.status, response_text)
@@ -263,7 +266,10 @@ class MiddlemanClient:
 
     @overload
     async def _post(
-        self, endpoint: str, out_type: None = None, data: dict[str, Any] | None = None
+        self,
+        endpoint: str,
+        out_type: None = None,
+        data: dict[str, Any] | None = None,
     ) -> None: ...
     @overload
     async def _post[T](
@@ -283,7 +289,9 @@ class MiddlemanClient:
         async with aiohttp.ClientSession() as session:
             encoded = json_encode.encode(data)
             async with session.post(
-                f"{self.base_url}/{endpoint}", data=encoded, headers=headers
+                f"{self.base_url}/{endpoint}",
+                data=encoded,
+                headers=headers,
             ) as response:
                 response_text = await response.text()
                 self._raise_on_code(response.status, response_text)
@@ -303,7 +311,9 @@ class MiddlemanClient:
         await self._post("/api/reconnect", None, data)
 
     async def send_to_ravenbot(
-        self, connection_id: str, message: RavenBotMessage
+        self,
+        connection_id: str,
+        message: RavenBotMessage,
     ) -> None:
         """Send RavenBot a message.
 
@@ -316,7 +326,9 @@ class MiddlemanClient:
         await self._post("/api/send-to-client", None, data)
 
     async def send_to_ravenfall(
-        self, connection_id: str, message: RavenfallMessage
+        self,
+        connection_id: str,
+        message: RavenfallMessage,
     ) -> None:
         """Send Ravenfall a message.
 
@@ -329,7 +341,9 @@ class MiddlemanClient:
         await self._post("/api/send-to-server", None, data)
 
     async def send_to_ravenfall_and_wait_for_response(
-        self, connection_id: str, message: SendAndWaitResult
+        self,
+        connection_id: str,
+        message: SendAndWaitResult,
     ) -> SendAndWaitResult:
         """Send Ravenfall a message and wait for a response.
 
@@ -342,7 +356,9 @@ class MiddlemanClient:
         return await self._post("/api/send-to-server-and-wait", SendAndWaitResult, data)
 
     async def ensure_connection(
-        self, connection_id: str, timeout_extension: int = 30
+        self,
+        connection_id: str,
+        timeout_extension: int = 30,
     ) -> EnsureConnectionResult:
         """Ensure the connection is active by extending its timeout.
 
@@ -362,7 +378,8 @@ class MiddlemanClient:
 
         """
         return await self._get(
-            "/api/connection-status?connectionId=" + connection_id, ConnStatusResponse
+            "/api/connection-status?connectionId=" + connection_id,
+            ConnStatusResponse,
         )
 
     async def get_config(self) -> MiddlemanConfig:
@@ -370,7 +387,8 @@ class MiddlemanClient:
         return await self._get("/api/config", MiddlemanConfig)
 
     def add_ravenfall_message_hook(
-        self, hook: Callable[[RavenfallStreamMessage], Awaitable[None]]
+        self,
+        hook: Callable[[RavenfallStreamMessage], Awaitable[None]],
     ) -> None:
         """Add a hook function to receive WebSocket messages.
 
@@ -381,7 +399,8 @@ class MiddlemanClient:
         self._ravenfall_message_hooks.append(hook)
 
     def remove_ravenfall_message_hook(
-        self, hook: Callable[[RavenfallStreamMessage], Awaitable[None]]
+        self,
+        hook: Callable[[RavenfallStreamMessage], Awaitable[None]],
     ) -> None:
         """Remove a message hook function.
 
@@ -393,7 +412,8 @@ class MiddlemanClient:
             self._ravenfall_message_hooks.remove(hook)
 
     def add_ravenbot_message_hook(
-        self, hook: Callable[[RavenBotStreamMessage], Awaitable[None]]
+        self,
+        hook: Callable[[RavenBotStreamMessage], Awaitable[None]],
     ) -> None:
         """Add a hook function to receive WebSocket messages.
 
@@ -404,7 +424,8 @@ class MiddlemanClient:
         self._ravenbot_message_hooks.append(hook)
 
     def remove_ravenbot_message_hook(
-        self, hook: Callable[[RavenBotStreamMessage], Awaitable[None]]
+        self,
+        hook: Callable[[RavenBotStreamMessage], Awaitable[None]],
     ) -> None:
         """Remove a message hook function.
 
@@ -418,7 +439,7 @@ class MiddlemanClient:
     async def connect_websocket(self) -> None:
         """Connect to the middleman's WebSocket stream."""
         if self._connected:
-            logger.warning("WebSocket is already connected")
+            LOGGER.warning("WebSocket is already connected")
             return
 
         ws_url = (
@@ -430,13 +451,13 @@ class MiddlemanClient:
             self._session = aiohttp.ClientSession()
             self._websocket = await self._session.ws_connect(ws_url)
             self._connected = True
-            logger.info("Connected to WebSocket at %s", ws_url)
+            LOGGER.info("Connected to WebSocket at %s", ws_url)
 
             # Start the message receiving task
             self._ws_task = asyncio.create_task(self._receive_messages())
 
         except Exception as e:
-            logger.error("Failed to connect to WebSocket: %s", e)
+            LOGGER.exception("Failed to connect to WebSocket")
             if self._session:
                 await self._session.close()
                 self._session = None
@@ -446,7 +467,7 @@ class MiddlemanClient:
     async def disconnect_websocket(self) -> None:
         """Disconnect from the WebSocket stream."""
         if not self._connected:
-            logger.warning("WebSocket is not connected")
+            LOGGER.warning("WebSocket is not connected")
             return
 
         self._connected = False
@@ -465,7 +486,29 @@ class MiddlemanClient:
             await self._session.close()
             self._session = None
 
-        logger.info("Disconnected from WebSocket")
+        LOGGER.info("Disconnected from WebSocket")
+
+    async def _handle_ws_text_message(self, text_data: bytes):
+        parsed_message = cast(
+            "StreamMessageType",
+            json.decode(
+                text_data,
+                type=StreamMessageType,
+            ),
+        )
+
+        if isinstance(parsed_message, RavenBotStreamMessage):
+            for hook in self._ravenbot_message_hooks:
+                try:
+                    await hook(parsed_message)
+                except Exception:
+                    LOGGER.exception("Error in message hook")
+        else:
+            for hook in self._ravenfall_message_hooks:
+                try:
+                    await hook(parsed_message)
+                except Exception:
+                    LOGGER.exception("Error in message hook")
 
     async def _receive_messages(self) -> None:
         """Receive and process messages from the WebSocket."""
@@ -476,39 +519,26 @@ class MiddlemanClient:
                     message = await self._websocket.receive()
 
                     if message.type == aiohttp.WSMsgType.TEXT:
-                        message_data_str = cast(bytes, message.data)
-                        parsed_message = json.decode(
-                            message_data_str, type=StreamMessageType
-                        )
-
-                        if isinstance(parsed_message, RavenBotStreamMessage):
-                            for hook in self._ravenbot_message_hooks:
-                                try:
-                                    await hook(parsed_message)
-                                except Exception as e:
-                                    logger.error(f"Error in message hook: {e}")
-                        else:
-                            for hook in self._ravenfall_message_hooks:
-                                try:
-                                    await hook(parsed_message)
-                                except Exception as e:
-                                    logger.error(f"Error in message hook: {e}")
+                        message_data_str = cast("bytes", message.data)
+                        await self._handle_ws_text_message(message_data_str)
 
                     elif message.type == aiohttp.WSMsgType.ERROR:
-                        logger.error(f"WebSocket error: {self._websocket.exception()}")
+                        LOGGER.error(f"WebSocket error: {self._websocket.exception()}")
                         break
 
                     elif message.type == aiohttp.WSMsgType.CLOSE:
-                        logger.info("WebSocket connection closed")
+                        LOGGER.info("WebSocket connection closed")
                         break
 
-                except Exception as e:
-                    logger.error(f"Error receiving WebSocket message: {e}")
-                    logger.error(f"Message data: {message_data_str}")
+                except Exception:
+                    LOGGER.exception(
+                        "Error receiving WebSocket message! "
+                        f"Message data: {message_data_str}",
+                    )
                     # break
 
         except asyncio.CancelledError:
-            logger.info("WebSocket message receiver task cancelled")
+            LOGGER.info("WebSocket message receiver task cancelled")
         finally:
             self._connected = False
 
@@ -516,16 +546,12 @@ class MiddlemanClient:
     def is_websocket_connected(self) -> bool:
         """Check if the WebSocket is connected."""
         return (
-            self._connected
-            and self._websocket is not None
-            and not self._websocket.closed
+            self._connected and self._websocket is not None and not self._websocket.closed
         )
 
 
 class FrozenSender(Sender, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[invalid-frozen-dataclass-subclass]
     """Frozen version of Sender for immutable message data."""
-
-    pass
 
 
 class FrozenRavenBotMessage(Struct, frozen=True):
@@ -539,8 +565,6 @@ class FrozenRavenBotMessage(Struct, frozen=True):
 
 class FrozenRecipient(Recipient, frozen=True):  # pyright: ignore[reportGeneralTypeIssues]  # ty:ignore[invalid-frozen-dataclass-subclass]
     """Frozen version of Recipient for immutable message data."""
-
-    pass
 
 
 class FrozenRavenfallMessage(Struct, frozen=True):
@@ -566,7 +590,7 @@ class ProcessorMessageBase(Struct, kw_only=True):
     timestamp: Final[datetime]
     _block: bool = False
 
-    def block(self):
+    def block(self) -> None:
         """Mark this message to be blocked from further processing."""
         self._block = True
 
@@ -588,7 +612,9 @@ class RavenBotProcessorMessage(ProcessorMessageBase, tag_field="source", tag="CL
 
 
 class RavenfallApiProcessorMessage(
-    RavenfallProcessorMessage, tag_field="source", tag="API-SERVER"
+    RavenfallProcessorMessage,
+    tag_field="source",
+    tag="API-SERVER",
 ):
     """API processor message originating from Ravenfall server."""
 
@@ -596,7 +622,9 @@ class RavenfallApiProcessorMessage(
 
 
 class RavenBotApiProcessorMessage(
-    RavenBotProcessorMessage, tag_field="source", tag="API-CLIENT"
+    RavenBotProcessorMessage,
+    tag_field="source",
+    tag="API-CLIENT",
 ):
     """API processor message originating from RavenBot client."""
 
@@ -614,11 +642,11 @@ ProcessorMessageType = (
 class MessageProcessorServer:
     """WebSocket server for processing Ravenfall messages."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 9000):
+    def __init__(self, host: str = "127.0.0.1", port: int = 9000):
         """Initialize the message processor server.
-        
+
         Args:
-            host: Host address to bind to (default: "0.0.0.0")
+            host: Host address to bind to (default: "127.0.0.1")
             port: Port to listen on (default: 9000)
 
         """
@@ -638,82 +666,87 @@ class MessageProcessorServer:
     def _setup_routes(self) -> None:
         __ = self._app.router.add_get("/process", self._websocket_handler)
 
+    async def _handle_ws_message(self, ws: web.WebSocketResponse, text_data: bytes):
+        try:
+            parsed_message = cast(
+                "ProcessorMessageType",
+                json.decode(
+                    text_data,
+                    type=ProcessorMessageType,
+                ),
+            )
+            if isinstance(parsed_message, RavenBotProcessorMessage):
+                for hook in self._ravenbot_message_hooks:
+                    try:
+                        await hook(parsed_message)
+                    except Exception:
+                        LOGGER.exception(
+                            "Error in message processor hook",
+                        )
+            else:
+                for hook in self._ravenfall_message_hooks:
+                    try:
+                        await hook(parsed_message)
+                    except Exception:
+                        LOGGER.exception(
+                            "Error in message processor hook",
+                        )
+
+            response = {
+                "correlationId": parsed_message.correlation_id,
+                "block": parsed_message._block,  # noqa: SLF001
+                "message": parsed_message.message,
+            }
+            await ws.send_bytes(json_encode.encode(response))
+
+        except Exception as e:
+            LOGGER.exception(f"Error processing message. Data: {text_data}")
+            try:
+                data_dict = cast("dict[str, Any]", json.decode(text_data, type=dict))
+                correlation_id = data_dict.get("correlationId")
+                if correlation_id is not None:
+                    response = {
+                        "correlationId": correlation_id,
+                        "block": False,
+                        "error": str(e),
+                        "message": None,
+                    }
+                    await ws.send_bytes(json_encode.encode(response))
+            except Exception:
+                LOGGER.exception("Error sending error response")
+
     async def _websocket_handler(self, request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse()
         __ = await ws.prepare(request)
-        logger.info(f"Message processor client connected from {request.remote}")
+        LOGGER.info(f"Message processor client connected from {request.remote}")
 
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
-                    message_data = msg.data  # pyright: ignore[reportAny]
-                    try:
-                        parsed_message = json.decode(
-                            message_data,  # pyright: ignore[reportAny]
-                            type=ProcessorMessageType,
-                        )
-                        if isinstance(parsed_message, RavenBotProcessorMessage):
-                            for hook in self._ravenbot_message_hooks:
-                                try:
-                                    await hook(parsed_message)
-                                except Exception as e:
-                                    logger.error(
-                                        f"Error in message processor hook: {e}"
-                                    )
-                        else:
-                            for hook in self._ravenfall_message_hooks:
-                                try:
-                                    await hook(parsed_message)
-                                except Exception as e:
-                                    logger.error(
-                                        f"Error in message processor hook: {e}"
-                                    )
-
-                        response = {
-                            "correlationId": parsed_message.correlation_id,
-                            "block": parsed_message._block,  # pyright: ignore[reportPrivateUsage]
-                            "message": parsed_message.message,
-                        }
-                        await ws.send_bytes(json_encode.encode(response))
-
-                    except Exception as e:
-                        logger.error(f"Error processing message: {e}")
-                        logger.error(f"Message data: {message_data}")
-                        try:
-                            data_dict = json.decode(message_data, type=dict)
-                            correlation_id = data_dict.get("correlationId", None)
-                            if correlation_id is not None:
-                                response = {
-                                    "correlationId": correlation_id,
-                                    "block": False,
-                                    "error": str(e),
-                                    "message": None,
-                                }
-                                await ws.send_bytes(json_encode.encode(response))
-                        except Exception as e2:
-                            logger.error(f"Error sending error response: {e2}")
+                    await self._handle_ws_message(ws, cast("bytes", msg.data))
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
-                    logger.error(f"WebSocket error: {ws.exception()}")
+                    LOGGER.error(f"WebSocket error: {ws.exception()}")
                     break
 
                 elif msg.type == aiohttp.WSMsgType.CLOSE:
-                    logger.info("Message processor client disconnected")
+                    LOGGER.info("Message processor client disconnected")
                     break
 
-        except Exception as e:
-            logger.error(f"Error in WebSocket handler: {e}")
+        except Exception:
+            LOGGER.exception("Error in WebSocket handler")
         finally:
             __ = await ws.close()
-            logger.info("Message processor WebSocket connection closed")
+            LOGGER.info("Message processor WebSocket connection closed")
 
         return ws
 
     def add_ravenfall_message_hook(
-        self, hook: Callable[[RavenfallProcessorMessage], Awaitable[None]]
+        self,
+        hook: Callable[[RavenfallProcessorMessage], Awaitable[None]],
     ) -> None:
         """Add a hook function to receive Ravenfall processor messages.
-        
+
         Args:
             hook: An async function that takes a RavenfallProcessorMessage instance
 
@@ -721,10 +754,11 @@ class MessageProcessorServer:
         self._ravenfall_message_hooks.append(hook)
 
     def remove_ravenfall_message_hook(
-        self, hook: Callable[[RavenfallProcessorMessage], Awaitable[None]]
+        self,
+        hook: Callable[[RavenfallProcessorMessage], Awaitable[None]],
     ) -> None:
         """Remove a Ravenfall message hook function.
-        
+
         Args:
             hook: The hook function to remove
 
@@ -733,10 +767,11 @@ class MessageProcessorServer:
             self._ravenfall_message_hooks.remove(hook)
 
     def add_ravenbot_message_hook(
-        self, hook: Callable[[RavenBotProcessorMessage], Awaitable[None]]
+        self,
+        hook: Callable[[RavenBotProcessorMessage], Awaitable[None]],
     ) -> None:
         """Add a hook function to receive RavenBot processor messages.
-        
+
         Args:
             hook: An async function that takes a RavenBotProcessorMessage instance
 
@@ -744,10 +779,11 @@ class MessageProcessorServer:
         self._ravenbot_message_hooks.append(hook)
 
     def remove_ravenbot_message_hook(
-        self, hook: Callable[[RavenBotProcessorMessage], Awaitable[None]]
+        self,
+        hook: Callable[[RavenBotProcessorMessage], Awaitable[None]],
     ) -> None:
         """Remove a RavenBot message hook function.
-        
+
         Args:
             hook: The hook function to remove
 
@@ -761,7 +797,7 @@ class MessageProcessorServer:
         await self._runner.setup()
         self._site = web.TCPSite(self._runner, self.host, self.port)
         await self._site.start()
-        logger.info(
+        LOGGER.info(
             "Message processor server started on ws://%s:%s/process",
             self.host,
             self.port,
@@ -775,4 +811,4 @@ class MessageProcessorServer:
         if self._runner:
             await self._runner.cleanup()
             self._runner = None
-        logger.info("Message processor server stopped")
+        LOGGER.info("Message processor server stopped")

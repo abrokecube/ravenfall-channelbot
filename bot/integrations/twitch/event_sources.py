@@ -1,21 +1,18 @@
-# pyright: reportPrivateUsage=false
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import functools
 import logging
-from collections.abc import Awaitable, Collection
-from typing import Any, cast, overload, override
+from typing import TYPE_CHECKING, Any, cast, overload, override
 
 from bidict import bidict
 from colorama import Back, Fore
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from twitchAPI import helper
-from twitchAPI.chat import Chat, ChatMessage, ChatUser
+from twitchAPI.chat import Chat
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.oauth import UserAuthenticator
-from twitchAPI.object import eventsub
-from twitchAPI.object.api import TwitchUser
 from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope as TWAuthScope
 from twitchAPI.type import (
@@ -25,7 +22,7 @@ from twitchAPI.type import (
     MissingScopeException,
 )
 
-from bot.core.components import BaseEventSource, EventManager
+from bot.core.components import BaseEventSource
 from bot.db.service import DatabaseService
 from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailure
@@ -37,8 +34,20 @@ from .enums import (
     MessageDeliveryMode,
     MessageReceiveMode,
 )
-from .models import ConnectedChat, EventSubChannelTopic, EventSubRevocationDict
+from .models import ConnectedChat, EventSubChannelTopic
 from .services import TwitchService
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Collection
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from twitchAPI.chat import ChatMessage, ChatUser
+    from twitchAPI.object import eventsub
+    from twitchAPI.object.api import TwitchUser
+
+    from bot.core.components import EventManager
+
+    from .models import EventSubRevocationDict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +57,8 @@ AuthScope = TWAuthScope
 def print_to_console(msg: str):
     """Print a message to the console."""
     print(  # noqa: T201
-        f"{Fore.LIGHTYELLOW_EX}{Back.RESET}twitch_event_source:{Fore.RESET} {msg}{Fore.RESET}{Back.RESET}"
+        f"{Fore.LIGHTYELLOW_EX}{Back.RESET}"
+        f"twitch_event_source:{Fore.RESET} {msg}{Fore.RESET}{Back.RESET}"
     )
 
 
@@ -56,7 +66,7 @@ class TwitchEventSub:
     """Manages EventSub subscriptions for a channel."""
 
     def __init__(
-        self, event_source: "TwitchEventSource", twitch: Twitch, channel_id: str
+        self, event_source: TwitchEventSource, twitch: Twitch, channel_id: str
     ) -> None:
         self.event_source: TwitchEventSource = event_source
         self.twitch: Twitch = twitch
@@ -65,9 +75,9 @@ class TwitchEventSub:
         self.eventsub_subs: bidict[EventSubChannelTopic, str] = bidict()
 
     async def _eventsub_revocation_handler(self, thing: Any):  # pyright: ignore[reportAny, reportExplicitAny]
-        data = cast(EventSubRevocationDict, thing)
+        data = cast("EventSubRevocationDict", thing)
         sub_id = data.get("subscription", {}).get("id")
-        if not sub_id in self.eventsub_subs.inverse:
+        if sub_id not in self.eventsub_subs.inverse:
             LOGGER.warning(
                 f"Revoked subscription id {sub_id} was not recorded during subscription"
             )
@@ -83,7 +93,7 @@ class TwitchEventSub:
                 self.twitch, revocation_handler=self._eventsub_revocation_handler
             )
             self.eventsub_ws.start()
-        if not topic in TOPIC_REQUIRES_TARGET_CHANNEL:
+        if topic not in TOPIC_REQUIRES_TARGET_CHANNEL:
             target_channel_id = None
         if topic in TOPIC_REQUIRES_TARGET_CHANNEL and not target_channel_id:
             msg = "target_channel is required for this topic"
@@ -102,12 +112,12 @@ class TwitchEventSub:
                 sub_id = await self.eventsub_ws.listen_channel_chat_message(
                     target_channel_id,
                     self.channel_id,
-                    self.event_source._ev_on_chat_message,
+                    self.event_source._ev_on_chat_message,  # noqa: SLF001
                 )
             case EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD:
                 sub_id = await self.eventsub_ws.listen_channel_points_custom_reward_redemption_add(
                     self.channel_id,
-                    self.event_source._ev_channel_points_custom_reward_redemption_add,
+                    self.event_source._ev_channel_points_custom_reward_redemption_add,  # noqa: SLF001
                 )
         if sub_id:
             self.eventsub_subs[ch_t] = sub_id
@@ -144,7 +154,7 @@ class TwitchEventSub:
             msg = "Twitch event source has not been initialized."
             raise RuntimeError(msg)
 
-        if not topic in TOPIC_REQUIRES_TARGET_CHANNEL:
+        if topic not in TOPIC_REQUIRES_TARGET_CHANNEL:
             target_channel_id = None
         if topic in TOPIC_REQUIRES_TARGET_CHANNEL and not target_channel_id:
             msg = "target_channel is required for this topic"
@@ -152,15 +162,18 @@ class TwitchEventSub:
 
         if not subscription_id:
             if topic:
-                if not topic in self.eventsub_subs:
-                    msg = f"A matching subscription for {self.channel_id}:{topic}:{target_channel_id} was not found"
+                if topic not in self.eventsub_subs:
+                    msg = (
+                        f"A matching subscription for "
+                        f"{self.channel_id}:{topic}:{target_channel_id} was not found"
+                    )
                     raise EventSubUnsubscriptionFailure(msg)
                 ch_t = EventSubChannelTopic(target_channel_id, topic)
                 subscription_id = self.eventsub_subs[ch_t]
             else:
                 msg = "channel_id and subscription must be specified if subscription_id is None"
                 raise ValueError(msg)
-        if not subscription_id in self.eventsub_subs.inv:
+        if subscription_id not in self.eventsub_subs.inv:
             msg = f"Subscription id {subscription_id} was not found"
             raise ValueError(msg)
         success = await self.eventsub_ws.unsubscribe_topic(subscription_id)
@@ -243,7 +256,10 @@ class TwitchEventSource(BaseEventSource):
             obj = result.scalar_one_or_none()
             if not obj:
                 if not all((user_login, access_token, refresh_token)):
-                    msg = "user_login, access_token, and refresh_token must be supplied for new entries"
+                    msg = (
+                        "user_login, access_token, "
+                        "and refresh_token must be supplied for new entries"
+                    )
                     raise ValueError(msg)
                 obj = TwitchAuth(
                     user_id=user_id,
@@ -264,6 +280,10 @@ class TwitchEventSource(BaseEventSource):
     ):
         if not user_id:
             return
+        LOGGER.info(
+            f"Saving user token for {user_id}: "
+            f"{access_token[:5]}...(length {len(access_token)})"
+        )
         await self._save_user_token(
             user_id, access_token=access_token, refresh_token=refresh_token
         )
@@ -320,7 +340,7 @@ class TwitchEventSource(BaseEventSource):
                     f"{Fore.LIGHTYELLOW_EX}Please authenticate with the Twitch account: {user_name or user_id}"
                 )
                 result = cast(
-                    tuple[str, str] | None, await auth.authenticate(use_browser=False)
+                    "tuple[str, str] | None", await auth.authenticate(use_browser=False)
                 )
                 if result is None:
                     continue
@@ -356,14 +376,14 @@ class TwitchEventSource(BaseEventSource):
                 refresh_token = None
                 save_new_tokens = True
                 continue
-            # except Exception as e:
-            #     print_to_console(
-            #         f"{Fore.LIGHTRED_EX}Error setting user authentication: {e}"
-            #     )
-            #     access_token = None
-            #     refresh_token = None
-            #     save_new_tokens = True
-            #     continue
+            except Exception as e:
+                print_to_console(
+                    f"{Fore.LIGHTRED_EX}Error setting user authentication: {e}"
+                )
+                access_token = None
+                refresh_token = None
+                save_new_tokens = True
+                continue
 
             if user is not None:
                 if user.id == str(user_id):
@@ -392,7 +412,10 @@ class TwitchEventSource(BaseEventSource):
     async def authenticate_user(
         self, user_id: str, scopes: Collection[AuthScope]
     ) -> Twitch:
-        """Authenticate a user. If a matching token is not found in the database, it will ask for authentication."""
+        """Authenticate a user.
+
+        If a matching token is not found in the database, it will ask for authentication.
+        """
         if not user_id or not user_id.isdigit():
             msg = f"{user_id} is not a valid Twitch user id"
             raise ValueError(msg)
@@ -431,8 +454,7 @@ class TwitchEventSource(BaseEventSource):
         tasks: list[Awaitable[None]] = []
         if self.bot_eventsub:
             tasks.append(self.bot_eventsub.stop())
-        for ev in self.eventsubs.values():
-            tasks.append(ev.stop())
+        tasks.extend([ev.stop() for ev in self.eventsubs.values()])
         tasks.append(self._twitch_service.teardown())
         __ = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -483,7 +505,9 @@ class TwitchEventSource(BaseEventSource):
                     settings.message_receive_mode = mode
                 has_failed = False
                 if settings.message_receive_mode == MessageReceiveMode.IRC:
-                    result = cast(list[str], await self.twitch_chat.join_room(user.login))
+                    result = cast(
+                        "list[str]", await self.twitch_chat.join_room(user.login)
+                    )
                     if result:
                         failed.extend(result)
                         has_failed = True
@@ -536,7 +560,7 @@ class TwitchEventSource(BaseEventSource):
             if not user:
                 failed.append(channel_list[idx])
                 continue
-            if not user.id in self.connected_chats:
+            if user.id not in self.connected_chats:
                 LOGGER.info(f"Twitch: Not connected to {user.login}:{user.id}, skipping")
                 continue
             settings = self.connected_chats[user.id]
@@ -584,7 +608,8 @@ class TwitchEventSource(BaseEventSource):
         channel_twitch = self._twitch_service.twitches.get(channel_id or " ")
         if not channel_twitch:
             LOGGER.warning(
-                f"Received a message from {channel_login}, but the bot has no authentication stored for this channel."
+                f"Received a message from {channel_login}, "
+                "but the bot has no authentication stored for this channel."
             )
             return
         await self.send_event(
@@ -614,7 +639,7 @@ class TwitchEventSource(BaseEventSource):
         if not self.is_user_authenticated(channel_id):
             msg = "This channel has not been authenticated. Call authenticate_user first."
             raise ValueError(msg)
-        if not channel_id in self.eventsubs:
+        if channel_id not in self.eventsubs:
             self.eventsubs[channel_id] = TwitchEventSub(
                 self, self._twitch_service.twitches[channel_id], channel_id
             )
@@ -661,7 +686,7 @@ class TwitchEventSource(BaseEventSource):
                 "One of subscription_ids and channel_id + subscriptions may be specified."
             )
             raise ValueError(msg)
-        if not channel_id in self.eventsubs:
+        if channel_id not in self.eventsubs:
             return
         if channel_id and not self.is_user_authenticated(channel_id):
             return
@@ -687,15 +712,18 @@ class TwitchEventSource(BaseEventSource):
                 __ = await eventsub.remove_eventsub_subscription(topic=sub_topic)
 
         if has_chat:
-            if not channel_id in self.connected_chats:
+            if channel_id not in self.connected_chats:
                 LOGGER.warning(
-                    f"Unsubscribed to a chat message topic in {channel_id}, but the subscription was not registered as a connected chat beforehand"
+                    f"Unsubscribed to a chat message topic in {channel_id}, "
+                    "but the subscription was not registered as a connected chat "
+                    "beforehand"
                 )
                 return
             connected_chat = self.connected_chats[channel_id]
             if connected_chat.message_receive_mode != MessageReceiveMode.EVENTSUB:
                 LOGGER.warning(
-                    f"Unsubscribed to a chat message topic in {channel_id}, but the message_receive_mode was not EventSub"
+                    f"Unsubscribed to a chat message topic in {channel_id}, "
+                    "but the message_receive_mode was not EventSub"
                 )
                 return
             del self.connected_chats[channel_id]
@@ -735,7 +763,8 @@ class TwitchEventSource(BaseEventSource):
         channel_twitch = self._twitch_service.twitches.get(data.broadcaster_user_id or "")
         if not channel_twitch:
             LOGGER.warning(
-                f"Received a message from {data.broadcaster_user_login}, but the bot has no authentication stored for this channel."
+                f"Received a message from {data.broadcaster_user_login}, "
+                "but the bot has no authentication stored for this channel."
             )
             return
         await self.send_event(
@@ -771,7 +800,8 @@ class TwitchEventSource(BaseEventSource):
         channel_twitch = self._twitch_service.twitches.get(data.broadcaster_user_id or "")
         if not channel_twitch:
             LOGGER.warning(
-                f"Received a message from {data.broadcaster_user_login}, but the bot has no authentication stored for this channel."
+                f"Received a message from {data.broadcaster_user_login}, "
+                "but the bot has no authentication stored for this channel."
             )
             return
         await self.send_event(

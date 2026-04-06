@@ -2,18 +2,23 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable
-from typing import Any, Callable, override
+from typing import TYPE_CHECKING, Any, override
 
 from .components import (
     BaseDispatcher,
-    BaseEvent,
     BaseListener,
-    Cog,
-    Cooldown,
-    GlobalContext,
 )
 from .modals import MetaFilter
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from .components import (
+        BaseEvent,
+        Cog,
+        Cooldown,
+        GlobalContext,
+    )
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,10 +28,10 @@ class GenericListener(BaseListener):
         self,
         func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]],
         cog: Cog | None = None,
-        cooldown: Cooldown | None | None = None,
+        cooldown: Cooldown | None = None,
         expected_dispatcher: type[BaseDispatcher] = BaseDispatcher,
     ):
-        super().__init__(func, cog)
+        super().__init__(func, cog, cooldown)
         self.expected_dispatcher: type[BaseDispatcher] = getattr(
             func, "_listener_dispatcher", expected_dispatcher
         )

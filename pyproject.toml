@@ -49,7 +49,9 @@ dependencies = [
 ]
 
 [tool.basedpyright]
-reportImportCycles="information"
+reportImportCycles = "information"
+reportImplicitStringConcatenation = "none"
+reportPrivateUsage = "none"
 
 [tool.ty.rules]
 all = "error"
@@ -57,28 +59,52 @@ all = "error"
 [tool.pyrefly]
 
 [tool.pyrefly.errors]
-implicit-any="warn"
-implicitly-defined-attribute="warn"
-unannotated-attribute="warn"
-unannotated-parameter="warn"
-untyped-import="warn"
-missing-source="warn"
-unused-ignore="warn"
-missing-override-decorator="warn"
-not-required-key-access="warn"
-open-unpacking="warn"
+implicit-any = "warn"
+implicitly-defined-attribute = "warn"
+unannotated-attribute = "warn"
+unannotated-parameter = "warn"
+untyped-import = "warn"
+missing-source = "warn"
+unused-ignore = "warn"
+missing-override-decorator = "warn"
+not-required-key-access = "warn"
+open-unpacking = "warn"
 
 [tool.ruff]
 line-length = 90
-unsafe-fixes = true
 
 [tool.ruff.lint]
 future-annotations = true
-select = ["F", "LOG", "G", "T20", "ASYNC", "B", "A", "DTZ", "T10", "EM", "INT", "RET", "PTH", "N", "DOC", "D"]
-ignore = ["F821", "G004", "D100", "D104", "D105", "D107", "ASYNC109", "B010", "B009"]
+select = ['ALL']
+ignore = [
+    "F821",
+    "G004",
+    "D100",
+    "D104",
+    "D105",
+    "D107",
+    "ASYNC109",
+    "B010",
+    "B009",
+    "ERA",
+    "INP",
+    "COM",
+    "ANN",
+    "TRY301",
+    "FBT003",
+    "SIM108",
+    "TRY400",
+    "PLR0913",
+    "C901",
+    "PLR0912",
+    "PLR0915",
+]
 
 [tool.ruff.format]
 exclude = ["./twitchAPI/**"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.uv.sources]
 twitchapi = { git = "https://github.com/abrokecube/pyTwitchAPI", rev = "master" }

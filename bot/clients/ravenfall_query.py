@@ -5,23 +5,27 @@ including data models for various game entities and methods for retrieving
 real-time game information.
 """
 
-import ravenpy
-from datetime import datetime, timezone, timedelta
-from ravenpy import Skills, Islands
-import aiohttp
+from __future__ import annotations
+
 import logging
-from typing import Any, NamedTuple
-import asyncio
-from msgspec import Struct, field, json
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Any, NamedTuple, cast
+
+import aiohttp
 from async_lru import alru_cache
+from msgspec import DecodeError, Struct, field, json
+
+import ravenpy
+from ravenpy import Islands, Skills
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
+
 class GameSettings(Struct):
     """Game configuration settings.
-    
+
     Contains various game settings including player cache, camera controls,
     day/night cycle, and other gameplay configuration options.
     """
@@ -41,18 +45,20 @@ class GameSettings(Struct):
     local_bot_port: int = field(name="localbotport")
     island_observe_seconds: float = field(name="islandobserveseconds")
 
+
 class SoundSettings(Struct):
     """Sound configuration settings.
-    
+
     Contains volume settings for music and raid horns.
     """
 
     music_volume: float = field(name="musicvolume")
     raid_horn_volume: float = field(name="raidhornvolume")
 
+
 class UISettings(Struct):
     """User interface configuration settings.
-    
+
     Contains settings for player name visibility and player list display.
     """
 
@@ -60,9 +66,10 @@ class UISettings(Struct):
     player_list_size: float = field(name="playerlistsize")
     player_list_scale: float = field(name="playerlistscale")
 
+
 class GraphicsSettings(Struct):
     """Graphics configuration settings.
-    
+
     Contains settings for quality level, DPI scaling, and performance modes.
     """
 
@@ -72,9 +79,10 @@ class GraphicsSettings(Struct):
     auto_potato_mode: bool = field(name="autopotatomode")
     post_processing: bool = field(name="postprocessing")
 
+
 class QueryEngineSettings(Struct):
     """Query engine configuration settings.
-    
+
     Contains settings for the API query engine functionality.
     """
 
@@ -82,9 +90,10 @@ class QueryEngineSettings(Struct):
     always_return_array: bool = field(name="alwaysreturnarray")
     api_prefix: str = field(name="apiprefix")
 
+
 class StreamLabelsSettings(Struct):
     """Stream labels configuration settings.
-    
+
     Contains settings for stream label file output functionality.
     """
 
@@ -92,9 +101,10 @@ class StreamLabelsSettings(Struct):
     save_text_files: bool = field(name="savetextfiles")
     save_json_files: bool = field(name="savejsonfiles")
 
+
 class PlayerObserveSeconds(Struct):
     """Player observation time settings by user type.
-    
+
     Contains observation time durations for different user roles
     and events (subscription, bits, etc.).
     """
@@ -107,17 +117,19 @@ class PlayerObserveSeconds(Struct):
     on_subscription: float = field(name="onsubcription")
     on_cheered_bits: float = field(name="oncheeredbits")
 
+
 class LootSettings(Struct):
     """Loot system configuration settings.
-    
+
     Contains settings for loot drop behavior.
     """
 
     include_origin: bool = field(name="includeorigin")
 
+
 class GameConfig(Struct):
     """Complete game configuration.
-    
+
     Contains all game settings including game, sound, UI, graphics,
     query engine, stream labels, player observation, and loot settings.
     """
@@ -134,7 +146,7 @@ class GameConfig(Struct):
 
 class GameSession(Struct):
     """Current game session information.
-    
+
     Contains session status, player count, game version, and elapsed time.
     """
 
@@ -148,7 +160,7 @@ class GameSession(Struct):
 
 class GameMultiplier(Struct):
     """Game event multiplier information.
-    
+
     Contains details about active game events that provide experience
     or other multipliers.
     """
@@ -165,7 +177,7 @@ class GameMultiplier(Struct):
 
 class Boss(Struct):
     """Boss entity information.
-    
+
     Contains boss health and combat level information.
     """
 
@@ -174,9 +186,10 @@ class Boss(Struct):
     health_percent: float = field(name="healthpercent")
     combat_level: int = field(name="combatlevel")
 
+
 class Dungeon(Struct):
     """Dungeon instance information.
-    
+
     Contains dungeon status, player count, room information,
     and boss details.
     """
@@ -193,9 +206,10 @@ class Dungeon(Struct):
     count: int
     boss: Boss
 
+
 class Raid(Struct):
     """Raid instance information.
-    
+
     Contains raid status, player count, time remaining,
     and boss details.
     """
@@ -209,7 +223,7 @@ class Raid(Struct):
 
 class PlayerStat(Struct):
     """Individual player skill statistics.
-    
+
     Contains skill level, current value, max level, and experience.
     """
 
@@ -218,9 +232,10 @@ class PlayerStat(Struct):
     max_level: int = field(name="maxlevel")
     experience: float
 
+
 class PlayerStats(Struct):
     """Complete player statistics.
-    
+
     Contains all skill statistics for a player including combat,
     gathering, and production skills.
     """
@@ -244,9 +259,10 @@ class PlayerStats(Struct):
     gathering: PlayerStat
     alchemy: PlayerStat
 
+
 class Player(Struct):
     """Player entity information.
-    
+
     Contains player details including location, activity, coins,
     and complete statistics.
     """
@@ -270,23 +286,24 @@ class Player(Struct):
 
 class TownBoost(NamedTuple):
     """Town boost information.
-    
+
     Contains skill type and multiplier for town boosts.
     """
 
     skill: Skills
     multiplier: float
 
+
 class TownBoostList(list[TownBoost]):
     """List of town boosts with serialization support.
-    
+
     Extends list to provide serialization and deserialization
     methods for town boost data.
     """
 
     def serialize(self) -> str:
         """Serialize the boost list to a string format.
-        
+
         Returns:
             str: Comma-separated list of boosts in "skill value%" format
 
@@ -294,32 +311,32 @@ class TownBoostList(list[TownBoost]):
         return ", ".join([f"{boost.skill.value} {boost.multiplier}%" for boost in self])
 
     @staticmethod
-    def deserialize(boost: str) -> 'TownBoostList':
+    def deserialize(boost: str) -> TownBoostList:
         """Deserialize a string into a TownBoostList.
-        
+
         Args:
             boost: String containing comma-separated boost data
-            
+
         Returns:
             TownBoostList: List of parsed town boosts
 
         """
         if not boost or not boost.strip():
             return TownBoostList()
-        
+
         boosts = TownBoostList()
         # Split by comma and process each boost
         boost_entries = boost.split(", ")
-        
+
         for entry in boost_entries:
-            entry = entry.strip()
-            if not entry:
+            entry_stripped = entry.strip()
+            if not entry_stripped:
                 continue
-                
-            parts = entry.split()
-            if len(parts) < 2:
+
+            parts = entry_stripped.split()
+            if len(parts) < 2:  # noqa: PLR2004
                 continue
-                
+
             boost_stat = parts[0]
             boost_value_str = " ".join(parts[1:]).rstrip("%")
             try:
@@ -327,12 +344,13 @@ class TownBoostList(list[TownBoost]):
                 boosts.append(TownBoost(Skills[boost_stat], boost_value))
             except (ValueError, KeyError):
                 continue
-        
+
         return boosts
+
 
 class Village(Struct):
     """Village information and status.
-    
+
     Contains village name, level, tier, and active boosts.
     """
 
@@ -344,25 +362,27 @@ class Village(Struct):
 
 class FerryCaptain(Struct):
     """Ferry captain information.
-    
+
     Contains captain name and sailing level requirements.
     """
 
     name: str
     sailing_level: int = field(name="sailinglevel")
 
+
 class FerryBoost(Struct):
     """Ferry boost status.
-    
+
     Contains information about active ferry speed boosts.
     """
 
     is_active: bool = field(name="isactive")
     remaining_time: float = field(name="remainingtime")
 
+
 class Ferry(Struct):
     """Ferry information and status.
-    
+
     Contains destination, boost status, player count, and captain details.
     """
 
@@ -374,16 +394,17 @@ class Ferry(Struct):
 
 class IslandLevels(Struct):
     """Island level requirements.
-    
+
     Contains skill and combat level requirements for islands.
     """
 
     skill: int
     combat: int
 
+
 class IslandName(StrEnum):
     """Enumeration of available island names.
-    
+
     Defines all possible island destinations in the game.
     """
 
@@ -396,9 +417,10 @@ class IslandName(StrEnum):
     ELDARA = "Eldara"
     WAR = "War"
 
+
 class Island(Struct):
     """Island information.
-    
+
     Contains island name, player count, and level requirements.
     """
 
@@ -409,7 +431,7 @@ class Island(Struct):
 
 class Redeemable(Struct):
     """Redeemable item information.
-    
+
     Contains item details including cost, currency, and description.
     """
 
@@ -422,51 +444,52 @@ class Redeemable(Struct):
 
 def enc_hook(obj: Any):  # pyright: ignore[reportAny, reportExplicitAny]
     """Encode object for JSON serialization.
-    
+
     Args:
         obj: Object to encode
-        
+
     Returns:
         Serialized representation of the object
-        
+
     Raises:
         NotImplementedError: If object type is not supported
 
     """
     if isinstance(obj, TownBoostList):
         return obj.serialize()
-    obj_type = type(obj)
-    error_msg = f"Objects of type {obj_type} are not supported"
+    error_msg = f"Objects of type {type(obj)} are not supported"  # pyright: ignore[reportAny]
     raise NotImplementedError(error_msg)
 
 
 def dec_hook(type_hint: type, obj: Any):  # pyright: ignore[reportAny, reportExplicitAny]
     """Decode object for JSON deserialization.
-    
+
     Args:
         type_hint: Type hint for the object
         obj: Object to decode
-        
+
     Returns:
         Deserialized object of the specified type
-        
+
     Raises:
         NotImplementedError: If object type is not supported
 
     """
-    if type is TownBoostList:
+    if (type_hint is TownBoostList) and (isinstance(obj, str)):
         return TownBoostList.deserialize(obj)
     error_msg = f"Objects of type {type_hint} are not supported"
     raise NotImplementedError(error_msg)
 
+
 enc_json = json.Encoder(enc_hook=enc_hook)
+
 
 class CharacterStat:
     """Character skill statistic wrapper.
-    
+
     Provides additional calculations and methods for character skill data
     including enchantment information and experience calculations.
-    
+
     Attributes:
         skill: The skill type
         level: Current skill level
@@ -479,7 +502,7 @@ class CharacterStat:
 
     def __init__(self, skill: ravenpy.Skills, data: PlayerStat):
         """Initialize character statistic.
-        
+
         Args:
             skill: The skill type
             data: Raw player stat data from the API
@@ -488,13 +511,13 @@ class CharacterStat:
         self.skill: Skills = skill
         self.level: int = data.level
         self.level_exp: float = data.experience
-        self.total_exp_for_level: int = ravenpy.experience_for_level(self.level+1)
-        self.enchant_percent: float = data.max_level/data.level
+        self.total_exp_for_level: int = ravenpy.experience_for_level(self.level + 1)
+        self.enchant_percent: float = data.max_level / data.level
         self.enchant_levels: int = data.max_level - data.level
 
     def _add_enchant(self, percent: float):
         """Add enchantment percentage to the skill.
-        
+
         Args:
             percent: Enchantment percentage to add
 
@@ -502,12 +525,13 @@ class CharacterStat:
         self.enchant_percent += percent
         self.enchant_levels = round(self.level * self.enchant_percent)
 
+
 class Character:
     """Character data wrapper with enhanced functionality.
-    
+
     Provides additional methods and calculations for character data
     including training status, skill lookups, and combat calculations.
-    
+
     Attributes:
         id: Character ID
         char_id: Alias for character ID
@@ -523,13 +547,13 @@ class Character:
 
     def __init__(self, data: Player):
         """Initialize character from player data.
-        
+
         Args:
             data: Raw player data from the API
 
         """
         self._raw: Player = data
-        self.time_received: datetime = datetime.now(timezone.utc)
+        self.time_received: datetime = datetime.now(UTC)
         self.id: str = data.id
         self.char_id: str = self.id
         self.user_name: str = data.name
@@ -541,7 +565,9 @@ class Character:
         self.health: CharacterStat = CharacterStat(Skills.Health, data.stats.health)
         self.magic: CharacterStat = CharacterStat(Skills.Magic, data.stats.magic)
         self.ranged: CharacterStat = CharacterStat(Skills.Ranged, data.stats.ranged)
-        self.woodcutting: CharacterStat = CharacterStat(Skills.Woodcutting, data.stats.woodcutting)
+        self.woodcutting: CharacterStat = CharacterStat(
+            Skills.Woodcutting, data.stats.woodcutting
+        )
         self.fishing: CharacterStat = CharacterStat(Skills.Fishing, data.stats.fishing)
         self.mining: CharacterStat = CharacterStat(Skills.Mining, data.stats.mining)
         self.crafting: CharacterStat = CharacterStat(Skills.Crafting, data.stats.crafting)
@@ -550,14 +576,40 @@ class Character:
         self.slayer: CharacterStat = CharacterStat(Skills.Slayer, data.stats.slayer)
         self.sailing: CharacterStat = CharacterStat(Skills.Sailing, data.stats.sailing)
         self.healing: CharacterStat = CharacterStat(Skills.Healing, data.stats.healing)
-        self.gathering: CharacterStat = CharacterStat(Skills.Gathering, data.stats.gathering)
+        self.gathering: CharacterStat = CharacterStat(
+            Skills.Gathering, data.stats.gathering
+        )
         self.alchemy: CharacterStat = CharacterStat(Skills.Alchemy, data.stats.alchemy)
-        self.combat_level: int = int(((self.attack.level + self.defense.level + self.health.level + self.strength.level) / 4) + ((self.ranged.level + self.magic.level + self.healing.level) / 8))
+        self.combat_level: int = int(
+            (
+                (
+                    self.attack.level
+                    + self.defense.level
+                    + self.health.level
+                    + self.strength.level
+                )
+                / 4
+            )
+            + ((self.ranged.level + self.magic.level + self.healing.level) / 8)
+        )
         self.stats: list[CharacterStat] = [
-            self.attack, self.defense, self.strength, self.health, self.magic,
-            self.ranged, self.woodcutting, self.fishing, self.mining, self.crafting,
-            self.cooking, self.farming, self.slayer, self.sailing, self.healing,
-            self.gathering, self.alchemy
+            self.attack,
+            self.defense,
+            self.strength,
+            self.health,
+            self.magic,
+            self.ranged,
+            self.woodcutting,
+            self.fishing,
+            self.mining,
+            self.crafting,
+            self.cooking,
+            self.farming,
+            self.slayer,
+            self.sailing,
+            self.healing,
+            self.gathering,
+            self.alchemy,
         ]
         self._skill_dict: dict[Skills, CharacterStat] = {
             Skills.Attack: self.attack,
@@ -576,7 +628,7 @@ class Character:
             Skills.Sailing: self.sailing,
             Skills.Healing: self.healing,
             Skills.Gathering: self.gathering,
-            Skills.Alchemy: self.alchemy
+            Skills.Alchemy: self.alchemy,
         }
         self.hp: int = data.stats.health.current_value
         self.in_raid: bool = data.in_raid
@@ -592,7 +644,7 @@ class Character:
         self.rested_time: timedelta = timedelta(seconds=int(data.rested_time))
         self.target_item: ravenpy.CharacterItem | None = None
         if data.task_argument is not None:
-            if (data.training == "Fighting"):
+            if data.training == "Fighting":
                 task_arg = data.task_argument.capitalize()
                 replace = ravenpy.fighting_replacements.get(task_arg)
                 if replace:
@@ -610,7 +662,7 @@ class Character:
                         amount=0,
                         equipped=False,
                         soulbound=False,
-                        enchantment=''
+                        enchantment="",
                     )
                     self.target_item = inv_item
 
@@ -620,7 +672,9 @@ class Character:
         self.training_stats: list[CharacterStat] = []
         if self.training:
             if self.training in (Skills.All, Skills.Health):
-                self.training_stats.extend([self.health, self.attack, self.defense, self.strength])
+                self.training_stats.extend(
+                    [self.health, self.attack, self.defense, self.strength]
+                )
             else:
                 self.training_stats.append(self.get_skill(self.training))
                 if self.training in ravenpy.combat_skills:
@@ -634,39 +688,46 @@ class Character:
 
     def get_skill(self, skill: Skills):
         """Get character statistic for a specific skill.
-        
+
         Args:
             skill: The skill to retrieve
-            
+
         Returns:
             CharacterStat: The skill statistic for this character
 
         """
         return self._skill_dict[skill]
 
+
 class RavenfallTimeoutError(Exception):
     """Exception raised when a query times out."""
 
-    pass
 
 class RavenfallConnectionError(Exception):
     """Exception raised when unable to connect to the API."""
 
-    pass
 
-class RavenfallQueryException(BaseException):
+class RavenfallBadHostError(Exception):
+    """Exception raised when Ravenfall returns an "invalid host" error."""
+
+
+class RavenfallQueryError(Exception):
     """Exception raised when the API returns an error."""
 
-    pass
 
-CACHE_TTL = 0.2
+class EmptyResponseError(Exception):
+    """Exception raised when Ravenfall unexpectedly returns an empty value."""
+
+
+CACHE_TTL = 0.1
+
 
 class RavenfallClient:
     """Client for interacting with the Ravenfall game API.
-    
+
     Provides methods for querying various game data including players,
     sessions, islands, and other game entities.
-    
+
     Attributes:
         base_url: Base URL for the API endpoint
         logger: Logger instance for this client
@@ -675,209 +736,286 @@ class RavenfallClient:
 
     def __init__(self, base_url: str):
         """Initialize the Ravenfall client.
-        
+
         Args:
             base_url: Base URL for the Ravenfall API
 
         """
-        self.base_url: str = base_url.rstrip('/')
+        self.base_url: str = base_url.rstrip("/")
         self.logger: logging.Logger = logging.getLogger(__name__)
+        self.default_request_timeout: float = 3
 
-    async def _query(self, query: str, timeout_seconds: int = 3) -> list[dict[str, Any]]:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_seconds)) as session:
-            try:
-                r = await session.get(f"{self.base_url}/{query}")
-                data = await r.json()
-                if isinstance(data, dict):
-                    if not data:
-                        return []
-                    if "error" in data:
-                        self.logger.error(f"Ravenfall query failed in {self.base_url}: {data['error']}")
-                        raise RavenfallQueryException(data['error'])
-                    return [data]
-                return data
-            except asyncio.TimeoutError as err:
-                self.logger.error(f"Timeout fetching Ravenfall query from {self.base_url}")
-                raise RavenfallTimeoutError() from err
-            except aiohttp.ClientConnectorError as err:
-                self.logger.error(f"Error fetching Ravenfall query from {self.base_url}: {err}")
-                raise RavenfallConnectionError() from err
-            except Exception as err:
-                self.logger.exception(f"Error fetching Ravenfall query from {self.base_url}: {err}")
-                raise
+    async def _query_type[T](
+        self, query: str, out_type: type[T], timeout_seconds: float | None = None
+    ) -> list[T]:
+        if timeout_seconds is None:
+            timeout_seconds = self.default_request_timeout
+        try:
+            async with (
+                aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=timeout_seconds)
+                ) as session,
+                session.get(f"{self.base_url}/{query}") as r,
+            ):
+                text = await r.text()
+                if text.startswith('{"error'):
+                    err_text = text[9:-2]
+                    self.logger.error(
+                        f"Ravenfall query failed in {self.base_url}: {err_text}"
+                    )
+                    raise RavenfallQueryError(err_text)
+                if text.startswith("<h1>Bad"):
+                    msg = (
+                        'Ravenfall returned an "invalid host" error. '
+                        "Make sure the passed URL's hostname matches "
+                        "'queryEngineApiPrefix' in Ravenfall's config file. "
+                        f"(passed URL: {self.base_url})"
+                    )
+                    raise RavenfallBadHostError(msg)
+                if text != "{}":
+                    try:
+                        data = cast(
+                            "T | list[T]",
+                            json.decode(
+                                text,
+                                type=out_type | list[out_type],
+                                dec_hook=dec_hook,
+                            ),
+                        )
+                    except DecodeError:
+                        err_text = f"Failed to decode to json: {text}"
+                        raise RavenfallQueryError(err_text) from None
+                else:
+                    data = None
+        except TimeoutError:
+            self.logger.error(
+                f"Timeout fetching Ravenfall query from {self.base_url}/{query}"
+            )
+            raise RavenfallTimeoutError from None
+        except aiohttp.ClientConnectorError:
+            self.logger.error(f"Error fetching Ravenfall query from {self.base_url}")
+            raise RavenfallConnectionError from None
+        except Exception:
+            self.logger.exception(f"Error fetching Ravenfall query from {self.base_url}")
+            raise
+        else:
+            if data is None:
+                return []
+            if not isinstance(data, list):
+                if not data:
+                    return []
+                return [data]
+            return data  # pyright: ignore[reportUnknownVariableType]
 
-    async def _query_type[T](self, query: str, out_type: type[T], timeout_seconds: int = 3) -> list[T]:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_seconds)) as session:
-            try:
-                async with session.get(f"{self.base_url}/{query}") as r:
-                    text = await r.text()
-                    if text.startswith('{"error'):
-                        err_text = text[9:-2]
-                        self.logger.error(f"Ravenfall query failed in {self.base_url}: {err_text}")
-                        raise RavenfallQueryException(err_text)
-                    data = json.decode(text, type=out_type | list[out_type], dec_hook=dec_hook)
-                if not isinstance(data, list):
-                    if not data:
-                        return []
-                    return [data]
-                return data
-            except asyncio.TimeoutError as err:
-                self.logger.error(f"Timeout fetching Ravenfall query from {self.base_url}")
-                raise RavenfallTimeoutError() from err
-            except aiohttp.ClientConnectorError as err:
-                self.logger.error(f"Error fetching Ravenfall query from {self.base_url}: {err}")
-                raise RavenfallConnectionError() from err
-            except Exception as err:
-                self.logger.exception(f"Error fetching Ravenfall query from {self.base_url}: {err}")
-                raise
-
-    @alru_cache(ttl=CACHE_TTL)
-    async def get_session(self, *, timeout_seconds: int = 3) -> GameSession:
+    # @alru_cache(ttl=CACHE_TTL)
+    async def get_session(self, *, timeout_seconds: float | None = None) -> GameSession:
         """Get the current game session.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             GameSession: The current game session
 
         """
-        response = await self._query_type(query="select * from session", out_type=GameSession, timeout_seconds=timeout_seconds)
+        response = await self._query_type(
+            query="select * from session",
+            out_type=GameSession,
+            timeout_seconds=timeout_seconds,
+        )
+        if not response:
+            raise EmptyResponseError
         return response[0]
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_ferry(self, *, timeout_seconds: int = 3) -> Ferry:
+    async def get_ferry(self, *, timeout_seconds: float | None = None) -> Ferry:
         """Get the current ferry status.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             Ferry: The current ferry status
 
         """
-        response = await self._query_type(query="select * from ferry", out_type=Ferry, timeout_seconds=timeout_seconds)
+        response = await self._query_type(
+            query="select * from ferry", out_type=Ferry, timeout_seconds=timeout_seconds
+        )
+        if not response:
+            raise EmptyResponseError
         return response[0]
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_players(self, *, timeout_seconds: int = 3) -> list[Player]:
+    async def get_players(self, *, timeout_seconds: float | None = None) -> list[Player]:
         """Get all players in the game.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             list[Player]: List of all players
 
         """
-        return await self._query_type(query="select * from players", out_type=Player, timeout_seconds=timeout_seconds)
+        return await self._query_type(
+            query="select * from players",
+            out_type=Player,
+            timeout_seconds=timeout_seconds,
+        )
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_village(self, *, timeout_seconds: int = 3) -> Village:
+    async def get_village(self, *, timeout_seconds: float | None = None) -> Village:
         """Get the current village status.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             Village: The current village status
 
         """
-        response = await self._query_type(query="select * from village", out_type=Village, timeout_seconds=timeout_seconds)
+        response = await self._query_type(
+            query="select * from village",
+            out_type=Village,
+            timeout_seconds=timeout_seconds,
+        )
+        if not response:
+            raise EmptyResponseError
         return response[0]
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_multiplier(self, *, timeout_seconds: int = 3) -> GameMultiplier:
+    async def get_multiplier(
+        self, *, timeout_seconds: float | None = None
+    ) -> GameMultiplier:
         """Get the current game multiplier.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             GameMultiplier: The current game multiplier
 
         """
-        response = await self._query_type(query="select * from multiplier", out_type=GameMultiplier, timeout_seconds=timeout_seconds)
+        response = await self._query_type(
+            query="select * from multiplier",
+            out_type=GameMultiplier,
+            timeout_seconds=timeout_seconds,
+        )
+        if not response:
+            raise EmptyResponseError
         return response[0]
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_dungeon(self, *, timeout_seconds: int = 3) -> Dungeon:
+    async def get_dungeon(self, *, timeout_seconds: float | None = None) -> Dungeon:
         """Get the current dungeon status.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             Dungeon: The current dungeon status
 
         """
-        response = await self._query_type(query="select * from dungeon", out_type=Dungeon, timeout_seconds=timeout_seconds)
+        response = await self._query_type(
+            query="select * from dungeon",
+            out_type=Dungeon,
+            timeout_seconds=timeout_seconds,
+        )
+        if not response:
+            raise EmptyResponseError
         return response[0]
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_raid(self, *, timeout_seconds: int = 3) -> Raid:
+    async def get_raid(self, *, timeout_seconds: float | None = None) -> Raid:
         """Get the current raid status.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             Raid: The current raid status
 
         """
-        response = await self._query_type(query="select * from raid", out_type=Raid, timeout_seconds=timeout_seconds)
+        response = await self._query_type(
+            query="select * from raid", out_type=Raid, timeout_seconds=timeout_seconds
+        )
+        if not response:
+            raise EmptyResponseError
         return response[0]
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_observed(self, *, timeout_seconds: int = 3) -> Player:
+    async def get_observed(
+        self, *, timeout_seconds: float | None = None
+    ) -> Player | None:
         """Get the currently observed player.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             Player: The currently observed player
 
         """
-        response = await self._query_type(query="select * from observed", out_type=Player, timeout_seconds=timeout_seconds)
+        response = await self._query_type(
+            query="select * from observed",
+            out_type=Player,
+            timeout_seconds=timeout_seconds,
+        )
+        if not response:
+            return None
         return response[0]
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_islands(self, *, timeout_seconds: int = 3) -> list[Island]:
+    async def get_islands(self, *, timeout_seconds: float | None = None) -> list[Island]:
         """Get info on all islands.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             list[Island]: List of all islands
 
         """
-        return await self._query_type(query="select * from islands", out_type=Island, timeout_seconds=timeout_seconds)
+        return await self._query_type(
+            query="select * from islands",
+            out_type=Island,
+            timeout_seconds=timeout_seconds,
+        )
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_redeemables(self, *, timeout_seconds: int = 3) -> list[Redeemable]:
+    async def get_redeemables(
+        self, *, timeout_seconds: float | None = None
+    ) -> list[Redeemable]:
         """Get all redeemables.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             list[Redeemable]: List of all redeemables
 
         """
-        return await self._query_type(query="select * from redeemables", out_type=Redeemable, timeout_seconds=timeout_seconds)
+        return await self._query_type(
+            query="select * from redeemables",
+            out_type=Redeemable,
+            timeout_seconds=timeout_seconds,
+        )
 
     @alru_cache(ttl=CACHE_TTL)
-    async def get_config(self, *, timeout_seconds: int = 3) -> GameConfig:
+    async def get_config(self, *, timeout_seconds: float | None = None) -> GameConfig:
         """Get the game configuration.
-        
+
         Args:
             timeout_seconds: Timeout in seconds for the request
-            
+
         Returns:
             GameConfig: The game configuration
 
         """
-        return (await self._query_type(query="select * from settings", out_type=GameConfig, timeout_seconds=timeout_seconds))[0]
-
+        response = await self._query_type(
+            query="select * from settings",
+            out_type=GameConfig,
+            timeout_seconds=timeout_seconds,
+        )
+        if not response:
+            raise EmptyResponseError
+        return response[0]

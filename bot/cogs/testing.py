@@ -3,15 +3,21 @@
 Contains simple ping/hi commands and test redeems used in development.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from bot.core.components import Cog
-from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.chat_messages.deco import checks
+from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.commands.checks import MinPermissionLevel
-from bot.integrations.commands.events import CommandEvent
 from bot.integrations.commands.deco import command
+from bot.integrations.commands.events import CommandEvent  # noqa: TC001
 from bot.integrations.commands.exceptions import CommandError
 from bot.integrations.twitch.deco import on_twitch_redeem
-from bot.integrations.twitch.events import TwitchRedemptionEvent
+
+if TYPE_CHECKING:
+    from bot.integrations.twitch.events import TwitchRedemptionEvent
 
 
 class TestingCog(Cog):

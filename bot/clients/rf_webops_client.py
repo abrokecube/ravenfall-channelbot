@@ -1,7 +1,10 @@
-"""Ravenfall web automation client."""
+from typing import Any, cast
 
 import aiohttp
-from typing import Any, cast
+
+
+class WebOpsException(BaseException):
+    """WebOps Exception."""
 
 
 class WebOpsClient:
@@ -30,11 +33,11 @@ class WebOpsClient:
             ) as session,
             session.post(url, json=payload) as response,
         ):
-            if response.status != 200:
+            if response.status != 200:  # noqa: PLR2004
                 text = await response.text()
                 msg = f"Redemption failed: {response.status} - {text}"
-                raise Exception(msg)
-            return cast(dict[str, Any], await response.json())
+                raise WebOpsException(msg)
+            return cast("dict[str, Any]", await response.json())
 
     async def get_total_loyalty_points(self, usernames: list[str]) -> dict[str, Any]:
         """Get total loyalty points for a list of usernames."""
@@ -46,8 +49,8 @@ class WebOpsClient:
             ) as session,
             session.post(url, json=payload) as response,
         ):
-            if response.status != 200:
+            if response.status != 200:  # noqa: PLR2004
                 text = await response.text()
                 msg = f"Failed to get points: {response.status} - {text}"
-                raise Exception(msg)
-            return cast(dict[str, Any], await response.json())
+                raise WebOpsException(msg)
+            return cast("dict[str, Any]", await response.json())

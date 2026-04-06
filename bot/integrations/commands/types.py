@@ -1,10 +1,11 @@
+from bot.integrations.commands.events import CommandEvent
 from . import BaseConverter
 from typing import TypedDict, Concatenate
 from collections.abc import Callable, Awaitable
-from bot.core.components import GlobalContext, BaseEvent
+from bot.core.components import GlobalContext
 
 VerifierType = Callable[
-    Concatenate[GlobalContext, BaseEvent, ...], bool | str | Awaitable[bool | str]
+    Concatenate[GlobalContext, CommandEvent, ...], bool | str | Awaitable[bool | str]
 ]
 
 

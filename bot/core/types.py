@@ -1,6 +1,7 @@
-from typing import Concatenate, Callable
-from collections.abc import Awaitable
-from .components import GlobalContext, BaseEvent
+from collections.abc import Awaitable, Callable
+from typing import Concatenate
+
+from .components import BaseEvent, GlobalContext
 
 type ListenerFuncType = Callable[
     Concatenate[GlobalContext, BaseEvent, ...], None | Awaitable[None]

@@ -17,7 +17,7 @@ class BaseCheck:
     title: str | None = None
     short_help: str | None = None
     help: str | None = None
-    hides_command_from_help: bool = False
+    will_hide_command_from_help: bool = False
 
     async def check(self, g_ctx: GlobalContext, event: BaseEvent) -> bool | str:  # pyright: ignore[reportUnusedParameter]
         raise NotImplementedError

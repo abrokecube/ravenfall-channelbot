@@ -1,8 +1,13 @@
-from typing import Callable, Any
-from .components import BaseDispatcher
-from .modals import MetaFilter
-from .components import Cooldown, BaseEvent
-from .listeners import LambdaListener, GenericListener
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
+from .components import BaseDispatcher, BaseEvent, Cooldown
+from .listeners import GenericListener, LambdaListener
+
+if TYPE_CHECKING:
+    from .modals import MetaFilter
 
 # Matchers
 

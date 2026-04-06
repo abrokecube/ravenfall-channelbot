@@ -1,28 +1,33 @@
-from collections.abc import Awaitable
+import asyncio
+import logging
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, override
+
 from dotenv import load_dotenv
 
-from bot.core.components import GlobalContext
-from bot.core.components import EventManager
+from bot.cogs.example import ExampleCog
+from bot.cogs.help import HelpCog
+from bot.cogs.testing import TestingCog
+from bot.core.components import EventManager, GlobalContext
+from bot.db.models import update_schema
 from bot.db.service import DatabaseService
+from bot.integrations.chat_messages.event_processors import filter_message_event_text
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.commands.dispatchers import CommandDispatcher
-from bot.integrations.chat_messages.event_processors import filter_message_event_text
+from bot.integrations.ravenfall import RavenfallConfig
+from bot.integrations.ravenfall.event_sources import RavenfallEventSource
 from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
 from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
+from utils.logging_fomatter import setup_logging
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable
 
 _ = load_dotenv()
 
-
-import os
-import asyncio
-import json
-import logging
-from utils.logging_fomatter import setup_logging
-from typing import cast, override, Any
-from bot.db.models import update_schema
-
-with open("pid", "w") as f:
+with Path("pid").open("w") as f:
     _ = f.write(str(os.getpid()))
 
 logging_level_strs = {
@@ -34,65 +39,69 @@ logging_level_strs = {
     "critical": logging.CRITICAL,
 }
 logger_config = {
-    "asyncio": {
-        "console_level": logging.INFO,
-    },
+    # "asyncio": {
+    #     "console_level": logging.INFO,
+    # },
     "twitchAPI": {
         "filename": "twitchAPI.log",
         "console_level": logging.INFO,
     },
-    "middleman": {
-        "filename": "middleman.log",
-        "console_level": logging.INFO,
-    },
+    # "middleman": {
+    #     "filename": "middleman.log",
+    #     "console_level": logging.INFO,
+    # },
     "aiosqlite": {
         "filename": "database.log",
         "console_level": logging.INFO,
     },
-    "new_message_processor": {
-        "filename": "rfmsgproc.log",
-        "console_level": logging.INFO,
-    },
-    "aiohttp.access": {
-        "filename": "httpserver.log",
-        "console_level": logging.WARNING,
-    },
-    "bot.server": {
-        "filename": "httpserver.log",
-        "console_level": logging.WARNING,
-    },
-    "utils.runshell": {
-        "filename": "runshell.log",
-        "console_level": logging.WARNING,
-    },
-    "bot.ravenfallloc": {
-        "filename": "rfloc.log",
-        "console_level": logging.WARNING,
-    },
-    "bot.ravenfallchannel": {
-        "filename": "rfchannels.log",
-        "console_level": logging.INFO,
-    },
-    "bot.ravenfallmanager": {
-        "filename": "rfchannels.log",
-        "console_level": logging.INFO,
-    },
-    "bot.commands": {
-        "filename": "commands.log",
-        "console_level": logging.INFO,
-    },
+    "bot.clients.ravenfall_query": {"console_level": logging.CRITICAL},
+    # "new_message_processor": {
+    #     "filename": "rfmsgproc.log",
+    #     "console_level": logging.INFO,
+    # },
+    # "aiohttp.access": {
+    #     "filename": "httpserver.log",
+    #     "console_level": logging.WARNING,
+    # },
+    # "bot.server": {
+    #     "filename": "httpserver.log",
+    #     "console_level": logging.WARNING,
+    # },
+    # "utils.runshell": {
+    #     "filename": "runshell.log",
+    #     "console_level": logging.WARNING,
+    # },
+    # "bot.ravenfallloc": {
+    #     "filename": "rfloc.log",
+    #     "console_level": logging.WARNING,
+    # },
+    # "bot.ravenfallchannel": {
+    #     "filename": "rfchannels.log",
+    #     "console_level": logging.INFO,
+    # },
+    # "bot.ravenfallmanager": {
+    #     "filename": "rfchannels.log",
+    #     "console_level": logging.INFO,
+    # },
+    # "bot.commands": {
+    #     "filename": "commands.log",
+    #     "console_level": logging.INFO,
+    # },
 }
 
 log_level = os.getenv("LOG_LEVEL", "info")
 default_console_logging_level = logging_level_strs.get(log_level.lower(), logging.INFO)
 setup_logging(level=default_console_logging_level, loggers_config=logger_config)
+# setup_logging(level=default_console_logging_level)
 
 logger = logging.getLogger(__name__)
-if not log_level.lower() in logging_level_strs:
+if log_level.lower() not in logging_level_strs:
     logger.warning(f"Invalid logging level '{log_level}'")
 
 
 class MyCmdDispatcher(CommandDispatcher):
+    """Command dispatcher."""
+
     def __init__(self):
         super().__init__()
 
@@ -102,6 +111,8 @@ class MyCmdDispatcher(CommandDispatcher):
 
 
 async def run():
+    """Run."""
+
     def handle_loop_exception(_: asyncio.AbstractEventLoop, context: dict[str, Any]):  # pyright: ignore [reportExplicitAny]
         logger.exception("Caught async exception: %s", context.get("exception"))
 
@@ -136,26 +147,38 @@ async def run():
                 AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS,
             ],
         )
-        tasks.append(event_manager.add_event_source(twitch))
-        from bot.cogs.testing import TestingCog
+        # tasks.append(event_manager.add_event_source(twitch))
+        ravenfall = RavenfallEventSource(
+            [
+                # RavenfallConfig(
+                #     "756734432", "abrokecube", "http://pc3-server/rf_query/1/"
+                # ),
+                RavenfallConfig(
+                    "1312439833", "cubedhelperbot", "http://127.0.0.1:8888/ravenfall/"
+                ),
+            ]
+        )
+        tasks.append(event_manager.add_event_source(ravenfall))
 
         await event_manager.add_cog(TestingCog)
+        await event_manager.add_cog(HelpCog)
+        await event_manager.add_cog(ExampleCog)
 
         await update_schema()
         global_ctx.register_service(DatabaseService, DatabaseService())
         __ = await asyncio.gather(*tasks)
 
-    __ = await twitch.authenticate_user(
-        os.getenv("OWNER_TWITCH_ID", ""),
-        [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS],
-    )
-    __ = await twitch.add_eventsub_subscriptions(
-        os.getenv("OWNER_TWITCH_ID", ""),
-        EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD,
-    )
-    __ = await twitch.join_chat(
-        channel_id=os.getenv("OWNER_TWITCH_ID", ""), mode=MessageReceiveMode.IRC
-    )
+    # __ = await twitch.authenticate_user(
+    #     os.getenv("OWNER_TWITCH_ID", ""),
+    #     [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS],
+    # )
+    # __ = await twitch.add_eventsub_subscriptions(
+    #     os.getenv("OWNER_TWITCH_ID", ""),
+    #     EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD,
+    # )
+    # __ = await twitch.join_chat(
+    #     channel_id=os.getenv("OWNER_TWITCH_ID", ""), mode=MessageReceiveMode.IRC
+    # )
 
     logger.info("Bot is ready")
     wait_forever = asyncio.Event()

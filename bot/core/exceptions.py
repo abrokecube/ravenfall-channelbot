@@ -24,7 +24,7 @@ class ListenerRegistrationError(ListenerError):
         super().__init__(f"{item_type} '{name}' already exists")
 
 
-class ListenerOnCooldown(ListenerError):
+class ListenerOnCooldownError(ListenerError):
     """Raised when a listener is on cooldown."""
 
     def __init__(self, cooldown: Cooldown, retry_after: float):

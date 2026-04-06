@@ -2,11 +2,10 @@ import asyncio
 import inspect
 import logging
 import re
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from types import UnionType
 from typing import (
     Any,
-    Callable,
     get_args,
     get_origin,
     get_type_hints,
@@ -16,7 +15,6 @@ from typing import (
 import docstring_parser
 
 from bot.core.components import (
-    BaseDispatcher,
     BaseEvent,
     Cog,
     Cooldown,
@@ -93,6 +91,13 @@ class CommandListener(GenericListener):
         try:
             # get_type_hints resolves string annotations to actual types
             self.type_hints: dict[str, type] = get_type_hints(func)
+        except NameError:
+            LOGGER.warning(
+                "Could not resolve type hints for %s. "
+                "Make sure all type hints are defined on runtime. You may have imported "
+                "something inside a TYPE_CHECKING if statement.",
+                func.__name__,
+            )
         except Exception as e:
             # If get_type_hints fails, we'll fall back to the signature
             LOGGER.warning("Could not resolve type hints for %s: %s", func.__name__, e)
@@ -276,7 +281,7 @@ class CommandListener(GenericListener):
             except VerificationFailure:
                 raise
             except Exception as e:
-                LOGGER.error("Verification raised an error: %s", e)
+                LOGGER.exception("Verification raised an error")
                 msg = "An unknown error occurred"
                 raise VerificationFailure(msg) from e
 
@@ -285,7 +290,7 @@ class CommandListener(GenericListener):
         ctx: CommandEvent,
         value: Any,
         param: Parameter,
-        g_ctx: GlobalContext | None = None,
+        g_ctx: GlobalContext,
     ) -> Any:
         if value is None:
             return value
@@ -302,12 +307,23 @@ class CommandListener(GenericListener):
 
         if isinstance(conv_obj, BaseConverter):
             try:
-                # Inspect the convert method's signature to determine parameters
-                convert_method: Callable[..., Any | Awaitable[Any]] = getattr(
-                    conv_obj, "convert"
-                )
-
-                result = convert_method(g_ctx, ctx, value)
+                result = conv_obj.convert(g_ctx, ctx, value)
+                if asyncio.iscoroutine(result):
+                    return await result
+                return result
+            except ArgumentConversionError as e:
+                raise ArgumentConversionError(e.message, value, param) from None
+            except Exception as e:
+                msg = f"An error occurred while converting the argument: {e}"
+                raise ArgumentConversionError(
+                    msg,
+                    value,
+                    param,
+                    e,
+                ) from e
+        elif issubclass(conv_obj, BaseConverter):
+            try:
+                result = conv_obj.cls_convert(g_ctx, ctx, value)
                 if asyncio.iscoroutine(result):
                     return await result
                 return result
@@ -477,17 +493,14 @@ class CommandListener(GenericListener):
                 # param.kind == ParameterKind.POSITIONAL_ONLY:
                 kwargs[param_name] = converted
                 specified_params.add(param.name)
+            # Not provided positionally
+            elif param.default != inspect.Parameter.empty:
+                converted = await self._convert_argument(ctx, param.default, param, g_ctx)
+                kwargs[param_name] = converted
+            elif param.is_optional:
+                kwargs[param_name] = None
             else:
-                # Not provided positionally
-                if param.default != inspect.Parameter.empty:
-                    converted = await self._convert_argument(
-                        ctx, param.default, param, g_ctx
-                    )
-                    kwargs[param_name] = converted
-                elif param.is_optional:
-                    kwargs[param_name] = None
-                else:
-                    raise MissingRequiredArgumentError(param)
+                raise MissingRequiredArgumentError(param)
 
         if len(named_args) > 0:
             raise UnknownArgumentError(list(named_args.keys()))
