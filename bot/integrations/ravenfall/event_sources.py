@@ -3,10 +3,19 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
+from enum import IntEnum
+from functools import partial
 from typing import TYPE_CHECKING, Literal, override
+
+from msgspec import structs
 
 from bot.clients import ravenfall_query as rq
 from bot.core.components import BaseEventSource
+from bot.integrations.ravenfall.services import RavenfallService
+from utils.utils import TimestampedValue, calculate_rate_per_second
+
+from . import enums
+from . import events as ev
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -21,6 +30,415 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
 RETURNED_NONE = -1
+
+
+class RavenfallCollectorBase[T]:
+    """Fetches data from Ravenfall."""
+
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 1,
+        *,
+        only_online: bool = True,
+    ) -> None:
+        self._loop_task: asyncio.Task[None] | None = None
+        self._last_data: T | None = None
+        self.interval: float = interval
+        self.ravenfall: RavenfallInstance = ravenfall
+        self.only_online: bool = only_online
+        self._last_execution: float = time.monotonic() - self.interval
+        self._processing_task: asyncio.Task[None] | None = None
+
+    def start(self):
+        """Start the processing loop."""
+        self._loop_task = asyncio.create_task(self._loop())
+
+    def stop(self):
+        """Stop the loop."""
+        if self._loop_task is not None:
+            __ = self._loop_task.cancel()
+            self._loop_task = None
+
+    def set_data(self, data: T | None):
+        """Set current data."""
+        self._last_data = data
+
+    def get_data(self) -> T | None:
+        """Get previously fetched data."""
+        return self._last_data
+
+    async def get_latest(self) -> T | None:
+        """Fetch the latest data and return it."""
+        if self._processing_task is not None:
+            await self._processing_task
+        else:
+            self._processing_task = asyncio.create_task(self._run_process())
+            await self._processing_task
+            self._processing_task = None
+        return self._last_data
+
+    async def _loop(self):
+        while True:
+            try:
+                if self.only_online:
+                    _ = await self.ravenfall.is_online.wait()
+                t = time.monotonic()
+                await asyncio.sleep(max(0, self.interval - (t - self._last_execution)))
+                _ = await self.get_latest()
+            except Exception:
+                LOGGER.exception(f"Error in collector loop {self.__class__.__name__}")
+
+    async def _run_process(self):
+        try:
+            t = time.monotonic()
+            await self.process()
+            self._last_execution = t
+        except Exception:
+            LOGGER.exception(f"Error in collector {self.__class__.__name__}")
+
+    async def process(self) -> None:
+        """Code that fetches data.
+
+        Use the set_data and get_data functions to store and retrieve data.
+        """
+        raise NotImplementedError
+
+
+class SessionCollector(RavenfallCollectorBase[rq.GameSession]):
+    """Ravenfall Session collector."""
+
+    def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
+        super().__init__(ravenfall, interval, only_online=False)
+        self.warned_user: str | None = None
+
+    @override
+    async def process(self):
+        ravenfall = self.ravenfall
+        session = self.get_data()
+        new_session = await ravenfall._query_request(
+            self.ravenfall.query_client.get_session()
+        )
+        if new_session is None or new_session == RETURNED_NONE:
+            return
+
+        if (
+            not (ravenfall.is_online.is_set())
+            and new_session.authenticated
+            and new_session.session_started
+        ):
+            LOGGER.info(f"Ravenfall ({ravenfall.channel_name}) is online.")
+            await ravenfall._set_is_online()
+        if new_session.twitch_username != ravenfall.twitch_login:
+            if self.warned_user != new_session.twitch_username:
+                LOGGER.warning(
+                    f"Ravenfall ({ravenfall.channel_name}): "
+                    "Received username does not match given twitch channel name "
+                    f"(got {new_session.twitch_username})"
+                )
+            self.warned_user = new_session.twitch_username
+
+        if not session:
+            self.set_data(new_session)
+            return
+
+        self.set_data(new_session)
+
+
+class FerryCollector(RavenfallCollectorBase[rq.Ferry]):
+    """Ravenfall Ferry collector."""
+
+    def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
+        super().__init__(ravenfall, interval)
+
+    @override
+    async def process(self):
+        new_ferry = await self.ravenfall._query_request(
+            self.ravenfall.query_client.get_ferry()
+        )
+        if new_ferry is None or new_ferry == RETURNED_NONE:
+            return
+
+        self.set_data(new_ferry)
+
+
+class VillageCollector(RavenfallCollectorBase[rq.Village]):
+    """Ravenfall Village collector."""
+
+    def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
+        super().__init__(ravenfall, interval)
+
+    @override
+    async def process(self):
+        new_village = await self.ravenfall._query_request(
+            self.ravenfall.query_client.get_village()
+        )
+        if new_village is None or new_village == RETURNED_NONE:
+            return
+
+        self.set_data(new_village)
+
+
+class MultiplierCollector(RavenfallCollectorBase[rq.GameMultiplier]):
+    """Ravenfall Multiplier collector."""
+
+    def __init__(self, ravenfall: RavenfallInstance, interval: float = 5) -> None:
+        super().__init__(ravenfall, interval)
+
+    @override
+    async def process(self):
+        new_mult = await self.ravenfall._query_request(
+            self.ravenfall.query_client.get_multiplier()
+        )
+        if new_mult is None or new_mult == RETURNED_NONE:
+            return
+
+        self.set_data(new_mult)
+
+
+class PlayersCollector(RavenfallCollectorBase[list[rq.Player]]):
+    """Ravenfall Players collector."""
+
+    def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
+        super().__init__(ravenfall, interval)
+        self.player_count_history: deque[tuple[float, int]] = deque(maxlen=10)
+
+    @override
+    async def process(self):
+        new_players = await self.ravenfall._query_request(
+            self.ravenfall.query_client.get_players()
+        )
+        if new_players is None or new_players == RETURNED_NONE:
+            return
+
+        t = time.monotonic()
+        self.player_count_history.append((t, len(new_players)))
+        min_items = 3
+        if (
+            not self.ravenfall.is_ready.is_set()
+            and len(new_players) > 0
+            and len(self.player_count_history) > min_items
+        ):
+            current_value = len(new_players)
+            is_ready = True
+            cutoff_t = t - 2
+            for t0, count in reversed(self.player_count_history):
+                if t0 < cutoff_t:
+                    break
+                if count != current_value:
+                    is_ready = False
+                    break
+            if is_ready:
+                LOGGER.info(f"Ravenfall ({self.ravenfall.channel_name}) is ready.")
+                await self.ravenfall._set_is_ready()
+
+        self.set_data(new_players)
+
+
+class DungeonStage(IntEnum):
+    """Dungeon stage."""
+
+    NONE = 0
+    LOADING = 1
+    WAITING_FOR_PLAYERS = 2
+    FIGHTING_ENEMIES = 3
+    FIGHTING_BOSS = 4
+
+
+class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
+    """Ravenfall Dungeon collector."""
+
+    def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
+        super().__init__(ravenfall, interval)
+        self.max_boss_hp: TimestampedValue = TimestampedValue(time.monotonic(), 0)
+        self.stage: DungeonStage = DungeonStage.NONE
+
+    @override
+    async def process(self):
+        new_dungeon = await self.ravenfall._query_request(
+            self.ravenfall.query_client.get_dungeon()
+        )
+        if new_dungeon is None or new_dungeon == RETURNED_NONE:
+            return
+
+        old_dungeon = self.get_data()
+        old_stage = self.stage
+
+        new_stage = DungeonStage.NONE
+        if new_dungeon.enemies > 0:
+            if not new_dungeon.started:
+                if new_dungeon.boss.health == 0:
+                    new_stage = DungeonStage.LOADING
+                else:
+                    new_stage = DungeonStage.WAITING_FOR_PLAYERS
+            elif new_dungeon.enemies_alive > 0:
+                new_stage = DungeonStage.FIGHTING_ENEMIES
+            else:
+                new_stage = DungeonStage.FIGHTING_BOSS
+
+        if not old_dungeon:
+            self.set_data(new_dungeon)
+            self.stage = new_stage
+            return
+
+        t = time.monotonic()
+        if new_dungeon.boss.health > self.max_boss_hp.value:
+            self.max_boss_hp = TimestampedValue(t, new_dungeon.boss.health)
+
+        if new_stage in {DungeonStage.FIGHTING_BOSS, DungeonStage.FIGHTING_ENEMIES}:
+            boss = new_dungeon.boss
+            new_dungeon = structs.replace(
+                new_dungeon,
+                boss=structs.replace(
+                    boss,
+                    max_health=self.max_boss_hp.value,
+                    health_percent=boss.health / self.max_boss_hp.value,
+                ),
+            )
+
+        # if new_stage != old_stage and new_stage != (old_stage + 1) % len(DungeonStage):
+        stages_match = new_stage != old_stage
+        if stages_match and (old_stage + 1) % len(DungeonStage):
+            stage_funcs = [
+                self._send_dungeon_end_event,
+                partial(self._send_dungeon_spawned_event, new_dungeon),
+                partial(self._send_dungeon_prepared_event, new_dungeon),
+                partial(self._send_dungeon_started_event, new_dungeon),
+                None,
+            ]
+            idx = old_stage
+            while idx != new_stage:
+                idx += 1
+                idx %= len(DungeonStage)
+                func = stage_funcs[idx]
+                if func is not None:
+                    await func()
+        elif stages_match:
+            if new_stage == DungeonStage.NONE:
+                reason = enums.DungeonEndReason.UNKNOWN
+                if self.max_boss_hp.value > 0:
+                    total_drop_rate = calculate_rate_per_second(
+                        (self.max_boss_hp, TimestampedValue(t, old_dungeon.boss.health))
+                    )
+                    recent_drop_rate = calculate_rate_per_second(
+                        (self.max_boss_hp, TimestampedValue(t, 0))
+                    )
+                    max_rate_factor = 1.2
+                    if (
+                        old_dungeon.enemies_alive > 0
+                        or recent_drop_rate / total_drop_rate > max_rate_factor
+                    ):
+                        reason = enums.DungeonEndReason.PLAYERS_DEFEATED
+                    else:
+                        reason = enums.DungeonEndReason.BOSS_DEFEATED
+                await self._send_dungeon_end_event(reason)
+            elif new_stage == DungeonStage.LOADING:
+                await self._send_dungeon_spawned_event(new_dungeon)
+            elif new_stage == DungeonStage.WAITING_FOR_PLAYERS:
+                await self._send_dungeon_prepared_event(new_dungeon)
+            elif new_stage == DungeonStage.FIGHTING_ENEMIES:
+                await self._send_dungeon_started_event(new_dungeon)
+
+        if new_stage < DungeonStage.FIGHTING_ENEMIES:
+            self.max_boss_hp = TimestampedValue(t, 0)
+
+        self.stage = new_stage
+        self.set_data(new_dungeon)
+
+    async def _send_dungeon_spawned_event(
+        self,
+        dungeon: rq.Dungeon,
+        reason: enums.DungeonStartReason = enums.DungeonStartReason.UNKNOWN,
+    ):
+        await self.ravenfall._event_hook(
+            ev.DungeonSpawnedEvent(
+                ravenfall=self.ravenfall,
+                reason=reason,
+                name=dungeon.name,
+            )
+        )
+
+    async def _send_dungeon_prepared_event(self, dungeon: rq.Dungeon):
+        await self.ravenfall._event_hook(
+            ev.DungeonPreparedEvent(
+                ravenfall=self.ravenfall,
+                name=dungeon.name,
+                joined_player_count=dungeon.players,
+                enemy_count=dungeon.enemies,
+            )
+        )
+
+    async def _send_dungeon_started_event(self, dungeon: rq.Dungeon):
+        await self.ravenfall._event_hook(
+            ev.DungeonStartedEvent(ravenfall=self.ravenfall, data=dungeon)
+        )
+
+    async def _send_dungeon_end_event(
+        self, reason: enums.DungeonEndReason = enums.DungeonEndReason.UNKNOWN
+    ):
+        await self.ravenfall._event_hook(
+            ev.DungeonEndedEvent(ravenfall=self.ravenfall, reason=reason)
+        )
+
+
+class RaidCollector(RavenfallCollectorBase[rq.Raid]):
+    """Ravenfall Raid collector."""
+
+    def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
+        super().__init__(ravenfall, interval)
+
+    @override
+    async def process(self):
+        new_raid = await self.ravenfall._query_request(
+            self.ravenfall.query_client.get_raid()
+        )
+        if new_raid is None or new_raid == RETURNED_NONE:
+            return
+
+        old_raid = self.get_data()
+        if not old_raid:
+            self.set_data(new_raid)
+            return
+
+        if not old_raid.started and new_raid.started:
+            await self._send_raid_started_event(
+                new_raid,
+                enums.RaidStartReason.UNKNOWN,
+            )
+        elif not new_raid.started and old_raid.started:
+            if old_raid.time_left < 1:
+                await self._send_raid_end_event(enums.RaidEndReason.TIME_EXPIRED)
+            else:
+                await self._send_raid_end_event(enums.RaidEndReason.BOSS_DEFEATED)
+
+        # new raid detections
+        elif (
+            old_raid.started
+            and new_raid.started
+            and (
+                new_raid.boss.health > old_raid.boss.health
+                or new_raid.boss.max_health != old_raid.boss.max_health
+            )
+        ):
+            await self._send_raid_end_event(enums.RaidEndReason.BOSS_DEFEATED)
+            await self._send_raid_started_event(
+                new_raid,
+                enums.RaidStartReason.UNKNOWN,
+            )
+
+        self.set_data(new_raid)
+
+    async def _send_raid_started_event(
+        self, data: rq.Raid, reason: enums.RaidStartReason
+    ):
+        await self.ravenfall._event_hook(
+            ev.RaidStartedEvent(ravenfall=self.ravenfall, data=data, reason=reason)
+        )
+
+    async def _send_raid_end_event(self, reason: enums.RaidEndReason):
+        await self.ravenfall._event_hook(
+            ev.RaidEndedEvent(ravenfall=self.ravenfall, reason=reason)
+        )
 
 
 class RavenfallInstance:
@@ -38,52 +456,63 @@ class RavenfallInstance:
         self.is_online: asyncio.Event = asyncio.Event()
         self.is_ready: asyncio.Event = asyncio.Event()
 
-        self._session_loop_task: asyncio.Task[None] | None = None
-        self._ferry_loop_task: asyncio.Task[None] | None = None
-        self._players_loop_task: asyncio.Task[None] | None = None
-        self._village_loop_task: asyncio.Task[None] | None = None
-        self._multiplier_loop_task: asyncio.Task[None] | None = None
-        self._dungeon_loop_task: asyncio.Task[None] | None = None
-        self._raid_loop_task: asyncio.Task[None] | None = None
+        self._session_collector: SessionCollector = SessionCollector(self)
+        self._ferry_collector: FerryCollector = FerryCollector(self)
+        self._players_collector: PlayersCollector = PlayersCollector(self)
+        self._village_collector: VillageCollector = VillageCollector(self)
+        self._multiplier_collector: MultiplierCollector = MultiplierCollector(self)
+        self._dungeon_collector: DungeonCollector = DungeonCollector(self)
+        self._raid_collector: RaidCollector = RaidCollector(self)
         self._observed_loop_task: asyncio.Task[None] | None = None
 
         self.channel_name: str = config.twitch_login
         self.channel_id: str = config.twitch_id
         self._fail_counter: int = 0
-        self._max_conn_failures: int = 5
+        self._max_conn_failures: int = 12
 
     async def _dummy_event_hook(self, event: RavenfallEvent):  # pyright: ignore[reportUnusedParameter]
         pass
 
     async def start(self):
         """Start the RavenfallInstance."""
-        self._session_loop_task = asyncio.create_task(self._session_loop())
-        self._ferry_loop_task = asyncio.create_task(self._ferry_loop())
-        self._players_loop_task = asyncio.create_task(self._players_loop())
-        self._village_loop_task = asyncio.create_task(self._village_loop())
-        self._multiplier_loop_task = asyncio.create_task(self._multiplier_loop())
-        self._dungeon_loop_task = asyncio.create_task(self._dungeon_loop())
-        self._raid_loop_task = asyncio.create_task(self._raid_loop())
-        self._observed_loop_task = asyncio.create_task(self._observed_loop())
+        self._session_collector.start()
+        self._ferry_collector.start()
+        self._players_collector.start()
+        self._village_collector.start()
+        self._multiplier_collector.start()
+        self._dungeon_collector.start()
+        self._raid_collector.start()
 
     async def stop(self):
         """Stop the RavenfallInstance."""
-        if self._session_loop_task:
-            __ = self._session_loop_task.cancel()
-        if self._ferry_loop_task:
-            __ = self._ferry_loop_task.cancel()
-        if self._players_loop_task:
-            __ = self._players_loop_task.cancel()
-        if self._village_loop_task:
-            __ = self._village_loop_task.cancel()
-        if self._multiplier_loop_task:
-            __ = self._multiplier_loop_task.cancel()
-        if self._dungeon_loop_task:
-            __ = self._dungeon_loop_task.cancel()
-        if self._raid_loop_task:
-            __ = self._raid_loop_task.cancel()
+        self._session_collector.stop()
+        self._ferry_collector.stop()
+        self._players_collector.stop()
+        self._village_collector.stop()
+        self._multiplier_collector.stop()
+        self._dungeon_collector.stop()
+        self._raid_collector.stop()
         if self._observed_loop_task:
             __ = self._observed_loop_task.cancel()
+
+    async def _set_is_offline(self):
+        if self.is_online.is_set():
+            self.is_online.clear()
+            await self._event_hook(ev.RavenfallOfflineEvent(ravenfall=self))
+
+    async def _set_is_online(self):
+        if not self.is_online.is_set():
+            self.is_online.set()
+            await self._event_hook(ev.RavenfallOnlineEvent(ravenfall=self))
+
+    async def _set_is_not_ready(self):
+        if self.is_ready.is_set():
+            self.is_ready.clear()
+
+    async def _set_is_ready(self):
+        if not self.is_ready.is_set():
+            self.is_ready.set()
+            await self._event_hook(ev.RavenfallReadyEvent(ravenfall=self))
 
     async def _query_request[T](self, query_call: Awaitable[T]) -> T | Literal[-1] | None:
         try:
@@ -92,8 +521,8 @@ class RavenfallInstance:
             self._fail_counter += 1
             if self.is_online.is_set() and self._fail_counter > self._max_conn_failures:
                 LOGGER.info(f"Ravenfall ({self.channel_name}) went offline.")
-                self.is_online.clear()
-                self.is_ready.clear()
+                await self._set_is_offline()
+                await self._set_is_not_ready()
         except rq.RavenfallQueryError:
             await asyncio.sleep(0.2)
         except rq.RavenfallBadHostError:
@@ -108,183 +537,81 @@ class RavenfallInstance:
             return result
         return None
 
-    async def _session_loop(self):
-        session: rq.GameSession | None = None
-        warned_user: str | None = None
-        while True:
-            if session is not None:
-                await asyncio.sleep(0.5)
+    async def get_session(self) -> rq.GameSession | None:
+        """Get the latest session."""
+        return await self._session_collector.get_latest()
 
-            new_session = await self._query_request(self.query_client.get_session())
-            if new_session is None or new_session == RETURNED_NONE:
-                continue
+    async def get_ferry(self) -> rq.Ferry | None:
+        """Get the latest ferry."""
+        return await self._ferry_collector.get_latest()
 
-            if (
-                not (self.is_online.is_set())
-                and new_session.authenticated
-                and new_session.session_started
-            ):
-                LOGGER.info(f"Ravenfall ({self.channel_name}) is online.")
-                self.is_online.set()
-            if new_session.twitch_username != self.twitch_login:
-                if warned_user != new_session.twitch_username:
-                    LOGGER.warning(
-                        f"Ravenfall ({self.channel_name}): "
-                        "Received username does not match given twitch channel name "
-                        f"(got {new_session.twitch_username})"
-                    )
-                warned_user = new_session.twitch_username
+    async def get_players(self) -> list[rq.Player] | None:
+        """Get the latest players."""
+        return await self._players_collector.get_latest()
 
-            if not session:
-                session = new_session
-                continue
+    async def get_village(self) -> rq.Village | None:
+        """Get the latest village."""
+        return await self._village_collector.get_latest()
 
-            session = new_session
+    async def get_multiplier(self) -> rq.GameMultiplier | None:
+        """Get the latest multiplier."""
+        return await self._multiplier_collector.get_latest()
 
-    async def _players_loop(self):
-        players: list[rq.Player] | None = None
-        player_count_history: deque[tuple[float, int]] = deque(maxlen=10)
-        while True:
-            __ = await self.is_online.wait()
-            if players is not None:
-                await asyncio.sleep(0.5)
+    async def get_dungeon(self) -> rq.Dungeon | None:
+        """Get the latest dungeon."""
+        return await self._dungeon_collector.get_latest()
 
-            new_players = await self._query_request(self.query_client.get_players())
-            if new_players is None or new_players == RETURNED_NONE:
-                continue
-            t = time.monotonic()
-            player_count_history.append((t, len(new_players)))
-            min_items = 3
-            if (
-                not self.is_ready.is_set()
-                and len(new_players) > 0
-                and len(player_count_history) > min_items
-            ):
-                current_value = len(new_players)
-                is_ready = True
-                cutoff_t = t - 2
-                for t0, count in reversed(player_count_history):
-                    if t0 < cutoff_t:
-                        break
-                    if count != current_value:
-                        is_ready = False
-                        break
-                if is_ready:
-                    LOGGER.info(f"Ravenfall ({self.channel_name}) is ready.")
-                    self.is_ready.set()
+    async def get_raid(self) -> rq.Raid | None:
+        """Get the latest raid."""
+        return await self._raid_collector.get_latest()
 
-            if not players:
-                players = new_players
-                continue
+    # Ravenfall's "observed" endpoint does NOT work
+    # async def _observed_loop(self):
+    #     observed: rq.Player | None = None
+    #     first = True
+    #     while True:
+    #         __ = await self.is_online.wait()
+    #         if not first:
+    #             await asyncio.sleep(0.5)
+    #         else:
+    #             first = False
 
-            players = new_players
+    #         new_observed = await self._query_request(self.query_client.get_observed())
+    #         if new_observed is None:
+    #             continue
+    #         if new_observed == RETURNED_NONE:
+    #             new_observed = None
 
-    async def _ferry_loop(self):
-        ferry: rq.Ferry | None = None
-        while True:
-            __ = await self.is_online.wait()
-            if ferry is not None:
-                await asyncio.sleep(1)
+    #         if observed is not None and new_observed is None:
+    #             await self._send_observed_player_cleared_event()
+    #         elif observed is None and new_observed is not None:
+    #             await self._send_observed_player_changed_event(new_observed)
+    #         elif (
+    #             observed is not None
+    #             and new_observed is not None
+    #             and observed.id != new_observed.id
+    #         ):
+    #             await self._send_observed_player_changed_event(new_observed)
 
-            new_ferry = await self._query_request(self.query_client.get_ferry())
-            if new_ferry is None or new_ferry == RETURNED_NONE:
-                continue
+    #         observed = new_observed
 
-            if not ferry:
-                ferry = new_ferry
-                continue
+    # async def _send_observed_player_cleared_event(self):
+    #     await self._event_hook(
+    #         ev.ObservedPlayerChangedEvent(
+    #             ravenfall=self,
+    #             data=None,
+    #             player=None,
+    #         )
+    #     )
 
-            ferry = new_ferry
-
-    async def _village_loop(self):
-        village: rq.Village | None = None
-        while True:
-            __ = await self.is_online.wait()
-            if village is not None:
-                await asyncio.sleep(1)
-
-            new_village = await self._query_request(self.query_client.get_village())
-            if new_village is None or new_village == RETURNED_NONE:
-                continue
-
-            if not village:
-                village = new_village
-                continue
-
-            village = new_village
-
-    async def _multiplier_loop(self):
-        mult: rq.GameMultiplier | None = None
-        while True:
-            __ = await self.is_online.wait()
-            if mult is not None:
-                await asyncio.sleep(5)
-
-            new_mult = await self._query_request(self.query_client.get_multiplier())
-            if new_mult is None or new_mult == RETURNED_NONE:
-                continue
-
-            if not mult:
-                mult = new_mult
-                continue
-
-            mult = new_mult
-
-    async def _dungeon_loop(self):
-        dungeon: rq.Dungeon | None = None
-        while True:
-            __ = await self.is_online.wait()
-            if dungeon is not None:
-                await asyncio.sleep(0.5)
-
-            new_dungeon = await self._query_request(self.query_client.get_dungeon())
-            if new_dungeon is None or new_dungeon == RETURNED_NONE:
-                continue
-
-            if not dungeon:
-                dungeon = new_dungeon
-                continue
-
-            dungeon = new_dungeon
-
-    async def _raid_loop(self):
-        raid: rq.Raid | None = None
-        while True:
-            __ = await self.is_online.wait()
-            if raid is not None:
-                await asyncio.sleep(0.5)
-
-            new_raid = await self._query_request(self.query_client.get_raid())
-            if new_raid is None or new_raid == RETURNED_NONE:
-                continue
-
-            if not raid:
-                raid = new_raid
-                continue
-
-            raid = new_raid
-
-    async def _observed_loop(self):
-        observed: rq.Player | None = None
-        first = True
-        while True:
-            __ = await self.is_online.wait()
-            if not first:
-                await asyncio.sleep(0.5)
-            else:
-                first = False
-
-            new_observed = await self._query_request(self.query_client.get_observed())
-            if new_observed is None:
-                continue
-            if new_observed == RETURNED_NONE:
-                new_observed = None
-
-            if not observed:
-                observed = new_observed
-                continue
-
-            observed = new_observed
+    # async def _send_observed_player_changed_event(self, player: rq.Player):
+    #     await self._event_hook(
+    #         ev.ObservedPlayerChangedEvent(
+    #             ravenfall=self,
+    #             data=player,
+    #             player=player,
+    #         )
+    #     )
 
 
 class RavenfallEventSource(BaseEventSource):
@@ -304,14 +631,21 @@ class RavenfallEventSource(BaseEventSource):
         self.ravenfall_instances: list[RavenfallInstance] = [
             RavenfallInstance(x) for x in ravenfall_config
         ]
+        self.channel_name_to_instance: dict[str, RavenfallInstance] = {
+            x.channel_name: x for x in self.ravenfall_instances
+        }
+        self.channel_id_to_instance: dict[str, RavenfallInstance] = {
+            x.channel_id: x for x in self.ravenfall_instances
+        }
         for i in self.ravenfall_instances:
-            i._event_hook = self.send_event  # noqa: SLF001
+            i._event_hook = self.send_event
 
     @override
     async def setup(self, event_manager: EventManager) -> None:
         tasks: list[Awaitable[None]] = []
         tasks.extend([x.start() for x in self.ravenfall_instances])
         __ = await asyncio.gather(*tasks)
+        self.global_context.register_service(RavenfallService, RavenfallService(self))
 
     @override
     async def teardown(self) -> None:

@@ -25,6 +25,37 @@ def parse_time(iso_str: str):
     return datetime.fromisoformat(s)
 
 
+class TimestampedValue(NamedTuple):
+    """Timestamp-value pair."""
+
+    timestamp: float
+    value: float
+
+
+def calculate_rate_per_second(
+    samples: Collection[tuple[float | int, float | int]], *, skip_sort: bool = False
+) -> float:
+    """Calculate the average rate per second from time/value samples.
+
+    The input is a collection of tuples with (time_in_seconds, value). The
+    samples do not need to be sorted by time.
+    """
+    if len(samples) < 2:
+        return 0.0
+
+    if not skip_sort:
+        sorted_samples = sorted(samples, key=lambda item: item[0])
+    else:
+        sorted_samples = list(samples)
+    start_time, start_value = sorted_samples[0]
+    end_time, end_value = sorted_samples[-1]
+    duration = float(end_time) - float(start_time)
+    if duration <= 0:
+        return 0.0
+
+    return (float(end_value) - float(start_value)) / duration
+
+
 def unping(in_str: str) -> str:
     out: list[str] = []
     for word in in_str.split():
