@@ -1,19 +1,84 @@
 from __future__ import annotations
 
-from collections.abc import Collection
+import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from enum import Enum, auto
+from typing import TYPE_CHECKING, Any, override
 
-from bot.clients import ravenfall_query as rq
+from bot.clients import ravenfall_middleman as rm
 from bot.core import EVENT_CATEGORY_GENERIC
 from bot.core.components import BaseEvent
 
-from . import enums
+if TYPE_CHECKING:
+    from collections.abc import Collection
+
+    from bot.clients import ravenfall_query as rq
+    from bot.integrations.ravenfall.event_sources import RavenfallInstance
+
+    from . import enums
+    from . import Match
+
+LOGGER = logging.getLogger(__name__)
 
 EVENT_SOURCE_RAVENFALL = "ravenfall"
 
-if TYPE_CHECKING:
-    from bot.integrations.ravenfall.event_sources import RavenfallInstance
+
+class MessageOrigin(Enum):
+    """Middleman message origin."""
+
+    STREAM = auto()
+    PROCESSOR = auto()
+
+
+@dataclass(kw_only=True)
+class BaseMiddlemanMessage(BaseEvent):
+    """Message from Ravenbot/Ravenfall from the middleman."""
+
+    categories: Collection[str] = (EVENT_CATEGORY_GENERIC,)
+    platform: str = EVENT_SOURCE_RAVENFALL
+
+    data: Any
+    message: Any
+    orig_message: Any
+    ravenfall: RavenfallInstance
+    is_msg_from_api: bool
+    message_source: MessageOrigin
+
+    def block(self) -> None:
+        """Blocks the message from being sent to its destination."""
+
+
+@dataclass(kw_only=True)
+class RavenfallMessageEvent(BaseMiddlemanMessage):
+    """Message from Ravenfall."""
+
+    data: rm.RavenfallStreamMessage | rm.RavenfallProcessorMessage
+    message: rm.RavenfallMessage
+    orig_message: rm.RavenfallMessage | rm.FrozenRavenfallMessage
+    message_match: Match | None
+
+    @override
+    def block(self):
+        if isinstance(self.data, rm.RavenfallProcessorMessage):
+            self.data.block()
+        else:
+            LOGGER.warning("RavenfallMessageEvent: cannot block a stream message")
+
+
+@dataclass(kw_only=True)
+class RavenBotMessageEvent(BaseMiddlemanMessage):
+    """Message from RavenBot."""
+
+    data: rm.RavenBotStreamMessage | rm.RavenBotProcessorMessage
+    message: rm.RavenBotMessage
+    orig_message: rm.RavenBotMessage | rm.FrozenRavenBotMessage
+
+    @override
+    def block(self):
+        if isinstance(self.data, rm.RavenBotProcessorMessage):
+            self.data.block()
+        else:
+            LOGGER.warning("RavenBotMessageEvent: cannot block a stream message")
 
 
 @dataclass(kw_only=True)

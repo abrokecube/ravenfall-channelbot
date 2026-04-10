@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from datetime import datetime  # noqa: TC003
 from enum import StrEnum
 from types import NoneType
 from typing import TYPE_CHECKING, Any, Final, cast, overload
@@ -22,10 +23,9 @@ from utils.logging_fomatter import setup_logging
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
-    from datetime import datetime
 
 # Configure logging
-LOGGER = logging.getLogger("ravenfall_middleman")
+LOGGER = logging.getLogger(__name__)
 json_encode = json.Encoder()
 setup_logging()
 
@@ -436,33 +436,35 @@ class MiddlemanClient:
         if hook in self._ravenbot_message_hooks:
             self._ravenbot_message_hooks.remove(hook)
 
+    async def _establish_ws_connection(self, *, is_reconnect: bool = False) -> None:
+        """Establish the WebSocket connection to the server."""
+        ws_url = (
+            self.base_url.replace("http://", "ws://").replace("https://", "wss://")
+            + "/ws"
+        )
+        if not self._session or self._session.closed:
+            self._session = aiohttp.ClientSession()
+        self._websocket = await self._session.ws_connect(ws_url)
+        if is_reconnect:
+            LOGGER.info("Reconnected to WebSocket successfully")
+        else:
+            LOGGER.info("Connected to WebSocket at %s", ws_url)
+
     async def connect_websocket(self) -> None:
         """Connect to the middleman's WebSocket stream."""
         if self._connected:
             LOGGER.warning("WebSocket is already connected")
             return
 
-        ws_url = (
-            self.base_url.replace("http://", "ws://").replace("https://", "wss://")
-            + "/ws"
-        )
+        self._connected = True
 
         try:
-            self._session = aiohttp.ClientSession()
-            self._websocket = await self._session.ws_connect(ws_url)
-            self._connected = True
-            LOGGER.info("Connected to WebSocket at %s", ws_url)
-
-            # Start the message receiving task
-            self._ws_task = asyncio.create_task(self._receive_messages())
-
+            await self._establish_ws_connection(is_reconnect=False)
         except Exception as e:
             LOGGER.exception("Failed to connect to WebSocket")
-            if self._session:
-                await self._session.close()
-                self._session = None
-            msg = f"WebSocket connection failed: {e}"
-            raise MiddlemanError(msg) from e
+
+        # Start the message receiving task
+        self._ws_task = asyncio.create_task(self._receive_messages())
 
     async def disconnect_websocket(self) -> None:
         """Disconnect from the WebSocket stream."""
@@ -513,7 +515,21 @@ class MiddlemanClient:
     async def _receive_messages(self) -> None:
         """Receive and process messages from the WebSocket."""
         try:
-            while self._connected and self._websocket:
+            while self._connected:
+                if not self._websocket or self._websocket.closed:
+                    LOGGER.info("Attempting to reconnect WebSocket...")
+                    try:
+                        await self._establish_ws_connection(is_reconnect=True)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        LOGGER.warning("Failed to reconnect to WebSocket: %s", e)
+                        await asyncio.sleep(5)
+                        continue
+
+                if self._websocket is None:
+                    continue
+
                 message_data_str: bytes = b""
                 try:
                     message = await self._websocket.receive()
@@ -524,18 +540,29 @@ class MiddlemanClient:
 
                     elif message.type == aiohttp.WSMsgType.ERROR:
                         LOGGER.error(f"WebSocket error: {self._websocket.exception()}")
-                        break
+                        self._websocket = None
+                        await asyncio.sleep(1)
 
-                    elif message.type == aiohttp.WSMsgType.CLOSE:
-                        LOGGER.info("WebSocket connection closed")
-                        break
+                    elif message.type in {
+                        aiohttp.WSMsgType.CLOSE,
+                        aiohttp.WSMsgType.CLOSED,
+                    }:
+                        LOGGER.warning("WebSocket connection closed unexpectedly")
+                        self._websocket = None
+                        await asyncio.sleep(1)
 
+                    else:
+                        LOGGER.debug(f"Message type {message.type} was ignored")
+
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     LOGGER.exception(
                         "Error receiving WebSocket message! "
                         f"Message data: {message_data_str}",
                     )
-                    # break
+                    self._websocket = None
+                    await asyncio.sleep(1)
 
         except asyncio.CancelledError:
             LOGGER.info("WebSocket message receiver task cancelled")
@@ -694,7 +721,7 @@ class MessageProcessorServer:
 
             response = {
                 "correlationId": parsed_message.correlation_id,
-                "block": parsed_message._block,  # noqa: SLF001
+                "block": parsed_message._block,
                 "message": parsed_message.message,
             }
             await ws.send_bytes(json_encode.encode(response))
@@ -732,6 +759,9 @@ class MessageProcessorServer:
                 elif msg.type == aiohttp.WSMsgType.CLOSE:
                     LOGGER.info("Message processor client disconnected")
                     break
+
+                else:
+                    LOGGER.debug(f"Unknown message type {msg.type}")
 
         except Exception:
             LOGGER.exception("Error in WebSocket handler")

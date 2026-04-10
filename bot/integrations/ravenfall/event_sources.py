@@ -3,19 +3,21 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from enum import IntEnum
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, override
 
-from msgspec import structs
+from msgspec import convert
 
+from bot.clients import ravenfall_middleman as rm
 from bot.clients import ravenfall_query as rq
 from bot.core.components import BaseEventSource
 from bot.integrations.ravenfall.services import RavenfallService
 from utils.utils import TimestampedValue, calculate_rate_per_second
 
-from . import enums
+from . import RavenfallMatcher, enums, models
 from . import events as ev
+from .enums import DungeonStage
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -24,7 +26,8 @@ if TYPE_CHECKING:
     from bot.integrations.ravenfall import RavenfallInstanceEventHook
     from bot.integrations.ravenfall.events import RavenfallEvent
 
-    from . import RavenfallConfig
+    from . import Match
+    from .models import RavenfallConfig
 
 import logging
 
@@ -105,7 +108,7 @@ class RavenfallCollectorBase[T]:
         raise NotImplementedError
 
 
-class SessionCollector(RavenfallCollectorBase[rq.GameSession]):
+class SessionCollector(RavenfallCollectorBase[models.GameSession]):
     """Ravenfall Session collector."""
 
     def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
@@ -145,7 +148,7 @@ class SessionCollector(RavenfallCollectorBase[rq.GameSession]):
         self.set_data(new_session)
 
 
-class FerryCollector(RavenfallCollectorBase[rq.Ferry]):
+class FerryCollector(RavenfallCollectorBase[models.Ferry]):
     """Ravenfall Ferry collector."""
 
     def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
@@ -162,7 +165,7 @@ class FerryCollector(RavenfallCollectorBase[rq.Ferry]):
         self.set_data(new_ferry)
 
 
-class VillageCollector(RavenfallCollectorBase[rq.Village]):
+class VillageCollector(RavenfallCollectorBase[models.Village]):
     """Ravenfall Village collector."""
 
     def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
@@ -179,7 +182,7 @@ class VillageCollector(RavenfallCollectorBase[rq.Village]):
         self.set_data(new_village)
 
 
-class MultiplierCollector(RavenfallCollectorBase[rq.GameMultiplier]):
+class MultiplierCollector(RavenfallCollectorBase[models.GameMultiplier]):
     """Ravenfall Multiplier collector."""
 
     def __init__(self, ravenfall: RavenfallInstance, interval: float = 5) -> None:
@@ -196,7 +199,7 @@ class MultiplierCollector(RavenfallCollectorBase[rq.GameMultiplier]):
         self.set_data(new_mult)
 
 
-class PlayersCollector(RavenfallCollectorBase[list[rq.Player]]):
+class PlayersCollector(RavenfallCollectorBase[list[models.Player]]):
     """Ravenfall Players collector."""
 
     def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
@@ -235,17 +238,7 @@ class PlayersCollector(RavenfallCollectorBase[list[rq.Player]]):
         self.set_data(new_players)
 
 
-class DungeonStage(IntEnum):
-    """Dungeon stage."""
-
-    NONE = 0
-    LOADING = 1
-    WAITING_FOR_PLAYERS = 2
-    FIGHTING_ENEMIES = 3
-    FIGHTING_BOSS = 4
-
-
-class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
+class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
     """Ravenfall Dungeon collector."""
 
     def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
@@ -255,11 +248,13 @@ class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
 
     @override
     async def process(self):
-        new_dungeon = await self.ravenfall._query_request(
+        new_dungeon_data = await self.ravenfall._query_request(
             self.ravenfall.query_client.get_dungeon()
         )
-        if new_dungeon is None or new_dungeon == RETURNED_NONE:
+        if new_dungeon_data is None or new_dungeon_data == RETURNED_NONE:
             return
+
+        new_dungeon = convert(new_dungeon_data, models.Dungeon, from_attributes=True)
 
         old_dungeon = self.get_data()
         old_stage = self.stage
@@ -275,6 +270,7 @@ class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
                 new_stage = DungeonStage.FIGHTING_ENEMIES
             else:
                 new_stage = DungeonStage.FIGHTING_BOSS
+        new_dungeon.stage = new_stage
 
         if not old_dungeon:
             self.set_data(new_dungeon)
@@ -287,14 +283,16 @@ class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
 
         if new_stage in {DungeonStage.FIGHTING_BOSS, DungeonStage.FIGHTING_ENEMIES}:
             boss = new_dungeon.boss
-            new_dungeon = structs.replace(
-                new_dungeon,
-                boss=structs.replace(
-                    boss,
-                    max_health=self.max_boss_hp.value,
-                    health_percent=boss.health / self.max_boss_hp.value,
-                ),
-            )
+            boss.max_health = int(self.max_boss_hp.value)
+            boss.health_percent = boss.health / self.max_boss_hp.value
+            # new_dungeon = structs.replace(
+            #     new_dungeon,
+            #     boss=structs.replace(
+            #         boss,
+            #         max_health=self.max_boss_hp.value,
+            #         health_percent=boss.health / self.max_boss_hp.value,
+            #     ),
+            # )
 
         # if new_stage != old_stage and new_stage != (old_stage + 1) % len(DungeonStage):
         stages_match = new_stage != old_stage
@@ -347,7 +345,7 @@ class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
 
     async def _send_dungeon_spawned_event(
         self,
-        dungeon: rq.Dungeon,
+        dungeon: models.Dungeon,
         reason: enums.DungeonStartReason = enums.DungeonStartReason.UNKNOWN,
     ):
         await self.ravenfall._event_hook(
@@ -358,7 +356,7 @@ class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
             )
         )
 
-    async def _send_dungeon_prepared_event(self, dungeon: rq.Dungeon):
+    async def _send_dungeon_prepared_event(self, dungeon: models.Dungeon):
         await self.ravenfall._event_hook(
             ev.DungeonPreparedEvent(
                 ravenfall=self.ravenfall,
@@ -368,7 +366,7 @@ class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
             )
         )
 
-    async def _send_dungeon_started_event(self, dungeon: rq.Dungeon):
+    async def _send_dungeon_started_event(self, dungeon: models.Dungeon):
         await self.ravenfall._event_hook(
             ev.DungeonStartedEvent(ravenfall=self.ravenfall, data=dungeon)
         )
@@ -381,7 +379,7 @@ class DungeonCollector(RavenfallCollectorBase[rq.Dungeon]):
         )
 
 
-class RaidCollector(RavenfallCollectorBase[rq.Raid]):
+class RaidCollector(RavenfallCollectorBase[models.Raid]):
     """Ravenfall Raid collector."""
 
     def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
@@ -429,7 +427,7 @@ class RaidCollector(RavenfallCollectorBase[rq.Raid]):
         self.set_data(new_raid)
 
     async def _send_raid_started_event(
-        self, data: rq.Raid, reason: enums.RaidStartReason
+        self, data: models.Raid, reason: enums.RaidStartReason
     ):
         await self.ravenfall._event_hook(
             ev.RaidStartedEvent(ravenfall=self.ravenfall, data=data, reason=reason)
@@ -448,6 +446,7 @@ class RavenfallInstance:
         self.config: RavenfallConfig = config
         self.twitch_id: str = config.twitch_id
         self.twitch_login: str = config.twitch_login
+        self.middleman_id: str | None = config.middleman_connection_id
         self.query_client: rq.RavenfallClient = rq.RavenfallClient(
             self.config.query_server_base_url
         )
@@ -537,37 +536,37 @@ class RavenfallInstance:
             return result
         return None
 
-    async def get_session(self) -> rq.GameSession | None:
+    async def get_session(self) -> models.GameSession | None:
         """Get the latest session."""
         return await self._session_collector.get_latest()
 
-    async def get_ferry(self) -> rq.Ferry | None:
+    async def get_ferry(self) -> models.Ferry | None:
         """Get the latest ferry."""
         return await self._ferry_collector.get_latest()
 
-    async def get_players(self) -> list[rq.Player] | None:
+    async def get_players(self) -> list[models.Player] | None:
         """Get the latest players."""
         return await self._players_collector.get_latest()
 
-    async def get_village(self) -> rq.Village | None:
+    async def get_village(self) -> models.Village | None:
         """Get the latest village."""
         return await self._village_collector.get_latest()
 
-    async def get_multiplier(self) -> rq.GameMultiplier | None:
+    async def get_multiplier(self) -> models.GameMultiplier | None:
         """Get the latest multiplier."""
         return await self._multiplier_collector.get_latest()
 
-    async def get_dungeon(self) -> rq.Dungeon | None:
+    async def get_dungeon(self) -> models.Dungeon | None:
         """Get the latest dungeon."""
         return await self._dungeon_collector.get_latest()
 
-    async def get_raid(self) -> rq.Raid | None:
+    async def get_raid(self) -> models.Raid | None:
         """Get the latest raid."""
         return await self._raid_collector.get_latest()
 
     # Ravenfall's "observed" endpoint does NOT work
     # async def _observed_loop(self):
-    #     observed: rq.Player | None = None
+    #     observed: models.Player | None = None
     #     first = True
     #     while True:
     #         __ = await self.is_online.wait()
@@ -604,7 +603,7 @@ class RavenfallInstance:
     #         )
     #     )
 
-    # async def _send_observed_player_changed_event(self, player: rq.Player):
+    # async def _send_observed_player_changed_event(self, player: models.Player):
     #     await self._event_hook(
     #         ev.ObservedPlayerChangedEvent(
     #             ravenfall=self,
@@ -624,6 +623,8 @@ class RavenfallEventSource(BaseEventSource):
         self,
         ravenfall_config: list[RavenfallConfig],
         middleman_base_url: str | None = None,
+        middleman_message_processor: rm.MessageProcessorServer | None = None,
+        ravenfall_message_definitions_path: str = "./data/definitions.yaml",
     ) -> None:
         super().__init__()
         self.middleman_base_url: str | None = middleman_base_url
@@ -637,18 +638,121 @@ class RavenfallEventSource(BaseEventSource):
         self.channel_id_to_instance: dict[str, RavenfallInstance] = {
             x.channel_id: x for x in self.ravenfall_instances
         }
+        self.middleman_id_to_instance: dict[str, RavenfallInstance] = {
+            x.middleman_id: x
+            for x in self.ravenfall_instances
+            if x.middleman_id is not None
+        }
         for i in self.ravenfall_instances:
             i._event_hook = self.send_event
+        self.middleman_client: rm.MiddlemanClient | None = None
+        self.middleman_message_processor: rm.MessageProcessorServer | None = (
+            middleman_message_processor
+        )
+        if middleman_base_url:
+            self.middleman_client = rm.MiddlemanClient(middleman_base_url)
+        if self.middleman_client is not None and self.middleman_message_processor is None:
+            self.middleman_client.add_ravenbot_message_hook(self._ravenbot_message)
+            self.middleman_client.add_ravenfall_message_hook(self._ravenfall_message)
+        elif self.middleman_message_processor is not None:
+            self.middleman_message_processor.add_ravenbot_message_hook(
+                self._ravenbot_processor_message
+            )
+            self.middleman_message_processor.add_ravenfall_message_hook(
+                self._ravenfall_processor_message
+            )
+        self._matcher: RavenfallMatcher | None = None
+        def_path = Path(ravenfall_message_definitions_path)
+        if def_path.exists():
+            with def_path.open("r") as f:
+                self._matcher = RavenfallMatcher(f)
 
     @override
     async def setup(self, event_manager: EventManager) -> None:
         tasks: list[Awaitable[None]] = []
         tasks.extend([x.start() for x in self.ravenfall_instances])
-        __ = await asyncio.gather(*tasks)
+        __ = await asyncio.gather(*tasks, return_exceptions=False)
         self.global_context.register_service(RavenfallService, RavenfallService(self))
+        if self.middleman_client is not None and self.middleman_message_processor is None:
+            await self.middleman_client.connect_websocket()
+        elif self.middleman_message_processor is not None:
+            LOGGER.info(
+                "RavenfallEventSource will listen for message events through "
+                "the provided MessageProcessorServer"
+            )
 
     @override
     async def teardown(self) -> None:
         tasks: list[Awaitable[None]] = []
         tasks.extend([x.stop() for x in self.ravenfall_instances])
-        __ = await asyncio.gather(*tasks)
+        __ = await asyncio.gather(*tasks, return_exceptions=False)
+        if self.middleman_client:
+            await self.middleman_client.disconnect_websocket()
+
+    async def _ravenfall_message(self, message: rm.RavenfallStreamMessage):
+        ravenfall = self.middleman_id_to_instance.get(message.connection_id)
+        if not ravenfall:
+            return
+        msg_match: Match | None = None
+        if self._matcher is not None:
+            msg_match = self._matcher.match_string(
+                message.message.format, message.message.args
+            )
+        event = ev.RavenfallMessageEvent(
+            data=message,
+            message=message.message,
+            orig_message=message.message,
+            ravenfall=ravenfall,
+            is_msg_from_api=message.is_api,
+            message_source=ev.MessageOrigin.STREAM,
+            message_match=msg_match,
+        )
+        await self.send_event(event)
+
+    async def _ravenbot_message(self, message: rm.RavenBotStreamMessage):
+        ravenfall = self.middleman_id_to_instance.get(message.connection_id)
+        if not ravenfall:
+            return
+        event = ev.RavenBotMessageEvent(
+            data=message,
+            message=message.message,
+            orig_message=message.message,
+            ravenfall=ravenfall,
+            is_msg_from_api=message.is_api,
+            message_source=ev.MessageOrigin.STREAM,
+        )
+        await self.send_event(event)
+
+    async def _ravenfall_processor_message(self, message: rm.RavenfallProcessorMessage):
+        ravenfall = self.middleman_id_to_instance.get(message.connection_id)
+        if not ravenfall:
+            return
+        msg_match: Match | None = None
+        if self._matcher is not None:
+            msg_match = self._matcher.match_string(
+                message.message.format, message.message.args
+            )
+        event = ev.RavenfallMessageEvent(
+            data=message,
+            message=message.message,
+            orig_message=message.original_message,
+            ravenfall=ravenfall,
+            is_msg_from_api=message.is_api,
+            message_source=ev.MessageOrigin.PROCESSOR,
+            message_match=msg_match,
+        )
+        await self.send_event(event)
+
+    async def _ravenbot_processor_message(self, message: rm.RavenBotProcessorMessage):
+        ravenfall = self.middleman_id_to_instance.get(message.connection_id)
+        if not ravenfall:
+            return
+        event = ev.RavenBotMessageEvent(
+            data=message,
+            message=message.message,
+            orig_message=message.original_message,
+            ravenfall=ravenfall,
+            is_msg_from_api=message.is_api,
+            message_source=ev.MessageOrigin.PROCESSOR,
+        )
+        await self.send_event(event)

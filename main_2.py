@@ -149,9 +149,12 @@ async def run():
         )
         # tasks.append(event_manager.add_event_source(twitch))
         ravenfall = RavenfallEventSource(
-            [
+            ravenfall_config=[
                 RavenfallConfig(
-                    "756734432", "abrokecube", "http://pc3-server/rf_query/1/"
+                    twitch_id="756734432",
+                    twitch_login="abrokecube",
+                    query_server_base_url="http://pc3-server/rf_query/1/",
+                    middleman_connection_id="rf_abrokecube",
                 ),
                 # RavenfallConfig(
                 #     "1253884011", "borkedcube", "http://pc3-server/rf_query/2/"
@@ -159,7 +162,8 @@ async def run():
                 # RavenfallConfig(
                 #     "1312439833", "cubedhelperbot", "http://127.0.0.1:8888/ravenfall/"
                 # ),
-            ]
+            ],
+            middleman_base_url="http://127.0.0.1:7101/",
         )
         tasks.append(event_manager.add_event_source(ravenfall))
 

@@ -1,4 +1,4 @@
-from enum import Enum, auto
+from enum import Enum, IntEnum, auto
 
 
 class RFChannelEvent(Enum):
@@ -52,3 +52,13 @@ class DungeonEndReason(Enum):
     BOSS_DEFEATED = auto()
     PLAYERS_DEFEATED = auto()
     # CANCELLED = auto()
+
+
+class DungeonStage(IntEnum):
+    """Dungeon stage."""
+
+    NONE = 0
+    LOADING = 1
+    WAITING_FOR_PLAYERS = 2
+    FIGHTING_ENEMIES = 3
+    FIGHTING_BOSS = 4
