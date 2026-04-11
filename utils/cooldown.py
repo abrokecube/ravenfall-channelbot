@@ -1,12 +1,12 @@
-"""
-A cooldown system that tracks and enforces cooldowns for arbitrary keys with bucket support.
-"""
-from asyncio.locks import Lock
-import time
+"""A cooldown system that tracks and enforces cooldowns for arbitrary keys with bucket support."""
+
+from __future__ import annotations
+
 import asyncio
-from dataclasses import dataclass
-from contextlib import asynccontextmanager
 import logging
+import time
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class CooldownBucket:
     """Represents a cooldown bucket with rate limit and time window."""
+
     rate: int
     per: float
 
@@ -22,6 +23,7 @@ class CooldownBucket:
 @dataclass
 class _CooldownState:
     """Internal state for a cooldown."""
+
     reset_time: float
     count: int
 
@@ -29,7 +31,7 @@ class _CooldownState:
 class CooldownScoped:
     """A scoped cooldown object for a specific key and bucket."""
 
-    def __init__(self, cooldown: 'Cooldown', key: str, bucket: CooldownBucket):
+    def __init__(self, cooldown: Cooldown, key: str, bucket: CooldownBucket):
         self._cooldown: Cooldown = cooldown
         self.key: str = key
         self.bucket: CooldownBucket = bucket
@@ -62,8 +64,7 @@ class CooldownScoped:
 
 
 class Cooldown:
-    """
-    A cooldown system that tracks and enforces cooldowns for arbitrary keys.
+    """A cooldown system that tracks and enforces cooldowns for arbitrary keys.
 
     Example:
         cooldown = Cooldown()
@@ -91,7 +92,7 @@ class Cooldown:
 
     def __init__(self):
         self._cooldowns: dict[tuple[str, CooldownBucket], _CooldownState] = {}
-        self._lock: Lock = asyncio.Lock()
+        self._lock: asyncio.Lock = asyncio.Lock()
 
     def _get_state(self, key: str, bucket: CooldownBucket) -> _CooldownState | None:
         """Get the current state for a key and bucket."""
@@ -102,15 +103,13 @@ class Cooldown:
         return state
 
     def is_rate_limited(self, key: str, bucket: CooldownBucket) -> bool:
-        """
-        Check if the given key is currently rate limited for the specified bucket.
-        """
+        """Check if the given key is currently rate limited for the specified bucket."""
         state = self._get_state(key, bucket)
         return state is not None and state.count >= bucket.rate
 
     def update_rate_limit(self, key: str, bucket: CooldownBucket) -> tuple[bool, float]:
-        """
-        Update the rate limit for the given key and bucket.
+        """Update the rate limit for the given key and bucket.
+
         Returns a tuple of (is_rate_limited, retry_after).
         """
         current_time = time.time()
@@ -131,16 +130,14 @@ class Cooldown:
         return False, 0.0
 
     async def acquire(self, key: str, bucket: CooldownBucket) -> bool:
-        """
-        Thread-safe version of update_rate_limit. Returns True if allowed, False if limited.
-        """
+        """Thread-safe version of update_rate_limit. Returns True if allowed, False if limited."""
         async with self._lock:
             is_limited, _ = self.update_rate_limit(key, bucket)
             return not is_limited
 
     def get_retry_after(self, key: str, bucket: CooldownBucket) -> float:
-        """
-        Get the time in seconds until the cooldown expires for a key.
+        """Get the time in seconds until the cooldown expires for a key.
+
         Returns 0.0 if not on cooldown.
         """
         state = self._get_state(key, bucket)
@@ -149,14 +146,11 @@ class Cooldown:
         return max(0.0, state.reset_time - time.time())
 
     def scoped(self, key: str, bucket: CooldownBucket) -> CooldownScoped:
-        """
-        Create a scoped cooldown object for the given key and bucket.
-        """
+        """Create a scoped cooldown object for the given key and bucket."""
         return CooldownScoped(self, key, bucket)
 
     def clear(self, key: str | None = None, bucket: CooldownBucket | None = None):
-        """
-        Clear cooldown entries.
+        """Clear cooldown entries.
 
         Args:
             key: If provided, only clear entries for this key.
@@ -167,7 +161,8 @@ class Cooldown:
             return
 
         keys_to_remove = [
-            k for k in self._cooldowns
+            k
+            for k in self._cooldowns
             if (key is None or k[0] == key) and (bucket is None or k[1] == bucket)
         ]
 

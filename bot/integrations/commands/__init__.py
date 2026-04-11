@@ -4,14 +4,15 @@ import inspect
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, NamedTuple, override, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, NamedTuple, override
 
-from bot.core.components import GlobalContext
 from utils.strutils import strjoin
 
 from .enums import ParameterType
 
 if TYPE_CHECKING:
+    from bot.core.components import GlobalContext
+
     from .events import CommandEvent
     from .listeners import CommandListener
 

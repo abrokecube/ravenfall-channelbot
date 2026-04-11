@@ -63,7 +63,7 @@ def _parse_matcher_string(match_string: str) -> re.Pattern[str]:
                     name, matcher = split
                 regex_str_build.append(f"(?P<{name}>{matcher})")
             case "given":
-                regex_str_build.append(re.escape(value))
+                regex_str_build.append(re.escape("{" + value + "}"))
             case _:
                 LOGGER.error("Unexpected match group in string pattern")
     regex_str_build.append("$")

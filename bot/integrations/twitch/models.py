@@ -1,10 +1,20 @@
-from typing import NamedTuple, TypedDict, cast
+from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import TYPE_CHECKING, NamedTuple, TypedDict, cast
+
 from sqlalchemy import select
 
 from . import TwitchChannelSettings
-from .enums import EventSubTopic, MessageDeliveryMode, MessageRateMode, MessageReceiveMode
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from .enums import (
+        EventSubTopic,
+        MessageDeliveryMode,
+        MessageRateMode,
+        MessageReceiveMode,
+    )
 
 
 class EventSubChannelTopic(NamedTuple):
@@ -55,13 +65,13 @@ class ConnectedChat:
         self.channel_id: str = channel_settings.id
         self.channel_name: str = channel_login
         self.message_receive_mode: MessageReceiveMode = cast(
-            MessageReceiveMode, channel_settings.message_receive_mode
+            "MessageReceiveMode", channel_settings.message_receive_mode
         )
         self.message_delivery_mode: MessageDeliveryMode = cast(
-            MessageDeliveryMode, channel_settings.message_delivery_mode
+            "MessageDeliveryMode", channel_settings.message_delivery_mode
         )
         self.message_rate: MessageRateMode = cast(
-            MessageRateMode, channel_settings.message_rate
+            "MessageRateMode", channel_settings.message_rate
         )
 
     async def commit_to_db(self, session: AsyncSession):
