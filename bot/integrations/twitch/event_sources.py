@@ -112,12 +112,12 @@ class TwitchEventSub:
                 sub_id = await self.eventsub_ws.listen_channel_chat_message(
                     target_channel_id,
                     self.channel_id,
-                    self.event_source._ev_on_chat_message,  # noqa: SLF001
+                    self.event_source._ev_on_chat_message,
                 )
             case EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD:
-                sub_id = await self.eventsub_ws.listen_channel_points_custom_reward_redemption_add(
+                sub_id = await self.eventsub_ws.listen_channel_points_custom_reward_redemption_add(  # noqa: E501
                     self.channel_id,
-                    self.event_source._ev_channel_points_custom_reward_redemption_add,  # noqa: SLF001
+                    self.event_source._ev_channel_points_custom_reward_redemption_add,
                 )
         if sub_id:
             self.eventsub_subs[ch_t] = sub_id
@@ -148,7 +148,10 @@ class TwitchEventSub:
     ):
         """Unsubscribe from an eventsub subscription."""
         if subscription_id and (topic or target_channel_id):
-            msg = "One of subscription_id and target_channel_id + subscription may be specified."
+            msg = (
+                "One of subscription_id and target_channel_id + "
+                "subscription may be specified."
+            )
             raise ValueError(msg)
         if not self.eventsub_ws:
             msg = "Twitch event source has not been initialized."
@@ -171,7 +174,10 @@ class TwitchEventSub:
                 ch_t = EventSubChannelTopic(target_channel_id, topic)
                 subscription_id = self.eventsub_subs[ch_t]
             else:
-                msg = "channel_id and subscription must be specified if subscription_id is None"
+                msg = (
+                    "channel_id and subscription must be specified "
+                    "if subscription_id is None"
+                )
                 raise ValueError(msg)
         if subscription_id not in self.eventsub_subs.inv:
             msg = f"Subscription id {subscription_id} was not found"
@@ -209,6 +215,7 @@ class TwitchEventSub:
             __ = await self.add_eventsub_subscription(topic.topic, topic.channel_id)
 
     async def stop(self):
+        """Stop the event source."""
         if self.eventsub_ws:
             await self.eventsub_ws.stop()
 
@@ -281,8 +288,8 @@ class TwitchEventSource(BaseEventSource):
         if not user_id:
             return
         LOGGER.info(
-            f"Saving user token for {user_id}: "
-            f"{access_token[:5]}...(length {len(access_token)})"
+            f"Saving user token for {user_id}: {access_token[:5]}..."
+            f"(length {len(access_token)})"
         )
         await self._save_user_token(
             user_id, access_token=access_token, refresh_token=refresh_token
@@ -337,7 +344,8 @@ class TwitchEventSource(BaseEventSource):
                 auth = UserAuthenticator(self.bot_twitch, scopes, True)
                 print_to_console(f"Auth scopes: {', '.join([x.value for x in scopes])}")
                 print_to_console(
-                    f"{Fore.LIGHTYELLOW_EX}Please authenticate with the Twitch account: {user_name or user_id}"
+                    f"{Fore.LIGHTYELLOW_EX}Please authenticate with the Twitch account: "
+                    f"{user_name or user_id}"
                 )
                 result = cast(
                     "tuple[str, str] | None", await auth.authenticate(use_browser=False)
@@ -445,7 +453,7 @@ class TwitchEventSource(BaseEventSource):
         self.twitch_chat = await Chat(self.bot_twitch)
         self.twitch_chat.start()
         self.twitch_chat.register_event(ChatEvent.MESSAGE, self._chat_on_message)
-        self.global_context.register_service(TwitchService, self._twitch_service)
+        await self.global_context.register_service(self._twitch_service)
 
     @override
     async def teardown(self):
@@ -576,7 +584,8 @@ class TwitchEventSource(BaseEventSource):
                         channel_id=user.id,
                         topics=EventSubTopic.CHANNEL_CHAT_MESSAGE,
                     )
-                    # remove_eventsub_subscriptions handles deleting from self.connected_chats
+                    # remove_eventsub_subscriptions handles deleting
+                    # from self.connected_chats
                 except:
                     failed.append(channel_list[idx])
         return failed

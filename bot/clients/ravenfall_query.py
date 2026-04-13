@@ -13,7 +13,6 @@ from enum import StrEnum
 from typing import Any, NamedTuple, cast
 
 import aiohttp
-from async_lru import alru_cache
 from msgspec import DecodeError, Struct, field, json
 
 import ravenpy
@@ -807,7 +806,6 @@ class RavenfallClient:
                 return [data]
             return data  # pyright: ignore[reportUnknownVariableType]
 
-    # @alru_cache(ttl=CACHE_TTL)
     async def get_session(self, *, timeout_seconds: float | None = None) -> GameSession:
         """Get the current game session.
 
@@ -827,7 +825,6 @@ class RavenfallClient:
             raise EmptyResponseError
         return response[0]
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_ferry(self, *, timeout_seconds: float | None = None) -> Ferry:
         """Get the current ferry status.
 
@@ -845,7 +842,6 @@ class RavenfallClient:
             raise EmptyResponseError
         return response[0]
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_players(self, *, timeout_seconds: float | None = None) -> list[Player]:
         """Get all players in the game.
 
@@ -862,7 +858,6 @@ class RavenfallClient:
             timeout_seconds=timeout_seconds,
         )
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_village(self, *, timeout_seconds: float | None = None) -> Village:
         """Get the current village status.
 
@@ -882,7 +877,6 @@ class RavenfallClient:
             raise EmptyResponseError
         return response[0]
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_multiplier(
         self, *, timeout_seconds: float | None = None
     ) -> GameMultiplier:
@@ -904,7 +898,6 @@ class RavenfallClient:
             raise EmptyResponseError
         return response[0]
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_dungeon(self, *, timeout_seconds: float | None = None) -> Dungeon:
         """Get the current dungeon status.
 
@@ -924,7 +917,6 @@ class RavenfallClient:
             raise EmptyResponseError
         return response[0]
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_raid(self, *, timeout_seconds: float | None = None) -> Raid:
         """Get the current raid status.
 
@@ -942,7 +934,6 @@ class RavenfallClient:
             raise EmptyResponseError
         return response[0]
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_observed(
         self, *, timeout_seconds: float | None = None
     ) -> Player | None:
@@ -964,7 +955,6 @@ class RavenfallClient:
             return None
         return response[0]
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_islands(self, *, timeout_seconds: float | None = None) -> list[Island]:
         """Get info on all islands.
 
@@ -981,7 +971,6 @@ class RavenfallClient:
             timeout_seconds=timeout_seconds,
         )
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_redeemables(
         self, *, timeout_seconds: float | None = None
     ) -> list[Redeemable]:
@@ -1000,7 +989,6 @@ class RavenfallClient:
             timeout_seconds=timeout_seconds,
         )
 
-    @alru_cache(ttl=CACHE_TTL)
     async def get_config(self, *, timeout_seconds: float | None = None) -> GameConfig:
         """Get the game configuration.
 

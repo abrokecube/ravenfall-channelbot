@@ -33,6 +33,14 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
+async def _log_on_invoke_error[T](awaitable: Awaitable[T], error_msg: str) -> T:
+    try:
+        return await awaitable
+    except Exception:
+        LOGGER.exception(error_msg)
+        raise
+
+
 class ServiceResolutionError(RuntimeError):
     """Raised when required services remain unresolved at context exit."""
 
@@ -68,7 +76,7 @@ class ServiceResolutionContext:
                 waiters = self.global_context._service_waiters.get(service_type, [])
                 for waiter in waiters:
                     if not waiter.done():
-                        waiter.cancel()
+                        __ = waiter.cancel()
                 # Clear the waiters list for this service type
                 __ = self.global_context._service_waiters.pop(service_type, None)
 
@@ -115,6 +123,7 @@ class GlobalContext:
 
     def __init__(self) -> None:
         """Initialize the global service registry."""
+        self.event_manager: EventManager | None = None
         self._services: dict[type[BaseService], BaseService] = {}
         self._service_events: dict[type[BaseService], asyncio.Event] = {}
         self._service_waiters: dict[
@@ -122,17 +131,21 @@ class GlobalContext:
             list[asyncio.Future[BaseService]],
         ] = {}
 
-    def register_service[T: BaseService](
+    async def register_service(
         self,
-        service_type: type[T],
-        instance: T,
+        instance: BaseService,
     ) -> None:
         """Register a service for cross-module sharing."""
+        service_type = type(instance)
         if service_type in self._services:
             msg = "Service of the same type already exists"
             raise ValueError(msg)
-        self._services[service_type] = instance
+
         instance.global_context = self
+
+        await instance.setup()
+
+        self._services[service_type] = instance
 
         ev = self._service_events.get(service_type)
         if ev is None:
@@ -217,7 +230,11 @@ class GlobalContext:
         """Stop all services."""
         tasks: list[Awaitable[None]] = []
         for s in self._services.values():
-            tasks.append(s.teardown())  # noqa: PERF401
+            tasks.append(  # noqa: PERF401
+                _log_on_invoke_error(
+                    s.teardown(), f"Error while stopping service {type(s)}"
+                )
+            )
         __ = await asyncio.gather(*tasks)
         self._services.clear()
 
@@ -237,7 +254,7 @@ class DummyGlobalContext(GlobalContext):
         raise RuntimeError(msg)
 
     @override
-    def register_service[T](self, service_type: type[T], instance: T) -> None:
+    async def register_service(self, instance: BaseService) -> None:
         self.raise_error()
 
     @override
@@ -262,6 +279,9 @@ class BaseService:
 
     def __init__(self) -> None:
         self.global_context: GlobalContext = DummyGlobalContext()
+
+    async def setup(self) -> None:
+        pass
 
     async def teardown(self) -> None:
         pass
@@ -329,6 +349,7 @@ class EventManager:
         }
         self.cogs: dict[str, Cog] = {}
         self.global_context: GlobalContext = global_context
+        global_context.event_manager = self
 
     async def add_event_source(self, source: BaseEventSource) -> None:
         """Add a source to begin receiving events."""
@@ -513,9 +534,17 @@ class EventManager:
         __ = await asyncio.gather(*tasks, return_exceptions=True)
         tasks = []
         for src in self.event_sources:
-            tasks.append(src.teardown())
+            tasks.append(
+                _log_on_invoke_error(
+                    src.teardown(), f"Error while tearing down event source {src}"
+                )
+            )
         for disp in self.dispatchers.values():
-            tasks.append(disp.teardown())
+            tasks.append(
+                _log_on_invoke_error(
+                    disp.teardown(), f"Error while tearing down dispatcher {disp}"
+                )
+            )
         __ = await asyncio.gather(*tasks, return_exceptions=True)
         self.event_sources.clear()
         self.dispatchers.clear()
@@ -771,9 +800,7 @@ class Cog:
                 "dict[str, object]",
                 getattr(attr_obj, "_listener_init_params", {}),
             )
-            listener_cls = (
-                getattr(attr_obj, "_listener_class", None) or d._func_listener  # noqa: SLF001
-            )
+            listener_cls = getattr(attr_obj, "_listener_class", None) or d._func_listener
             callback = cast(
                 "Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]",
                 attr_obj,

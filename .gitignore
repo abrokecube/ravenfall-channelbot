@@ -171,3 +171,4 @@ channels.json
 logs/
 output/
 pid
+config.toml

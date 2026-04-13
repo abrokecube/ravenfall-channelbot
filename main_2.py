@@ -174,7 +174,7 @@ async def run():
         await event_manager.add_cog(ExampleCog)
 
         await update_schema()
-        global_ctx.register_service(DatabaseService, DatabaseService())
+        await global_ctx.register_service(DatabaseService())
         __ = await asyncio.gather(*tasks)
 
     # __ = await twitch.authenticate_user(

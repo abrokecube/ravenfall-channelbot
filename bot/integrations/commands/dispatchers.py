@@ -54,7 +54,7 @@ class CommandDispatcher(BaseDispatcher):
     @override
     async def setup(self, event_manager: EventManager):
         self.service = CommandService(self)
-        self.global_context.register_service(CommandService, self.service)
+        await self.global_context.register_service(self.service)
 
     @override
     def add_listener(self, listener: BaseListener):

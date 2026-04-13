@@ -44,10 +44,12 @@ class RavenfallCollectorBase[T]:
         interval: float = 1,
         *,
         only_online: bool = True,
+        cache_time: float = 0.05,
     ) -> None:
         self._loop_task: asyncio.Task[None] | None = None
         self._last_data: T | None = None
         self.interval: float = interval
+        self.cache_time: float = cache_time
         self.ravenfall: RavenfallInstance = ravenfall
         self.only_online: bool = only_online
         self._last_execution: float = time.monotonic() - self.interval
@@ -73,6 +75,9 @@ class RavenfallCollectorBase[T]:
 
     async def get_latest(self) -> T | None:
         """Fetch the latest data and return it."""
+        if time.monotonic() - self._last_execution < self.cache_time:
+            return self._last_data
+
         if self._processing_task is not None:
             await self._processing_task
         else:
@@ -111,8 +116,13 @@ class RavenfallCollectorBase[T]:
 class SessionCollector(RavenfallCollectorBase[models.GameSession]):
     """Ravenfall Session collector."""
 
-    def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
-        super().__init__(ravenfall, interval, only_online=False)
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 1,
+        cache_time: float = 0.05,
+    ) -> None:
+        super().__init__(ravenfall, interval, only_online=False, cache_time=cache_time)
         self.warned_user: str | None = None
 
     @override
@@ -151,8 +161,13 @@ class SessionCollector(RavenfallCollectorBase[models.GameSession]):
 class FerryCollector(RavenfallCollectorBase[models.Ferry]):
     """Ravenfall Ferry collector."""
 
-    def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
-        super().__init__(ravenfall, interval)
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 1,
+        cache_time: float = 0.05,
+    ) -> None:
+        super().__init__(ravenfall, interval, cache_time=cache_time)
 
     @override
     async def process(self):
@@ -168,8 +183,13 @@ class FerryCollector(RavenfallCollectorBase[models.Ferry]):
 class VillageCollector(RavenfallCollectorBase[models.Village]):
     """Ravenfall Village collector."""
 
-    def __init__(self, ravenfall: RavenfallInstance, interval: float = 1) -> None:
-        super().__init__(ravenfall, interval)
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 1,
+        cache_time: float = 0.05,
+    ) -> None:
+        super().__init__(ravenfall, interval, cache_time=cache_time)
 
     @override
     async def process(self):
@@ -185,8 +205,13 @@ class VillageCollector(RavenfallCollectorBase[models.Village]):
 class MultiplierCollector(RavenfallCollectorBase[models.GameMultiplier]):
     """Ravenfall Multiplier collector."""
 
-    def __init__(self, ravenfall: RavenfallInstance, interval: float = 5) -> None:
-        super().__init__(ravenfall, interval)
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 5,
+        cache_time: float = 0.05,
+    ) -> None:
+        super().__init__(ravenfall, interval, cache_time=cache_time)
 
     @override
     async def process(self):
@@ -202,8 +227,13 @@ class MultiplierCollector(RavenfallCollectorBase[models.GameMultiplier]):
 class PlayersCollector(RavenfallCollectorBase[list[models.Player]]):
     """Ravenfall Players collector."""
 
-    def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
-        super().__init__(ravenfall, interval)
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 0.5,
+        cache_time: float = 0.05,
+    ) -> None:
+        super().__init__(ravenfall, interval, cache_time=cache_time)
         self.player_count_history: deque[tuple[float, int]] = deque(maxlen=10)
 
     @override
@@ -241,8 +271,13 @@ class PlayersCollector(RavenfallCollectorBase[list[models.Player]]):
 class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
     """Ravenfall Dungeon collector."""
 
-    def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
-        super().__init__(ravenfall, interval)
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 0.5,
+        cache_time: float = 0.05,
+    ) -> None:
+        super().__init__(ravenfall, interval, cache_time=cache_time)
         self.max_boss_hp: TimestampedValue = TimestampedValue(time.monotonic(), 0)
         self.stage: DungeonStage = DungeonStage.NONE
 
@@ -382,8 +417,13 @@ class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
 class RaidCollector(RavenfallCollectorBase[models.Raid]):
     """Ravenfall Raid collector."""
 
-    def __init__(self, ravenfall: RavenfallInstance, interval: float = 0.5) -> None:
-        super().__init__(ravenfall, interval)
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 0.5,
+        cache_time: float = 0.05,
+    ) -> None:
+        super().__init__(ravenfall, interval, cache_time=cache_time)
 
     @override
     async def process(self):
@@ -672,7 +712,7 @@ class RavenfallEventSource(BaseEventSource):
         tasks: list[Awaitable[None]] = []
         tasks.extend([x.start() for x in self.ravenfall_instances])
         __ = await asyncio.gather(*tasks, return_exceptions=False)
-        self.global_context.register_service(RavenfallService, RavenfallService(self))
+        await self.global_context.register_service(RavenfallService(self))
         if self.middleman_client is not None and self.middleman_message_processor is None:
             await self.middleman_client.connect_websocket()
         elif self.middleman_message_processor is not None:
