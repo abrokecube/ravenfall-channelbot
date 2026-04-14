@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
+import sys
 import tomllib
 from pathlib import Path
 from typing import cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from bot.core.components import BaseService
 
@@ -25,20 +27,22 @@ class ConfigService(BaseService):
 
     def __init__(
         self,
-        path: Path | str,
-        env_prefix: str = "",
+        path: Path | str | None = None,
+        env_prefix: str = "BOT",
+        cli_args: list[str] | None = None,
     ) -> None:
         super().__init__()
-        self._path: Path = Path(path)
         self._env_prefix: str = env_prefix
+        self._cli_overrides: dict[str, str] = self._parse_cli_args(cli_args)
+        self._path: Path = self._resolve_config_path(path)
         self._data: dict[str, object] = {}
         self._subscribers: dict[
             ConfigSubscriberMixin,
             dict[str, _SubscriptionEntry],
         ] = {}
-        self._load()
+        self._load_toml()
 
-    def _load(self) -> None:
+    def _load_toml(self) -> None:
         """Read and parse the TOML file from disk."""
         with self._path.open("rb") as f:
             self._data = tomllib.load(f)
@@ -64,16 +68,18 @@ class ConfigService(BaseService):
             current = cast("dict[str, object]", value)
         return current
 
-    def get_table[T: BaseModel](
+    def get_table[T](
         self,
         table: str,
         model: type[T],
     ) -> T:
-        """Validate a TOML table against a Pydantic model.
+        """Validate a TOML table against a type.
 
         Args:
             table: Dot-separated table name (e.g. ``"server"``).
-            model: The Pydantic model class to validate against.
+            model: The type to validate against.  Can be a
+                ``BaseModel`` subclass, a ``list[SomeModel]``, or any
+                type supported by :class:`pydantic.TypeAdapter`.
 
         Returns:
             A validated instance of *model*.
@@ -84,7 +90,9 @@ class ConfigService(BaseService):
         """
         raw = dict(self._resolve_table(table))
         self._apply_env_overrides(table, raw)
-        return model.model_validate(raw)
+        self._apply_cli_overrides(table, raw)
+        adapter: TypeAdapter[T] = TypeAdapter(model)
+        return adapter.validate_python(raw)
 
     def _apply_env_overrides(
         self,
@@ -113,6 +121,108 @@ class ConfigService(BaseService):
                 if field in raw:
                     raw[field] = env_val
 
+    def _parse_cli_args(self, cli_args: list[str] | None) -> dict[str, str]:
+        """Parse command-line arguments for config overrides.
+
+        Supports:
+        - ``--config-path <path>``: Set the config file path
+        - ``--table.field=value``: Override specific config values
+
+        Returns a dict mapping config keys to values. The config path is
+        stored under the special key ``__config_path__``.
+
+        Args:
+            cli_args: List of command-line arguments. If None, uses
+                ``sys.argv[1:]``.
+
+        Returns:
+            Dict of config overrides keyed by ``table.field`` or
+            ``__config_path__`` for the config file path.
+        """
+        if cli_args is None:
+            cli_args = sys.argv[1:]
+
+        parser = argparse.ArgumentParser(add_help=False)
+        __ = parser.add_argument("--config-path", default=None, type=str)
+
+        try:
+            args, _ = parser.parse_known_args(cli_args)
+            args: argparse.Namespace
+        except (argparse.ArgumentError, ValueError):
+            LOGGER.debug("Failed to parse CLI args, using empty overrides")
+            return {}
+
+        overrides: dict[str, str] = {}
+        if args.config_path:  # pyright: ignore[reportAny]
+            overrides["__config_path__"] = args.config_path  # pyright: ignore[reportAny]
+
+        # Handle direct --table.field=value format
+        for arg in cli_args:
+            if arg.startswith("--") and "=" in arg and not arg.startswith("--config-"):
+                key_value = arg[2:]  # Remove leading --
+                if "=" in key_value:
+                    key, value = key_value.split("=", 1)
+                    overrides[key] = value
+
+        return overrides
+
+    def _resolve_config_path(self, path: Path | str | None) -> Path:
+        """Resolve the config file path from multiple sources.
+
+        Checks sources in order of precedence:
+        1. Explicit ``path`` argument
+        2. CLI ``--config-path`` argument
+        3. Environment variable ``{PREFIX}_CONFIG_PATH`` or ``CONFIG_PATH``
+        4. Default ``config.toml``
+
+        Args:
+            path: Explicit path passed to constructor.
+
+        Returns:
+            The resolved config file path.
+
+        Raises:
+            FileNotFoundError: If no valid config path can be determined.
+        """
+        # 1. Explicit path argument
+        if path is not None:
+            return Path(path)
+
+        # 2. CLI argument
+        cli_path = self._cli_overrides.get("__config_path__")
+        if cli_path:
+            return Path(cli_path)
+
+        # 3. Environment variable
+        env_var = f"{self._env_prefix}_CONFIG_PATH" if self._env_prefix else "CONFIG_PATH"
+        env_path = os.environ.get(env_var.upper())
+        if env_path:
+            return Path(env_path)
+
+        # 4. Default
+        return Path("config.toml")
+
+    def _apply_cli_overrides(
+        self,
+        table: str,
+        raw: dict[str, object],
+    ) -> None:
+        """Overlay command-line argument values onto a raw table dict.
+
+        Scans CLI overrides for keys matching the pattern
+        ``table.field`` and overwrites the corresponding entry in *raw*.
+        CLI overrides take precedence over environment variables.
+
+        Args:
+            table: The dot-separated table path.
+            raw: The mutable dict to overlay values into.
+        """
+        for key, value in self._cli_overrides.items():
+            if key.startswith(table + "."):
+                field = key[len(table + ".") :]
+                if field in raw:
+                    raw[field] = value
+
     def reload(self) -> None:
         """Re-read the TOML file and notify subscribers of changes.
 
@@ -121,12 +231,12 @@ class ConfigService(BaseService):
         differ, ``on_config_changed`` is called on the subscriber with
         the new model and the set of changed field names.
         """
-        self._load()
+        self._load_toml()
 
         for subscriber, entries in self._subscribers.items():
             for table, entry in entries.items():
                 try:
-                    new_model = self.get_table(table, entry.model_type)
+                    new_value = self.get_table(table, entry.model_type)
                 except Exception:
                     LOGGER.exception(
                         "Failed to validate table '%s' for subscriber %s during reload",
@@ -135,11 +245,11 @@ class ConfigService(BaseService):
                     )
                     continue
 
-                changed = _diff_models(entry.snapshot, new_model)
+                changed = _diff_snapshots(entry.snapshot, new_value)
                 if changed:
-                    entry.snapshot = new_model
+                    entry.snapshot = new_value
                     try:
-                        subscriber.on_config_changed(new_model, changed)
+                        subscriber.on_config_changed(new_value, changed)
                     except Exception:
                         LOGGER.exception(
                             "Error in on_config_changed for %s",
@@ -150,18 +260,18 @@ class ConfigService(BaseService):
     # Subscription management (called by ConfigSubscriberMixin)
     # ------------------------------------------------------------------
 
-    def _subscribe(
+    def _subscribe[T](
         self,
         subscriber: ConfigSubscriberMixin,
         table: str,
-        model_type: type[BaseModel],
+        model_type: type[T],
     ) -> None:
         """Register a subscriber for a specific table.
 
         Args:
             subscriber: The mixin instance subscribing.
             table: Dot-separated TOML table name.
-            model_type: The Pydantic model to validate against.
+            model_type: The type to validate against.
         """
         snapshot = self.get_table(table, model_type)
         entry = _SubscriptionEntry(model_type=model_type, snapshot=snapshot)
@@ -207,33 +317,43 @@ class _SubscriptionEntry:
 
     def __init__(
         self,
-        model_type: type[BaseModel],
-        snapshot: BaseModel,
+        model_type: type[object],
+        snapshot: object,
     ) -> None:
-        self.model_type: type[BaseModel] = model_type
-        self.snapshot: BaseModel = snapshot
+        self.model_type: type[object] = model_type
+        self.snapshot: object = snapshot
 
 
-def _diff_models(
-    old: BaseModel,
-    new: BaseModel,
+def _diff_snapshots(
+    old: object,
+    new: object,
 ) -> set[str]:
-    """Compare two Pydantic models and return names of changed fields.
+    """Compare two config snapshots and return names of changed fields.
+
+    For ``BaseModel`` instances, compares top-level fields individually.
+    For any other type, performs a simple equality check and returns
+    ``{"__value__"}`` if the values differ.
 
     Args:
-        old: The previous model snapshot.
-        new: The newly validated model.
+        old: The previous snapshot.
+        new: The newly validated value.
 
     Returns:
-        A set of top-level field names whose values differ.
+        A set of changed field names, or ``{"__value__"}`` for
+        non-model types that differ.
     """
-    changed: set[str] = set()
-    for field_name in type(new).model_fields:
-        old_val = getattr(old, field_name, _SENTINEL)
-        new_val = getattr(new, field_name, _SENTINEL)
-        if old_val != new_val:
-            changed.add(field_name)
-    return changed
+    if isinstance(new, BaseModel) and isinstance(old, BaseModel):
+        changed: set[str] = set()
+        for field_name in type(new).model_fields:
+            old_val = getattr(old, field_name, _SENTINEL)
+            new_val = getattr(new, field_name, _SENTINEL)
+            if old_val != new_val:
+                changed.add(field_name)
+        return changed
+
+    if old != new:
+        return {"__value__"}
+    return set()
 
 
 _SENTINEL = object()
@@ -268,7 +388,7 @@ class ConfigSubscriberMixin:
             raise RuntimeError(msg)
         return svc
 
-    def subscribe[T: BaseModel](
+    def subscribe[T](
         self,
         table: str,
         model: type[T],
@@ -277,7 +397,7 @@ class ConfigSubscriberMixin:
 
         Args:
             table: Dot-separated TOML table name.
-            model: The Pydantic model to validate against.
+            model: The type to validate against.
         """
         svc = self._require_config_service()
         svc._subscribe(self, table, model)
@@ -293,7 +413,7 @@ class ConfigSubscriberMixin:
 
     def on_config_changed(
         self,
-        _config: BaseModel,
+        _config: object,
         _changed_fields: set[str],
     ) -> None:
         """Called when subscribed config fields change after a reload.
@@ -301,6 +421,7 @@ class ConfigSubscriberMixin:
         Override this method to react to configuration changes.
 
         Args:
-            config: The newly validated Pydantic model.
-            changed_fields: Set of top-level field names that changed.
+            config: The newly validated config value.
+            changed_fields: Set of top-level field names that changed,
+                or ``{"__value__"}`` for non-model types.
         """

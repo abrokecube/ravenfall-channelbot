@@ -5,11 +5,15 @@ This cog demonstrates the new command system features:
 - Custom type converters
 - Custom checks using @checks(check1, check2, ...)
 - Google-style docstrings for documentation
+- Remote callable methods for inter-bot communication
 """
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any, ClassVar, override
+
+from msgspec import Struct
 
 from bot.core.components import Cog
 from bot.core.decorators import cooldown
@@ -25,6 +29,7 @@ from bot.integrations.commands.deco import (
 )
 from bot.integrations.commands.events import CommandEvent
 from bot.integrations.commands.exceptions import ArgumentConversionError
+from bot.mixins.remote_callable import RemoteCallableMixin, remote_callable
 
 if TYPE_CHECKING:
     from bot.core.components import GlobalContext
@@ -81,7 +86,23 @@ async def transfer_verify(
     return True
 
 
-class ExampleCog(Cog):
+# Example data structure for remote callable methods
+class ExampleData(Struct):
+    """Example data structure for remote calls.
+
+    Attributes:
+        message: A message string
+        timestamp: Unix timestamp
+        value: A numeric value
+
+    """
+
+    message: str
+    timestamp: int
+    value: int
+
+
+class ExampleCog(Cog, RemoteCallableMixin):
     """Example cog showcasing new command features."""
 
     @command(name="echo", aliases=["echo1", "agecko"])
@@ -318,6 +339,14 @@ class ExampleCog(Cog):
     @parameter("item_name", description="The name of the item", regex=r"^[a-zA-Z ]+$")
     @parameter("amount", description="The amount of the item")
     async def item_amount(self, ctx: CommandEvent, item_name: str, amount: int) -> None:
+        """Display the amount of an item.
+
+        Args:
+            ctx: The command event context
+            item_name: The name of the item
+            amount: The amount of the item
+
+        """
         await ctx.message.reply(f"You have {amount} of {item_name}.")
 
     @command()
@@ -327,6 +356,54 @@ class ExampleCog(Cog):
 
     @command()
     @cooldown(1, 90, [BucketType.USER, BucketType.CHANNEL])
+    async def cooldown_test_long(self, ctx: CommandEvent) -> None:
+        await ctx.message.reply("buh (long cooldown)")
+
+    # Remote callable demonstration
+    @remote_callable()
+    def get_example_data(self, value: int = 42) -> ExampleData:
+        """Get example data that can be called locally or remotely.
+
+        This method demonstrates the remote_callable decorator. It can be
+        called directly (local) or via .call_remote() to fetch data from
+        another bot instance.
+
+        Args:
+            value: A numeric value to include in the response
+
+        Returns:
+            ExampleData: Struct containing message, timestamp, and value
+
+        """
+        return ExampleData(
+            message="Hello from remote bot!",
+            timestamp=int(time.time()),
+            value=value,
+        )
+
+    @command()
+    async def remote_test(self, ctx: CommandEvent) -> None:
+        """Test remote callable functionality.
+
+        Demonstrates local vs remote calls to remote_callable methods.
+
+        Examples:
+            !remote_test
+
+        """
+        # Local call - no HTTP, no conversion
+        local_data = self.get_example_data(100)
+        await ctx.message.reply(
+            f"Local call: {local_data.message}, value={local_data.value}"
+        )
+
+        # Remote call example (commented out since no remote bot is configured)
+        # remote_service = self.global_context.get_service(RemoteBotService)
+        # remote_bot = remote_service.get_remote_bot("bot2")
+        # remote_data = await self.get_example_data.call_remote(remote_bot, 200)
+        # await ctx.message.reply(
+        #     f"Remote call: {remote_data.message}, value={remote_data.value}"
+        # )
     async def long_cooldown_test(self, ctx: CommandEvent) -> None:
         await ctx.message.reply("buh")
 

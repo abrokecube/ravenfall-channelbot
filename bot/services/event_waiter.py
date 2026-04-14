@@ -70,6 +70,7 @@ class EventWaiterService(BaseService):
                 try:
                     return predicate(event)
                 except Exception:
+                    LOGGER.exception("Error in event waiter predicate: %s", predicate)
                     return False
             return True
 
@@ -85,8 +86,8 @@ class EventWaiterService(BaseService):
 
         try:
             if timeout is not None:
-                return await asyncio.wait_for(future, timeout=timeout)
-            return await future
+                return await asyncio.wait_for(future, timeout=timeout)  # pyright: ignore[reportAny]
+            return await future  # pyright: ignore[reportAny]
         except TimeoutError as e:
             msg = (
                 f"Timed out waiting for event "

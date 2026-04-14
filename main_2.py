@@ -18,8 +18,9 @@ from bot.integrations.commands.dispatchers import CommandDispatcher
 from bot.integrations.ravenfall import RavenfallConfig
 from bot.integrations.ravenfall.event_sources import RavenfallEventSource
 from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
-from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
+from bot.services.config_service import ConfigService
+from bot.services.remote_bot_service import RemoteBotService
 from utils.logging_fomatter import setup_logging
 
 if TYPE_CHECKING:
@@ -175,6 +176,8 @@ async def run():
 
         await update_schema()
         await global_ctx.register_service(DatabaseService())
+        await global_ctx.register_service(RemoteBotService())
+        await global_ctx.register_service(ConfigService("config.toml"))
         __ = await asyncio.gather(*tasks)
 
     # __ = await twitch.authenticate_user(
