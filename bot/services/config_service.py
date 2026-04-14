@@ -8,11 +8,14 @@ import os
 import sys
 import tomllib
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from pydantic import BaseModel, TypeAdapter
 
 from bot.core.components import BaseService
+
+if TYPE_CHECKING:
+    from bot.mixins.config_subscriber import ConfigSubscriberMixin
 
 LOGGER = logging.getLogger(__name__)
 
@@ -249,7 +252,7 @@ class ConfigService(BaseService):
                 if changed:
                     entry.snapshot = new_value
                     try:
-                        subscriber.on_config_changed(new_value, changed)
+                        subscriber.on_config_changed(table, new_value, changed)
                     except Exception:
                         LOGGER.exception(
                             "Error in on_config_changed for %s",
@@ -357,71 +360,3 @@ def _diff_snapshots(
 
 
 _SENTINEL = object()
-
-
-class ConfigSubscriberMixin:
-    """Mixin that adds config-change subscription to any class.
-
-    Designed for multiple inheritance, e.g.::
-
-        class MyService(BaseService, ConfigSubscriberMixin):
-            ...
-    """
-
-    _config_service: ConfigService | None = None
-
-    def inject_config_service(self, config_service: ConfigService) -> None:
-        """Store a reference to the ``ConfigService``.
-
-        Args:
-            config_service: The config service instance to use.
-        """
-        self._config_service = config_service
-
-    def _require_config_service(self) -> ConfigService:
-        """Return the injected config service or raise."""
-        svc: ConfigService | None = getattr(self, "_config_service", None)
-        if svc is None:
-            msg = (
-                "ConfigService has not been injected. Call inject_config_service() first."
-            )
-            raise RuntimeError(msg)
-        return svc
-
-    def subscribe[T](
-        self,
-        table: str,
-        model: type[T],
-    ) -> None:
-        """Subscribe to changes on a specific config table.
-
-        Args:
-            table: Dot-separated TOML table name.
-            model: The type to validate against.
-        """
-        svc = self._require_config_service()
-        svc._subscribe(self, table, model)
-
-    def unsubscribe(self, table: str) -> None:
-        """Unsubscribe from a specific config table.
-
-        Args:
-            table: The table name to stop watching.
-        """
-        svc = self._require_config_service()
-        svc._unsubscribe(self, table)
-
-    def on_config_changed(
-        self,
-        _config: object,
-        _changed_fields: set[str],
-    ) -> None:
-        """Called when subscribed config fields change after a reload.
-
-        Override this method to react to configuration changes.
-
-        Args:
-            config: The newly validated config value.
-            changed_fields: Set of top-level field names that changed,
-                or ``{"__value__"}`` for non-model types.
-        """

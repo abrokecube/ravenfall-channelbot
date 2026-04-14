@@ -21,6 +21,7 @@ from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
 from bot.services.config_service import ConfigService
 from bot.services.remote_bot_service import RemoteBotService
+from bot.services.web_service import WebService
 from utils.logging_fomatter import setup_logging
 
 if TYPE_CHECKING:
@@ -126,59 +127,59 @@ async def run():
 
     global_ctx = GlobalContext()
 
-    async with global_ctx.service_resolution_context():
-        tasks: list[Awaitable[None]] = []
-        event_manager = EventManager(global_ctx)
-        command_d = MyCmdDispatcher()
-        await event_manager.add_dispatcher(command_d)
-        await event_manager.add_dispatcher(TwitchRedeemDispatcher())
-        event_manager.add_event_processor(MessageEvent, filter_message_event_text)
-        twitch = TwitchEventSource(
-            os.getenv("TWITCH_APP_ID", ""),
-            os.getenv("TWITCH_APP_SECRET", ""),
-            os.getenv("BOT_USER_ID", ""),
-            [os.getenv("OWNER_TWITCH_ID", "")],
-            [AuthScope.USER_WRITE_CHAT],
-            [
-                AuthScope.CHAT_READ,
-                AuthScope.CHAT_EDIT,
-                AuthScope.USER_BOT,
-                AuthScope.USER_READ_CHAT,
-                AuthScope.USER_WRITE_CHAT,
-                AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS,
-            ],
-        )
-        # tasks.append(event_manager.add_event_source(twitch))
-        ravenfall = RavenfallEventSource(
-            ravenfall_config=[
-                RavenfallConfig(
-                    twitch_id="756734432",
-                    twitch_login="abrokecube",
-                    query_server_base_url="http://pc3-server/rf_query/1/",
-                ),
-                # RavenfallConfig(
-                #     "1253884011", "borkedcube", "http://pc3-server/rf_query/2/"
-                # ),
-                RavenfallConfig(
-                    twitch_id="1312439833",
-                    twitch_login="cubedhelperbot",
-                    query_server_base_url="http://127.0.0.1:8888/ravenfall/",
-                    middleman_connection_id="rf_abrokecube",
-                ),
-            ],
-            middleman_base_url="http://127.0.0.1:7101/",
-        )
-        tasks.append(event_manager.add_event_source(ravenfall))
+    tasks: list[Awaitable[None]] = []
+    event_manager = EventManager(global_ctx)
+    command_d = MyCmdDispatcher()
+    await event_manager.add_dispatcher(command_d)
+    await event_manager.add_dispatcher(TwitchRedeemDispatcher())
+    event_manager.add_event_processor(MessageEvent, filter_message_event_text)
+    twitch = TwitchEventSource(
+        os.getenv("TWITCH_APP_ID", ""),
+        os.getenv("TWITCH_APP_SECRET", ""),
+        os.getenv("BOT_USER_ID", ""),
+        [os.getenv("OWNER_TWITCH_ID", "")],
+        [AuthScope.USER_WRITE_CHAT],
+        [
+            AuthScope.CHAT_READ,
+            AuthScope.CHAT_EDIT,
+            AuthScope.USER_BOT,
+            AuthScope.USER_READ_CHAT,
+            AuthScope.USER_WRITE_CHAT,
+            AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS,
+        ],
+    )
+    # tasks.append(event_manager.add_event_source(twitch))
+    ravenfall = RavenfallEventSource(
+        ravenfall_config=[
+            RavenfallConfig(
+                twitch_id="756734432",
+                twitch_login="abrokecube",
+                query_server_base_url="http://pc3-server/rf_query/1/",
+            ),
+            # RavenfallConfig(
+            #     "1253884011", "borkedcube", "http://pc3-server/rf_query/2/"
+            # ),
+            RavenfallConfig(
+                twitch_id="1312439833",
+                twitch_login="cubedhelperbot",
+                query_server_base_url="http://127.0.0.1:8888/ravenfall/",
+                middleman_connection_id="rf_abrokecube",
+            ),
+        ],
+        middleman_base_url="http://127.0.0.1:7101/",
+    )
+    tasks.append(event_manager.add_event_source(ravenfall))
 
-        await event_manager.add_cog(TestingCog)
-        await event_manager.add_cog(HelpCog)
-        await event_manager.add_cog(ExampleCog)
+    tasks.append(event_manager.add_cog(TestingCog))
+    tasks.append(event_manager.add_cog(HelpCog))
+    tasks.append(event_manager.add_cog(ExampleCog))
 
-        await update_schema()
-        await global_ctx.register_service(DatabaseService())
-        await global_ctx.register_service(RemoteBotService())
-        await global_ctx.register_service(ConfigService("config.toml"))
-        __ = await asyncio.gather(*tasks)
+    await update_schema()
+    tasks.append(global_ctx.register_service(DatabaseService()))
+    tasks.append(global_ctx.register_service(RemoteBotService()))
+    tasks.append(global_ctx.register_service(ConfigService("config.toml")))
+    tasks.append(global_ctx.register_service(WebService()))
+    __ = await asyncio.gather(*tasks)
 
     # __ = await twitch.authenticate_user(
     #     os.getenv("OWNER_TWITCH_ID", ""),
@@ -192,7 +193,7 @@ async def run():
     #     channel_id=os.getenv("OWNER_TWITCH_ID", ""), mode=MessageReceiveMode.IRC
     # )
 
-    logger.info("Bot is ready")
+    logger.info("### Bot is ready ###")
     wait_forever = asyncio.Event()
     try:
         __ = await wait_forever.wait()
@@ -200,6 +201,7 @@ async def run():
         logger.info("Bot is shutting down")
         await event_manager.teardown()
         await global_ctx.stop_all()
+        logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":

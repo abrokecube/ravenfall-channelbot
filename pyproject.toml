@@ -18,6 +18,7 @@ dependencies = [
     "colorama==0.4.6",
     "docstring-parser>=0.17.0",
     "enum-tools==0.13.0",
+    "fastapi>=0.115.0",
     "frozenlist==1.8.0",
     "greenlet==3.2.3",
     "h11==0.16.0",
@@ -44,6 +45,7 @@ dependencies = [
     "tqdm==4.67.1",
     "twitchapi",
     "typing-extensions==4.15.0",
+    "uvicorn>=0.32.0",
     "websockets==15.0.1",
     "yarl==1.22.0",
 ]

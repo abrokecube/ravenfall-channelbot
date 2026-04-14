@@ -41,79 +41,6 @@ async def _log_on_invoke_error[T](awaitable: Awaitable[T], error_msg: str) -> T:
         raise
 
 
-class ServiceResolutionError(RuntimeError):
-    """Raised when required services remain unresolved at context exit."""
-
-
-class ServiceResolutionContext:
-    """Context for waiting for required services before continuing."""
-
-    def __init__(
-        self,
-        global_context: GlobalContext,
-        max_wait: float | None = None,
-    ) -> None:
-        self.global_context: GlobalContext = global_context
-        self.max_wait: float | None = max_wait
-        self.required_services: set[type[BaseService]] = set()
-        self.resolved_services: dict[type[BaseService], BaseService] = {}
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type,
-        exc_val,
-        exc_tb,
-    ):
-        unresolved = [
-            t for t in self.required_services if t not in self.resolved_services
-        ]
-        if unresolved:
-            # Cancel any pending waiters for unresolved services
-            for service_type in unresolved:
-                waiters = self.global_context._service_waiters.get(service_type, [])
-                for waiter in waiters:
-                    if not waiter.done():
-                        __ = waiter.cancel()
-                # Clear the waiters list for this service type
-                __ = self.global_context._service_waiters.pop(service_type, None)
-
-            unresolved_list = ", ".join([t.__name__ for t in unresolved])
-            error_msg = f"Unresolved services at context exit: {unresolved_list}"
-            raise ServiceResolutionError(error_msg) from exc_val
-
-        # Preserve raised exception from context body if there was one.
-        return False
-
-    async def require_service[T: BaseService](
-        self,
-        service_type: type[T],
-        timeout: float | None = None,
-    ) -> T:
-        """Require a service to be resolved before continuing.
-
-        Args:
-            service_type: The type of service to wait for
-            timeout: Maximum time to wait, None for no timeout
-
-        Returns:
-            The resolved service instance
-
-        Raises:
-            asyncio.TimeoutError: If the timeout is exceeded
-
-        """
-        self.required_services.add(service_type)
-        service = await self.global_context.wait_for_service(
-            service_type,
-            max_wait=timeout if timeout is not None else self.max_wait,
-        )
-        self.resolved_services[service_type] = service
-        return service
-
-
 class GlobalContext:
     """Global dependency injection and service registry.
 
@@ -177,13 +104,14 @@ class GlobalContext:
     async def wait_for_service[T: BaseService](
         self,
         service_type: type[T],
-        max_wait: float | None = None,
+        max_wait: float | None = 30,
     ) -> T:
         """Wait for a service to become available, with optional timeout.
 
         Args:
             service_type: The type of service to wait for
             max_wait: Maximum time to wait, None for no timeout
+            _tracker: Optional ServiceResolutionContext to track the waiter
 
         Returns:
             The service instance when available
@@ -203,11 +131,6 @@ class GlobalContext:
             cast("asyncio.Future[BaseService]", waiter),
         )
 
-        # re-check in case the service arrived before the waiter was registered
-        existing = self.get_service(service_type)
-        if existing is not None and not waiter.done():
-            waiter.set_result(existing)
-
         try:
             if max_wait is None:
                 instance = await waiter
@@ -218,13 +141,6 @@ class GlobalContext:
             waiters = self._service_waiters.get(service_type)
             if waiters and waiter in waiters:
                 waiters.remove(cast("asyncio.Future[BaseService]", waiter))
-
-    def service_resolution_context(
-        self,
-        max_wait: float | None = None,
-    ) -> ServiceResolutionContext:
-        """Create an async context where required services can be awaited."""
-        return ServiceResolutionContext(self, max_wait)
 
     async def stop_all(self) -> None:
         """Stop all services."""

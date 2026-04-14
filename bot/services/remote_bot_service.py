@@ -8,15 +8,22 @@ from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, NamedTuple, cast, override
 
 import aiohttp
-from aiohttp import web
+from fastapi import HTTPException
+from fastapi import status as http_status
+from fastapi.responses import JSONResponse
 from msgspec import Struct, convert, defstruct, json, structs
 from pydantic import BaseModel, Field
 
 from bot.core.components import BaseService
-from bot.services.config_service import ConfigService, ConfigSubscriberMixin
+from bot.mixins.config_subscriber import ConfigSubscriberMixin
+from bot.mixins.fastapi_routes import FastAPIRoutesMixin, api_route
+from bot.services.config_service import ConfigService
+from bot.services.web_service import APIServer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from fastapi import Request
 
     from bot.core.components import Cog
 
@@ -100,7 +107,7 @@ class RemoteBotInstance:
         self.api_key: str | None = api_key
 
 
-class RemoteBotService(BaseService, ConfigSubscriberMixin):
+class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
     """Service for managing remote bot communication.
 
     Provides HTTP server for incoming remote requests and HTTP client
@@ -108,67 +115,46 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin):
     registry, and automatic msgspec.Struct conversion.
 
     Attributes:
-        host: Host address for the HTTP server
-        port: Port for the HTTP server
         remote_bots: Dictionary of configured remote bot instances
         method_registry: Registry of remotely callable methods
 
     """
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8001) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         """Initialize the remote bot service.
 
         Args:
-            host: Host address for the HTTP server
-            port: Port for the HTTP server
+            api_key: Optional API key for authentication
 
         """
         super().__init__()
-        self.host: str = host
-        self.port: int = port
         self.remote_bots: dict[str, RemoteBotInstance] = {}
         self.method_registry: dict[str, dict[str, RegisteredMethod]] = {}
-        self._app: web.Application | None = None
-        self._runner: web.AppRunner | None = None
-        self._site: web.TCPSite | None = None
         self._session: aiohttp.ClientSession | None = None
-        self._api_key: str | None = None
+        self._api_key: str | None = api_key
 
     @override
     async def setup(self) -> None:
-        """Set up the HTTP server and load configuration."""
+        """Set up the service and load configuration."""
         # Load configuration
-        config_service = self.global_context.require_service(ConfigService)
+        config_service = await self.global_context.wait_for_service(ConfigService)
+        self.inject_config_service(config_service)
 
-        if config_service:
-            try:
-                self.subscribe("remote_bots", list[RemoteBotConfig])
-            except KeyError:
-                LOGGER.debug("No remote_bots configuration found")
+        try:
+            self.subscribe("remote_bots", list[RemoteBotConfig])
+        except KeyError:
+            LOGGER.debug("No remote_bots configuration found")
 
-        # Create aiohttp application
-        self._app = web.Application()
-        __ = self._app.add_routes(
-            [web.post("/api/remote-call", self._handle_remote_call)]
-        )
-
-        # Start HTTP server
-        self._runner = web.AppRunner(self._app)
-        await self._runner.setup()
-        self._site = web.TCPSite(self._runner, self.host, self.port)
-        await self._site.start()
-        LOGGER.info(f"Remote bot service started on {self.host}:{self.port}")
+        # Register FastAPI routes
+        await self.register_fastapi_routes()
 
         # Create HTTP client session
         self._session = aiohttp.ClientSession()
+        LOGGER.info("Remote bot service started")
 
     @override
     async def teardown(self) -> None:
-        """Tear down the HTTP server and client."""
-        if self._site:
-            await self._site.stop()
-        if self._runner:
-            await self._runner.cleanup()
+        """Tear down the HTTP client."""
         if self._session:
             await self._session.close()
         LOGGER.info("Remote bot service stopped")
@@ -219,10 +205,13 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin):
         LOGGER.debug(f"Registered remote method: {cog_name}.{method_name}")
 
     @override
-    def on_config_changed(self, config: object, changed_fields: set[str]) -> None:
+    def on_config_changed(
+        self, table: str, config: object, changed_fields: set[str]
+    ) -> None:
         """Handle configuration changes.
 
         Args:
+            table: The config table name
             config: The new configuration
             changed_fields: Set of changed field names
 
@@ -257,61 +246,56 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin):
             raise KeyError(msg)
         return self.remote_bots[name]
 
+    @api_route.post(APIServer.PRIVATE, "/api/remote-call")
     async def _handle_remote_call(
         self,
-        request: web.Request,
-    ) -> web.Response:
+        request: Request,
+    ) -> JSONResponse:
         """Handle incoming remote call requests.
 
         Args:
-            request: The aiohttp request
+            request: The FastAPI request
 
         Returns:
-            web.Response: JSON response
+            JSONResponse: JSON response
 
         """
         try:
             # Check authentication
             provided_key = request.headers.get("X-API-Key")
             if self._api_key and provided_key != self._api_key:
-                return web.json_response(
-                    {"status": "error", "error": "Authentication failed"}, status=401
+                raise HTTPException(
+                    status_code=http_status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication failed",
                 )
 
             encoder = json.Encoder()
 
             # Parse request body
-            body = cast(
-                "RemoteCallRequestBody",
-                await request.json(
-                    loads=lambda x: json.decode(x, type=RemoteCallRequestBody)
-                ),
-            )
+            body_bytes = await request.body()
+            body = json.decode(body_bytes, type=RemoteCallRequestBody)
             cog_name = body.cog_name
             method_name = body.method_name
             kwargs = body.kwargs
 
             if not cog_name or not method_name:
-                return web.json_response(
-                    data=ErrorResponse(error="cog_name and method_name are required"),
-                    status=400,
-                    dumps=dumps,
+                raise HTTPException(
+                    status_code=http_status.HTTP_400_BAD_REQUEST,
+                    detail="cog_name and method_name are required",
                 )
 
             # Look up method in registry
             if cog_name not in self.method_registry:
-                return web.json_response(
-                    data=ErrorResponse(error=f"Cog '{cog_name}' not found"),
-                    status=404,
-                    dumps=dumps,
+                raise HTTPException(
+                    status_code=http_status.HTTP_404_NOT_FOUND,
+                    detail=f"Cog '{cog_name}' not found",
                 )
 
             if method_name not in self.method_registry[cog_name]:
                 error_msg = f"Method '{method_name}' not found in '{cog_name}'"
-                return web.json_response(
-                    data=ErrorResponse(error=error_msg),
-                    status=404,
-                    dumps=dumps,
+                raise HTTPException(
+                    status_code=http_status.HTTP_404_NOT_FOUND,
+                    detail=error_msg,
                 )
 
             bound_method, __, cog_instance, struct = self.method_registry[cog_name][
@@ -335,19 +319,19 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin):
             # Encode result to JSON
             response = SuccessResponse(data=result)
 
-            return web.json_response(
-                data=response,
-                status=200,
-                dumps=lambda x: encoder.encode(x).decode(encoding="utf-8"),  # pyright: ignore[reportAny]
+            return JSONResponse(
+                content=encoder.encode(response).decode(encoding="utf-8"),
+                status_code=http_status.HTTP_200_OK,
             )
 
+        except HTTPException:
+            raise
         except Exception as e:
             LOGGER.exception("Error handling remote call")
-            return web.json_response(
-                data=ErrorResponse(error=str(e)),
-                status=500,
-                dumps=dumps,
-            )
+            raise HTTPException(
+                status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(e),
+            ) from None
 
     async def call_remote[T: Struct](
         self,

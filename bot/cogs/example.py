@@ -30,6 +30,8 @@ from bot.integrations.commands.deco import (
 from bot.integrations.commands.events import CommandEvent
 from bot.integrations.commands.exceptions import ArgumentConversionError
 from bot.mixins.remote_callable import RemoteCallableMixin, remote_callable
+from bot.mixins.fastapi_routes import FastAPIRoutesMixin, api_route
+from bot.services.web_service import APIServer
 
 if TYPE_CHECKING:
     from bot.core.components import GlobalContext
@@ -102,8 +104,22 @@ class ExampleData(Struct):
     value: int
 
 
-class ExampleCog(Cog, RemoteCallableMixin):
+class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
     """Example cog showcasing new command features."""
+
+    async def setup(self) -> None:
+        """Set up the cog and register FastAPI routes."""
+        await self.register_fastapi_routes()
+
+    @api_route.get(APIServer.PUBLIC, "/health")
+    async def health_check(self):
+        """Health check endpoint for public server."""
+        return {"status": "ok", "service": "ravenfall-channelbot"}
+
+    @api_route.get(APIServer.PRIVATE, "/admin/status")
+    async def admin_status(self):
+        """Admin status endpoint for private server."""
+        return {"status": "running", "admin": True}
 
     @command(name="echo", aliases=["echo1", "agecko"])
     async def echo(self, ctx: CommandEvent, message: str) -> None:
@@ -404,6 +420,7 @@ class ExampleCog(Cog, RemoteCallableMixin):
         # await ctx.message.reply(
         #     f"Remote call: {remote_data.message}, value={remote_data.value}"
         # )
+
     async def long_cooldown_test(self, ctx: CommandEvent) -> None:
         await ctx.message.reply("buh")
 
