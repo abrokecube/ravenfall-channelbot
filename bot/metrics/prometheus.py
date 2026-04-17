@@ -10,11 +10,11 @@ LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from bot.metrics.prometheus import (
-        _CounterChild,
-        _GaugeChild,
-        _HistogramChild,
-        _InfoChild,
-        _SummaryChild,
+        _CounterChild,  # pyright: ignore[reportPrivateLocalImportUsage]
+        _GaugeChild,  # pyright: ignore[reportPrivateLocalImportUsage]
+        _HistogramChild,  # pyright: ignore[reportPrivateLocalImportUsage]
+        _InfoChild,  # pyright: ignore[reportPrivateLocalImportUsage]
+        _SummaryChild,  # pyright: ignore[reportPrivateLocalImportUsage]
     )
 
 
@@ -35,7 +35,7 @@ class MetricDefinition:
     name: str
     description: str
     metric_type: MetricType
-    labelnames: tuple[str, ...] = ()
+    label_names: tuple[str, ...] = ()
     buckets: tuple[float, ...] | None = None
     quantiles: tuple[float, ...] | None = None
 
@@ -108,7 +108,7 @@ class Metrics:
         metric_name: str,
         description: str,
         metric_type: MetricType,
-        labelnames: tuple[str, ...] = (),
+        label_names: tuple[str, ...] = (),
         buckets: tuple[float, ...] | None = None,
         quantiles: tuple[float, ...] | None = None,
     ) -> None:
@@ -118,7 +118,7 @@ class Metrics:
             metric_name: The name of the metric.
             description: The description of the metric.
             metric_type: The type of the metric.
-            labelnames: The label names for the metric.
+            label_names: The label names for the metric.
             buckets: The bucket values for histograms.
             quantiles: The quantile values for summaries.
 
@@ -127,7 +127,7 @@ class Metrics:
             name=metric_name,
             description=description,
             metric_type=metric_type,
-            labelnames=labelnames,
+            label_names=label_names,
             buckets=buckets,
             quantiles=quantiles,
         )
@@ -175,12 +175,12 @@ class Metrics:
 
             return "\n".join(out_text)
 
-    async def remove_labelset(self, metric_name: str, *label_values: str) -> None:
-        """Remove a specific labelset from a metric.
+    async def remove_label_set(self, metric_name: str, *label_values: str) -> None:
+        """Remove a specific label set from a metric.
 
         Args:
             metric_name: The name of the metric.
-            *label_values: The label values in the order of labelnames.
+            *label_values: The label values in the order of label_names.
 
         """
         definition = self.definitions.get(metric_name)
@@ -190,16 +190,16 @@ class Metrics:
         label_str = ",".join(
             [
                 f'{k}="{to_label(v)}"'
-                for k, v in zip(definition.labelnames, label_values, strict=True)
+                for k, v in zip(definition.label_names, label_values, strict=True)
             ]
         )
         entry = MetricEntry(metric_name, label_str)
 
         async with self._lock:
-            self.metrics.pop(entry, None)
+            __ = self.metrics.pop(entry, None)
 
-    async def remove_labelsets_by_labels(self, metric_name: str, **labels: str) -> None:
-        """Remove all labelsets that partially match the given labels.
+    async def remove_label_sets_by_labels(self, metric_name: str, **labels: str) -> None:
+        """Remove all label_sets that partially match the given labels.
 
         Args:
             metric_name: The name of the metric.
@@ -215,10 +215,10 @@ class Metrics:
                 if all(f'{k}="{to_label(v)}"' in entry_labels for k, v in labels.items()):
                     entries_to_remove.append(entry)
             for entry in entries_to_remove:
-                self.metrics.pop(entry, None)
+                __ = self.metrics.pop(entry, None)
 
     async def clear_metric(self, metric_name: str) -> None:
-        """Remove all labelsets from a metric.
+        """Remove all label_sets from a metric.
 
         Args:
             metric_name: The name of the metric.
@@ -227,7 +227,7 @@ class Metrics:
         async with self._lock:
             entries_to_remove = [e for e in self.metrics if e.name == metric_name]
             for entry in entries_to_remove:
-                self.metrics.pop(entry, None)
+                __ = self.metrics.pop(entry, None)
 
 
 class _MetricChild:
@@ -249,10 +249,10 @@ class _MetricChild:
             label_kwargs: Keyword label values.
 
         """
-        self._metrics = metrics
-        self._metric_name = metric_name
-        self._label_values = label_values or ()
-        self._label_kwargs = label_kwargs or {}
+        self._metrics: Metrics = metrics
+        self._metric_name: str = metric_name
+        self._label_values: tuple[str, ...] | tuple[()] = label_values or ()
+        self._label_kwargs: dict[str, str] = label_kwargs or {}
 
     def _get_labels(self, definition: MetricDefinition) -> dict[str, str]:
         """Get the combined labels from positional and keyword arguments.
@@ -266,9 +266,7 @@ class _MetricChild:
         """
         labels: dict[str, str] = {}
         if self._label_values:
-            labels = dict(zip(
-                    definition.labelnames, self._label_values, strict=True
-                ))
+            labels = dict(zip(definition.label_names, self._label_values, strict=True))
         labels.update(self._label_kwargs)
         return labels
 
@@ -281,7 +279,7 @@ class Counter:
         metrics: Metrics,
         name: str,
         description: str,
-        labelnames: tuple[str, ...] = (),
+        label_names: tuple[str, ...] = (),
     ) -> None:
         """Initialize a counter.
 
@@ -289,13 +287,13 @@ class Counter:
             metrics: The Metrics instance.
             name: The metric name.
             description: The metric description.
-            labelnames: The label names.
+            label_names: The label names.
 
         """
-        self._metrics = metrics
-        self._name = name
-        self._labelnames = labelnames
-        self._description = description
+        self._metrics: Metrics = metrics
+        self._name: str = name
+        self._label_names: tuple[str, ...] = label_names
+        self._description: str = description
 
     async def _ensure_definition(self) -> None:
         """Ensure the metric definition exists."""
@@ -304,10 +302,10 @@ class Counter:
                 self._name,
                 self._description,
                 MetricType.COUNTER,
-                self._labelnames,
+                self._label_names,
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_CounterChild":
+    def labels(self, *values: str, **kwargs: str) -> "_CounterChild":  # noqa: UP037
         """Get a child metric with specific label values.
 
         Args:
@@ -318,7 +316,7 @@ class Counter:
             A child counter metric.
 
         """
-        return _CounterChild(self._metrics, self._name, self._labelnames, values, kwargs)
+        return _CounterChild(self._metrics, self._name, self._label_names, values, kwargs)
 
     async def inc(self, amount: float = 1, **labels: str) -> None:
         """Increment the counter.
@@ -332,25 +330,25 @@ class Counter:
         await self._metrics.add_value(self._name, amount, **labels)
 
     async def remove(self, *label_values: str) -> None:
-        """Remove a specific labelset.
+        """Remove a specific label_set.
 
         Args:
-            *label_values: The label values in the order of labelnames.
+            *label_values: The label values in the order of label_names.
 
         """
-        await self._metrics.remove_labelset(self._name, *label_values)
+        await self._metrics.remove_label_set(self._name, *label_values)
 
     async def remove_by_labels(self, labels: dict[str, str]) -> None:
-        """Remove labelsets that match the given labels.
+        """Remove label_sets that match the given labels.
 
         Args:
             labels: The label key-value pairs to match.
 
         """
-        await self._metrics.remove_labelsets_by_labels(self._name, **labels)
+        await self._metrics.remove_label_sets_by_labels(self._name, **labels)
 
     async def clear(self) -> None:
-        """Remove all labelsets from the counter."""
+        """Remove all label_sets from the counter."""
         await self._metrics.clear_metric(self._name)
 
 
@@ -361,7 +359,7 @@ class _CounterChild(_MetricChild):
         self,
         metrics: Metrics,
         metric_name: str,
-        labelnames: tuple[str, ...],
+        label_names: tuple[str, ...],
         label_values: tuple[str, ...],
         label_kwargs: dict[str, str],
     ) -> None:
@@ -370,13 +368,13 @@ class _CounterChild(_MetricChild):
         Args:
             metrics: The Metrics instance.
             metric_name: The metric name.
-            labelnames: The label names.
+            label_names: The label names.
             label_values: Positional label values.
             label_kwargs: Keyword label values.
 
         """
         super().__init__(metrics, metric_name, label_values, label_kwargs)
-        self._labelnames = labelnames
+        self._label_names: tuple[str, ...] = label_names
 
     async def inc(self, amount: float = 1) -> None:
         """Increment the counter.
@@ -391,7 +389,9 @@ class _CounterChild(_MetricChild):
         else:
             labels = self._label_kwargs.copy()
             if self._label_values:
-                for name, value in zip(self._labelnames, self._label_values, strict=True):
+                for name, value in zip(
+                    self._label_names, self._label_values, strict=True
+                ):
                     labels[name] = value
         await self._metrics.add_value(self._metric_name, amount, **labels)
 
@@ -404,7 +404,7 @@ class Gauge:
         metrics: Metrics,
         name: str,
         description: str,
-        labelnames: tuple[str, ...] = (),
+        label_names: tuple[str, ...] = (),
     ) -> None:
         """Initialize a gauge.
 
@@ -412,13 +412,13 @@ class Gauge:
             metrics: The Metrics instance.
             name: The metric name.
             description: The metric description.
-            labelnames: The label names.
+            label_names: The label names.
 
         """
-        self._metrics = metrics
-        self._name = name
-        self._labelnames = labelnames
-        self._description = description
+        self._metrics: Metrics = metrics
+        self._name: str = name
+        self._label_names: tuple[str, ...] = label_names
+        self._description: str = description
 
     async def _ensure_definition(self) -> None:
         """Ensure the metric definition exists."""
@@ -427,10 +427,10 @@ class Gauge:
                 self._name,
                 self._description,
                 MetricType.GAUGE,
-                self._labelnames,
+                self._label_names,
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_GaugeChild":
+    def labels(self, *values: str, **kwargs: str) -> "_GaugeChild":  # noqa: UP037
         """Get a child metric with specific label values.
 
         Args:
@@ -441,7 +441,7 @@ class Gauge:
             A child gauge metric.
 
         """
-        return _GaugeChild(self._metrics, self._name, self._labelnames, values, kwargs)
+        return _GaugeChild(self._metrics, self._name, self._label_names, values, kwargs)
 
     async def set(self, value: float, **labels: str) -> None:
         """Set the gauge to a value.
@@ -477,25 +477,25 @@ class Gauge:
         await self._metrics.add_value(self._name, -amount, **labels)
 
     async def remove(self, *label_values: str) -> None:
-        """Remove a specific labelset.
+        """Remove a specific label_set.
 
         Args:
-            *label_values: The label values in the order of labelnames.
+            *label_values: The label values in the order of label_names.
 
         """
-        await self._metrics.remove_labelset(self._name, *label_values)
+        await self._metrics.remove_label_set(self._name, *label_values)
 
     async def remove_by_labels(self, labels: dict[str, str]) -> None:
-        """Remove labelsets that match the given labels.
+        """Remove label_sets that match the given labels.
 
         Args:
             labels: The label key-value pairs to match.
 
         """
-        await self._metrics.remove_labelsets_by_labels(self._name, **labels)
+        await self._metrics.remove_label_sets_by_labels(self._name, **labels)
 
     async def clear(self) -> None:
-        """Remove all labelsets from the gauge."""
+        """Remove all label_sets from the gauge."""
         await self._metrics.clear_metric(self._name)
 
 
@@ -506,7 +506,7 @@ class _GaugeChild(_MetricChild):
         self,
         metrics: Metrics,
         metric_name: str,
-        labelnames: tuple[str, ...],
+        label_names: tuple[str, ...],
         label_values: tuple[str, ...],
         label_kwargs: dict[str, str],
     ) -> None:
@@ -515,13 +515,13 @@ class _GaugeChild(_MetricChild):
         Args:
             metrics: The Metrics instance.
             metric_name: The metric name.
-            labelnames: The label names.
+            label_names: The label names.
             label_values: Positional label values.
             label_kwargs: Keyword label values.
 
         """
         super().__init__(metrics, metric_name, label_values, label_kwargs)
-        self._labelnames = labelnames
+        self._label_names: tuple[str, ...] = label_names
 
     async def set(self, value: float) -> None:
         """Set the gauge to a value.
@@ -536,7 +536,7 @@ class _GaugeChild(_MetricChild):
         else:
             labels = self._label_kwargs.copy()
             if self._label_values:
-                for name, val in zip(self._labelnames, self._label_values, strict=True):
+                for name, val in zip(self._label_names, self._label_values, strict=True):
                     labels[name] = val
         await self._metrics.add_value(self._metric_name, value, **labels)
 
@@ -553,7 +553,9 @@ class _GaugeChild(_MetricChild):
         else:
             labels = self._label_kwargs.copy()
             if self._label_values:
-                for name, value in zip(self._labelnames, self._label_values, strict=True):
+                for name, value in zip(
+                    self._label_names, self._label_values, strict=True
+                ):
                     labels[name] = value
         await self._metrics.add_value(self._metric_name, amount, **labels)
 
@@ -570,7 +572,7 @@ class _GaugeChild(_MetricChild):
         else:
             labels = self._label_kwargs.copy()
             if self._label_values:
-                for name, val in zip(self._labelnames, self._label_values, strict=True):
+                for name, val in zip(self._label_names, self._label_values, strict=True):
                     labels[name] = val
         await self._metrics.add_value(self._metric_name, -amount, **labels)
 
@@ -578,14 +580,26 @@ class _GaugeChild(_MetricChild):
 class Histogram:
     """A Prometheus histogram metric."""
 
-    DEFAULT_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
+    DEFAULT_BUCKETS: tuple[float, ...] = (
+        0.005,
+        0.01,
+        0.025,
+        0.05,
+        0.1,
+        0.25,
+        0.5,
+        1,
+        2.5,
+        5,
+        10,
+    )
 
     def __init__(
         self,
         metrics: Metrics,
         name: str,
         description: str,
-        labelnames: tuple[str, ...] = (),
+        label_names: tuple[str, ...] = (),
         buckets: tuple[float, ...] | None = None,
     ) -> None:
         """Initialize a histogram.
@@ -594,15 +608,15 @@ class Histogram:
             metrics: The Metrics instance.
             name: The metric name.
             description: The metric description.
-            labelnames: The label names.
+            label_names: The label names.
             buckets: The bucket boundaries.
 
         """
-        self._metrics = metrics
-        self._name = name
-        self._labelnames = labelnames
-        self._buckets = buckets or self.DEFAULT_BUCKETS
-        self._description = description
+        self._metrics: Metrics = metrics
+        self._name: str = name
+        self._label_names: tuple[str, ...] = label_names
+        self._buckets: tuple[float, ...] = buckets or self.DEFAULT_BUCKETS
+        self._description: str = description
 
     async def _ensure_definition(self) -> None:
         """Ensure the metric definition exists."""
@@ -611,7 +625,7 @@ class Histogram:
                 self._name,
                 self._description,
                 MetricType.HISTOGRAM,
-                self._labelnames,
+                self._label_names,
                 buckets=self._buckets,
             )
             # Add child metric definitions
@@ -619,16 +633,16 @@ class Histogram:
                 f"{self._name}_sum",
                 f"{self._description} (sum)",
                 MetricType.GAUGE,
-                self._labelnames,
+                self._label_names,
             )
             await self._metrics.add_definition(
                 f"{self._name}_count",
                 f"{self._description} (count)",
                 MetricType.COUNTER,
-                self._labelnames,
+                self._label_names,
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_HistogramChild":
+    def labels(self, *values: str, **kwargs: str) -> "_HistogramChild":  # noqa: UP037
         """Get a child metric with specific label values.
 
         Args:
@@ -640,7 +654,7 @@ class Histogram:
 
         """
         return _HistogramChild(
-            self._metrics, self._name, self._labelnames, values, kwargs
+            self._metrics, self._name, self._label_names, values, kwargs
         )
 
     async def observe(self, amount: float, **labels: str) -> None:
@@ -658,29 +672,29 @@ class Histogram:
         await self._metrics.add_value(f"{self._name}_count", 1, **labels)
 
     async def remove(self, *label_values: str) -> None:
-        """Remove a specific labelset.
+        """Remove a specific label_set.
 
         Args:
-            *label_values: The label values in the order of labelnames.
+            *label_values: The label values in the order of label_names.
 
         """
-        await self._metrics.remove_labelset(self._name, *label_values)
-        await self._metrics.remove_labelset(f"{self._name}_sum", *label_values)
-        await self._metrics.remove_labelset(f"{self._name}_count", *label_values)
+        await self._metrics.remove_label_set(self._name, *label_values)
+        await self._metrics.remove_label_set(f"{self._name}_sum", *label_values)
+        await self._metrics.remove_label_set(f"{self._name}_count", *label_values)
 
     async def remove_by_labels(self, labels: dict[str, str]) -> None:
-        """Remove labelsets that match the given labels.
+        """Remove label_sets that match the given labels.
 
         Args:
             labels: The label key-value pairs to match.
 
         """
-        await self._metrics.remove_labelsets_by_labels(self._name, **labels)
-        await self._metrics.remove_labelsets_by_labels(f"{self._name}_sum", **labels)
-        await self._metrics.remove_labelsets_by_labels(f"{self._name}_count", **labels)
+        await self._metrics.remove_label_sets_by_labels(self._name, **labels)
+        await self._metrics.remove_label_sets_by_labels(f"{self._name}_sum", **labels)
+        await self._metrics.remove_label_sets_by_labels(f"{self._name}_count", **labels)
 
     async def clear(self) -> None:
-        """Remove all labelsets from the histogram."""
+        """Remove all label_sets from the histogram."""
         await self._metrics.clear_metric(self._name)
         await self._metrics.clear_metric(f"{self._name}_sum")
         await self._metrics.clear_metric(f"{self._name}_count")
@@ -693,7 +707,7 @@ class _HistogramChild(_MetricChild):
         self,
         metrics: Metrics,
         metric_name: str,
-        labelnames: tuple[str, ...],
+        label_names: tuple[str, ...],
         label_values: tuple[str, ...],
         label_kwargs: dict[str, str],
     ) -> None:
@@ -702,13 +716,13 @@ class _HistogramChild(_MetricChild):
         Args:
             metrics: The Metrics instance.
             metric_name: The metric name.
-            labelnames: The label names.
+            label_names: The label names.
             label_values: Positional label values.
             label_kwargs: Keyword label values.
 
         """
         super().__init__(metrics, metric_name, label_values, label_kwargs)
-        self._labelnames = labelnames
+        self._label_names = label_names  # pyright: ignore[reportUnannotatedClassAttribute]
 
     async def observe(self, amount: float) -> None:
         """Observe a value.
@@ -723,7 +737,9 @@ class _HistogramChild(_MetricChild):
         else:
             labels = self._label_kwargs.copy()
             if self._label_values:
-                for name, value in zip(self._labelnames, self._label_values, strict=True):
+                for name, value in zip(
+                    self._label_names, self._label_values, strict=True
+                ):
                     labels[name] = value
         await self._metrics.add_value(f"{self._metric_name}_sum", amount, **labels)
         await self._metrics.add_value(f"{self._metric_name}_count", 1, **labels)
@@ -732,14 +748,14 @@ class _HistogramChild(_MetricChild):
 class Summary:
     """A Prometheus summary metric."""
 
-    DEFAULT_QUANTILES = (0.5, 0.9, 0.95, 0.99)
+    DEFAULT_QUANTILES: tuple[float, ...] = (0.5, 0.9, 0.95, 0.99)
 
     def __init__(
         self,
         metrics: Metrics,
         name: str,
         description: str,
-        labelnames: tuple[str, ...] = (),
+        label_names: tuple[str, ...] = (),
         quantiles: tuple[float, ...] | None = None,
     ) -> None:
         """Initialize a summary.
@@ -748,15 +764,15 @@ class Summary:
             metrics: The Metrics instance.
             name: The metric name.
             description: The metric description.
-            labelnames: The label names.
+            label_names: The label names.
             quantiles: The quantile values.
 
         """
-        self._metrics = metrics
-        self._name = name
-        self._labelnames = labelnames
-        self._quantiles = quantiles or self.DEFAULT_QUANTILES
-        self._description = description
+        self._metrics: Metrics = metrics
+        self._name: str = name
+        self._label_names: tuple[str, ...] = label_names
+        self._quantiles: tuple[float, ...] = quantiles or self.DEFAULT_QUANTILES
+        self._description: str = description
 
     async def _ensure_definition(self) -> None:
         """Ensure the metric definition exists."""
@@ -765,7 +781,7 @@ class Summary:
                 self._name,
                 self._description,
                 MetricType.SUMMARY,
-                self._labelnames,
+                self._label_names,
                 quantiles=self._quantiles,
             )
             # Add child metric definitions
@@ -773,16 +789,16 @@ class Summary:
                 f"{self._name}_sum",
                 f"{self._description} (sum)",
                 MetricType.GAUGE,
-                self._labelnames,
+                self._label_names,
             )
             await self._metrics.add_definition(
                 f"{self._name}_count",
                 f"{self._description} (count)",
                 MetricType.COUNTER,
-                self._labelnames,
+                self._label_names,
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_SummaryChild":
+    def labels(self, *values: str, **kwargs: str) -> "_SummaryChild":  # noqa: UP037
         """Get a child metric with specific label values.
 
         Args:
@@ -793,7 +809,7 @@ class Summary:
             A child summary metric.
 
         """
-        return _SummaryChild(self._metrics, self._name, self._labelnames, values, kwargs)
+        return _SummaryChild(self._metrics, self._name, self._label_names, values, kwargs)
 
     async def observe(self, amount: float, **labels: str) -> None:
         """Observe a value.
@@ -810,29 +826,29 @@ class Summary:
         await self._metrics.add_value(f"{self._name}_count", 1, **labels)
 
     async def remove(self, *label_values: str) -> None:
-        """Remove a specific labelset.
+        """Remove a specific label_set.
 
         Args:
-            *label_values: The label values in the order of labelnames.
+            *label_values: The label values in the order of label_names.
 
         """
-        await self._metrics.remove_labelset(self._name, *label_values)
-        await self._metrics.remove_labelset(f"{self._name}_sum", *label_values)
-        await self._metrics.remove_labelset(f"{self._name}_count", *label_values)
+        await self._metrics.remove_label_set(self._name, *label_values)
+        await self._metrics.remove_label_set(f"{self._name}_sum", *label_values)
+        await self._metrics.remove_label_set(f"{self._name}_count", *label_values)
 
     async def remove_by_labels(self, labels: dict[str, str]) -> None:
-        """Remove labelsets that match the given labels.
+        """Remove label_sets that match the given labels.
 
         Args:
             labels: The label key-value pairs to match.
 
         """
-        await self._metrics.remove_labelsets_by_labels(self._name, **labels)
-        await self._metrics.remove_labelsets_by_labels(f"{self._name}_sum", **labels)
-        await self._metrics.remove_labelsets_by_labels(f"{self._name}_count", **labels)
+        await self._metrics.remove_label_sets_by_labels(self._name, **labels)
+        await self._metrics.remove_label_sets_by_labels(f"{self._name}_sum", **labels)
+        await self._metrics.remove_label_sets_by_labels(f"{self._name}_count", **labels)
 
     async def clear(self) -> None:
-        """Remove all labelsets from the summary."""
+        """Remove all label_sets from the summary."""
         await self._metrics.clear_metric(self._name)
         await self._metrics.clear_metric(f"{self._name}_sum")
         await self._metrics.clear_metric(f"{self._name}_count")
@@ -845,7 +861,7 @@ class _SummaryChild(_MetricChild):
         self,
         metrics: Metrics,
         metric_name: str,
-        labelnames: tuple[str, ...],
+        label_names: tuple[str, ...],
         label_values: tuple[str, ...],
         label_kwargs: dict[str, str],
     ) -> None:
@@ -854,13 +870,13 @@ class _SummaryChild(_MetricChild):
         Args:
             metrics: The Metrics instance.
             metric_name: The metric name.
-            labelnames: The label names.
+            label_names: The label names.
             label_values: Positional label values.
             label_kwargs: Keyword label values.
 
         """
         super().__init__(metrics, metric_name, label_values, label_kwargs)
-        self._labelnames = labelnames
+        self._label_names: tuple[str, ...] = label_names
 
     async def observe(self, amount: float) -> None:
         """Observe a value.
@@ -875,7 +891,9 @@ class _SummaryChild(_MetricChild):
         else:
             labels = self._label_kwargs.copy()
             if self._label_values:
-                for name, value in zip(self._labelnames, self._label_values, strict=True):
+                for name, value in zip(
+                    self._label_names, self._label_values, strict=True
+                ):
                     labels[name] = value
         await self._metrics.add_value(f"{self._metric_name}_sum", amount, **labels)
         await self._metrics.add_value(f"{self._metric_name}_count", 1, **labels)
@@ -889,7 +907,7 @@ class Info:
         metrics: Metrics,
         name: str,
         description: str,
-        labelnames: tuple[str, ...] = (),
+        label_names: tuple[str, ...] = (),
     ) -> None:
         """Initialize an info metric.
 
@@ -897,13 +915,13 @@ class Info:
             metrics: The Metrics instance.
             name: The metric name.
             description: The metric description.
-            labelnames: The label names.
+            label_names: The label names.
 
         """
-        self._metrics = metrics
-        self._name = name
-        self._labelnames = labelnames
-        self._description = description
+        self._metrics: Metrics = metrics
+        self._name: str = name
+        self._label_names: tuple[str, ...] = label_names
+        self._description: str = description
 
     async def _ensure_definition(self) -> None:
         """Ensure the metric definition exists."""
@@ -912,10 +930,10 @@ class Info:
                 self._name,
                 self._description,
                 MetricType.INFO,
-                self._labelnames,
+                self._label_names,
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_InfoChild":
+    def labels(self, *values: str, **kwargs: str) -> "_InfoChild":  # noqa: UP037
         """Get a child metric with specific label values.
 
         Args:
@@ -926,7 +944,7 @@ class Info:
             A child info metric.
 
         """
-        return _InfoChild(self._metrics, self._name, self._labelnames, values, kwargs)
+        return _InfoChild(self._metrics, self._name, self._label_names, values, kwargs)
 
     async def info(self, **labels: str) -> None:
         """Set the info metric with labels.
@@ -939,25 +957,25 @@ class Info:
         await self._metrics.add_value(self._name, 1, **labels)
 
     async def remove(self, *label_values: str) -> None:
-        """Remove a specific labelset.
+        """Remove a specific label_set.
 
         Args:
-            *label_values: The label values in the order of labelnames.
+            *label_values: The label values in the order of label_names.
 
         """
-        await self._metrics.remove_labelset(self._name, *label_values)
+        await self._metrics.remove_label_set(self._name, *label_values)
 
     async def remove_by_labels(self, labels: dict[str, str]) -> None:
-        """Remove labelsets that match the given labels.
+        """Remove label_sets that match the given labels.
 
         Args:
             labels: The label key-value pairs to match.
 
         """
-        await self._metrics.remove_labelsets_by_labels(self._name, **labels)
+        await self._metrics.remove_label_sets_by_labels(self._name, **labels)
 
     async def clear(self) -> None:
-        """Remove all labelsets from the info metric."""
+        """Remove all label_sets from the info metric."""
         await self._metrics.clear_metric(self._name)
 
 
@@ -968,7 +986,7 @@ class _InfoChild(_MetricChild):
         self,
         metrics: Metrics,
         metric_name: str,
-        labelnames: tuple[str, ...],
+        label_names: tuple[str, ...],
         label_values: tuple[str, ...],
         label_kwargs: dict[str, str],
     ) -> None:
@@ -977,13 +995,13 @@ class _InfoChild(_MetricChild):
         Args:
             metrics: The Metrics instance.
             metric_name: The metric name.
-            labelnames: The label names.
+            label_names: The label names.
             label_values: Positional label values.
             label_kwargs: Keyword label values.
 
         """
         super().__init__(metrics, metric_name, label_values, label_kwargs)
-        self._labelnames = labelnames
+        self._label_names: tuple[str, ...] = label_names
 
     async def info(self) -> None:
         """Set the info metric with labels."""
@@ -993,6 +1011,6 @@ class _InfoChild(_MetricChild):
         else:
             labels = self._label_kwargs.copy()
             if self._label_values:
-                for name, val in zip(self._labelnames, self._label_values, strict=True):
+                for name, val in zip(self._label_names, self._label_values, strict=True):
                     labels[name] = val
         await self._metrics.add_value(self._metric_name, 1, **labels)
