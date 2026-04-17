@@ -87,7 +87,7 @@ class Metrics:
     metrics: dict[MetricEntry, float] = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-    async def add_value(self, metric_name: str, value: float, **labels: str) -> None:
+    async def set_value(self, metric_name: str, value: float, **labels: str) -> None:
         """Add a value to a metric with labels.
 
         Args:
@@ -102,6 +102,23 @@ class Metrics:
             value = 1.0 if value else 0.0
         async with self._lock:
             self.metrics[entry] = float(value)
+
+    async def increment_value(
+        self, metric_name: str, amount: float = 1.0, **labels: str
+    ) -> None:
+        """Increment a counter-type metric value.
+
+        Args:
+            metric_name: The name of the metric.
+            amount: The amount to increment by.
+            **labels: The label key-value pairs.
+
+        """
+        label_str = ",".join([f'{k}="{to_label(v)}"' for k, v in labels.items()])
+        entry = MetricEntry(metric_name, label_str)
+        async with self._lock:
+            current_value = self.metrics.get(entry, 0.0)
+            self.metrics[entry] = current_value + float(amount)
 
     async def add_definition(
         self,
@@ -327,7 +344,7 @@ class Counter:
 
         """
         await self._ensure_definition()
-        await self._metrics.add_value(self._name, amount, **labels)
+        await self._metrics.increment_value(self._name, amount, **labels)
 
     async def remove(self, *label_values: str) -> None:
         """Remove a specific label_set.
@@ -393,7 +410,7 @@ class _CounterChild(_MetricChild):
                     self._label_names, self._label_values, strict=True
                 ):
                     labels[name] = value
-        await self._metrics.add_value(self._metric_name, amount, **labels)
+        await self._metrics.increment_value(self._metric_name, amount, **labels)
 
 
 class Gauge:
@@ -452,7 +469,7 @@ class Gauge:
 
         """
         await self._ensure_definition()
-        await self._metrics.add_value(self._name, value, **labels)
+        await self._metrics.set_value(self._name, value, **labels)
 
     async def inc(self, amount: float = 1, **labels: str) -> None:
         """Increment the gauge.
@@ -463,7 +480,7 @@ class Gauge:
 
         """
         await self._ensure_definition()
-        await self._metrics.add_value(self._name, amount, **labels)
+        await self._metrics.increment_value(self._name, amount, **labels)
 
     async def dec(self, amount: float = 1, **labels: str) -> None:
         """Decrement the gauge.
@@ -474,7 +491,7 @@ class Gauge:
 
         """
         await self._ensure_definition()
-        await self._metrics.add_value(self._name, -amount, **labels)
+        await self._metrics.increment_value(self._name, -amount, **labels)
 
     async def remove(self, *label_values: str) -> None:
         """Remove a specific label_set.
@@ -538,7 +555,7 @@ class _GaugeChild(_MetricChild):
             if self._label_values:
                 for name, val in zip(self._label_names, self._label_values, strict=True):
                     labels[name] = val
-        await self._metrics.add_value(self._metric_name, value, **labels)
+        await self._metrics.set_value(self._metric_name, value, **labels)
 
     async def inc(self, amount: float = 1) -> None:
         """Increment the gauge.
@@ -557,7 +574,7 @@ class _GaugeChild(_MetricChild):
                     self._label_names, self._label_values, strict=True
                 ):
                     labels[name] = value
-        await self._metrics.add_value(self._metric_name, amount, **labels)
+        await self._metrics.increment_value(self._metric_name, amount, **labels)
 
     async def dec(self, amount: float = 1) -> None:
         """Decrement the gauge.
@@ -574,7 +591,7 @@ class _GaugeChild(_MetricChild):
             if self._label_values:
                 for name, val in zip(self._label_names, self._label_values, strict=True):
                     labels[name] = val
-        await self._metrics.add_value(self._metric_name, -amount, **labels)
+        await self._metrics.increment_value(self._metric_name, -amount, **labels)
 
 
 class Histogram:
@@ -641,6 +658,13 @@ class Histogram:
                 MetricType.COUNTER,
                 self._label_names,
             )
+            # Add bucket metric definition with le label
+            await self._metrics.add_definition(
+                f"{self._name}_bucket",
+                f"{self._description} (bucket)",
+                MetricType.COUNTER,
+                (*self._label_names, "le"),
+            )
 
     def labels(self, *values: str, **kwargs: str) -> "_HistogramChild":  # noqa: UP037
         """Get a child metric with specific label values.
@@ -668,8 +692,8 @@ class Histogram:
         await self._ensure_definition()
         # For simplicity, we just store the observed value
         # A full implementation would track bucket counts
-        await self._metrics.add_value(f"{self._name}_sum", amount, **labels)
-        await self._metrics.add_value(f"{self._name}_count", 1, **labels)
+        await self._metrics.increment_value(f"{self._name}_sum", amount, **labels)
+        await self._metrics.increment_value(f"{self._name}_count", 1, **labels)
 
     async def remove(self, *label_values: str) -> None:
         """Remove a specific label_set.
@@ -734,6 +758,7 @@ class _HistogramChild(_MetricChild):
         definition = self._metrics.definitions.get(self._metric_name)
         if definition:
             labels = self._get_labels(definition)
+            buckets = definition.buckets
         else:
             labels = self._label_kwargs.copy()
             if self._label_values:
@@ -741,8 +766,27 @@ class _HistogramChild(_MetricChild):
                     self._label_names, self._label_values, strict=True
                 ):
                     labels[name] = value
-        await self._metrics.add_value(f"{self._metric_name}_sum", amount, **labels)
-        await self._metrics.add_value(f"{self._metric_name}_count", 1, **labels)
+            buckets = None
+
+        # Increment sum and count
+        await self._metrics.increment_value(f"{self._metric_name}_sum", amount, **labels)
+        await self._metrics.increment_value(f"{self._metric_name}_count", 1, **labels)
+
+        # Increment bucket counters cumulatively
+        if buckets:
+            for bucket in buckets:
+                if amount <= bucket:
+                    bucket_labels = labels.copy()
+                    bucket_labels["le"] = str(bucket)
+                    await self._metrics.increment_value(
+                        f"{self._metric_name}_bucket", 1, **bucket_labels
+                    )
+            # Always increment +Inf bucket
+            inf_labels = labels.copy()
+            inf_labels["le"] = "+Inf"
+            __ = await self._metrics.increment_value(
+                f"{self._metric_name}_bucket", 1, **inf_labels
+            )
 
 
 class Summary:
@@ -773,6 +817,7 @@ class Summary:
         self._label_names: tuple[str, ...] = label_names
         self._quantiles: tuple[float, ...] = quantiles or self.DEFAULT_QUANTILES
         self._description: str = description
+        self._observed_values: list[float] = []
 
     async def _ensure_definition(self) -> None:
         """Ensure the metric definition exists."""
@@ -797,6 +842,13 @@ class Summary:
                 MetricType.COUNTER,
                 self._label_names,
             )
+            # Add quantile metric definitions with quantile label
+            await self._metrics.add_definition(
+                self._name,
+                f"{self._description} (quantile)",
+                MetricType.GAUGE,
+                (*self._label_names, "quantile"),
+            )
 
     def labels(self, *values: str, **kwargs: str) -> "_SummaryChild":  # noqa: UP037
         """Get a child metric with specific label values.
@@ -820,10 +872,23 @@ class Summary:
 
         """
         await self._ensure_definition()
-        # For simplicity, we just store the observed value
-        # A full implementation would track quantiles
-        await self._metrics.add_value(f"{self._name}_sum", amount, **labels)
-        await self._metrics.add_value(f"{self._name}_count", 1, **labels)
+        # Store the observed value for quantile calculation
+        self._observed_values.append(amount)
+        # Update sum and count
+        await self._metrics.increment_value(f"{self._name}_sum", amount, **labels)
+        await self._metrics.increment_value(f"{self._name}_count", 1, **labels)
+        # Calculate and update quantiles
+        if self._observed_values:
+            sorted_values = sorted(self._observed_values)
+            for quantile in self._quantiles:
+                # Calculate quantile value
+                index = int(quantile * (len(sorted_values) - 1))
+                quantile_value = sorted_values[index]
+                quantile_labels = labels.copy()
+                quantile_labels["quantile"] = str(quantile)
+                __ = await self._metrics.set_value(
+                    self._name, quantile_value, **quantile_labels
+                )
 
     async def remove(self, *label_values: str) -> None:
         """Remove a specific label_set.
@@ -895,8 +960,8 @@ class _SummaryChild(_MetricChild):
                     self._label_names, self._label_values, strict=True
                 ):
                     labels[name] = value
-        await self._metrics.add_value(f"{self._metric_name}_sum", amount, **labels)
-        await self._metrics.add_value(f"{self._metric_name}_count", 1, **labels)
+        await self._metrics.increment_value(f"{self._metric_name}_sum", amount, **labels)
+        await self._metrics.increment_value(f"{self._metric_name}_count", 1, **labels)
 
 
 class Info:
@@ -954,7 +1019,7 @@ class Info:
 
         """
         await self._ensure_definition()
-        await self._metrics.add_value(self._name, 1, **labels)
+        await self._metrics.set_value(self._name, 1, **labels)
 
     async def remove(self, *label_values: str) -> None:
         """Remove a specific label_set.
@@ -1013,4 +1078,4 @@ class _InfoChild(_MetricChild):
             if self._label_values:
                 for name, val in zip(self._label_names, self._label_values, strict=True):
                     labels[name] = val
-        await self._metrics.add_value(self._metric_name, 1, **labels)
+        await self._metrics.set_value(self._metric_name, 1, **labels)

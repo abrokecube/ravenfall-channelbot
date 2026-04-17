@@ -78,6 +78,7 @@ class PrometheusTestCog(Cog, PrometheusCollectorMixin):
     )
     async def test_histogram(self, metric: Histogram) -> None:
         """Test histogram metric."""
+        print("aga")
         __ = await metric.labels(operation="read").observe(random.random() * 10)
         __ = await metric.labels(operation="write").observe(random.random() * 5)
 
