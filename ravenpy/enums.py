@@ -1,18 +1,19 @@
 from enum import Enum
 
+
 class ItemTypes(Enum):
     TwoHandedSword = 1
     OneHandedSword = 2
     TwoHandedAxe = 3
     OneHandedAxe = 4
-    TwoHandedStaff = 5 
+    TwoHandedStaff = 5
     TwoHandedBow = 6
     TwoHandedSpear = 7
     Helmet = 8
     Chest = 9
     Gloves = 10
     Boots = 11
-    Leggings = 12 
+    Leggings = 12
     Shield = 13
     LeftShoulder = 14
     RightShoulder = 15
@@ -38,20 +39,22 @@ class ItemTypes(Enum):
     Cooking = 35
     Alchemy = 36
 
+
 class ItemCategory(Enum):
     Weapon = 0
     Armor = 1
     Ring = 2
     Amulet = 3
     Food = 4
-    Potion = 5 
+    Potion = 5
     Pet = 6
     Resource = 7
     StreamerToken = 8
     Scroll = 9
     Skin = 10
     Cosmetic = 11
-    
+
+
 class ItemMaterials(Enum):
     Bronze = 1
     Iron = 2
@@ -82,6 +85,7 @@ class ItemMaterials(Enum):
     ElderAncient = 27
     ElderAtlarus = 28
 
+
 class Skills(Enum):
     Attack = 0
     Defense = 1
@@ -102,6 +106,7 @@ class Skills(Enum):
     Alchemy = 16
     Melee = 900
     All = 999
+
 
 class Enchantments(Enum):
     NoneEnchantment = -1
@@ -126,6 +131,7 @@ class Enchantments(Enum):
     Aim = 18
     Armor = 19
 
+
 class Stat(Enum):
     WeaponAim = 0
     WeaponPower = 1
@@ -134,6 +140,7 @@ class Stat(Enum):
     RangedAim = 4
     RangedPower = 5
     ArmorPower = 6
+
 
 class Effects(Enum):
     NoEffect = 0
@@ -169,6 +176,7 @@ class Effects(Enum):
     AddItem = 30
     Teleport = 31
 
+
 class Islands(Enum):
     Unknown = -2
     Ferry = -1
@@ -181,14 +189,17 @@ class Islands(Enum):
     Atria = 6
     Eldara = 7
 
+
 class ClanSkill(Enum):
     Enchanting = 1
+
 
 class ClanRole(Enum):
     Inactive = 0
     Recruit = 1
     Member = 2
     Officer = 3
+
 
 class PlayerTask(Enum):
     Woodcutting = 0
