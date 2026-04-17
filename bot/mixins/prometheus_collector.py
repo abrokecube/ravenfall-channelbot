@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from bot.metrics.prometheus import Counter, Gauge, Histogram, Info, Summary
 from bot.metrics.prometheus import MetricType as PrometheusMetricType
@@ -12,8 +12,10 @@ from bot.services.prometheus_service import PrometheusService
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from inspect import _GetMembersReturn
 
     from bot.core.components import GlobalContext
+    from bot.services.prometheus_service import CollectorFunc
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,17 +43,17 @@ class CollectorDefinition:
             quantiles: Quantile values for summaries.
 
         """
-        self.metric_type = metric_type
-        self.labelnames = labelnames
-        self.name = name
-        self.description = description
-        self.buckets = buckets
-        self.quantiles = quantiles
+        self.metric_type: type = metric_type
+        self.labelnames: tuple[str, ...] | None = labelnames
+        self.name: str | None = name
+        self.description: str | None = description
+        self.buckets: tuple[float, ...] | None = buckets
+        self.quantiles: tuple[float, ...] | None = quantiles
 
 
-def _create_collector_decorator(
+def _create_collector_decorator[T: Callable[..., Any]](
     metric_type: type,
-) -> Callable:
+) -> Callable[..., Callable[..., Callable[[T], T]]]:
     """Create a decorator for a specific metric type.
 
     Args:
@@ -68,7 +70,7 @@ def _create_collector_decorator(
         description: str | None = None,
         buckets: tuple[float, ...] | None = None,
         quantiles: tuple[float, ...] | None = None,
-    ) -> Callable:
+    ) -> Callable[..., Callable[[T], T]]:
         """Decorator to mark a method as a metric collector.
 
         Args:
@@ -83,7 +85,7 @@ def _create_collector_decorator(
 
         """
 
-        def decorate(func: Callable) -> Callable:
+        def decorate(func: T) -> T:
             """Decorate the collector function.
 
             Args:
@@ -158,7 +160,6 @@ class PrometheusCollectorMixin:
                 raise RuntimeError(msg)
 
             try:
-
                 prometheus_service = await global_context.wait_for_service(
                     PrometheusService  # type: ignore[arg-type]
                 )
@@ -171,9 +172,9 @@ class PrometheusCollectorMixin:
                 return
 
         # Find all methods with collector definitions
-        members = inspect.getmembers(
+        members: _GetMembersReturn[CollectorFunc] = inspect.getmembers(
             self,
-            lambda x: hasattr(x, "__collector_definition__"),
+            lambda x: hasattr(x, "__collector_definition__"),  # pyright: ignore[reportAny]
         )
 
         if not members:
@@ -183,8 +184,9 @@ class PrometheusCollectorMixin:
             return
 
         for method_name, collector_func in members:
-            definition: CollectorDefinition | None = getattr(
-                collector_func, "__collector_definition__"
+            definition = cast(
+                "CollectorDefinition | None",
+                getattr(collector_func, "__collector_definition__"),
             )
             if definition is None:
                 continue

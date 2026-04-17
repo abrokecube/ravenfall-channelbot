@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING
+from collections.abc import Awaitable
+from typing import TYPE_CHECKING, override
 
 import aiohttp
 from fastapi import APIRouter
@@ -32,6 +33,10 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
+type CollectorFunc = Callable[
+    [Counter | Gauge | Histogram | Summary | Info], Awaitable[None]
+]
+
 
 class PrometheusServiceConfig(BaseModel):
     """Configuration for PrometheusService."""
@@ -55,17 +60,17 @@ class CollectorDefinition:
         self,
         cog_name: str,
         metric_name: str,
-        collector_func: Callable,
+        collector_func: CollectorFunc,
         metric: Counter | Gauge | Histogram | Summary | Info,
         metric_type: MetricType,
         description: str,
     ) -> None:
-        self.cog_name = cog_name
-        self.metric_name = metric_name
-        self.collector_func = collector_func
-        self.metric = metric
-        self.metric_type = metric_type
-        self.description = description
+        self.cog_name: str = cog_name
+        self.metric_name: str = metric_name
+        self.collector_func: CollectorFunc = collector_func
+        self.metric: Counter | Gauge | Histogram | Summary | Info = metric
+        self.metric_type: MetricType = metric_type
+        self.description: str = description
 
 
 class PrometheusService(BaseService):
@@ -73,12 +78,13 @@ class PrometheusService(BaseService):
 
     def __init__(self) -> None:
         super().__init__()
-        self._metrics = Metrics()
+        self._metrics: Metrics = Metrics()
         self._collectors: dict[str, CollectorDefinition] = {}
         self._config: PrometheusServiceConfig = PrometheusServiceConfig()
         self._query_config: PrometheusQueryConfig = PrometheusQueryConfig()
         self._http_client: aiohttp.ClientSession | None = None
 
+    @override
     async def setup(self) -> None:
         """Set up the Prometheus service."""
         self._http_client = aiohttp.ClientSession()
@@ -90,7 +96,7 @@ class PrometheusService(BaseService):
         router = APIRouter()
 
         @router.get("/metrics")
-        async def metrics_endpoint() -> PlainTextResponse:
+        async def metrics_endpoint() -> PlainTextResponse:  # pyright: ignore[reportUnusedFunction]
             """Prometheus metrics endpoint."""
             await self.run_collectors()
             text = await self.get_metrics_text()
@@ -105,6 +111,7 @@ class PrometheusService(BaseService):
         web_service.include_router(router, server)
         LOGGER.info("Registered /metrics endpoint on %s server", server)
 
+    @override
     async def teardown(self) -> None:
         """Tear down the Prometheus service."""
         if self._http_client:
@@ -164,7 +171,7 @@ class PrometheusService(BaseService):
         self,
         cog_name: str,
         metric_name: str,
-        collector_func: Callable,
+        collector_func: CollectorFunc,
         metric: Counter | Gauge | Histogram | Summary | Info,
         metric_type: MetricType,
         description: str,
@@ -180,7 +187,7 @@ class PrometheusService(BaseService):
         if not self._collectors:
             return
 
-        tasks = []
+        tasks: list[asyncio.Task[None]] = []
         for definition in self._collectors.values():
             task = asyncio.create_task(
                 self._run_single_collector(definition),

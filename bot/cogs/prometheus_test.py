@@ -27,9 +27,9 @@ class PrometheusTestCog(Cog, PrometheusCollectorMixin):
 
     def __init__(self, event_manager) -> None:
         super().__init__(event_manager)
-        self._counter = 0
-        self._gauge_value = 0.0
-        self._running = False
+        self._counter: int = 0
+        self._gauge_value: float = 0.0
+        self._running: bool = False
         self._task: asyncio.Task[None] | None = None
 
     async def setup(self) -> None:
