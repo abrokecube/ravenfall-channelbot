@@ -238,6 +238,7 @@ class BaseEvent:
     categories: Collection[str]
     platform: str = EVENT_SOURCE_ANY
     data: Any  # pyright: ignore[reportExplicitAny]
+    timestamp: float = time.time()
 
     async def get_bucket_key(self, bucket_type: str | BucketType) -> str:  # pyright: ignore[reportUnusedParameter]
         """Return a string key used for rate limiting/bucketing.
