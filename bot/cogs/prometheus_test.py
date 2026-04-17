@@ -19,7 +19,7 @@ from bot.mixins.prometheus_collector import (
 from bot.services.prometheus_service import PrometheusService
 
 if TYPE_CHECKING:
-    from bot.metrics.prometheus import Counter, Gauge, Histogram, Info, Summary
+    from bot.clients.prometheus import Counter, Gauge, Histogram, Info, Summary
 
 
 class PrometheusTestCog(Cog, PrometheusCollectorMixin):

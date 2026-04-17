@@ -1,21 +1,12 @@
 """Custom Prometheus metrics library with thread-safe updates."""
+from __future__ import annotations
 
 import asyncio
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING
 
 LOGGER = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    from bot.metrics.prometheus import (
-        _CounterChild,  # pyright: ignore[reportPrivateLocalImportUsage]
-        _GaugeChild,  # pyright: ignore[reportPrivateLocalImportUsage]
-        _HistogramChild,  # pyright: ignore[reportPrivateLocalImportUsage]
-        _InfoChild,  # pyright: ignore[reportPrivateLocalImportUsage]
-        _SummaryChild,  # pyright: ignore[reportPrivateLocalImportUsage]
-    )
 
 
 class MetricType(Enum):
@@ -322,7 +313,7 @@ class Counter:
                 self._label_names,
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_CounterChild":  # noqa: UP037
+    def labels(self, *values: str, **kwargs: str) -> _CounterChild:
         """Get a child metric with specific label values.
 
         Args:
@@ -447,7 +438,7 @@ class Gauge:
                 self._label_names,
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_GaugeChild":  # noqa: UP037
+    def labels(self, *values: str, **kwargs: str) -> _GaugeChild:
         """Get a child metric with specific label values.
 
         Args:
@@ -666,7 +657,7 @@ class Histogram:
                 (*self._label_names, "le"),
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_HistogramChild":  # noqa: UP037
+    def labels(self, *values: str, **kwargs: str) -> _HistogramChild:
         """Get a child metric with specific label values.
 
         Args:
@@ -850,7 +841,7 @@ class Summary:
                 (*self._label_names, "quantile"),
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_SummaryChild":  # noqa: UP037
+    def labels(self, *values: str, **kwargs: str) -> _SummaryChild:
         """Get a child metric with specific label values.
 
         Args:
@@ -998,7 +989,7 @@ class Info:
                 self._label_names,
             )
 
-    def labels(self, *values: str, **kwargs: str) -> "_InfoChild":  # noqa: UP037
+    def labels(self, *values: str, **kwargs: str) -> _InfoChild:
         """Get a child metric with specific label values.
 
         Args:

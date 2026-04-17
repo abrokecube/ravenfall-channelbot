@@ -30,8 +30,9 @@ class GenericListener(BaseListener):
         cog: Cog | None = None,
         cooldown: Cooldown | None = None,
         expected_dispatcher: type[BaseDispatcher] = BaseDispatcher,
+        priority: int = 0,
     ):
-        super().__init__(func, cog, cooldown)
+        super().__init__(func, cog, cooldown, priority)
         self.expected_dispatcher: type[BaseDispatcher] = getattr(
             func, "_listener_dispatcher", expected_dispatcher
         )
@@ -71,8 +72,9 @@ class LambdaListener(GenericListener):
         event_types: list[type[BaseEvent]] | None = None,
         match_fn: Callable[[BaseEvent], bool] = lambda x: True,
         expected_dispatcher: type[BaseDispatcher] = BaseDispatcher,
+        priority: int = 0,
     ):
-        super().__init__(func, cog, cooldown, expected_dispatcher)
+        super().__init__(func, cog, cooldown, expected_dispatcher, priority)
         self.event_types: tuple[type[BaseEvent], ...] = tuple(event_types or [])
         self.match_fn: Callable[[BaseEvent], bool] = match_fn
 

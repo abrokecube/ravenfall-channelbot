@@ -8,7 +8,7 @@ import time
 from collections import defaultdict
 from collections.abc import Awaitable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Never, Self, cast, override
+from typing import TYPE_CHECKING, Any, Never, cast, override
 from uuid import uuid4
 
 from . import EVENT_CATEGORY_GENERIC, EVENT_SOURCE_ANY, exceptions
@@ -437,11 +437,16 @@ class EventManager:
         if not matching_dispatchers:
             LOGGER.warning(f'A matching dispatcher for event "{event}" was not found.')
 
+        # Execute dispatchers concurrently
+        tasks: list[Awaitable[None]] = []
         for dispatcher in matching_dispatchers:
-            try:
-                await dispatcher.dispatch(self.global_context, event)
-            except Exception as e:
-                LOGGER.exception(f"Exception while sending event to dispatcher: {e}")
+            tasks.append(  # noqa: PERF401
+                _log_on_invoke_error(
+                    dispatcher.dispatch(self.global_context, event),
+                    f"Exception while sending event to dispatcher: {dispatcher}",
+                )
+            )
+        __ = await asyncio.gather(*tasks, return_exceptions=True)
 
     async def teardown(self) -> None:
         """Stop and remove all loaded components."""
@@ -583,15 +588,30 @@ class BaseDispatcher:
         **_kwargs: object,
     ) -> None:
         """Check and invoke listeners matching the event."""
-        for l in self.listeners.values():
+        # Group matching listeners by priority
+        priority_groups: dict[int, list[tuple[BaseListener, Any]]] = {}
+        for listener in self.listeners.values():
             match_result = False
             try:
-                match_result = await l.check_for_match(event)
+                match_result = await listener.check_for_match(event)
             except Exception as e:
                 LOGGER.exception("Listener matcher returned an error: %s", e)
 
             if match_result:
-                await self._invoke_listener(l, global_context, event, match_result)
+                if listener.priority not in priority_groups:
+                    priority_groups[listener.priority] = []
+                priority_groups[listener.priority].append((listener, match_result))
+
+        # Sort priority groups in descending order (higher priority first)
+        for priority in sorted(priority_groups.keys(), reverse=True):
+            listeners_to_invoke = priority_groups[priority]
+            # Execute listeners with the same priority concurrently
+            tasks: list[Awaitable[None]] = []
+            for listener, match_result in listeners_to_invoke:
+                tasks.append(
+                    self._invoke_listener(listener, global_context, event, match_result)
+                )
+            __ = await asyncio.gather(*tasks, return_exceptions=True)
 
     async def on_invoke_error(
         self,
@@ -614,12 +634,14 @@ class BaseListener:
         func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]],
         cog: Cog | None = None,
         cooldown: Cooldown | None = None,
+        priority: int = 0,
     ) -> None:
         """Initialize a listener wrapper for the target callback."""
         self.id: str = f"{func.__name__}_{uuid4()}"
         self.func: Callable[..., None | Awaitable[None]] = func
         self.cog: Cog | None = cog
         self.cooldown: Cooldown | None = getattr(func, "_listener_cooldown", cooldown)
+        self.priority: int = getattr(func, "_listener_priority", priority)
 
     async def check_for_match(self, _event: BaseEvent) -> bool:
         """Return whether the listener should run for the given event."""
@@ -723,10 +745,13 @@ class Cog:
                 attr_obj,
             )
             listener_kwargs = {k: v for k, v in init_params.items() if k != "cog"}
+            # Check for priority attribute on the function
+            listener_priority = getattr(attr_obj, "_listener_priority", 0)
             new_listener = listener_cls(
                 func=callback,
                 cog=self,
                 cooldown=None,
+                priority=listener_priority,
                 **listener_kwargs,
             )
             self.listeners.append(new_listener)

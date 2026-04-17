@@ -14,8 +14,7 @@ from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from bot.core.components import BaseService
-from bot.metrics.prometheus import (
+from bot.clients.prometheus import (
     Counter,
     Gauge,
     Histogram,
@@ -23,12 +22,13 @@ from bot.metrics.prometheus import (
     Metrics,
     Summary,
 )
+from bot.core.components import BaseService
 from bot.services.web_service import APIServer, WebService
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from bot.metrics.prometheus import (
+    from bot.clients.prometheus import (
         MetricType,
     )
 

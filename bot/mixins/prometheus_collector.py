@@ -6,8 +6,8 @@ import inspect
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from bot.metrics.prometheus import Counter, Gauge, Histogram, Info, Summary
-from bot.metrics.prometheus import MetricType as PrometheusMetricType
+from bot.clients.prometheus import Counter, Gauge, Histogram, Info, Summary
+from bot.clients.prometheus import MetricType as PrometheusMetricType
 from bot.services.prometheus_service import PrometheusService
 
 if TYPE_CHECKING:
