@@ -9,6 +9,7 @@ from collections.abc import Awaitable
 from typing import TYPE_CHECKING, override
 
 import aiohttp
+import msgspec
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -36,6 +37,35 @@ LOGGER = logging.getLogger(__name__)
 type CollectorFunc = Callable[
     [Counter | Gauge | Histogram | Summary | Info], Awaitable[None]
 ]
+
+
+# Prometheus query response structs
+class InstantQueryResult(msgspec.Struct):
+    """Result from an instant Prometheus query."""
+
+    metric: dict[str, str]
+    value: list[float]
+
+
+class RangeQueryResult(msgspec.Struct):
+    """Result from a range Prometheus query."""
+
+    metric: dict[str, str]
+    values: list[list[float]]
+
+
+class InstantQueryResponse(msgspec.Struct):
+    """Wrapper for instant query API responses."""
+
+    status: str
+    data: dict[str, list[InstantQueryResult]]
+
+
+class RangeQueryResponse(msgspec.Struct):
+    """Wrapper for range query API responses."""
+
+    status: str
+    data: dict[str, list[RangeQueryResult]]
 
 
 class PrometheusServiceConfig(BaseModel):
@@ -229,7 +259,7 @@ class PrometheusService(BaseService):
     # Query functions for external Prometheus servers
     async def query(
         self, query: str, server_id: str | None = None, server_url: str | None = None
-    ) -> dict:
+    ) -> InstantQueryResponse:
         """Query an external Prometheus server.
 
         Args:
@@ -238,7 +268,7 @@ class PrometheusService(BaseService):
             server_url: Override URL for the server.
 
         Returns:
-            The query result.
+            The query result as a typed struct.
 
         """
         if server_url:
@@ -264,7 +294,8 @@ class PrometheusService(BaseService):
 
         response = await self._http_client.get(url, params={"query": query})
         response.raise_for_status()
-        return await response.json()
+        json_data = await response.json()  # pyright: ignore[reportAny]
+        return msgspec.convert(json_data, InstantQueryResponse)
 
     async def query_range(
         self,
@@ -273,7 +304,7 @@ class PrometheusService(BaseService):
         step_s: int = 20,
         server_id: str | None = None,
         server_url: str | None = None,
-    ) -> dict:
+    ) -> RangeQueryResponse:
         """Query an external Prometheus server with a range.
 
         Args:
@@ -284,7 +315,7 @@ class PrometheusService(BaseService):
             server_url: Override URL for the server.
 
         Returns:
-            The query result.
+            The query result as a typed struct.
 
         """
         if server_url:
@@ -316,4 +347,5 @@ class PrometheusService(BaseService):
 
         response = await self._http_client.get(url, params=params)
         response.raise_for_status()
-        return await response.json()
+        json_data = await response.json()  # pyright: ignore[reportAny]
+        return msgspec.convert(json_data, RangeQueryResponse)
