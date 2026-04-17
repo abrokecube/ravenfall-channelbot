@@ -29,8 +29,8 @@ from bot.integrations.commands.deco import (
 )
 from bot.integrations.commands.events import CommandEvent
 from bot.integrations.commands.exceptions import ArgumentConversionError
-from bot.mixins.remote_callable import RemoteCallableMixin, remote_callable
 from bot.mixins.fastapi_routes import FastAPIRoutesMixin, api_route
+from bot.mixins.remote_callable import RemoteCallableMixin, remote_callable
 from bot.services.web_service import APIServer
 
 if TYPE_CHECKING:

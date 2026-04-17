@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from bot.cogs.example import ExampleCog
 from bot.cogs.help import HelpCog
+from bot.cogs.prometheus_test import PrometheusTestCog
 from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
 from bot.db.models import update_schema
@@ -20,6 +21,7 @@ from bot.integrations.ravenfall.event_sources import RavenfallEventSource
 from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
 from bot.services.config_service import ConfigService
+from bot.services.prometheus_service import PrometheusService
 from bot.services.remote_bot_service import RemoteBotService
 from bot.services.web_service import WebService
 from utils.logging_fomatter import setup_logging
@@ -173,12 +175,14 @@ async def run():
     tasks.append(event_manager.add_cog(TestingCog))
     tasks.append(event_manager.add_cog(HelpCog))
     tasks.append(event_manager.add_cog(ExampleCog))
+    tasks.append(event_manager.add_cog(PrometheusTestCog))
 
     await update_schema()
     tasks.append(global_ctx.register_service(DatabaseService()))
     tasks.append(global_ctx.register_service(RemoteBotService()))
     tasks.append(global_ctx.register_service(ConfigService("config.toml")))
     tasks.append(global_ctx.register_service(WebService()))
+    tasks.append(global_ctx.register_service(PrometheusService()))
     __ = await asyncio.gather(*tasks)
 
     # __ = await twitch.authenticate_user(
