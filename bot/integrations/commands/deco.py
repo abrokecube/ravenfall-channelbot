@@ -16,26 +16,31 @@ if TYPE_CHECKING:
 def command[T: Callable[..., Any]](
     name: str | None = None,
     short_help_text: str | None = None,
+    *,
     help_text: str | None = None,
     aliases: list[str] | None = None,
     verifier: VerifierType | None = None,
-    *,
     hidden: bool = False,
-    **kwargs: Any,  # pyright: ignore[reportAny, reportExplicitAny]
+    priority: int = 0,
+    title: str | None = None,  # i forgot what this was for
 ) -> Callable[[T], T]:
     """Decorator to mark a function as a command listener."""
     if not aliases:
         aliases = []
 
+    kwargs: dict[str, object] = {}
+
     def decorator(func: T):
         kwargs.update(
             {
                 "name": name,
-                "short_help": short_help_text,
-                "help_": help_text,
+                "short_help_text": short_help_text,
+                "help_text": help_text,
                 "aliases": aliases,
                 "verifier": verifier,
                 "hidden": hidden,
+                "priority": priority,
+                "title": title,
             }
         )
         setattr(func, "_listener_init_params", kwargs)

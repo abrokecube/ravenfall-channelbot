@@ -702,7 +702,19 @@ class Cog:
             )
             listener_kwargs = {k: v for k, v in init_params.items() if k != "cog"}
             # Check for priority attribute on the function
-            listener_priority = getattr(attr_obj, "_listener_priority", 0)
+            listener_priority = getattr(
+                attr_obj, "_listener_priority", 0
+            ) or listener_kwargs.get("priority", 0)
+            if not isinstance(listener_priority, int):
+                LOGGER.warning(
+                    "Listener %s in cog %s has an invalid priority value. "
+                    "Defaulting to 0.",
+                    attr_name,
+                    self.name,
+                )
+                listener_priority = 0
+            __ = listener_kwargs.pop("priority", None)
+
             new_listener = listener_cls(
                 func=callback,
                 cog=self,

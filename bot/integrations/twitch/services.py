@@ -78,7 +78,7 @@ class TwitchService(BaseService):
         max_len = 500
         if me:
             max_len -= 4
-        input_text_len = len(text.encode("utf-16-le"))
+        input_text_len = len(text.encode("utf-16-le")) / 2
         if input_text_len > max_len:
             msg = (
                 f"Text must be below {max_len} characters. "

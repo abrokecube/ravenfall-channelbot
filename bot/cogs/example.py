@@ -197,7 +197,7 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         """
         await ctx.message.reply(f"Set your color to {color.name} ({color.hex_code})")
 
-    @command(name="transfer", help="Transfer currency to another user")
+    @command(name="transfer", help_text="Transfer currency to another user")
     @verification(transfer_verify)
     @parameter("amount", description="Amount to transfer")
     @parameter("user", description="User to transfer to")

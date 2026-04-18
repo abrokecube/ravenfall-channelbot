@@ -1,81 +1,39 @@
-from typing import Any, override, cast
-from database.service import DatabaseService
+import asyncio
+import logging
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, override
 
 from dotenv import load_dotenv
 
+from bot.cogs.example import ExampleCog
+from bot.cogs.help import HelpCog
+from bot.cogs.prometheus_test import PrometheusTestCog
+from bot.cogs.testing import TestingCog
+from bot.core.components import EventManager, GlobalContext
+from bot.db.models import update_schema
+from bot.db.service import DatabaseService
+from bot.integrations.chat_messages.event_processors import filter_message_event_text
+from bot.integrations.chat_messages.events import MessageEvent
+from bot.integrations.commands.dispatchers import CommandDispatcher
+from bot.integrations.ravenfall.event_sources import RavenfallEventSource
+from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
+from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
+from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
+from bot.services.config_service import ConfigService
+from bot.services.prometheus_service import PrometheusService
+from bot.services.remote_bot_service import RemoteBotService
+from bot.services.web_service import WebService
+from utils.logging_fomatter import setup_logging
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
 _ = load_dotenv()
 
-import os
-import asyncio
-import json
-import logging
-
-import ravenpy
-
-from bot.core.global_context import GlobalContext
-from bot.core.event_sources import TwitchAPIEventSource
-from bot.core.event_manager import EventManager
-from bot.core.dispatchers import CommandDispatcher, TwitchRedeemDispatcher
-from bot.core.events import MessageEvent
-
-from bot.models import *
-from bot.ravenfallmanager import RFChannelManager
-from database.models import update_schema
-from utils.logging_fomatter import setup_logging
-from bot.server import SomeEndpoints
-
-with open("pid", "w") as f:
+with Path("pid").open("w") as f:
     _ = f.write(str(os.getpid()))
 
-logger_config = {
-    "asyncio": {
-        "console_level": logging.INFO,
-    },
-    "twitchAPI": {
-        "filename": "twitchAPI.log",
-        "console_level": logging.INFO,
-    },
-    "middleman": {
-        "filename": "middleman.log",
-        "console_level": logging.INFO,
-    },
-    "aiosqlite": {
-        "filename": "database.log",
-        "console_level": logging.INFO,
-    },
-    "new_message_processor": {
-        "filename": "rfmsgproc.log",
-        "console_level": logging.INFO,
-    },
-    "aiohttp.access": {
-        "filename": "httpserver.log",
-        "console_level": logging.WARNING,
-    },
-    "bot.server": {
-        "filename": "httpserver.log",
-        "console_level": logging.WARNING,
-    },
-    "utils.runshell": {
-        "filename": "runshell.log",
-        "console_level": logging.WARNING,
-    },
-    "bot.ravenfallloc": {
-        "filename": "rfloc.log",
-        "console_level": logging.WARNING,
-    },
-    "bot.ravenfallchannel": {
-        "filename": "rfchannels.log",
-        "console_level": logging.INFO,
-    },
-    "bot.ravenfallmanager": {
-        "filename": "rfchannels.log",
-        "console_level": logging.INFO,
-    },
-    "bot.commands": {
-        "filename": "commands.log",
-        "console_level": logging.INFO,
-    },
-}
 logging_level_strs = {
     "debug": logging.DEBUG,
     "info": logging.INFO,
@@ -84,26 +42,70 @@ logging_level_strs = {
     "error": logging.ERROR,
     "critical": logging.CRITICAL,
 }
+logger_config = {
+    # "asyncio": {
+    #     "console_level": logging.INFO,
+    # },
+    "twitchAPI": {
+        "filename": "twitchAPI.log",
+        "console_level": logging.INFO,
+    },
+    # "middleman": {
+    #     "filename": "middleman.log",
+    #     "console_level": logging.INFO,
+    # },
+    "aiosqlite": {
+        "filename": "database.log",
+        "console_level": logging.INFO,
+    },
+    "bot.clients.ravenfall_query": {"console_level": logging.CRITICAL},
+    # "new_message_processor": {
+    #     "filename": "rfmsgproc.log",
+    #     "console_level": logging.INFO,
+    # },
+    # "aiohttp.access": {
+    #     "filename": "httpserver.log",
+    #     "console_level": logging.WARNING,
+    # },
+    # "bot.server": {
+    #     "filename": "httpserver.log",
+    #     "console_level": logging.WARNING,
+    # },
+    # "utils.runshell": {
+    #     "filename": "runshell.log",
+    #     "console_level": logging.WARNING,
+    # },
+    # "bot.ravenfallloc": {
+    #     "filename": "rfloc.log",
+    #     "console_level": logging.WARNING,
+    # },
+    # "bot.ravenfallchannel": {
+    #     "filename": "rfchannels.log",
+    #     "console_level": logging.INFO,
+    # },
+    # "bot.ravenfallmanager": {
+    #     "filename": "rfchannels.log",
+    #     "console_level": logging.INFO,
+    # },
+    # "bot.commands": {
+    #     "filename": "commands.log",
+    #     "console_level": logging.INFO,
+    # },
+}
+
 log_level = os.getenv("LOG_LEVEL", "info")
 default_console_logging_level = logging_level_strs.get(log_level.lower(), logging.INFO)
 setup_logging(level=default_console_logging_level, loggers_config=logger_config)
+# setup_logging(level=default_console_logging_level)
 
 logger = logging.getLogger(__name__)
-if not log_level.lower() in logging_level_strs:
+if log_level.lower() not in logging_level_strs:
     logger.warning(f"Invalid logging level '{log_level}'")
-
-with open("channels.json", "r") as f:
-    channels: list[Channel] = cast(list[Channel], json.load(f))
-for channel in channels:
-    channel["rf_query_url"] = channel["rf_query_url"].rstrip("/")
-    # Set default command prefix if not specified
-    if "command_prefix" not in channel:
-        channel["command_prefix"] = "!"
-
-rf_manager: RFChannelManager | None = None
 
 
 class MyCmdDispatcher(CommandDispatcher):
+    """Command dispatcher."""
+
     def __init__(self):
         super().__init__()
 
@@ -113,10 +115,10 @@ class MyCmdDispatcher(CommandDispatcher):
 
 
 async def run():
+    """Run."""
+
     def handle_loop_exception(_: asyncio.AbstractEventLoop, context: dict[str, Any]):  # pyright: ignore [reportExplicitAny]
-        logger.error(
-            "Caught async exception: %s", context.get("exception"), exc_info=True
-        )
+        logger.exception("Caught async exception: %s", context.get("exception"))
 
     logger.info("Setting up loop")
     loop = asyncio.get_event_loop()
@@ -125,95 +127,63 @@ async def run():
     logger.info("Checking db")
     await update_schema()
 
-    rf = ravenpy.RavenNest(
-        os.getenv("RAVENFALL_API_USER") or "", os.getenv("RAVENFALL_API_PASS") or ""
-    )
-    _ = asyncio.create_task(rf.login())
-
-    logger.info("Initializing event system")
-
     global_ctx = GlobalContext()
-    db_service = DatabaseService()
-    global_ctx.register_service(DatabaseService, db_service)
 
+    tasks: list[Awaitable[None]] = []
     event_manager = EventManager(global_ctx)
-    command_dispatcher = MyCmdDispatcher()
-    await event_manager.add_dispatcher(command_dispatcher)
-    twitch_redeem_dispatcher = TwitchRedeemDispatcher()
-    await event_manager.add_dispatcher(twitch_redeem_dispatcher)
+    command_d = MyCmdDispatcher()
+    await event_manager.add_dispatcher(command_d)
+    await event_manager.add_dispatcher(TwitchRedeemDispatcher())
+    event_manager.add_event_processor(MessageEvent, filter_message_event_text)
+    twitch = TwitchEventSource(
+        [AuthScope.USER_WRITE_CHAT],
+        [
+            AuthScope.CHAT_READ,
+            AuthScope.CHAT_EDIT,
+            AuthScope.USER_BOT,
+            AuthScope.USER_READ_CHAT,
+            AuthScope.USER_WRITE_CHAT,
+            AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS,
+        ],
+    )
+    tasks.append(event_manager.add_event_source(twitch))
+    ravenfall = RavenfallEventSource()
+    tasks.append(event_manager.add_event_source(ravenfall))
 
-    global_ctx.register_service(ravenpy.RavenNest, rf)
+    tasks.append(event_manager.add_cog(TestingCog))
+    tasks.append(event_manager.add_cog(HelpCog))
+    tasks.append(event_manager.add_cog(ExampleCog))
+    tasks.append(event_manager.add_cog(PrometheusTestCog))
 
-    from bot.cogs.help import HelpCog
-
-    await event_manager.add_cog(HelpCog)
-
-    if os.getenv("COMMAND_TESTING") == "1":
-        from bot.cogs.example import ExampleCog
-
-        await event_manager.add_cog(ExampleCog)
-    from bot.cogs.testing import TestingCog
-
-    await event_manager.add_cog(TestingCog)
-    from bot.cogs.redeem import RedeemCog
-
-    await event_manager.add_cog(RedeemCog)
-    from bot.cogs.redeem_rf import RedeemRFCog
-
-    await event_manager.add_cog(RedeemRFCog)
-    rfwebops = os.getenv("WEBOPS_URL", "http://pc2-mobile:7102")
-    from bot.cogs.game import GameCog
-
-    await event_manager.add_cog(GameCog, rf_webops_url=rfwebops)
-    from bot.cogs.info import InfoCog
-
-    await event_manager.add_cog(InfoCog)
-    from bot.cogs.bot import BotStuffCog
-
-    watchers = os.getenv("WATCHER_URLS", "http://127.0.0.1:8110").split(",")
-    await event_manager.add_cog(BotStuffCog, watcher_urls=watchers)
-    from bot.cogs.debug import DebugCog
-
-    await event_manager.add_cog(DebugCog)
-
-    logger.info("Checking db after cog imports")
     await update_schema()
+    tasks.append(global_ctx.register_service(DatabaseService()))
+    tasks.append(global_ctx.register_service(RemoteBotService()))
+    tasks.append(global_ctx.register_service(ConfigService("config.toml")))
+    tasks.append(global_ctx.register_service(WebService()))
+    tasks.append(global_ctx.register_service(PrometheusService()))
+    __ = await asyncio.gather(*tasks)
 
-    twitch_admin_uids = set(
-        (os.getenv("BOT_USER_ID", ""), os.getenv("OWNER_TWITCH_ID", ""))
+    __ = await twitch.authenticate_user(
+        os.getenv("OWNER_TWITCH_ID", ""),
+        [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS],
     )
-    twitch_source = TwitchAPIEventSource(
-        channels,
-        twitch_admin_uids,
-        bot_user_id=os.getenv("BOT_USER_ID", ""),
-        twitch_app_id=os.getenv("TWITCH_APP_ID", ""),
-        twitch_app_secret=os.getenv("TWITCH_APP_SECRET", ""),
+    __ = await twitch.add_eventsub_subscriptions(
+        os.getenv("OWNER_TWITCH_ID", ""),
+        EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD,
     )
-    await event_manager.add_event_source(twitch_source)
-
-    rf_manager = RFChannelManager(channels, global_ctx)
-    if not os.getenv("DISABLE_RAVENFALL_INTEGRATION", "").lower() in ("1", "true"):
-        await rf_manager.start()
-
-    global_ctx.register_service(RFChannelManager, rf_manager)
-
-    server = SomeEndpoints(
-        rf_manager,
-        os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"),
-        int(os.getenv("PRIVATE_SERVER_PORT", 8080)),
+    __ = await twitch.join_chat(
+        channel_id=os.getenv("OWNER_TWITCH_ID", ""), mode=MessageReceiveMode.IRC
     )
-    await server.start()
 
+    logger.info("### Bot is ready ###")
+    wait_forever = asyncio.Event()
     try:
-        while True:
-            await asyncio.sleep(9999)
+        __ = await wait_forever.wait()
     except asyncio.CancelledError:
         logger.info("Bot is shutting down")
-        tasks = [event_manager.stop_all()]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for r in results:
-            if isinstance(r, Exception):
-                logging.error(f"Error occurred while shutting down: {r}")
+        await event_manager.teardown()
+        await global_ctx.stop_all()
+        logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":

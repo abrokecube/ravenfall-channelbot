@@ -9,7 +9,6 @@ from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.models import ChatRoomCapabilities
 from bot.integrations.commands import CommandExecutionResult, CommandResponse
-from bot.integrations.commands.dispatchers import CommandDispatcher
 
 if TYPE_CHECKING:
     from collections.abc import Collection

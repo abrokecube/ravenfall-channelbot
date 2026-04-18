@@ -262,6 +262,20 @@ class TwitchEventSource(BaseEventSource):
         access_token: str | None = None,
         refresh_token: str | None = None,
     ):
+        LOGGER.debug("Saving user token for %s", user_id)
+        if access_token is not None:
+            LOGGER.debug(
+                "Access token: %s... (length %d)",
+                access_token[:5],
+                len(access_token),
+            )
+        if refresh_token is not None:
+            LOGGER.debug(
+                "Refresh token: %s... (length %d)",
+                refresh_token[:5],
+                len(refresh_token),
+            )
+
         db = self.global_context.require_service(DatabaseService)
         async with db.get_session() as session:
             result = await session.execute(
@@ -290,17 +304,18 @@ class TwitchEventSource(BaseEventSource):
                 obj.refresh_token = refresh_token
 
     async def _twitchio_token_callback(
-        self, access_token: str, refresh_token: str, *, user_id: str | None = None
+        self,
+        access_token: str,  # pyright: ignore[reportUnusedParameter]
+        refresh_token: str,  # pyright: ignore[reportUnusedParameter]
+        *,
+        user_id: str | None = None,
     ):
-        if not user_id:
-            return
-        LOGGER.info(
-            f"Saving user token for {user_id}: {access_token[:5]}..."
-            f"(length {len(access_token)})"
-        )
-        await self._save_user_token(
-            user_id, access_token=access_token, refresh_token=refresh_token
-        )
+        LOGGER.debug("Ignoring token refresh callback for user_id %s", user_id)
+        # if not user_id:
+        #     return
+        # await self._save_user_token(
+        #     user_id, access_token=access_token, refresh_token=refresh_token
+        # )
 
     async def _fetch_user_auth(self, user_id: str, session: AsyncSession):
         result = await session.execute(
@@ -544,6 +559,10 @@ class TwitchEventSource(BaseEventSource):
                         has_failed = True
                 if not has_failed:
                     self.connected_chats[user.id] = ConnectedChat(settings, user.login)
+                    LOGGER.info(
+                        f"Twitch: Connected to {user.login}:{user.id} "
+                        f"with mode {settings.message_receive_mode}"
+                    )
                 idx += 1
             return failed
 

@@ -46,7 +46,7 @@ class RavenfallConfig(BaseModel):
 
     middleman_base_url: str | None = None
     ravenfall_message_definitions_path: str = "./data/definitions.yaml"
-    instances: list[RavenfallInstanceConfig]
+    instances: list[RavenfallInstanceConfig] = []
 
 
 class RavenfallInstanceConfig(BaseModel):

@@ -171,7 +171,7 @@ class Parameter:
     type_title: str | None = None
     type_short_help: str | None = None
     type_help: str | None = None
-    help: str | None = None
+    help_text: str | None = None
     command: CommandListener | None = None
     regex: str | re.Pattern[str] | re.Pattern[bytes] | None = None
     _regex_compiled: re.Pattern[str] | re.Pattern[bytes] | None = None
@@ -209,7 +209,7 @@ class Parameter:
         out_str: list[str] = []
         param_str = self.get_parameter_display(invoked_name)
         out_str.append(param_str)
-        help_text = self.help
+        help_text = self.help_text
         type_help = self.type_short_help or self.type_help or None
         if not help_text:
             if self.kind == ParameterType.VAR_KEYWORD:

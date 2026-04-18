@@ -121,8 +121,7 @@ class ConfigService(BaseService):
         for env_key, env_val in os.environ.items():
             if env_key.startswith(env_prefix):
                 field = env_key[len(env_prefix) :].lower()
-                if field in raw:
-                    raw[field] = env_val
+                raw[field] = env_val
 
     def _parse_cli_args(self, cli_args: list[str] | None) -> dict[str, str]:
         """Parse command-line arguments for config overrides.

@@ -14,11 +14,19 @@ from ..commands.checks import TwitchOnly, MinPermissionLevel
 # from ..command_utils import HasRole, TwitchOnly
 # from ..commands_old.cog import Cog
 
+
 class RedeemCog(Cog):
     """Cog exposing simple reward management commands for Twitch channels."""
-    @command(name="createreward", help="Create a custom channel point reward")
+
+    @command(name="createreward", help_text="Create a custom channel point reward")
     @checks(TwitchOnly, MinPermissionLevel(UserRole.MODERATOR))
-    async def createreward(self, ctx: CommandEvent, title: str = "New reward", cost: int = 1000, prompt: str = None):
+    async def createreward(
+        self,
+        ctx: CommandEvent,
+        title: str = "New reward",
+        cost: int = 1000,
+        prompt: str = None,
+    ):
         """Create a custom channel point reward.
 
         Args:
@@ -28,10 +36,6 @@ class RedeemCog(Cog):
         """
         m: TwitchMessageEvent = ctx.message
         await m.channel_twitch.create_custom_reward(
-            ctx.message.room_id,
-            title,
-            cost = cost,
-            prompt = prompt
+            ctx.message.room_id, title, cost=cost, prompt=prompt
         )
         await ctx.message.reply("Created reward")
-    

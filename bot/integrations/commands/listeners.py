@@ -79,8 +79,8 @@ class CommandListener(GenericListener):
         checks: list[BaseCheck] | None = None,
         verifier: VerifierType | None = None,
         hidden: bool = False,
-        help_: str | None = None,
-        short_help: str | None = None,
+        help_text: str | None = None,
+        short_help_text: str | None = None,
         title: str | None = None,
     ):
         # prevent circular import :)
@@ -106,8 +106,8 @@ class CommandListener(GenericListener):
         doc = docstring_parser.parse(func.__doc__ or "")
 
         self.title: str = title or self.name.replace("_", " ").title()
-        self.short_help: str | None = short_help or doc.short_description
-        self.help: str | None = help_ or doc.long_description or doc.short_description
+        self.short_help: str | None = short_help_text or doc.short_description
+        self.help: str | None = help_text or doc.long_description or doc.short_description
 
         self.hidden: bool = hidden
 
@@ -273,7 +273,7 @@ class CommandListener(GenericListener):
                 greedy=param_greedy,
                 hidden=param_hidden,
                 kind=param_kind,
-                help=param_help,
+                help_text=param_help,
                 command=self,
                 regex=param_regex,
             )

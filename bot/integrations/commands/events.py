@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from bot.core import EVENT_SOURCE_ANY
 from bot.core.components import BaseEvent
@@ -29,3 +29,11 @@ class CommandEvent(BaseEvent):
     parsed_args: CommandArgs
     parameters_text: str
     specified_parameters: set[str] = field(default_factory=set)
+
+    async def send(self, text: str, **kwargs: object):
+        """Send a message in the same context as this event."""
+        await self.message.send(text, **kwargs)
+
+    async def reply(self, text: str, **kwargs: object):
+        """Reply to this message."""
+        await self.message.reply(text, **kwargs)
