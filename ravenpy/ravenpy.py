@@ -148,6 +148,7 @@ class Buh(TypedDict):
 async def _fetch_raw_item_data(rf: RavenNest):
     f = await AsyncPath(dirname, "data/internal_game_data.json").open("r")
     a: InternalGameData = cast("InternalGameData", json.loads(await f.read()))
+    await f.aclose()
     item_effects: dict[str, ItemEffectsJSON] = a["item_effects"]
     item_raid_drops: dict[str, ItemRaidDropJSON] = a["item_raid_drops"]
 

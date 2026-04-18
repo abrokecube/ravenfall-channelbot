@@ -197,10 +197,16 @@ class BaseService:
         self.global_context: GlobalContext = DummyGlobalContext()
 
     async def setup(self) -> None:
-        pass
+        """Runs when the service is registered to the global context.
+
+        Override to set up resources.
+        """
 
     async def teardown(self) -> None:
-        pass
+        """Runs when the service is stopped or the bot is shutting down.
+
+        Override to clean up resources.
+        """
 
 
 class BaseEventSource:
@@ -219,7 +225,7 @@ class BaseEventSource:
         )
         self.global_context: GlobalContext = DummyGlobalContext()
 
-    async def setup(self, event_manager: EventManager) -> None:
+    async def setup(self, event_manager: EventManager) -> None:  # pyright: ignore[reportUnusedParameter]
         """Set up the source with an EventManager reference."""
 
     async def teardown(self) -> None:
@@ -258,7 +264,7 @@ class EventManager:
     def __init__(self, global_context: GlobalContext) -> None:
         """Initialize the event manager with context and empty registries."""
         self.event_sources: list[BaseEventSource] = []
-        self.event_processors: dict[type[BaseEvent], list[EventProcessor[Any]]] = (
+        self.event_processors: dict[type[BaseEvent], list[EventProcessor[...]]] = (
             defaultdict(list)
         )
         self.dispatchers: dict[type[BaseDispatcher], BaseDispatcher] = {
@@ -357,8 +363,8 @@ class EventManager:
 
         try:
             await cog_instance.teardown()
-        except Exception as e:
-            LOGGER.exception(f"Error occurred while stopping cog: {e}")
+        except Exception:
+            LOGGER.exception("Error occurred while stopping cog")
 
         del self.cogs[cog_name]
 
@@ -472,56 +478,6 @@ class EventManager:
         self.dispatchers.clear()
         self.event_processors.clear()
 
-    # async def execute_text(
-    #     self, text: str, event: MessageEvent | None = None,
-    #     roles: Collection[UserRole] | None = None, capture_responses: bool = False
-    #     ) -> CommandExecutionResult:
-    #     if not roles:
-    #         roles = [UserRole.USER]
-    #     if not Dispatcher.Command in self.dispatchers:
-    #         raise Exception("The event manager doesn't have "
-    # "a Command dispatcher registered.")
-    #     if event:
-    #         event = dataclasses.replace(event, text=text, author_roles=set(roles))
-    #     else:
-    #         event = MessageEvent(
-    #             text=text,
-    #             id="bot",
-    #             author_login="bot",
-    #             author_name="bot",
-    #             author_id="bot",
-    #             author_roles=set(roles),
-    #             room_name="bot",
-    #             room_id="bot",
-    #             room_capabilities=ChatRoomCapabilities(False, 999999),
-    #             bot_user_login="bot",
-    #             bot_user_name="bot",
-    #             bot_user_id="bot",
-    #             data={}
-    #         )
-    #     responses: list[CommandResponse] = []
-    #     if capture_responses:
-    #         async def message(_: MessageEvent, text: str, *args: Any, **kwargs: Any):
-    #             responses.append(CommandResponse(text, args, kwargs))
-    #         event.reply = MethodType(message, event)
-    #         event.send = MethodType(message, event)
-    #     d: BaseDispatcher = self.dispatchers[Dispatcher.Command]
-    #     if not isinstance(d, CommandDispatcher):
-    #         raise TypeError(f"Expected CommandDispatcher, got {type(d)}")
-    #     command_exception = None
-    #     try:
-    #         result = await d.dispatch(
-    #             self.global_context, event, no_prefix=True,
-    #         )
-    #         command_exception = result.error
-    #     except Exception as e:
-    #         if not capture_responses:
-    #             raise e
-    #         command_exception = e
-    #     return CommandExecutionResult(
-    #         responses, command_exception
-    #     )
-
 
 class BaseDispatcher:
     """Base dispatcher for routing events to listeners."""
@@ -589,13 +545,13 @@ class BaseDispatcher:
     ) -> None:
         """Check and invoke listeners matching the event."""
         # Group matching listeners by priority
-        priority_groups: dict[int, list[tuple[BaseListener, Any]]] = {}
+        priority_groups: dict[int, list[tuple[BaseListener, object]]] = {}
         for listener in self.listeners.values():
             match_result = False
             try:
                 match_result = await listener.check_for_match(event)
-            except Exception as e:
-                LOGGER.exception("Listener matcher returned an error: %s", e)
+            except Exception:
+                LOGGER.exception("Listener matcher returned an error")
 
             if match_result:
                 if listener.priority not in priority_groups:
@@ -615,11 +571,11 @@ class BaseDispatcher:
 
     async def on_invoke_error(
         self,
-        global_context: GlobalContext,
-        event: BaseEvent,
-        error: Exception,
-        *args: object,
-        **kwargs: object,
+        global_context: GlobalContext,  # pyright: ignore[reportUnusedParameter]
+        event: BaseEvent,  # pyright: ignore[reportUnusedParameter]
+        error: Exception,  # pyright: ignore[reportUnusedParameter]
+        *args: Any,  # pyright: ignore[reportUnusedParameter, reportExplicitAny, reportAny]
+        **kwargs: Any,  # pyright: ignore[reportUnusedParameter, reportExplicitAny, reportAny]
     ) -> None:
         """Handle listener invocation errors."""
 
@@ -679,20 +635,20 @@ class BaseListener:
         self,
         global_ctx: GlobalContext,
         event: BaseEvent,
-        *_args: object,
-        **_kwargs: object,
+        *args: Any,  # pyright: ignore[reportExplicitAny, reportAny]
+        **kwargs: Any,  # pyright: ignore[reportExplicitAny, reportAny]
     ) -> None:
         """Invoke the listener action."""
         await self._check_cooldown(event)
-        await self._run_func(global_ctx, event, *_args, **_kwargs)
+        await self._run_func(global_ctx, event, *args, **kwargs)  # pyright: ignore[reportAny]
 
     async def on_func_exception(
         self,
-        global_ctx: GlobalContext,
-        event: BaseEvent,
-        error: Exception,
-        *args: object,
-        **kwargs: object,
+        global_ctx: GlobalContext,  # pyright: ignore[reportUnusedParameter]
+        event: BaseEvent,  # pyright: ignore[reportUnusedParameter]
+        error: Exception,  # pyright: ignore[reportUnusedParameter]
+        *args: object,  # pyright: ignore[reportUnusedParameter]
+        **kwargs: object,  # pyright: ignore[reportUnusedParameter]
     ) -> None:
         """Handle exceptions that occur during function execution.
 

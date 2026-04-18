@@ -1,31 +1,38 @@
 from __future__ import annotations
-from collections.abc import Collection
+
+import dataclasses
 from types import MethodType
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from bot.core.components import BaseService
 from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.chat_messages.events import MessageEvent
-import dataclasses
-
 from bot.integrations.chat_messages.models import ChatRoomCapabilities
 from bot.integrations.commands import CommandExecutionResult, CommandResponse
+from bot.integrations.commands.dispatchers import CommandDispatcher
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
     from bot.integrations.commands.dispatchers import CommandDispatcher
 
 
 class CommandService(BaseService):
+    """Service for executing commands."""
+
     def __init__(self, dispatcher: CommandDispatcher) -> None:
         super().__init__()
-        self.dispatcher = dispatcher
+        self.dispatcher: CommandDispatcher = dispatcher
 
     async def execute(
         self,
         text: str,
         event: MessageEvent | None = None,
         roles: Collection[UserRole] | None = None,
+        *,
         capture_responses: bool = False,
     ):
+        """Execute a command with the given text and context."""
         if not roles:
             roles = [UserRole.USER]
         if event:
@@ -49,7 +56,9 @@ class CommandService(BaseService):
         responses: list[CommandResponse] = []
         if capture_responses:
 
-            async def message(_: MessageEvent, text: str, *args: Any, **kwargs: Any):
+            async def message(
+                _: MessageEvent, text: str, *args: object, **kwargs: object
+            ):
                 responses.append(CommandResponse(text, args, kwargs))
 
             event.reply = MethodType(message, event)
@@ -64,6 +73,6 @@ class CommandService(BaseService):
             command_exception = result.error
         except Exception as e:
             if not capture_responses:
-                raise e
+                raise
             command_exception = e
         return CommandExecutionResult(responses, command_exception)

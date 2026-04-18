@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 import asyncio
 import inspect
 import logging
 import re
-from collections.abc import Awaitable, Callable
 from types import UnionType
 from typing import (
-    Any,
+    TYPE_CHECKING,
+    cast,
     get_args,
     get_origin,
     get_type_hints,
@@ -15,13 +17,9 @@ from typing import (
 import docstring_parser
 
 from bot.core.components import (
-    BaseEvent,
-    Cog,
-    Cooldown,
     GlobalContext,
 )
 from bot.core.listeners import GenericListener
-from bot.integrations.chat_messages import BaseCheck
 from bot.integrations.chat_messages.exceptions import CheckFailure
 from utils.strutils import strjoin
 
@@ -36,21 +34,48 @@ from .exceptions import (
     MissingRequiredArgumentError,
     UnknownArgumentError,
     UnknownFlagError,
-    VerificationFailure,
+    VerificationFailureError,
 )
-from .types import VerifierType
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from bot.core.components import (
+        BaseEvent,
+        Cog,
+        Cooldown,
+    )
+    from bot.integrations.chat_messages import BaseCheck
+
+    from .types import VerifierType
 
 LOGGER = logging.getLogger(__name__)
 
 
+def _warn_type_mismatch(
+    param_name: str, expected: object, actual: object, command_name: str
+):
+    LOGGER.warning(
+        "Type mismatch for parameter '%s' in command '%s': expected %s, got %s",
+        param_name,
+        command_name,
+        expected,
+        actual,
+    )
+
+
 class CommandListener(GenericListener):
+    """Listener for command events. Handles argument parsing, checks, and verification."""
+
     def __init__(
         self,
         func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]],
-        cog: "Cog | None" = None,
+        *,
+        cog: Cog | None = None,
         name: str | None = None,
         aliases: list[str] | None = None,
         cooldown: Cooldown | None = None,
+        priority: int = 0,
         checks: list[BaseCheck] | None = None,
         verifier: VerifierType | None = None,
         hidden: bool = False,
@@ -59,9 +84,9 @@ class CommandListener(GenericListener):
         title: str | None = None,
     ):
         # prevent circular import :)
-        from bot.integrations.commands.dispatchers import CommandDispatcher
+        from bot.integrations.commands.dispatchers import CommandDispatcher  # noqa: I001, PLC0415
 
-        super().__init__(func, cog, cooldown, CommandDispatcher)
+        super().__init__(func, cog, cooldown, CommandDispatcher, priority=priority)
         self.verifier: VerifierType | None = getattr(
             func, "_listener_command_verifier", verifier
         )
@@ -98,13 +123,13 @@ class CommandListener(GenericListener):
                 "something inside a TYPE_CHECKING if statement.",
                 func.__name__,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             # If get_type_hints fails, we'll fall back to the signature
             LOGGER.warning("Could not resolve type hints for %s: %s", func.__name__, e)
             self.type_hints = {}
 
         # Load parameter configurations from decorator
-        params_config: dict[str, dict[str, Any]] = getattr(
+        params_config: dict[str, dict[str, object]] = getattr(
             func, "_listener_command_params", {}
         )
 
@@ -130,47 +155,62 @@ class CommandListener(GenericListener):
         if sig_params and sig_params[0].name == "self":
             __ = sig_params.pop(0)
         if sig_params and (
-            sig_params[0].name == "g_ctx" or sig_params[0].annotation == GlobalContext
+            sig_params[0].name == "g_ctx"
+            or cast("object", sig_params[0].annotation) == GlobalContext
         ):
             __ = sig_params.pop(0)
         if sig_params and (
             sig_params[0].name in ["event", "ctx"]
-            or sig_params[0].annotation == CommandEvent
-            or "Event" in str(sig_params[0].annotation)
+            or cast("object", sig_params[0].annotation) == CommandEvent
+            or "Event" in str(cast("object", sig_params[0].annotation))
         ):
             __ = sig_params.pop(0)
 
         for param in sig_params:
-            param_config: dict[str, Any] = params_config.get(param.name, {})
+            param_config: dict[str, object] = params_config.get(param.name, {})
 
             # Resolve aliases
-            param_aliases: list[str] = param_config.get("aliases", []) or []
+            param_aliases = param_config.get("aliases", [])
             if isinstance(param_aliases, str):
                 param_aliases = [param_aliases]
+            elif not isinstance(param_aliases, list):
+                _warn_type_mismatch(param.name, list, param_aliases, self.name)
+                param_aliases = []
+            new_param_aliases: list[str] = []
+            for alias in param_aliases:  # pyright: ignore[reportUnknownVariableType]
+                if not isinstance(alias, str):
+                    _warn_type_mismatch(param.name, str, alias, self.name)  # pyright: ignore[reportUnknownArgumentType]
+                else:
+                    new_param_aliases.append(alias)
+            param_aliases = new_param_aliases
 
-            display_name: str = param_config.get("display_name") or param.name
+            display_name = param_config.get("display_name")
+            if not display_name:
+                display_name = param.name
+            if not isinstance(display_name, str):
+                _warn_type_mismatch(param.name, str, display_name, self.name)
+                display_name = param.name
 
             # Resolve type and check for Optional
-            raw_annotation = self.type_hints.get(param.name, param.annotation)
+            raw_annotation = self.type_hints.get(
+                param.name, cast("object", param.annotation)
+            )
             annotation = raw_annotation
             is_optional = False
 
-            # If still a string (shouldn't happen with get_type_hints, but just in case)
             if isinstance(annotation, str):
-                # Try to evaluate common built-in types
-                builtins_map = {
-                    "int": int,
-                    "float": float,
-                    "str": str,
-                    "bool": bool,
-                }
-                if annotation in builtins_map:
-                    annotation = builtins_map[annotation]
+                msg = (
+                    f"Unresolved annotation for parameter '{param.name}' "
+                    f"in command '{self.name}': {annotation}. "
+                    "Make sure all types used in annotations are imported "
+                    "and available at runtime, not just for type checking."
+                )
+                raise TypeError(msg)
 
             # Handle Optional[T] - extract the inner type
             origin = get_origin(annotation)
             if isinstance(origin, UnionType):
-                args = get_args(annotation)
+                args: tuple[object, ...] = get_args(annotation)
                 # Check if NoneType is in args
                 if type(None) in args:
                     is_optional = True
@@ -181,7 +221,7 @@ class CommandListener(GenericListener):
 
             is_optional = (
                 is_optional
-                or (param.default != inspect.Parameter.empty)
+                or (cast("object", param.default) != inspect.Parameter.empty)
                 or (
                     param.kind
                     in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
@@ -192,12 +232,33 @@ class CommandListener(GenericListener):
             param_help = param_config.get("help")
             if not param_help:
                 param_help = doc_params.get(param.name)
+            if not isinstance(param_help, str) and param_help is not None:
+                _warn_type_mismatch(param.name, str, param_help, self.name)
+                param_help = None
 
             converter = param_config.get("converter") or annotation
             if not converter:
                 converter = str
+            if not isinstance(converter, (type, BaseConverter)):
+                _warn_type_mismatch(
+                    param.name, (type, BaseConverter), converter, self.name
+                )
+                converter = str
 
             param_kind = kind_mapping[param.kind]
+
+            param_greedy = param_config.get("greedy", False)
+            if not isinstance(param_greedy, bool):
+                _warn_type_mismatch(param.name, bool, param_greedy, self.name)
+                param_greedy = False
+            param_hidden = param_config.get("hidden", False)
+            if not isinstance(param_hidden, bool):
+                _warn_type_mismatch(param.name, bool, param_hidden, self.name)
+                param_hidden = False
+            param_regex = param_config.get("regex")
+            if not isinstance(param_regex, (str, re.Pattern)):
+                _warn_type_mismatch(param.name, (str, re.Pattern), param_regex, self.name)
+                param_regex = None
 
             # Create Parameter object
             p = Parameter(
@@ -205,25 +266,27 @@ class CommandListener(GenericListener):
                 display_name=display_name,
                 raw_annotation=raw_annotation,
                 annotation=annotation,
-                converter=converter,  # pyrefly: ignore[bad-argument-type]
+                converter=converter,
                 is_optional=is_optional,
-                default=param.default,
+                default=cast("object", param.default),
                 aliases=param_aliases,
-                greedy=param_config.get("greedy") or False,
-                hidden=param_config.get("hidden") or False,
+                greedy=param_greedy,
+                hidden=param_hidden,
                 kind=param_kind,
                 help=param_help,
                 command=self,
-                regex=param_config.get("regex"),
+                regex=param_regex,
             )
 
             # Extract documentation from converter if available
-            is_subclass = isinstance(converter, type) and issubclass(
-                converter, BaseConverter
-            )
-            is_instance = isinstance(converter, BaseConverter)
-            if is_subclass or is_instance:
-                p.type_title = getattr(converter, "title", None) or converter.__name__  # pyrefly: ignore[missing-attribute]
+            if (
+                isinstance(converter, type) and issubclass(converter, BaseConverter)
+            ) or isinstance(converter, BaseConverter):
+                raw_type_title = getattr(converter, "title", None)
+                if isinstance(raw_type_title, type):
+                    p.type_title = raw_type_title.__name__
+                else:
+                    p.type_title = raw_type_title.__class__.__name__
                 p.type_short_help = getattr(converter, "short_help", None)
                 p.type_help = getattr(converter, "help", None) or converter.__doc__
             elif converter in BUILTIN_TYPE_DOCS:
@@ -247,51 +310,45 @@ class CommandListener(GenericListener):
 
     async def _run_checks(self, g_ctx: GlobalContext, ctx: CommandEvent):
         for check in self.checks:
-            try:
-                check_result = check.check(g_ctx, ctx)
-                if asyncio.iscoroutine(check_result):
-                    check_result = await check_result
+            check_result = check.check(g_ctx, ctx)
+            if asyncio.iscoroutine(check_result):
+                check_result = await check_result
 
-                if isinstance(check_result, str):
-                    raise CheckFailure(check_result)
-                if not check_result:
-                    msg = f"Check failed for command '{self.name}'"
-                    raise CheckFailure(msg)
-            except CheckFailure:
-                raise
-            except Exception as e:
-                raise e
-                # raise (f"Check raised an error: {e}")
+            if isinstance(check_result, str):
+                raise CheckFailure(check_result)
+            if not check_result:
+                msg = f"Check failed for command '{self.name}'"
+                raise CheckFailure(msg)
 
     async def _run_verification(
-        self, g_ctx: GlobalContext, event: CommandEvent, *args: Any, **kwargs: Any
+        self, g_ctx: GlobalContext, event: CommandEvent, *args: object, **kwargs: object
     ):
         # Run verifier if present
         if self.verifier:
             try:
                 verify_result = self.verifier(g_ctx, event, *args, **kwargs)
-                if asyncio.iscoroutine(verify_result):
+                if inspect.isawaitable(verify_result):
                     verify_result = await verify_result
 
                 if isinstance(verify_result, str):
-                    raise VerificationFailure(verify_result)
+                    raise VerificationFailureError(verify_result)
                 if verify_result is False:
                     msg = f"Verification failed for command '{self.name}'"
-                    raise VerificationFailure(msg)
-            except VerificationFailure:
+                    raise VerificationFailureError(msg)
+            except VerificationFailureError:
                 raise
             except Exception as e:
                 LOGGER.exception("Verification raised an error")
                 msg = "An unknown error occurred"
-                raise VerificationFailure(msg) from e
+                raise VerificationFailureError(msg) from e
 
     async def _convert_argument(
         self,
         ctx: CommandEvent,
-        value: Any,
+        value: object,
         param: Parameter,
         g_ctx: GlobalContext,
-    ) -> Any:
+    ) -> object:
         if value is None:
             return value
         if param.annotation == inspect.Parameter.empty:
@@ -299,18 +356,25 @@ class CommandListener(GenericListener):
 
         conv_obj = param.converter
 
-        if type(value) is type(conv_obj):
+        if isinstance(conv_obj, type) and isinstance(value, conv_obj):
             return value
 
-        if value is True:
+        if isinstance(value, bool) and conv_obj is not bool:
             raise EmptyFlagValueError(param)
 
-        if isinstance(conv_obj, BaseConverter):
+        if not isinstance(value, str):
+            msg = (
+                "Expected argument to be a string for conversion, "
+                f"got {type(value).__name__}"
+            )
+            raise ArgumentConversionError(msg, str(value), param)
+
+        if isinstance(conv_obj, BaseConverter) or issubclass(conv_obj, BaseConverter):
             try:
-                result = conv_obj.convert(g_ctx, ctx, value)
-                if asyncio.iscoroutine(result):
-                    return await result
-                return result
+                if isinstance(conv_obj, BaseConverter):
+                    result = conv_obj.convert(g_ctx, ctx, value)
+                else:
+                    result = conv_obj.cls_convert(g_ctx, ctx, value)
             except ArgumentConversionError as e:
                 raise ArgumentConversionError(e.message, value, param) from None
             except Exception as e:
@@ -321,62 +385,43 @@ class CommandListener(GenericListener):
                     param,
                     e,
                 ) from e
-        elif issubclass(conv_obj, BaseConverter):
-            try:
-                result = conv_obj.cls_convert(g_ctx, ctx, value)
+            else:
                 if asyncio.iscoroutine(result):
                     return await result
                 return result
-            except ArgumentConversionError as e:
-                raise ArgumentConversionError(e.message, value, param) from None
-            except Exception as e:
-                msg = f"An error occurred while converting the argument: {e}"
-                raise ArgumentConversionError(
-                    msg,
-                    value,
-                    param,
-                    e,
-                ) from e
-        elif conv_obj is bool:
-            if isinstance(value, bool):
-                return value
-            if isinstance(value, str):
-                if value.lower() in ("true", "yes", "1", "on"):
-                    return True
-                if value.lower() in ("false", "no", "0", "off"):
-                    return False
-                msg = "Expected a boolean"
-                raise ArgumentConversionError(msg, value, param)
+
+        if conv_obj is bool:
+            if value.lower() in ("true", "yes", "1", "on"):
+                return True
+            if value.lower() in ("false", "no", "0", "off"):
+                return False
             msg = "Expected a boolean"
             raise ArgumentConversionError(msg, value, param)
-        elif conv_obj is int:
+
+        if conv_obj is int:
             try:
                 return int(value)
             except ValueError as e:
                 msg = "Expected an integer"
                 raise ArgumentConversionError(msg, value, param, e) from None
-        elif conv_obj is float:
+
+        if conv_obj is float:
             try:
                 return float(value)
             except ValueError as e:
                 msg = "Expected a number"
                 raise ArgumentConversionError(msg, value, param, e) from None
-        elif conv_obj is str:
-            if value == True:
-                raise EmptyFlagValueError(param)
+
+        if conv_obj is str:
             return value
-        else:
-            # Attempt to call the type as a constructor
-            try:
-                return conv_obj(value)
-            except Exception as e:
-                msg = f"Could not convert to {conv_obj.__name__}"
-                raise ArgumentConversionError(msg, value, param, e) from e
+
+        msg = f"Could not convert to {conv_obj.__name__}"
+        raise ArgumentConversionError(msg, value, param)
 
     async def _parse_arguments(
         self, ctx: CommandEvent, g_ctx: GlobalContext
-    ) -> tuple[set[str], dict[str, Any]]:
-        kwargs: dict[str, Any] = {}
+    ) -> tuple[set[str], dict[str, object]]:
+        kwargs: dict[str, object] = {}
 
         # Separate positional args and flags from ctx.args
         positional_args: list[str] = []
@@ -449,7 +494,10 @@ class CommandListener(GenericListener):
             if param.kind == ParameterType.KEYWORD_ONLY:
                 if param.default != inspect.Parameter.empty:
                     converted = await self._convert_argument(
-                        ctx, param.default, param, g_ctx
+                        ctx,
+                        param.default,
+                        param,
+                        g_ctx,
                     )
                     kwargs[param_name] = converted
                 elif param.is_optional:
@@ -474,11 +522,11 @@ class CommandListener(GenericListener):
                     tokens_consumed = 0
 
                     # Only attempt to extend if the base value matches
-                    if re.match(param.regex, current_val):
+                    if re.match(param.regex, current_val):  # pyright: ignore[reportCallIssue, reportArgumentType]
                         remaining_tokens = positional_args[positional_index:]
                         for token in remaining_tokens:
                             next_val = current_val + " " + token
-                            if re.match(param.regex, next_val):
+                            if re.match(param.regex, next_val):  # pyright: ignore[reportCallIssue, reportArgumentType]
                                 current_val = next_val
                                 tokens_consumed += 1
                             else:
@@ -489,8 +537,6 @@ class CommandListener(GenericListener):
 
                 converted = await self._convert_argument(ctx, val, param, g_ctx)
 
-                # Decide where to put it
-                # param.kind == ParameterKind.POSITIONAL_ONLY:
                 kwargs[param_name] = converted
                 specified_params.add(param.name)
             # Not provided positionally
@@ -511,7 +557,11 @@ class CommandListener(GenericListener):
 
     @override
     async def invoke(
-        self, global_ctx: GlobalContext, event: CommandEvent, *args: Any, **kwargs: Any
+        self,
+        global_ctx: GlobalContext,
+        event: CommandEvent,
+        *args: object,
+        **kwargs: object,
     ) -> None:
         await self._run_checks(global_ctx, event)
         await self._check_cooldown(event)
@@ -525,6 +575,7 @@ class CommandListener(GenericListener):
         await self._run_func(global_ctx, event, *args, **kwargs)
 
     def get_usage_text(self, prefix: str, invoked_name: str | None = None):
+        """Get the usage text for the command."""
         if not invoked_name:
             invoked_name = self.name
         nm_out = [f"{prefix}{invoked_name}"]
@@ -538,6 +589,7 @@ class CommandListener(GenericListener):
         return " ".join(nm_out)
 
     def get_help_text(self, prefix: str, invoked_name: str | None = None):
+        """Get the help text for the command."""
         if not invoked_name:
             invoked_name = self.name
         description = self.short_help or self.help or ""
@@ -552,11 +604,10 @@ class CommandListener(GenericListener):
             aliases = f"Aliases: {', '.join(alias_list)}"
         restrictions = ""
         if self.checks:
-            restriction_list: list[str] = []
-            for check in self.checks:
-                restriction_list.append(
-                    check.title or check.short_help or check.help or check.__qualname__
-                )
+            restriction_list: list[str] = [
+                check.title or check.short_help or check.help or check.__qualname__
+                for check in self.checks
+            ]
             restrictions = f"Limited to: {', '.join(restriction_list).capitalize()}"
         cooldowns = ""
         if self.cooldown:
@@ -569,7 +620,12 @@ class CommandListener(GenericListener):
                 )
 
         return strjoin(
-            " – ", name_and_usage, description, restrictions, aliases, cooldowns
+            " – ",  # noqa: RUF001
+            name_and_usage,
+            description,
+            restrictions,
+            aliases,
+            cooldowns,
         )
 
 

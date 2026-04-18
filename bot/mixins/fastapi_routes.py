@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,8 +26,8 @@ class EndpointDefinition:
         self,
         method: str,
         server: APIServer,
-        *args: Any,
-        **kwargs: Any,
+        *args: Any,  # pyright: ignore[reportExplicitAny, reportAny]
+        **kwargs: Any,  # pyright: ignore[reportExplicitAny, reportAny]
     ) -> None:
         """Initialize an endpoint definition.
 
@@ -41,14 +41,14 @@ class EndpointDefinition:
         self.method: str = method
         self.server: APIServer = server
         self.path: str = args[0] if len(args) > 0 else kwargs.get("path", "")
-        self.args: tuple[Any, ...] = args[1:]
-        self.kwargs: dict[str, Any] = kwargs
+        self.args: tuple[object, ...] = args[1:]
+        self.kwargs: dict[str, object] = kwargs
 
     def include_in_router(
         self,
-        endpoint: Callable[..., Any],
+        endpoint: Callable[..., Any],  # pyright: ignore[reportExplicitAny]
         router: APIRouter,
-        **defaults_route_args: Any,
+        **defaults_route_args: object,
     ) -> None:
         """Include this endpoint in a FastAPI router.
 
@@ -115,7 +115,10 @@ class APIControllerDecorator:
         """
 
         def decorator_factory(
-            server: APIServer, /, *args: Any, **kwargs: Any
+            server: APIServer,
+            /,
+            *args: Any,  # pyright: ignore[reportExplicitAny, reportAny]
+            **kwargs: Any,  # pyright: ignore[reportExplicitAny, reportAny]
         ) -> Callable[[T], T]:
             """Decorator factory that takes server and route parameters.
 
@@ -197,7 +200,7 @@ class FastAPIRoutesMixin:
         # Find all methods with endpoint definitions
         members = inspect.getmembers(
             self,
-            lambda x: hasattr(x, "__endpoint_definitions__"),
+            lambda x: hasattr(x, "__endpoint_definitions__"),  # pyright: ignore[reportAny]
         )
 
         if not members:
@@ -207,11 +210,14 @@ class FastAPIRoutesMixin:
         # Group endpoint definitions by server
         routes_by_server: dict[
             APIServer,
-            list[tuple[str, Callable[..., Any], EndpointDefinition]],
+            list[tuple[str, Callable[..., object], EndpointDefinition]],
         ] = {}
 
-        for _, endpoint in members:
-            definitions = getattr(endpoint, "__endpoint_definitions__")
+        for _, endpoint in members:  # pyright: ignore[reportAny]
+            definitions = cast(
+                "list[EndpointDefinition]",
+                getattr(endpoint, "__endpoint_definitions__"),  # pyright: ignore[reportAny]
+            )
             for definition in definitions:
                 if definition.server not in routes_by_server:
                     routes_by_server[definition.server] = []

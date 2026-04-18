@@ -4,7 +4,7 @@ import inspect
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, NamedTuple, override
+from typing import TYPE_CHECKING, NamedTuple, override
 
 from utils.strutils import strjoin
 
@@ -22,20 +22,33 @@ EVENT_CATEGORY_COMMAND = "command"
 
 
 class BaseConverter:
-    """To display a custom error message when conversion fails,
-    raise command_exceptions.ArgumentConversionError in the convert method."""
+    """Base converter class for command argument conversion.
+
+    To display a custom error message when conversion fails,
+    raise command_exceptions.ArgumentConversionError in the convert method.
+    """
 
     title: str = ""
     short_help: str = ""
     help: str = ""
 
-    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> Any:  # pyright: ignore[reportUnusedParameter, reportAny, reportExplicitAny]
+    async def convert(
+        self,
+        g_ctx: GlobalContext,  # pyright: ignore[reportUnusedParameter]
+        event: CommandEvent,  # pyright: ignore[reportUnusedParameter]
+        arg: str,  # pyright: ignore[reportUnusedParameter]
+    ) -> object:
+        """Convert a string argument to the desired type."""
         raise NotImplementedError
 
     @classmethod
     async def cls_convert(
-        cls, g_ctx: GlobalContext, event: CommandEvent, arg: str
-    ) -> Any:
+        cls,
+        g_ctx: GlobalContext,  # pyright: ignore[reportUnusedParameter]
+        event: CommandEvent,  # pyright: ignore[reportUnusedParameter]
+        arg: str,  # pyright: ignore[reportUnusedParameter]
+    ) -> object:
+        """Convert a string argument to the desired type."""
         raise NotImplementedError
 
 
@@ -44,8 +57,13 @@ RE_FLAG = re.compile(r"[-a-zA-Z]{2}[a-zA-Z]+[:=]+.+|-[a-zA-Z]\b|--[a-zA-Z_]+\b")
 
 
 class CommandArgs:
+    """Arguments passed to a command.
+
+    Includes parsing of flags and grouping of consecutive non-flag arguments.
+    """
+
     def __init__(self, text: str):
-        self.text = text
+        self.text: str = text
 
         self.args: list[str | Flag] = []  # args are in order of appearance
         self.flags: list[Flag] = []  # flags are in order of appearance
@@ -116,10 +134,8 @@ class CommandArgs:
                 flag = Flag(flag_name, flag_value)
                 self.flags.append(flag)
                 self.args.append(flag)
-            else:
-                if is_quoted:
-                    arg = arg[1:-1]
-                self.args.append(arg)
+            elif is_quoted:
+                self.args.append(arg[1:-1])
 
         # Build grouped_args by joining consecutive non-flag args with spaces,
         # using flags as separators (flags are not included in grouped_args)
@@ -136,25 +152,18 @@ class CommandArgs:
             grouped.append(" ".join(current_group))
         self.grouped_args = grouped
 
-    # def get_flag(self, name: str | list[str], case_sensitive: bool = False, default: str | None = None) -> Flag | None:
-    #     names = name if isinstance(name, list) else [name]
-    #     for flag in self.flags:
-    #         if case_sensitive and flag.name in names:
-    #             return flag
-    #         elif not case_sensitive and flag.name.lower() in [n.lower() for n in names]:
-    #             return flag
-    #     return Flag(name, default)
-
 
 @dataclass
 class Parameter:
+    """Command parameter definition."""
+
     name: str
     display_name: str
-    raw_annotation: Any
-    annotation: Any
+    raw_annotation: object
+    annotation: object
     converter: BaseConverter | type
     kind: ParameterType
-    default: Any = inspect.Parameter.empty
+    default: object = inspect.Parameter.empty
     aliases: list[str] = field(default_factory=list)
     greedy: bool = False
     hidden: bool = False
@@ -164,8 +173,8 @@ class Parameter:
     type_help: str | None = None
     help: str | None = None
     command: CommandListener | None = None
-    regex: str | re.Pattern[str] | None = None
-    _regex_compiled: re.Pattern[str] | None = None
+    regex: str | re.Pattern[str] | re.Pattern[bytes] | None = None
+    _regex_compiled: re.Pattern[str] | re.Pattern[bytes] | None = None
 
     def __post_init__(self):
         if isinstance(self.regex, str):
@@ -174,6 +183,7 @@ class Parameter:
             self._regex_compiled = self.regex
 
     def get_parameter_display(self, invoked_name: str | None = None) -> str:
+        """Help text helper."""
         param_str = invoked_name or self.display_name
         if self.type_title:
             param_str += f": {self.type_title}"
@@ -186,6 +196,7 @@ class Parameter:
         return param_str
 
     def get_help_text(self, invoked_name: str | None = None) -> str:
+        """Help text helper."""
         param_aliases = self.aliases[:]
 
         if invoked_name and invoked_name in param_aliases:
@@ -225,28 +236,36 @@ class Parameter:
         if param_aliases:
             out_str.append(f"Aliases: {', '.join(param_aliases)}")
 
-        response = strjoin(" – ", *out_str)
-        return response
+        response = strjoin(" – ", *out_str)  # noqa: RUF001
+        return response  # noqa: RET504
 
 
 class CommandResponse(NamedTuple):
+    """Response from a command execution."""
+
     text: str
-    args: tuple[Any]
-    kwargs: dict[str, Any]
+    args: tuple[object, ...]
+    kwargs: dict[str, object]
 
 
 class CommandExecutionResult(NamedTuple):
+    """Result from a command execution."""
+
     responses: list[CommandResponse]
     error: Exception | None
 
 
 class CommandDispatchResult(NamedTuple):
-    listener: "CommandListener | None"
+    """Result from a command dispatch."""
+
+    listener: CommandListener | None
     error: Exception | None
 
 
 @dataclass
 class Flag:
+    """Parsed flag from command arguments."""
+
     name: str
     value: str | None = None
 

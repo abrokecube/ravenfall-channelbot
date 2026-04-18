@@ -60,9 +60,9 @@ class ConfigSubscriberMixin:
 
     def on_config_changed(
         self,
-        table: str,
-        config: object,
-        changed_fields: set[str],
+        table: str,  # pyright: ignore[reportUnusedParameter]
+        config: object,  # pyright: ignore[reportUnusedParameter]
+        changed_fields: set[str],  # pyright: ignore[reportUnusedParameter]
     ) -> None:
         """Called when subscribed config fields change after a reload.
 

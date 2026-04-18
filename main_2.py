@@ -136,10 +136,6 @@ async def run():
     await event_manager.add_dispatcher(TwitchRedeemDispatcher())
     event_manager.add_event_processor(MessageEvent, filter_message_event_text)
     twitch = TwitchEventSource(
-        os.getenv("TWITCH_APP_ID", ""),
-        os.getenv("TWITCH_APP_SECRET", ""),
-        os.getenv("BOT_USER_ID", ""),
-        [os.getenv("OWNER_TWITCH_ID", "")],
         [AuthScope.USER_WRITE_CHAT],
         [
             AuthScope.CHAT_READ,
@@ -151,25 +147,7 @@ async def run():
         ],
     )
     # tasks.append(event_manager.add_event_source(twitch))
-    ravenfall = RavenfallEventSource(
-        ravenfall_config=[
-            RavenfallConfig(
-                twitch_id="756734432",
-                twitch_login="abrokecube",
-                query_server_base_url="http://pc3-server/rf_query/1/",
-            ),
-            # RavenfallConfig(
-            #     "1253884011", "borkedcube", "http://pc3-server/rf_query/2/"
-            # ),
-            RavenfallConfig(
-                twitch_id="1312439833",
-                twitch_login="cubedhelperbot",
-                query_server_base_url="http://127.0.0.1:8888/ravenfall/",
-                middleman_connection_id="rf_abrokecube",
-            ),
-        ],
-        middleman_base_url="http://127.0.0.1:7101/",
-    )
+    ravenfall = RavenfallEventSource()
     tasks.append(event_manager.add_event_source(ravenfall))
 
     tasks.append(event_manager.add_cog(TestingCog))

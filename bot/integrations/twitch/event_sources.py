@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast, overload, override
 
 from bidict import bidict
 from colorama import Back, Fore
+from pydantic import BaseModel
 from sqlalchemy import select
 from twitchAPI import helper
 from twitchAPI.chat import Chat
@@ -26,6 +27,7 @@ from bot.core.components import BaseEventSource
 from bot.db.service import DatabaseService
 from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailure
+from bot.services.config_service import ConfigService
 
 from . import TwitchAuth, TwitchChannelSettings, events
 from .enums import (
@@ -60,6 +62,15 @@ def print_to_console(msg: str):
         f"{Fore.LIGHTYELLOW_EX}{Back.RESET}"
         f"twitch_event_source:{Fore.RESET} {msg}{Fore.RESET}{Back.RESET}"
     )
+
+
+class TwitchConfig(BaseModel):
+    """Configuration for Twitch integration."""
+
+    app_id: str
+    app_secret: str
+    bot_user_id: str
+    bot_admin_uids: set[str] = set()
 
 
 class TwitchEventSub:
@@ -225,19 +236,15 @@ class TwitchEventSource(BaseEventSource):
 
     def __init__(
         self,
-        app_id: str,
-        app_secret: str,
-        bot_user_id: str,
-        bot_admin_uids: Collection[str] | None = None,
         app_scopes: Collection[AuthScope] | None = None,
         bot_user_scopes: Collection[AuthScope] | None = None,
     ):
         super().__init__()
-        self.app_id: str = app_id
-        self.app_secret: str = app_secret
-        self.bot_user_id: str = bot_user_id
+        self.app_id: str = ""
+        self.app_secret: str = ""
+        self.bot_user_id: str = ""
         self.twitch_chat: Chat | None = None
-        self.bot_admin_uids: set[str] = set(bot_admin_uids or [])
+        self.bot_admin_uids: set[str] = set()
         self.app_scopes: list[AuthScope] = list(app_scopes or [])
         self.bot_user_scopes: list[AuthScope] = list(bot_user_scopes or [])
         self.bot_twitch: Twitch | None = None
@@ -384,7 +391,7 @@ class TwitchEventSource(BaseEventSource):
                 refresh_token = None
                 save_new_tokens = True
                 continue
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print_to_console(
                     f"{Fore.LIGHTRED_EX}Error setting user authentication: {e}"
                 )
@@ -440,6 +447,12 @@ class TwitchEventSource(BaseEventSource):
     @override
     async def setup(self, event_manager: EventManager):
         __ = await self.global_context.wait_for_service(DatabaseService)
+        config = await self.global_context.wait_for_service(ConfigService)
+        twitch_config = config.get_table("integrations.twitch", TwitchConfig)
+        self.app_id = twitch_config.app_id
+        self.app_secret = twitch_config.app_secret
+        self.bot_user_id = twitch_config.bot_user_id
+        self.bot_admin_uids = twitch_config.bot_admin_uids
         self.bot_twitch = await Twitch(
             self.app_id, self.app_secret, target_app_auth_scope=self.app_scopes
         )
@@ -523,7 +536,7 @@ class TwitchEventSource(BaseEventSource):
                     try:
                         await self._add_eventsub_chat_message_subscription(settings)
                         settings.message_delivery_mode = MessageDeliveryMode.HELIX
-                    except:
+                    except Exception:  # noqa: BLE001
                         LOGGER.warning(
                             "Failed to subscribe to eventsub chat", exc_info=True
                         )
@@ -576,7 +589,7 @@ class TwitchEventSource(BaseEventSource):
                 try:
                     await self.twitch_chat.leave_room(user.login)
                     del self.connected_chats[user.id]
-                except:
+                except Exception:  # noqa: BLE001
                     failed.append(channel_list[idx])
             elif settings.message_receive_mode == MessageReceiveMode.EVENTSUB:
                 try:
@@ -586,7 +599,7 @@ class TwitchEventSource(BaseEventSource):
                     )
                     # remove_eventsub_subscriptions handles deleting
                     # from self.connected_chats
-                except:
+                except Exception:  # noqa: BLE001
                     failed.append(channel_list[idx])
         return failed
 

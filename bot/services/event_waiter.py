@@ -74,7 +74,7 @@ class EventWaiterService(BaseService):
                 seconds_before, event_type, predicate
             )
             if past_event is not None:
-                return past_event  # pyright: ignore[reportReturnType]
+                return past_event
 
         loop = asyncio.get_running_loop()
         future = loop.create_future()

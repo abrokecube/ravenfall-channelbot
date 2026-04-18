@@ -4,7 +4,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 from ruamel import yaml as ruamel_yaml
 from ruamel.yaml import YAML
@@ -15,9 +15,10 @@ from . import models as md
 
 if TYPE_CHECKING:
     import io
+    from collections.abc import Sequence
 
 type RavenfallInstanceEventHook = Callable[[RavenfallEvent], Awaitable[None]]
-RavenfallConfig = md.RavenfallConfig
+RavenfallConfig = md.RavenfallInstanceConfig
 
 LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class Match:
     """Matched Ravenfall string."""
 
     identifier: str | None
-    _args: dict[str, str | float]
+    _args: dict[str, object]
 
     def get_arg(self, key: str):
         """Get a format string argument's value."""
@@ -73,21 +74,34 @@ def _parse_matcher_string(match_string: str) -> re.Pattern[str]:
 class RavenfallMatcher:
     """Matches incoming format strings from Ravenfall."""
 
-    def __init__(self, definitions_text_buf: io.TextIOBase):
+    def __init__(
+        self,
+        *,
+        definitions_text_buf: io.TextIOBase | None = None,
+        definitions_text: str | None = None,
+    ):
         self._string_matchers: dict[str, str] = {}
         self._regex_matchers: list[RegexMatcher] = []
 
         yaml = YAML()
-        definitions_yaml: Any = yaml.load(definitions_text_buf)
-        defs_dict: dict[str, Any] = {}
+
+        if definitions_text_buf is not None:
+            definitions_yaml: object = yaml.load(definitions_text_buf)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        elif definitions_text is not None:
+            definitions_yaml = yaml.load(definitions_text)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        else:
+            msg = "Either definitions_text_buf or definitions_text must be provided"
+            raise ValueError(msg)
+
+        defs_dict: dict[str, object] = {}
         if not isinstance(definitions_yaml, dict):
             defs_dict = {}
         else:
-            defs_dict = cast("dict[Any, Any]", definitions_yaml)
+            defs_dict = cast("dict[str, object]", definitions_yaml)
 
         for key, match_str in defs_dict.items():
             if isinstance(match_str, ruamel_yaml.CommentedSeq):
-                for sub_match_str in match_str:
+                for sub_match_str in match_str:  # pyright: ignore[reportUnknownVariableType]
                     if isinstance(sub_match_str, str):
                         self._add_matcher(key, sub_match_str)
                     else:
@@ -105,11 +119,11 @@ class RavenfallMatcher:
         else:
             self._string_matchers[match_str] = key
 
-    def match_string(self, format_str: str, args: list[Any]) -> Match:
+    def match_string(self, format_str: str, args: Sequence[object]) -> Match:
         """Matches a given format string."""
-        args = args.copy()
+        args = list(args)
         str_identifier: str | None = None
-        mapped_args: dict[str, Any] = {}
+        mapped_args: dict[str, object] = {}
         if format_str in self._string_matchers:
             str_identifier = self._string_matchers[format_str]
         else:
@@ -120,7 +134,7 @@ class RavenfallMatcher:
                     str_identifier = regex_matcher.identifier
                     break
             if re_match is not None:
-                mapped_args = re_match.groupdict()
+                mapped_args = cast("dict[str, object]", re_match.groupdict())
 
         for a in FSTRINGS.finditer(format_str):
             mapped_args[a.group(1)] = args.pop(0)

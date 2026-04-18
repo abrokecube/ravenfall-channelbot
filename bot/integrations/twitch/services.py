@@ -101,7 +101,7 @@ class TwitchService(BaseService):
             try:
                 _ = await m(channel_id, text, reply_id=reply_id)
                 break
-            except Exception:
+            except Exception:  # noqa: BLE001
                 LOGGER.warning("Failed to send message", exc_info=True)
                 continue
 

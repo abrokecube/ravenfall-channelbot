@@ -1,16 +1,23 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
 from bot.core import EVENT_CATEGORY_GENERIC, EVENT_SOURCE_ANY
 from bot.core.components import BaseEvent
-from dataclasses import dataclass
-from collections.abc import Collection
-
 from bot.integrations.chat_messages import EVENT_CATEGORY_MESSAGE
-from .enums import UserRole
-from .models import ChatRoomCapabilities
-from typing import Any
+
+if TYPE_CHECKING:
+    from collections.abc import Collection
+
+    from .enums import UserRole
+    from .models import ChatRoomCapabilities
 
 
 @dataclass(kw_only=True)
 class MessageEvent(BaseEvent):
+    """Event representing a chat message."""
+
     categories: Collection[str] = (
         EVENT_CATEGORY_MESSAGE,
         EVENT_CATEGORY_GENERIC,
@@ -29,8 +36,8 @@ class MessageEvent(BaseEvent):
     bot_user_name: str
     bot_user_id: str
 
-    async def send(self, text: str, **kwargs: Any):
-        pass
+    async def send(self, text: str, **kwargs: Any):  # pyright: ignore[reportUnusedParameter, reportAny, reportExplicitAny]
+        """Send a message in the same context as this event."""
 
-    async def reply(self, text: str, **kwargs: Any):
-        pass
+    async def reply(self, text: str, **kwargs: Any):  # pyright: ignore[reportUnusedParameter, reportAny, reportExplicitAny]
+        """Reply to this message."""

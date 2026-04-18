@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from msgspec import Struct
+from pydantic import BaseModel
 
 from bot.clients import ravenfall_query as rq
 
@@ -41,7 +41,15 @@ class Dungeon(rq.Dungeon):
     stage: enums.DungeonStage = enums.DungeonStage.NONE
 
 
-class RavenfallConfig(Struct):
+class RavenfallConfig(BaseModel):
+    """Configuration model for Ravenfall integration."""
+
+    middleman_base_url: str | None = None
+    ravenfall_message_definitions_path: str = "./data/definitions.yaml"
+    instances: list[RavenfallInstanceConfig]
+
+
+class RavenfallInstanceConfig(BaseModel):
     """Configuration model for a Ravenfall instance."""
 
     twitch_id: str

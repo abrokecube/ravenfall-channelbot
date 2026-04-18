@@ -1,8 +1,14 @@
-from . import BaseCheck
-from .types import CheckFuncType
-from typing import override
+from __future__ import annotations
+
 from inspect import isawaitable
-from bot.core.components import GlobalContext, BaseEvent
+from typing import TYPE_CHECKING, override
+
+from . import BaseCheck
+
+if TYPE_CHECKING:
+    from bot.core.components import BaseEvent, GlobalContext
+
+    from .types import CheckFuncType
 
 
 class FunctionCheck(BaseCheck):

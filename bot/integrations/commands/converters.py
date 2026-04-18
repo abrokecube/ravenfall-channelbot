@@ -1,25 +1,30 @@
 from __future__ import annotations
 
-from typing import override
-
-from bot.core.components import GlobalContext
 import glob
 import re
+from typing import TYPE_CHECKING, override
 
 from ravenpy import ravenpy
-from ravenpy.ravenpy import Item as RFItem
 from utils.strutils import strjoin
 
 from . import BaseConverter
-from .events import CommandEvent
 from .exceptions import ArgumentConversionError
+
+if TYPE_CHECKING:
+    from bot.core.components import GlobalContext
+    from ravenpy.ravenpy import Item as RFItem
+
+    from .events import CommandEvent
 
 
 class Choice(BaseConverter):
+    """Converter for a fixed set of string choices."""
+
     def __init__(
         self,
         definition: list[str] | dict[str, list[str]],
         title: str | None = None,
+        *,
         case_sensitive: bool = False,
     ):
         super().__init__()
@@ -36,7 +41,7 @@ class Choice(BaseConverter):
             if case_sensitive:
                 string_map = {x: x for x in choices}
                 for k, v in definition.items():
-                    string_map.update({x: k for x in v})
+                    string_map.update(dict.fromkeys(v, k))
             else:
                 string_map = {x.lower(): x for x in choices}
                 for k, v in definition.items():
@@ -46,17 +51,19 @@ class Choice(BaseConverter):
             self.title: str = title
         else:
             self.title = f"Choice ({len(choices)})"
-        self.short_help: str = f"One of the following: {strjoin(', ', *choices, before_end='or ', include_conn_char_before_end=True)}"
+        j = strjoin(", ", *choices, before_end="or ", include_conn_char_before_end=True)
+        self.short_help: str = f"One of the following: {j}"
         self.help: str = self.short_help
         self.case_sensitive: bool = case_sensitive
         self.string_map: dict[str, str] = string_map
 
     @override
     async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> str:
-        if not arg in self.string_map:
-            raise ArgumentConversionError(
+        if arg not in self.string_map:
+            msg = (
                 f"Choice '{arg}' is not a valid option. Valid choices: {self.short_help}"
             )
+            raise ArgumentConversionError(msg)
         return self.string_map[arg]
 
 
@@ -150,9 +157,7 @@ class RangeFloat(BaseConverter):
             raise ValueError("min_ or max_ need to be a number")
 
     @override
-    async def convert(
-        self, g_ctx: GlobalContext, event: CommandEvent, arg: str
-    ) -> float:
+    async def convert(self, g_ctx: GlobalContext, event: CommandEvent, arg: str) -> float:
         try:
             number = float(arg)
         except ValueError:

@@ -12,7 +12,7 @@ import aiohttp
 import msgspec
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from bot.clients.prometheus import (
     Counter,
@@ -23,6 +23,8 @@ from bot.clients.prometheus import (
     Summary,
 )
 from bot.core.components import BaseService
+from bot.mixins.config_subscriber import ConfigSubscriberMixin
+from bot.services.config_service import ConfigService
 from bot.services.web_service import APIServer, WebService
 
 if TYPE_CHECKING:
@@ -74,13 +76,16 @@ class PrometheusServiceConfig(BaseModel):
     enabled: bool = True
     collector_timeout_s: int = 10
     metrics_server: str = "private"
-
-
-class PrometheusQueryConfig(BaseModel):
-    """Configuration for Prometheus query servers."""
-
+    default_query_server: str = "main"
     servers: dict[str, str] = {"main": "http://localhost:9090"}
-    default: str = "main"
+
+    @model_validator(mode="after")
+    def validate_config(self):
+        """Validate that the default_query_server is defined in servers."""
+        if self.default_query_server not in self.servers:
+            msg = "default_query_server must be a valid server ID defined in servers"
+            raise ValueError(msg)
+        return self
 
 
 class CollectorDefinition:
@@ -103,7 +108,7 @@ class CollectorDefinition:
         self.description: str = description
 
 
-class PrometheusService(BaseService):
+class PrometheusService(BaseService, ConfigSubscriberMixin):
     """Service for managing Prometheus metrics and collectors."""
 
     def __init__(self) -> None:
@@ -111,7 +116,6 @@ class PrometheusService(BaseService):
         self._metrics: Metrics = Metrics()
         self._collectors: dict[str, CollectorDefinition] = {}
         self._config: PrometheusServiceConfig = PrometheusServiceConfig()
-        self._query_config: PrometheusQueryConfig = PrometheusQueryConfig()
         self._http_client: aiohttp.ClientSession | None = None
 
     @override
@@ -119,9 +123,15 @@ class PrometheusService(BaseService):
         """Set up the Prometheus service."""
         self._http_client = aiohttp.ClientSession()
 
-        # Integrate with WebService
-
         web_service = await self.global_context.wait_for_service(WebService)
+        config_service = await self.global_context.wait_for_service(ConfigService)
+        self.inject_config_service(config_service)
+
+        config_table_name = "services.prometheus"
+        self._config = config_service.get_table(
+            config_table_name, PrometheusServiceConfig
+        )
+        self.subscribe(config_table_name, PrometheusServiceConfig)
 
         router = APIRouter()
 
@@ -146,6 +156,13 @@ class PrometheusService(BaseService):
         """Tear down the Prometheus service."""
         if self._http_client:
             await self._http_client.close()
+
+    @override
+    def on_config_changed(self, table: str, config: object, changed_fields: set[str]):
+        """Handle configuration changes."""
+        if table == "services.prometheus" and isinstance(config, PrometheusServiceConfig):
+            self._config = config
+            LOGGER.info("PrometheusService configuration updated: %s", config)
 
     # Factory methods for metric objects
     async def create_counter(
@@ -274,18 +291,18 @@ class PrometheusService(BaseService):
         if server_url:
             url = f"{server_url}/api/v1/query"
         elif server_id:
-            if server_id not in self._query_config.servers:
+            if server_id not in self._config.servers:
                 LOGGER.warning(
                     "Invalid server_id '%s' specified, falling back to default",
                     server_id,
                 )
 
-            server_url = self._query_config.servers.get(
-                server_id, self._query_config.servers[self._query_config.default]
+            server_url = self._config.servers.get(
+                server_id, self._config.servers[self._config.default_query_server]
             )
             url = f"{server_url}/api/v1/query"
         else:
-            server_url = self._query_config.servers[self._query_config.default]
+            server_url = self._config.servers[self._config.default_query_server]
             url = f"{server_url}/api/v1/query"
 
         if not self._http_client:
@@ -321,17 +338,17 @@ class PrometheusService(BaseService):
         if server_url:
             url = f"{server_url}/api/v1/query_range"
         elif server_id:
-            if server_id not in self._query_config.servers:
+            if server_id not in self._config.servers:
                 LOGGER.warning(
                     "Invalid server_id '%s' specified, falling back to default",
                     server_id,
                 )
-            server_url = self._query_config.servers.get(
-                server_id, self._query_config.servers[self._query_config.default]
+            server_url = self._config.servers.get(
+                server_id, self._config.servers[self._config.default_query_server]
             )
             url = f"{server_url}/api/v1/query_range"
         else:
-            server_url = self._query_config.servers[self._query_config.default]
+            server_url = self._config.servers[self._config.default_query_server]
             url = f"{server_url}/api/v1/query_range"
 
         if not self._http_client:

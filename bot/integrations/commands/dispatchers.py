@@ -1,16 +1,14 @@
+from __future__ import annotations
+
 import logging
 from typing import (
-    Any,
+    TYPE_CHECKING,
     override,
 )
 
 from bot.core.components import (
     BaseDispatcher,
-    BaseEvent,
-    BaseListener,
     Cooldown,
-    EventManager,
-    GlobalContext,
 )
 from bot.core.enums import BucketType
 from bot.core.exceptions import ListenerError, ListenerOnCooldownError
@@ -30,19 +28,29 @@ from .exceptions import (
     MissingRequiredArgumentError,
     UnknownArgumentError,
     UnknownFlagError,
-    VerificationFailure,
+    VerificationFailureError,
 )
 from .listeners import CommandListener
+
+if TYPE_CHECKING:
+    from bot.core.components import (
+        BaseEvent,
+        BaseListener,
+        EventManager,
+        GlobalContext,
+    )
 
 LOGGER = logging.getLogger(__name__)
 
 
 class CommandDispatcher(BaseDispatcher):
-    def __init__(self, case_sensitive: bool = False):
+    """Dispatcher for handling command events."""
+
+    def __init__(self, *, case_sensitive: bool = False):
         super().__init__()
         self.identifier: type[BaseDispatcher] = CommandDispatcher
         self._func_listener: type[BaseListener] = CommandListener
-        self.categories: set[str] = set([EVENT_CATEGORY_MESSAGE])
+        self.categories: set[str] = {EVENT_CATEGORY_MESSAGE}
         self.listeners: dict[str, BaseListener] = {}
         self.listeners_and_aliases: dict[str, CommandListener] = {}
         self.error_cooldown: Cooldown = Cooldown(
@@ -70,7 +78,7 @@ class CommandDispatcher(BaseDispatcher):
                 cog_name: str = listener.cog.name
         else:
             msg = f"Listener {listener} cannot be assigned to this dispatcher!"
-            raise ValueError(msg)
+            raise TypeError(msg)
 
         if not self.case_sensitive:
             name = name.lower()
@@ -78,20 +86,35 @@ class CommandDispatcher(BaseDispatcher):
 
         if name in self.listeners:
             other = self.listeners[name]
-            msg = f"Command name '{name}' ({cog_name}) is taken by command '{other.id}' ({other.cog.__qualname__})"
+            msg = (
+                f"Command name '{name}' ({cog_name}) is taken by command '{other.id}' "
+                f"({other.cog.__qualname__})"
+            )
             raise ValueError(msg)
         if name in self.listeners_and_aliases:
             other = self.listeners_and_aliases[name]
-            msg = f"Command name '{name}' ({cog_name}) is taken by an alias of '{other.id}' ({other.cog.__qualname__})"
+            msg = (
+                f"Command name '{name}' ({cog_name}) is taken by "
+                f"an alias of '{other.id}' "
+                f"({other.cog.__qualname__})"
+            )
             raise ValueError(msg)
         for alias in aliases:
             if alias in self.listeners:
                 other = self.listeners[alias]
-                msg = f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken by command '{other.id}' ({other.cog.__qualname__})"
+                msg = (
+                    f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken "
+                    f"by command '{other.id}' "
+                    f"({other.cog.__qualname__})"
+                )
                 raise ValueError(msg)
             if alias in self.listeners_and_aliases:
                 other = self.listeners_and_aliases[alias]
-                msg = f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken by an alias of '{other.id}' ({other.cog.__qualname__})"
+                msg = (
+                    f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken "
+                    f"by an alias of '{other.id}' "
+                    f"({other.cog.__qualname__})"
+                )
                 raise ValueError(msg)
 
         self.listeners[name] = listener
@@ -115,7 +138,10 @@ class CommandDispatcher(BaseDispatcher):
             aliases = [a.lower() for a in aliases]
 
         if name not in self.listeners:
-            msg = f"Dispatcher '{type(self)}' does not have a listener with the name '{name}'"
+            msg = (
+                f"Dispatcher '{type(self)}' does not have "
+                "a listener with the name '{name}'"
+            )
             raise ValueError(msg)
 
         __ = self.listeners.pop(name)
@@ -137,10 +163,10 @@ class CommandDispatcher(BaseDispatcher):
         self,
         global_context: GlobalContext,
         event: BaseEvent,
-        *args: Any,
+        *args: object,
         respond_to_errors: bool = True,
         no_prefix: bool = False,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> CommandDispatchResult:
         if isinstance(event, MessageEvent):
             if no_prefix:
@@ -198,19 +224,19 @@ class CommandDispatcher(BaseDispatcher):
             else:
                 LOGGER.warning(f"Error handled - {command.__class__.__name__}: {error}")
             if not respond_to_errors:
-                raise error
+                raise
             await self.on_invoke_error(global_context, new_event, error, command=command)
             return CommandDispatchResult(command, error)
 
     @override
     async def on_invoke_error(
         self,
-        g_ctx: GlobalContext,
+        global_context: GlobalContext,
         event: BaseEvent,
         error: Exception,
-        *args: Any,
+        *args: object,
         command: CommandListener | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ):
         if command is None:
             return
@@ -218,8 +244,9 @@ class CommandDispatcher(BaseDispatcher):
             return
         usage_text = command.get_usage_text(event.prefix, event.invoked_with)
         if isinstance(error, ListenerOnCooldownError):
+            _min_cooldown = 60
             if (
-                error.cooldown.per >= 60
+                error.cooldown.per >= _min_cooldown
                 and self.error_cooldown.get_retry_after(event) <= 0
             ):
                 await event.message.reply(
@@ -229,7 +256,7 @@ class CommandDispatcher(BaseDispatcher):
                 self.error_cooldown.update_rate_limit(event)
         elif isinstance(error, MissingRequiredArgumentError):
             await event.message.reply(
-                f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}"
+                f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}"  # noqa: RUF001
             )
         elif isinstance(error, EmptyFlagValueError):
             if not error.parameter:
@@ -269,22 +296,26 @@ class CommandDispatcher(BaseDispatcher):
             await event.message.reply(out_text)
         elif isinstance(error, UnknownArgumentError):
             await event.message.reply(
-                f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}"
+                f"❌ Usage: {usage_text} – Unknown argument: {error.arguments[0]}"  # noqa: RUF001
             )
         elif isinstance(error, UnknownFlagError):
             await event.message.reply(
-                f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}"
+                f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}"  # noqa: RUF001
             )
         elif isinstance(error, CheckFailure):
             if self.error_cooldown.get_retry_after(event) <= 0:
                 await event.message.reply(f"❌ {error.message}")
                 self.error_cooldown.update_rate_limit(event)
         elif isinstance(
-            error, (VerificationFailure, ArgumentError, CommandError, ListenerError)
+            error, (VerificationFailureError, ArgumentError, CommandError, ListenerError)
         ):
             await event.message.reply(f"❌ {error.message}")
         else:
             await event.message.reply("❌ An unknown error occurred")
 
-    async def get_prefix(self, global_context: GlobalContext, event: MessageEvent) -> str:
+    async def get_prefix(self, global_context: GlobalContext, event: MessageEvent) -> str:  # pyright: ignore[reportUnusedParameter]
+        """Get the command prefix for a given message event.
+
+        Can be overridden for dynamic prefixes.
+        """
         return "!"

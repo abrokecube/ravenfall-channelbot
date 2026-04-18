@@ -15,8 +15,7 @@ if TYPE_CHECKING:
     from bot.clients import ravenfall_query as rq
     from bot.integrations.ravenfall.event_sources import RavenfallInstance
 
-    from . import enums
-    from . import Match
+    from . import Match, enums
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,9 +36,9 @@ class BaseMiddlemanMessage(BaseEvent):
     categories: Collection[str] = (EVENT_CATEGORY_GENERIC,)
     platform: str = EVENT_SOURCE_RAVENFALL
 
-    data: Any
-    message: Any
-    orig_message: Any
+    data: Any  # pyright: ignore[reportExplicitAny]
+    message: Any  # pyright: ignore[reportExplicitAny]
+    orig_message: Any  # pyright: ignore[reportExplicitAny]
     ravenfall: RavenfallInstance
     is_msg_from_api: bool
     message_source: MessageOrigin

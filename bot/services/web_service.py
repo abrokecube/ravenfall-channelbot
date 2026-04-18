@@ -86,10 +86,9 @@ class WebService(BaseService, ConfigSubscriberMixin):
         # Load configuration for each server
         for server in APIServer:
             try:
-                config = config_service.get_table(
-                    f"web_service.{server.value}", ServerConfigModel
-                )
-                self.subscribe(f"web_service.{server.value}", ServerConfigModel)
+                table_name = f"services.web.{server.value}"
+                config = config_service.get_table(table_name, ServerConfigModel)
+                self.subscribe(table_name, ServerConfigModel)
                 self._configs[server] = WebServiceConfig(
                     host=config.host,
                     port=config.port,

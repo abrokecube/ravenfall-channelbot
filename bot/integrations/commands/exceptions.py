@@ -1,17 +1,25 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from bot.core.exceptions import ListenerError
-from . import Parameter
+
 from .enums import ParameterType
-from typing import Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from . import Parameter
 
 
 class CommandError(ListenerError):
-    """Raised when a non-fatal error occurs in a command"""
+    """Raised when a non-fatal error occurs in a command."""
 
     def __init__(self, message: str = "Command error"):
         super().__init__(message)
 
 
-class VerificationFailure(ListenerError):
+class VerificationFailureError(ListenerError):
     """Raised when a listener verification fails."""
 
     def __init__(self, message: str = "Verification failed"):
@@ -20,8 +28,6 @@ class VerificationFailure(ListenerError):
 
 class ArgumentError(ListenerError):
     """Base exception for argument parsing errors."""
-
-    pass
 
 
 class UnknownFlagError(ArgumentError):
@@ -55,8 +61,8 @@ class MissingRequiredArgumentError(ArgumentError):
 class UnknownArgumentError(ArgumentError):
     """Raised when unknown arguments are provided."""
 
-    def __init__(self, args: list[Any]):
-        self.arguments: list[Any] = args
+    def __init__(self, args: Sequence[object]):
+        self.arguments: tuple[object, ...] = tuple(args)
         args_str = (
             ", ".join(f"'{arg}'" for arg in args)
             if isinstance(args[0], str)

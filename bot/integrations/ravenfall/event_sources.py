@@ -4,20 +4,22 @@ import asyncio
 import time
 from collections import deque
 from functools import partial
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, override
 
+from anyio import Path as AsyncPath
 from msgspec import convert
 
 from bot.clients import ravenfall_middleman as rm
 from bot.clients import ravenfall_query as rq
 from bot.core.components import BaseEventSource
 from bot.integrations.ravenfall.services import RavenfallService
+from bot.services.config_service import ConfigService
 from utils.utils import TimestampedValue, calculate_rate_per_second
 
 from . import RavenfallMatcher, enums, models
 from . import events as ev
 from .enums import DungeonStage
+from .models import RavenfallConfig
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -27,7 +29,7 @@ if TYPE_CHECKING:
     from bot.integrations.ravenfall.events import RavenfallEvent
 
     from . import Match
-    from .models import RavenfallConfig
+    from .models import RavenfallInstanceConfig
 
 import logging
 
@@ -482,8 +484,8 @@ class RaidCollector(RavenfallCollectorBase[models.Raid]):
 class RavenfallInstance:
     """A Ravenfall instance."""
 
-    def __init__(self, config: RavenfallConfig) -> None:
-        self.config: RavenfallConfig = config
+    def __init__(self, config: RavenfallInstanceConfig) -> None:
+        self.config: RavenfallInstanceConfig = config
         self.twitch_id: str = config.twitch_id
         self.twitch_login: str = config.twitch_login
         self.middleman_id: str | None = config.middleman_connection_id
@@ -661,36 +663,21 @@ class RavenfallEventSource(BaseEventSource):
 
     def __init__(
         self,
-        ravenfall_config: list[RavenfallConfig],
-        middleman_base_url: str | None = None,
         middleman_message_processor: rm.MessageProcessorServer | None = None,
-        ravenfall_message_definitions_path: str = "./data/definitions.yaml",
     ) -> None:
         super().__init__()
-        self.middleman_base_url: str | None = middleman_base_url
-        self.ravenfall_config: list[RavenfallConfig] = ravenfall_config
-        self.ravenfall_instances: list[RavenfallInstance] = [
-            RavenfallInstance(x) for x in ravenfall_config
-        ]
-        self.channel_name_to_instance: dict[str, RavenfallInstance] = {
-            x.channel_name: x for x in self.ravenfall_instances
-        }
-        self.channel_id_to_instance: dict[str, RavenfallInstance] = {
-            x.channel_id: x for x in self.ravenfall_instances
-        }
-        self.middleman_id_to_instance: dict[str, RavenfallInstance] = {
-            x.middleman_id: x
-            for x in self.ravenfall_instances
-            if x.middleman_id is not None
-        }
+        self.middleman_base_url: str | None = None
+        self.ravenfall_config: list[RavenfallInstanceConfig] = []
+        self.ravenfall_instances: list[RavenfallInstance] = []
+        self.channel_name_to_instance: dict[str, RavenfallInstance] = {}
+        self.channel_id_to_instance: dict[str, RavenfallInstance] = {}
+        self.middleman_id_to_instance: dict[str, RavenfallInstance] = {}
         for i in self.ravenfall_instances:
             i._event_hook = self.send_event
         self.middleman_client: rm.MiddlemanClient | None = None
         self.middleman_message_processor: rm.MessageProcessorServer | None = (
             middleman_message_processor
         )
-        if middleman_base_url:
-            self.middleman_client = rm.MiddlemanClient(middleman_base_url)
         if self.middleman_client is not None and self.middleman_message_processor is None:
             self.middleman_client.add_ravenbot_message_hook(self._ravenbot_message)
             self.middleman_client.add_ravenfall_message_hook(self._ravenfall_message)
@@ -702,13 +689,32 @@ class RavenfallEventSource(BaseEventSource):
                 self._ravenfall_processor_message
             )
         self._matcher: RavenfallMatcher | None = None
-        def_path = Path(ravenfall_message_definitions_path)
-        if def_path.exists():
-            with def_path.open("r") as f:
-                self._matcher = RavenfallMatcher(f)
 
     @override
     async def setup(self, event_manager: EventManager) -> None:
+        config_service = await self.global_context.wait_for_service(ConfigService)
+        config = config_service.get_table("integrations.ravenfall", RavenfallConfig)
+        self.ravenfall_config = config.instances
+        self.ravenfall_instances = [RavenfallInstance(x) for x in self.ravenfall_config]
+        self.channel_name_to_instance = {
+            x.channel_name: x for x in self.ravenfall_instances
+        }
+        self.channel_id_to_instance = {x.channel_id: x for x in self.ravenfall_instances}
+        self.middleman_id_to_instance = {
+            x.middleman_id: x
+            for x in self.ravenfall_instances
+            if x.middleman_id is not None
+        }
+        if config.middleman_base_url:
+            self.middleman_client = rm.MiddlemanClient(config.middleman_base_url)
+
+        def_path = AsyncPath(config.ravenfall_message_definitions_path)
+        if await def_path.exists():
+            f = await def_path.open("r")
+            text = await f.read()
+            self._matcher = RavenfallMatcher(definitions_text=text)
+            await f.aclose()
+
         tasks: list[Awaitable[None]] = []
         tasks.extend([x.start() for x in self.ravenfall_instances])
         __ = await asyncio.gather(*tasks, return_exceptions=False)
