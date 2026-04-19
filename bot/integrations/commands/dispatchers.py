@@ -247,13 +247,13 @@ class CommandDispatcher(BaseDispatcher):
             _min_cooldown = 60
             if (
                 error.cooldown.per >= _min_cooldown
-                and self.error_cooldown.get_retry_after(event) <= 0
+                and await self.error_cooldown.get_retry_after(event) <= 0
             ):
                 await event.message.reply(
                     f"❌ Listener '{command.name}' is on cooldown. "
                     f"Try again in {format_seconds(error.retry_after, TimeSize.LONG)}."
                 )
-                self.error_cooldown.update_rate_limit(event)
+                await self.error_cooldown.update_rate_limit(event)
         elif isinstance(error, MissingRequiredArgumentError):
             await event.message.reply(
                 f"❌ Usage: {usage_text} – Missing argument: {error.parameter.name}"  # noqa: RUF001
@@ -303,9 +303,9 @@ class CommandDispatcher(BaseDispatcher):
                 f"❌ Usage: {usage_text} – Unknown parameter: {error.flag_name}"  # noqa: RUF001
             )
         elif isinstance(error, CheckFailure):
-            if self.error_cooldown.get_retry_after(event) <= 0:
+            if await self.error_cooldown.get_retry_after(event) <= 0:
                 await event.message.reply(f"❌ {error.message}")
-                self.error_cooldown.update_rate_limit(event)
+                await self.error_cooldown.update_rate_limit(event)
         elif isinstance(
             error, (VerificationFailureError, ArgumentError, CommandError, ListenerError)
         ):

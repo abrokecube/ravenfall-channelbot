@@ -605,10 +605,10 @@ class BaseListener:
 
     async def _check_cooldown(self, event: BaseEvent) -> None:
         if self.cooldown:
-            retry_after = self.cooldown.get_retry_after(event)
+            retry_after = await self.cooldown.get_retry_after(event)
             if retry_after > 0:
                 raise exceptions.ListenerOnCooldownError(self.cooldown, retry_after)
-            self.cooldown.update_rate_limit(event)
+            await self.cooldown.update_rate_limit(event)
 
     async def _run_func(
         self,
@@ -749,17 +749,18 @@ class Cooldown:
         self.bucket: list[str] = bucket
         self._windows: dict[str, list[float]] = {}
 
-    def _get_bucket_key(self, event: BaseEvent) -> str:
+    async def _get_bucket_key(self, event: BaseEvent) -> str:
         """Create a bucket key from event-specific bucket types."""
         if hasattr(event, "get_bucket_key"):
-            keys: list[str] = [str(event.get_bucket_key(t)) for t in self.bucket]
+            tasks = [event.get_bucket_key(t) for t in self.bucket]
+            keys: list[str] = [str(key) for key in await asyncio.gather(*tasks)]
             return ":".join(keys)
         return ""
 
-    def get_retry_after(self, event: BaseEvent) -> float:
+    async def get_retry_after(self, event: BaseEvent) -> float:
         """Return seconds until the next allowed invocation for this bucket."""
         now = time.time()
-        key = self._get_bucket_key(event)
+        key = await self._get_bucket_key(event)
 
         if key not in self._windows:
             return 0.0
@@ -774,10 +775,10 @@ class Cooldown:
 
         return self.per - (now - window[0])
 
-    def update_rate_limit(self, event: BaseEvent) -> None:
+    async def update_rate_limit(self, event: BaseEvent) -> None:
         """Record an event occurrence for rate limit tracking."""
         now = time.time()
-        key = self._get_bucket_key(event)
+        key = await self._get_bucket_key(event)
 
         if key not in self._windows:
             self._windows[key] = []

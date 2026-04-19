@@ -3,25 +3,35 @@ from __future__ import annotations
 import inspect
 import logging
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
-from bot.core.components import Cog, EventManager
+from bot.core.components import Cog
 from bot.integrations.chat_messages.exceptions import CheckFailure
 from bot.integrations.commands.deco import command, parameter
-from bot.integrations.commands.dispatchers import CommandDispatcher
 from bot.integrations.commands.events import CommandEvent
 from bot.integrations.commands.listeners import CommandListener
 from bot.integrations.commands.services import CommandService
+
+if TYPE_CHECKING:
+    from bot.core.components import EventManager
+    from bot.integrations.commands.dispatchers import CommandDispatcher
 
 LOGGER = logging.getLogger(__name__)
 
 
 class HelpCog(Cog):
+    """Help command cog."""
+
     def __init__(self, event_manager: EventManager):
         super().__init__(event_manager)
 
     async def build_command_list_single_line(
-        self, ctx: CommandEvent | None = None, show_more: bool = False
+        self, ctx: CommandEvent | None = None, *, show_more: bool = False
     ) -> str:
+        """Builds a single line string listing all commands.
+
+        Optionally includes commands the user doesn't have access to.
+        """
         cogs_dict: dict[str, list[CommandListener]] = defaultdict(list)
         cmd_dispatcher: CommandDispatcher = self.global_context.require_service(
             CommandService
@@ -37,7 +47,7 @@ class HelpCog(Cog):
                 cogs_dict[cog_name].append(lis)
 
         commands_lists: list[str] = []
-        for cog_name, commands in cogs_dict.items():
+        for commands in cogs_dict.values():
             visible_cmds: list[str] = []
             for c in commands:
                 if c.hidden:
@@ -59,7 +69,7 @@ class HelpCog(Cog):
                             except CheckFailure:
                                 should_hide = True
                                 break
-                            except Exception as e:
+                            except Exception as e:  # noqa: BLE001
                                 LOGGER.warning(
                                     f"Check failed to execute: {e}", exc_info=True
                                 )
@@ -75,11 +85,13 @@ class HelpCog(Cog):
     def build_command_info_single_line(
         self, ctx: CommandEvent, command: CommandListener, invoked_name: str
     ) -> str:
+        """Single line help for a command."""
         return f"Usage: {command.get_help_text(ctx.prefix, invoked_name)}"
 
     def build_arg_info_single_line(
         self, ctx: CommandEvent, command: CommandListener, arg_name: str
     ) -> str:
+        """Single line help for a command argument."""
         matched_arg_name = command.arg_mappings.get(arg_name, None)
         if not matched_arg_name:
             return f"Argument '{arg_name}' not found in command '{command.name}'."
@@ -95,8 +107,9 @@ class HelpCog(Cog):
         self,
         ctx: CommandEvent,
         command_name: str = "",
+        *,
         all_: bool = False,
-        **kwargs,
+        **kwargs: str,
     ):
         """Get help for a command or lists all commands.
 
@@ -109,10 +122,10 @@ class HelpCog(Cog):
             CommandService
         ).dispatcher
 
-        if kwargs:
-            command_name += " " + " ".join([x for x in kwargs])
+        # if kwargs:
+        #     command_name += " " + " ".join([x for x in kwargs])
         if command_name:
-            command, parameter = cmd_dispatcher._find_command(command_name)  # pyright: ignore[reportPrivateUsage]
+            command, parameter = cmd_dispatcher._find_command(command_name)
             if not command:
                 await ctx.message.reply(f"Command '{command_name}' not found.")
                 return

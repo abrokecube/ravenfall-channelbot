@@ -27,6 +27,7 @@ from bot.core.components import BaseEventSource
 from bot.db.service import DatabaseService
 from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailure
+from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.services.config_service import ConfigService
 
 from . import TwitchAuth, TwitchChannelSettings, events
@@ -231,7 +232,7 @@ class TwitchEventSub:
             await self.eventsub_ws.stop()
 
 
-class TwitchEventSource(BaseEventSource):
+class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
     """Event source for Twitch events. Includes a TwitchService."""
 
     def __init__(
@@ -463,7 +464,11 @@ class TwitchEventSource(BaseEventSource):
     async def setup(self, event_manager: EventManager):
         __ = await self.global_context.wait_for_service(DatabaseService)
         config = await self.global_context.wait_for_service(ConfigService)
+        self.inject_config_service(config)
+
         twitch_config = config.get_table("integrations.twitch", TwitchConfig)
+        self.subscribe_config("integrations.twitch", TwitchConfig)
+
         self.app_id = twitch_config.app_id
         self.app_secret = twitch_config.app_secret
         self.bot_user_id = twitch_config.bot_user_id
@@ -482,6 +487,14 @@ class TwitchEventSource(BaseEventSource):
         self.twitch_chat.start()
         self.twitch_chat.register_event(ChatEvent.MESSAGE, self._chat_on_message)
         await self.global_context.register_service(self._twitch_service)
+
+    @override
+    def on_config_changed(self, table: str, config: object, changed_fields: set[str]):
+        if not isinstance(config, TwitchConfig):
+            return
+        self.bot_admin_uids = config.bot_admin_uids
+        if len(changed_fields.difference({"bot_admin_uids"})) > 0:
+            LOGGER.warning("Config changed, requires bot restart to apply changes.")
 
     @override
     async def teardown(self):

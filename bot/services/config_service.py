@@ -233,6 +233,7 @@ class ConfigService(BaseService):
         differ, ``on_config_changed`` is called on the subscriber with
         the new model and the set of changed field names.
         """
+        LOGGER.info("Reloading config from '%s'", self._path)
         self._load_toml()
 
         for subscriber, entries in self._subscribers.items():
@@ -250,6 +251,12 @@ class ConfigService(BaseService):
                 changed = _diff_snapshots(entry.snapshot, new_value)
                 if changed:
                     entry.snapshot = new_value
+                    LOGGER.debug(
+                        "Notifying %s of changes to table '%s': %s",
+                        type(subscriber).__name__,
+                        table,
+                        changed,
+                    )
                     try:
                         subscriber.on_config_changed(table, new_value, changed)
                     except Exception:

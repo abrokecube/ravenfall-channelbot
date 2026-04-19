@@ -134,8 +134,11 @@ class CommandArgs:
                 flag = Flag(flag_name, flag_value)
                 self.flags.append(flag)
                 self.args.append(flag)
-            elif is_quoted:
-                self.args.append(arg[1:-1])
+            else:
+                arg_trim = arg
+                if is_quoted:
+                    arg_trim = arg[1:-1]
+                self.args.append(arg_trim)
 
         # Build grouped_args by joining consecutive non-flag args with spaces,
         # using flags as separators (flags are not included in grouped_args)

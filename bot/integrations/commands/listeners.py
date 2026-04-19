@@ -207,9 +207,7 @@ class CommandListener(GenericListener):
                 )
                 raise TypeError(msg)
 
-            # Handle Optional[T] - extract the inner type
-            origin = get_origin(annotation)
-            if isinstance(origin, UnionType):
+            if isinstance(annotation, UnionType):
                 args: tuple[object, ...] = get_args(annotation)
                 # Check if NoneType is in args
                 if type(None) in args:
@@ -256,7 +254,7 @@ class CommandListener(GenericListener):
                 _warn_type_mismatch(param.name, bool, param_hidden, self.name)
                 param_hidden = False
             param_regex = param_config.get("regex")
-            if not isinstance(param_regex, (str, re.Pattern)):
+            if param_regex is not None and not isinstance(param_regex, (str, re.Pattern)):
                 _warn_type_mismatch(param.name, (str, re.Pattern), param_regex, self.name)
                 param_regex = None
 
@@ -420,7 +418,8 @@ class CommandListener(GenericListener):
 
     async def _parse_arguments(
         self, ctx: CommandEvent, g_ctx: GlobalContext
-    ) -> tuple[set[str], dict[str, object]]:
+    ) -> tuple[set[str], list[object], dict[str, object]]:
+        args: list[object] = []
         kwargs: dict[str, object] = {}
 
         # Separate positional args and flags from ctx.args
@@ -464,7 +463,8 @@ class CommandListener(GenericListener):
             if param.kind == ParameterType.VAR_POSITIONAL:
                 for arg in positional_args[positional_index:]:
                     converted = await self._convert_argument(ctx, arg, param, g_ctx)
-                    kwargs[param.name] = converted
+                    # kwargs[param.name] = converted
+                    args.append(converted)
                     specified_params.add(param.name)
                 positional_index = len(positional_args)
                 continue
@@ -537,8 +537,11 @@ class CommandListener(GenericListener):
 
                 converted = await self._convert_argument(ctx, val, param, g_ctx)
 
-                kwargs[param_name] = converted
-                specified_params.add(param.name)
+                if param.kind == ParameterType.POSITIONAL_ONLY:
+                    args.append(converted)
+                else:
+                    kwargs[param_name] = converted
+                    specified_params.add(param.name)
             # Not provided positionally
             elif param.default != inspect.Parameter.empty:
                 converted = await self._convert_argument(ctx, param.default, param, g_ctx)
@@ -553,7 +556,7 @@ class CommandListener(GenericListener):
         if positional_index < len(positional_args):
             raise UnknownArgumentError(positional_args[positional_index:])
 
-        return specified_params, kwargs
+        return specified_params, args, kwargs
 
     @override
     async def invoke(
@@ -566,10 +569,12 @@ class CommandListener(GenericListener):
         await self._run_checks(global_ctx, event)
         await self._check_cooldown(event)
         if self.parameters:
-            specified_params, parsed_kwargs = await self._parse_arguments(
+            specified_params, parsed_args, parsed_kwargs = await self._parse_arguments(
                 event, global_ctx
             )
             event.specified_parameters = specified_params
+            if not args:
+                args = tuple(parsed_args)
             kwargs = {**kwargs, **parsed_kwargs}
         await self._run_verification(global_ctx, event, *args, **kwargs)
         await self._run_func(global_ctx, event, *args, **kwargs)

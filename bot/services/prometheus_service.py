@@ -131,7 +131,7 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
         self._config = config_service.get_table(
             config_table_name, PrometheusServiceConfig
         )
-        self.subscribe(config_table_name, PrometheusServiceConfig)
+        self.subscribe_config(config_table_name, PrometheusServiceConfig)
 
         router = APIRouter()
 

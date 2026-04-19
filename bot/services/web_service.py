@@ -88,7 +88,7 @@ class WebService(BaseService, ConfigSubscriberMixin):
             try:
                 table_name = f"services.web.{server.value}"
                 config = config_service.get_table(table_name, ServerConfigModel)
-                self.subscribe(table_name, ServerConfigModel)
+                self.subscribe_config(table_name, ServerConfigModel)
                 self._configs[server] = WebServiceConfig(
                     host=config.host,
                     port=config.port,

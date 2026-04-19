@@ -1,9 +1,9 @@
-from bot.core.components import GlobalContext, BaseEvent
+from typing import override
+
+from bot.core.components import BaseEvent, GlobalContext
 from bot.integrations.chat_messages import BaseCheck
 from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.chat_messages.events import MessageEvent
-from typing import override
-
 from bot.integrations.commands.events import CommandEvent
 
 
@@ -17,7 +17,7 @@ class HasRole(BaseCheck):
         )
         self.title: str | None = role_names
         self.short_help: str | None = role_names
-        self.hide_in_help: bool = True
+        self.will_hide_command_from_help: bool = True
         if len(required_roles) == 1:
             self.help: str | None = f"Requires the {role_names} role."
         else:
@@ -25,9 +25,11 @@ class HasRole(BaseCheck):
 
     @override
     async def check(self, g_ctx: GlobalContext, event: BaseEvent):
-        if not isinstance(event, MessageEvent):
-            msg = "HasRole check can only be used with MessageEvent"
-            raise ValueError(msg)
+        if not isinstance(event, (MessageEvent, CommandEvent)):
+            msg = "HasRole check can only be used with MessageEvent and CommandEvent"
+            raise TypeError(msg)
+        if isinstance(event, CommandEvent):
+            event = event.message
         if not any(role in event.author_roles for role in self.required_roles):
             return "You do not have permission to use this command."
         return True
@@ -43,7 +45,7 @@ class MinPermissionLevel(BaseCheck):
         self.extra_roles: list[UserRole] = extra_roles or []
         self.title: str | None = minimum_role.name.lower().replace("_", " ")
         self.short_help: str | None = self.title
-        self.hide_in_help: bool = True
+        self.will_hide_command_from_help: bool = True
         if not self.extra_roles:
             self.help: str | None = f"Must be {self.title}."
         else:
@@ -55,8 +57,11 @@ class MinPermissionLevel(BaseCheck):
     @override
     async def check(self, g_ctx: GlobalContext, event: BaseEvent):
         if not isinstance(event, (MessageEvent, CommandEvent)):
-            msg = "MinPermissionLevel check can only be used with MessageEvent and CommandEvent"
-            raise ValueError(msg)
+            msg = (
+                "MinPermissionLevel check can only be used with "
+                "MessageEvent and CommandEvent"
+            )
+            raise TypeError(msg)
         if isinstance(event, CommandEvent):
             event = event.message
         if any(r.level() >= self.min_level for r in event.author_roles):

@@ -9,15 +9,13 @@ from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.commands.checks import MinPermissionLevel
 from bot.integrations.commands.deco import (
     command,
-    parameter,
-    verification,
 )
+from bot.integrations.commands.events import CommandEvent  # noqa: TC001
 from bot.integrations.commands.exceptions import CommandError
 from bot.services.config_service import ConfigService
 
 if TYPE_CHECKING:
     from bot.core.components import EventManager
-    from bot.integrations.commands.events import CommandEvent
 
 
 class BotStuffCog(Cog):

@@ -261,7 +261,7 @@ class PrometheusCollectorMixin:
                 description=metric_description,
             )
 
-            LOGGER.info(
+            LOGGER.debug(
                 "Registered %s collector '%s' in cog %s",
                 definition.metric_type,
                 metric_name,

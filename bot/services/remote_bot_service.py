@@ -141,7 +141,7 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
         self.inject_config_service(config_service)
 
         try:
-            self.subscribe("remote_bots", list[RemoteBotConfig])
+            self.subscribe_config("remote_bots", list[RemoteBotConfig])
         except KeyError:
             LOGGER.debug("No remote_bots configuration found")
 

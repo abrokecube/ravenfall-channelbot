@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, override
 
 from dotenv import load_dotenv
 
+from bot.cogs.bot import BotStuffCog
 from bot.cogs.example import ExampleCog
 from bot.cogs.help import HelpCog
 from bot.cogs.prometheus_test import PrometheusTestCog
@@ -153,7 +154,8 @@ async def run():
     tasks.append(event_manager.add_cog(TestingCog))
     tasks.append(event_manager.add_cog(HelpCog))
     tasks.append(event_manager.add_cog(ExampleCog))
-    tasks.append(event_manager.add_cog(PrometheusTestCog))
+    # tasks.append(event_manager.add_cog(PrometheusTestCog))
+    tasks.append(event_manager.add_cog(BotStuffCog))
 
     await update_schema()
     tasks.append(global_ctx.register_service(DatabaseService()))
@@ -172,7 +174,7 @@ async def run():
         EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD,
     )
     __ = await twitch.join_chat(
-        channel_id=os.getenv("OWNER_TWITCH_ID", ""), mode=MessageReceiveMode.IRC
+        channel_id=os.getenv("OWNER_TWITCH_ID", ""), mode=MessageReceiveMode.EVENTSUB
     )
 
     logger.info("### Bot is ready ###")

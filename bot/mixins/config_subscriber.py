@@ -35,7 +35,7 @@ class ConfigSubscriberMixin:
             raise RuntimeError(msg)
         return svc
 
-    def subscribe[T](
+    def subscribe_config[T](
         self,
         table: str,
         model: type[T],
@@ -49,7 +49,7 @@ class ConfigSubscriberMixin:
         svc = self._require_config_service()
         svc._subscribe(self, table, model)
 
-    def unsubscribe(self, table: str) -> None:
+    def unsubscribe_config(self, table: str) -> None:
         """Unsubscribe from a specific config table.
 
         Args:
