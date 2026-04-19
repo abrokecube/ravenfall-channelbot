@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING, Any
 from bot.core import EVENT_SOURCE_ANY
 from bot.core.components import BaseEvent
 
-from . import EVENT_CATEGORY_COMMAND
-
 if TYPE_CHECKING:
     from collections.abc import Collection
 
     from bot.integrations.chat_messages.events import MessageEvent
 
-    from . import CommandArgs
+    from .classes import CommandArgs
+
+EVENT_CATEGORY_COMMAND = "command"
 
 
 @dataclass(kw_only=True)

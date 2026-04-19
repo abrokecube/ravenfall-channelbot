@@ -2,19 +2,46 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, NamedTuple, TypedDict, cast
 
-from sqlalchemy import select
+from sqlalchemy import Integer, String, select
+from sqlalchemy.orm import Mapped, mapped_column  # noqa: TC002
 
-from . import TwitchChannelSettings
+from bot.db import Base
+
+from .enums import (
+    MessageDeliveryMode,
+    MessageRateMode,
+    MessageReceiveMode,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from .enums import (
         EventSubTopic,
-        MessageDeliveryMode,
-        MessageRateMode,
-        MessageReceiveMode,
     )
+
+
+class TwitchAuth(Base):
+    __tablename__: str = "twitch_auth"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer)
+    user_name: Mapped[str] = mapped_column(String)
+    access_token: Mapped[str] = mapped_column(String)
+    refresh_token: Mapped[str] = mapped_column(String)
+
+
+class TwitchChannelSettings(Base):
+    __tablename__: str = "twitch_channel_settings"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    message_delivery_mode: Mapped[str] = mapped_column(
+        String, default=MessageDeliveryMode.HELIX
+    )
+    message_receive_mode: Mapped[str] = mapped_column(
+        String, default=MessageReceiveMode.IRC
+    )
+    message_rate: Mapped[str] = mapped_column(String, default=MessageRateMode.STANDARD)
 
 
 class EventSubChannelTopic(NamedTuple):

@@ -78,7 +78,7 @@ class ProcessEventSource(BaseEventSource):
         box_pids: dict[str, set[int]] = defaultdict(set)
 
         if boxes_needed:
-            tasks: list[Coroutine[Any, Any, tuple[int, str | None]]] = []
+            tasks: list[Coroutine[Any, Any, tuple[int, str | None]]] = []  # pyright: ignore[reportExplicitAny]
             ordered_boxes = list(boxes_needed)
             sandboxie_path = os.getenv("SANDBOXIE_START_PATH", "Start.exe")
             for box in ordered_boxes:

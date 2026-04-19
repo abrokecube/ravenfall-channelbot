@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, override
 from ravenpy import ravenpy
 from utils.strutils import strjoin
 
-from . import BaseConverter
 from .exceptions import ArgumentConversionError
 
 if TYPE_CHECKING:
@@ -15,6 +14,37 @@ if TYPE_CHECKING:
     from ravenpy.ravenpy import Item as RFItem
 
     from .events import CommandEvent
+
+
+class BaseConverter:
+    """Base converter class for command argument conversion.
+
+    To display a custom error message when conversion fails,
+    raise command_exceptions.ArgumentConversionError in the convert method.
+    """
+
+    title: str = ""
+    short_help: str = ""
+    help: str = ""
+
+    async def convert(
+        self,
+        g_ctx: GlobalContext,  # pyright: ignore[reportUnusedParameter]
+        event: CommandEvent,  # pyright: ignore[reportUnusedParameter]
+        arg: str,  # pyright: ignore[reportUnusedParameter]
+    ) -> object:
+        """Convert a string argument to the desired type."""
+        raise NotImplementedError
+
+    @classmethod
+    async def cls_convert(
+        cls,
+        g_ctx: GlobalContext,  # pyright: ignore[reportUnusedParameter]
+        event: CommandEvent,  # pyright: ignore[reportUnusedParameter]
+        arg: str,  # pyright: ignore[reportUnusedParameter]
+    ) -> object:
+        """Convert a string argument to the desired type."""
+        raise NotImplementedError
 
 
 class Choice(BaseConverter):

@@ -5,13 +5,14 @@ from typing import TYPE_CHECKING, Any
 
 from bot.core import EVENT_CATEGORY_GENERIC, EVENT_SOURCE_ANY
 from bot.core.components import BaseEvent
-from bot.integrations.chat_messages import EVENT_CATEGORY_MESSAGE
 
 if TYPE_CHECKING:
     from collections.abc import Collection
 
     from .enums import UserRole
     from .models import ChatRoomCapabilities
+
+EVENT_CATEGORY_MESSAGE = "message"
 
 
 @dataclass(kw_only=True)

@@ -16,20 +16,21 @@ from bot.integrations.ravenfall.services import RavenfallService
 from bot.services.config_service import ConfigService
 from utils.utils import TimestampedValue, calculate_rate_per_second
 
-from . import RavenfallMatcher, enums, models
+from . import enums, models
 from . import events as ev
 from .enums import DungeonStage
+from .matcher import RavenfallMatcher
 from .models import RavenfallConfig
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from bot.core.components import EventManager
-    from bot.integrations.ravenfall import RavenfallInstanceEventHook
     from bot.integrations.ravenfall.events import RavenfallEvent
 
-    from . import Match
+    from .matcher import Match
     from .models import RavenfallInstanceConfig
+    from .types import RavenfallInstanceEventHook
 
 import logging
 

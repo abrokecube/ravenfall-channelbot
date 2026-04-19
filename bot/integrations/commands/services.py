@@ -8,7 +8,8 @@ from bot.core.components import BaseService
 from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.models import ChatRoomCapabilities
-from bot.integrations.commands import CommandExecutionResult, CommandResponse
+
+from .models import CommandExecutionResult, CommandResponse
 
 if TYPE_CHECKING:
     from collections.abc import Collection

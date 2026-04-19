@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from bot.cogs.bot import BotStuffCog
 from bot.cogs.example import ExampleCog
 from bot.cogs.help import HelpCog
-from bot.cogs.prometheus_test import PrometheusTestCog
+from bot.cogs.process_watchdog import ProcessWatchdogCog
 from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
 from bot.db.models import update_schema
@@ -154,7 +154,7 @@ async def run():
     tasks.append(event_manager.add_cog(TestingCog))
     tasks.append(event_manager.add_cog(HelpCog))
     tasks.append(event_manager.add_cog(ExampleCog))
-    # tasks.append(event_manager.add_cog(PrometheusTestCog))
+    tasks.append(event_manager.add_cog(ProcessWatchdogCog))
     tasks.append(event_manager.add_cog(BotStuffCog))
 
     await update_schema()

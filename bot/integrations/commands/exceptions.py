@@ -9,7 +9,7 @@ from .enums import ParameterType
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from . import Parameter
+    from .classes import Parameter
 
 
 class CommandError(ListenerError):

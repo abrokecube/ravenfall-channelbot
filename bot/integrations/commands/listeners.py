@@ -9,7 +9,6 @@ from typing import (
     TYPE_CHECKING,
     cast,
     get_args,
-    get_origin,
     get_type_hints,
     override,
 )
@@ -23,7 +22,8 @@ from bot.core.listeners import GenericListener
 from bot.integrations.chat_messages.exceptions import CheckFailure
 from utils.strutils import strjoin
 
-from . import BaseConverter, Flag, Parameter
+from .classes import Flag, Parameter
+from .converters import BaseConverter
 from .enums import ParameterType
 from .events import CommandEvent
 from .exceptions import (

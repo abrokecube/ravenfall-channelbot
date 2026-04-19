@@ -9,10 +9,12 @@ from twitchAPI.type import TwitchResourceNotFound
 from bot.core import EVENT_CATEGORY_GENERIC
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.models import ChatRoomCapabilities
-from bot.integrations.twitch import EVENT_SOURCE_TWITCH
 from utils.strutils import split_by_utf16_bytes
 
 from .enums import TwitchCustomRewardRedemptionStatus
+
+EVENT_SOURCE_TWITCH = "twitch"
+
 
 if TYPE_CHECKING:
     from collections.abc import Collection

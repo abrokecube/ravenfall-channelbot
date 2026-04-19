@@ -18,7 +18,7 @@ from bot.integrations.chat_messages.exceptions import CheckFailure
 from bot.integrations.commands.services import CommandService
 from utils.format_time import TimeSize, format_seconds
 
-from . import CommandArgs, CommandDispatchResult
+from .classes import CommandArgs
 from .events import CommandEvent
 from .exceptions import (
     ArgumentConversionError,
@@ -31,6 +31,7 @@ from .exceptions import (
     VerificationFailureError,
 )
 from .listeners import CommandListener
+from .models import CommandDispatchResult
 
 if TYPE_CHECKING:
     from bot.core.components import (

@@ -30,14 +30,14 @@ from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailure
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.services.config_service import ConfigService
 
-from . import TwitchAuth, TwitchChannelSettings, events
+from . import events
 from .enums import (
     TOPIC_REQUIRES_TARGET_CHANNEL,
     EventSubTopic,
     MessageDeliveryMode,
     MessageReceiveMode,
 )
-from .models import ConnectedChat, EventSubChannelTopic
+from .models import ConnectedChat, EventSubChannelTopic, TwitchAuth, TwitchChannelSettings
 from .services import TwitchService
 
 if TYPE_CHECKING:

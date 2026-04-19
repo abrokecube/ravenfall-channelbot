@@ -1,142 +1,29 @@
 from __future__ import annotations
 
-import logging
-import re
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, NamedTuple, cast
-
-from ruamel import yaml as ruamel_yaml
-from ruamel.yaml import YAML
-
-from bot.integrations.ravenfall.events import RavenfallEvent
-
-from . import models as md
-
-if TYPE_CHECKING:
-    import io
-    from collections.abc import Sequence
-
-type RavenfallInstanceEventHook = Callable[[RavenfallEvent], Awaitable[None]]
-RavenfallConfig = md.RavenfallInstanceConfig
-
-LOGGER = logging.getLogger(__name__)
-
-
-class RegexMatcher(NamedTuple):
-    """Ravenfall string regex matcher."""
-
-    pattern: re.Pattern[str]
-    identifier: str
-
-
-@dataclass
-class Match:
-    """Matched Ravenfall string."""
-
-    identifier: str | None
-    _args: dict[str, object]
-
-    def get_arg(self, key: str):
-        """Get a format string argument's value."""
-        return self._args.get(key)
-
-
-MATCH_DEF_TOKENIZER: re.Pattern[str] = re.compile(
-    r"{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<parsed>[a-zA-Z_0-9]+(:((?:(?!}})).)+)?)}}|(?P<nothing>[^{}]*)"
-)
-FSTRINGS: re.Pattern[str] = re.compile(r"{([a-zA-Z_0-9]+)}")
-
-
-def _parse_matcher_string(match_string: str) -> re.Pattern[str]:
-    regex_str_build: list[str] = ["^"]
-    for mo in MATCH_DEF_TOKENIZER.finditer(match_string):
-        kind = mo.lastgroup
-        value: str = mo.groupdict().get(kind or "", "")
-        match kind:
-            case "nothing":
-                regex_str_build.append(re.escape(value))
-            case "parsed":
-                name: str = value
-                matcher = ".+"
-                split = value.split(":", 1)
-                if len(split) == 2:  # noqa: PLR2004
-                    name, matcher = split
-                regex_str_build.append(f"(?P<{name}>{matcher})")
-            case "given":
-                regex_str_build.append(re.escape("{" + value + "}"))
-            case _:
-                LOGGER.error("Unexpected match group in string pattern")
-    regex_str_build.append("$")
-    return re.compile("".join(regex_str_build))
-
-
-class RavenfallMatcher:
-    """Matches incoming format strings from Ravenfall."""
-
-    def __init__(
-        self,
-        *,
-        definitions_text_buf: io.TextIOBase | None = None,
-        definitions_text: str | None = None,
-    ):
-        self._string_matchers: dict[str, str] = {}
-        self._regex_matchers: list[RegexMatcher] = []
-
-        yaml = YAML()
-
-        if definitions_text_buf is not None:
-            definitions_yaml: object = yaml.load(definitions_text_buf)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        elif definitions_text is not None:
-            definitions_yaml = yaml.load(definitions_text)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        else:
-            msg = "Either definitions_text_buf or definitions_text must be provided"
-            raise ValueError(msg)
-
-        defs_dict: dict[str, object] = {}
-        if not isinstance(definitions_yaml, dict):
-            defs_dict = {}
-        else:
-            defs_dict = cast("dict[str, object]", definitions_yaml)
-
-        for key, match_str in defs_dict.items():
-            if isinstance(match_str, ruamel_yaml.CommentedSeq):
-                for sub_match_str in match_str:  # pyright: ignore[reportUnknownVariableType]
-                    if isinstance(sub_match_str, str):
-                        self._add_matcher(key, sub_match_str)
-                    else:
-                        LOGGER.error(f"Invalid value '{sub_match_str}' for '{key}'")
-            elif isinstance(match_str, str):
-                self._add_matcher(key, match_str)
-            else:
-                LOGGER.error(f"Invalid value '{match_str}' for '{key}'")
-
-    def _add_matcher(self, key: str, match_str: str):
-        if "{{" in match_str:
-            self._regex_matchers.append(
-                RegexMatcher(_parse_matcher_string(match_str), key)
-            )
-        else:
-            self._string_matchers[match_str] = key
-
-    def match_string(self, format_str: str, args: Sequence[object]) -> Match:
-        """Matches a given format string."""
-        args = list(args)
-        str_identifier: str | None = None
-        mapped_args: dict[str, object] = {}
-        if format_str in self._string_matchers:
-            str_identifier = self._string_matchers[format_str]
-        else:
-            re_match: re.Match[str] | None = None
-            for regex_matcher in self._regex_matchers:
-                re_match = regex_matcher.pattern.match(format_str)
-                if re_match is not None:
-                    str_identifier = regex_matcher.identifier
-                    break
-            if re_match is not None:
-                mapped_args = cast("dict[str, object]", re_match.groupdict())
-
-        for a in FSTRINGS.finditer(format_str):
-            mapped_args[a.group(1)] = args.pop(0)
-
-        return Match(str_identifier, mapped_args)
+from .enums import DungeonEndReason as DungeonEndReason
+from .enums import DungeonStage as DungeonStage
+from .enums import DungeonStartReason as DungeonStartReason
+from .enums import RaidEndReason as RaidEndReason
+from .enums import RaidStartReason as RaidStartReason
+from .enums import RFChannelEvent as RFChannelEvent
+from .enums import RFChannelSubEvent as RFChannelSubEvent
+from .events import EVENT_SOURCE_RAVENFALL as EVENT_SOURCE_RAVENFALL
+from .events import BaseMiddlemanMessage as BaseMiddlemanMessage
+from .events import DungeonEndedEvent as DungeonEndedEvent
+from .events import DungeonPreparedEvent as DungeonPreparedEvent
+from .events import DungeonSpawnedEvent as DungeonSpawnedEvent
+from .events import DungeonStartedEvent as DungeonStartedEvent
+from .events import MessageOrigin as MessageOrigin
+from .events import ObservedPlayerChangedEvent as ObservedPlayerChangedEvent
+from .events import RaidEndedEvent as RaidEndedEvent
+from .events import RaidStartedEvent as RaidStartedEvent
+from .events import RavenBotMessageEvent as RavenBotMessageEvent
+from .events import RavenfallEvent as RavenfallEvent
+from .events import RavenfallMessageEvent as RavenfallMessageEvent
+from .events import RavenfallOfflineEvent as RavenfallOfflineEvent
+from .events import RavenfallOnlineEvent as RavenfallOnlineEvent
+from .events import RavenfallReadyEvent as RavenfallReadyEvent
+from .models import Dungeon as Dungeon
+from .models import RavenfallConfig as RavenfallConfig
+from .models import RavenfallInstanceConfig as RavenfallInstanceConfig
+from .services import RavenfallService as RavenfallService

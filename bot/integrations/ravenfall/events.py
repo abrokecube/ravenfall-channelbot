@@ -15,7 +15,8 @@ if TYPE_CHECKING:
     from bot.clients import ravenfall_query as rq
     from bot.integrations.ravenfall.event_sources import RavenfallInstance
 
-    from . import Match, enums
+    from . import enums
+    from .matcher import Match
 
 LOGGER = logging.getLogger(__name__)
 
