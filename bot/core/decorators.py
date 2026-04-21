@@ -3,11 +3,29 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from .components import BaseDispatcher, BaseEvent, Cooldown
+from .components import BaseDispatcher, BaseEvent, Cooldown, ListenerMetadata
 from .listeners import GenericListener, LambdaListener
 
 if TYPE_CHECKING:
     from .modals import MetaFilter
+
+
+def _get_or_create_metadata_list(func: Callable[..., Any]) -> list[ListenerMetadata]:
+    """Get or create the listener metadata list on a function.
+
+    Args:
+        func: The function to get metadata from.
+
+    Returns:
+        The list of ListenerMetadata objects.
+    """
+    metadata_list: list[ListenerMetadata] | None = getattr(
+        func, "_listener_metadata", None
+    )
+    if metadata_list is None:
+        metadata_list = []
+        setattr(func, "_listener_metadata", metadata_list)
+    return metadata_list
 
 # Matchers
 
@@ -26,9 +44,12 @@ def meta_filter_decorator[T: Callable[..., Any]](
     """
 
     def decorator(func: T) -> T:
-        setattr(func, "_listener_meta_filter", meta_filter)
-        setattr(func, "_listener_dispatcher", dispatcher_type)
-        setattr(func, "_listener_class", listener_cls)
+        metadata = ListenerMetadata(
+            dispatcher=dispatcher_type,
+            listener_cls=listener_cls,
+            meta_filter=meta_filter,
+        )
+        _get_or_create_metadata_list(func).append(metadata)
         return func
 
     return decorator
@@ -50,13 +71,12 @@ def lambda_filter_decorator[T: Callable[..., Any], E: BaseEvent](
     """
 
     def decorator(func: T) -> T:
-        setattr(
-            func,
-            "_listener_init_params",
-            {"event_types": event_types, "match_fn": match_fn},
+        metadata = ListenerMetadata(
+            dispatcher=dispatcher_type,
+            listener_cls=listener_cls,
+            init_params={"event_types": event_types, "match_fn": match_fn},
         )
-        setattr(func, "_listener_dispatcher", dispatcher_type)
-        setattr(func, "_listener_class", listener_cls)
+        _get_or_create_metadata_list(func).append(metadata)
         return func
 
     return decorator
@@ -89,7 +109,12 @@ def cooldown[T: Callable[..., Any]](
     """
 
     def decorator(func: T) -> T:
-        setattr(func, "_listener_cooldown", Cooldown(rate, per, type_))
+        metadata_list = _get_or_create_metadata_list(func)
+        if metadata_list:
+            metadata_list[-1].cooldown = Cooldown(rate, per, type_)
+        else:
+            metadata = ListenerMetadata(cooldown=Cooldown(rate, per, type_))
+            metadata_list.append(metadata)
         return func
 
     return decorator
@@ -104,7 +129,12 @@ def priority[T: Callable[..., Any]](value: int) -> Callable[[T], T]:
     """
 
     def decorator(func: T) -> T:
-        setattr(func, "_listener_priority", value)
+        metadata_list = _get_or_create_metadata_list(func)
+        if metadata_list:
+            metadata_list[-1].priority = value
+        else:
+            metadata = ListenerMetadata(priority=value)
+            metadata_list.append(metadata)
         return func
 
     return decorator

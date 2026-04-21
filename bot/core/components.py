@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Coroutine
 
     from .enums import BucketType
+    from .modals import MetaFilter
     from .types import EventProcessor
 
 LOGGER = logging.getLogger(__name__)
@@ -39,6 +40,18 @@ async def _log_on_invoke_error[T](awaitable: Awaitable[T], error_msg: str) -> T:
     except Exception:
         LOGGER.exception(error_msg)
         raise
+
+
+@dataclass
+class ListenerMetadata:
+    """Metadata for a single listener configuration set by decorators."""
+
+    dispatcher: type[BaseDispatcher] | None = None
+    listener_cls: type[BaseListener] | None = None
+    meta_filter: MetaFilter | None = None
+    init_params: dict[str, Any] = dataclasses.field(default_factory=dict)
+    cooldown: Cooldown | None = None
+    priority: int = 0
 
 
 class GlobalContext:
@@ -674,56 +687,57 @@ class Cog:
         self.listeners: list[BaseListener] = []
         for attr_name in dir(self):
             attr_obj = cast("object", getattr(self, attr_name))
-            listener_dispatcher: type[BaseDispatcher] | None = getattr(
-                attr_obj,
-                "_listener_dispatcher",
-                None,
+            metadata_list: list[ListenerMetadata] | None = getattr(
+                attr_obj, "_listener_metadata", None
             )
-            if not listener_dispatcher:
+            if not metadata_list:
                 continue
-            d = event_manager.dispatchers.get(listener_dispatcher, None)
-            if not d:
-                LOGGER.warning(
-                    "Cog %s: Listener %s could not be added. "
-                    "The event manager does not have a %s dispatcher registered.",
-                    self.name,
-                    attr_name,
-                    listener_dispatcher,
-                )
-                continue
-            init_params = cast(
-                "dict[str, object]",
-                getattr(attr_obj, "_listener_init_params", {}),
-            )
-            listener_cls = getattr(attr_obj, "_listener_class", None) or d._func_listener
+
             callback = cast(
                 "Callable[[GlobalContext, BaseEvent], None | Awaitable[None]]",
                 attr_obj,
             )
-            listener_kwargs = {k: v for k, v in init_params.items() if k != "cog"}
-            # Check for priority attribute on the function
-            listener_priority = getattr(
-                attr_obj, "_listener_priority", 0
-            ) or listener_kwargs.get("priority", 0)
-            if not isinstance(listener_priority, int):
-                LOGGER.warning(
-                    "Listener %s in cog %s has an invalid priority value. "
-                    "Defaulting to 0.",
-                    attr_name,
-                    self.name,
-                )
-                listener_priority = 0
-            __ = listener_kwargs.pop("priority", None)
 
-            new_listener = listener_cls(
-                func=callback,
-                cog=self,
-                cooldown=None,
-                priority=listener_priority,
-                **listener_kwargs,
-            )
-            self.listeners.append(new_listener)
-            new_listener.cog = self
+            for metadata in metadata_list:
+                if metadata.dispatcher is None:
+                    continue
+                d = event_manager.dispatchers.get(metadata.dispatcher, None)
+                if not d:
+                    LOGGER.warning(
+                        "Cog %s: Listener %s could not be added. "
+                        "The event manager does not have a %s dispatcher registered.",
+                        self.name,
+                        attr_name,
+                        metadata.dispatcher,
+                    )
+                    continue
+
+                listener_cls = metadata.listener_cls or d._func_listener
+                listener_kwargs = {
+                    k: v for k, v in metadata.init_params.items() if k != "cog"
+                }
+                listener_priority = (
+                    metadata.priority or listener_kwargs.get("priority", 0)
+                )
+                if not isinstance(listener_priority, int):
+                    LOGGER.warning(
+                        "Listener %s in cog %s has an invalid priority value. "
+                        "Defaulting to 0.",
+                        attr_name,
+                        self.name,
+                    )
+                    listener_priority = 0
+                __ = listener_kwargs.pop("priority", None)
+
+                new_listener = listener_cls(
+                    func=callback,
+                    cog=self,
+                    cooldown=metadata.cooldown,
+                    priority=listener_priority,
+                    **listener_kwargs,
+                )
+                self.listeners.append(new_listener)
+                new_listener.cog = self
 
     async def setup(self) -> None:
         """Set up resources after cog is added."""

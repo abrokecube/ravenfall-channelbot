@@ -87,9 +87,34 @@ class CommandListener(GenericListener):
         from bot.integrations.commands.dispatchers import CommandDispatcher  # noqa: I001, PLC0415
 
         super().__init__(func, cog, cooldown, CommandDispatcher, priority=priority)
-        self.verifier: VerifierType | None = getattr(
-            func, "_listener_command_verifier", verifier
+
+        # Get command metadata from decorator
+        command_metadata_list: list[
+            object
+        ] = getattr(func, "_command_metadata", [])
+        command_metadata = (
+            command_metadata_list[-1] if command_metadata_list else None
         )
+
+        if command_metadata:
+            # Extract properties from CommandMetadata
+            self.verifier: VerifierType | None = getattr(
+                command_metadata, "verifier", verifier
+            )
+            name = name or getattr(command_metadata, "name", None)
+            aliases = aliases or getattr(command_metadata, "aliases", None)
+            hidden = hidden or getattr(command_metadata, "hidden", False)
+            help_text = help_text or getattr(command_metadata, "help_text", None)
+            short_help_text = short_help_text or getattr(
+                command_metadata, "short_help_text", None
+            )
+            title = title or getattr(command_metadata, "title", None)
+            command_priority = getattr(command_metadata, "priority", 0)
+            if command_priority and not priority:
+                priority = command_priority
+        else:
+            # Fallback to old attribute-based approach
+            self.verifier = getattr(func, "_listener_command_verifier", verifier)
 
         self.checks: list[BaseCheck] = []
         if checks:

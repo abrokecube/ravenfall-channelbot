@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
+from bot.core.components import ListenerMetadata
+from bot.core.decorators import _get_or_create_metadata_list
 from bot.core.modals import MetaFilter
 from bot.integrations.chat_messages import EVENT_CATEGORY_MESSAGE
 
@@ -11,6 +14,40 @@ from .dispatchers import CommandDispatcher
 if TYPE_CHECKING:
     from . import BaseConverter
     from .types import ParameterConfig, VerifierType
+
+
+@dataclasses.dataclass
+class CommandMetadata:
+    """Metadata for command listeners set by decorators."""
+
+    name: str | None = None
+    short_help_text: str | None = None
+    help_text: str | None = None
+    aliases: list[str] = dataclasses.field(default_factory=list)
+    verifier: VerifierType | None = None
+    hidden: bool = False
+    priority: int = 0
+    title: str | None = None
+
+
+def _get_or_create_command_metadata_list(
+    func: Callable[..., Any],
+) -> list[CommandMetadata]:
+    """Get or create the command metadata list on a function.
+
+    Args:
+        func: The function to get metadata from.
+
+    Returns:
+        The list of CommandMetadata objects.
+    """
+    metadata_list: list[CommandMetadata] | None = getattr(
+        func, "_command_metadata", None
+    )
+    if metadata_list is None:
+        metadata_list = []
+        setattr(func, "_command_metadata", metadata_list)
+    return metadata_list
 
 
 def command[T: Callable[..., Any]](
@@ -28,28 +65,40 @@ def command[T: Callable[..., Any]](
     if not aliases:
         aliases = []
 
-    kwargs: dict[str, object] = {}
+    kwargs: dict[str, object] = {
+        "name": name,
+        "short_help_text": short_help_text,
+        "help_text": help_text,
+        "aliases": aliases,
+        "verifier": verifier,
+        "hidden": hidden,
+        "priority": priority,
+        "title": title,
+    }
 
     def decorator(func: T):
-        kwargs.update(
-            {
-                "name": name,
-                "short_help_text": short_help_text,
-                "help_text": help_text,
-                "aliases": aliases,
-                "verifier": verifier,
-                "hidden": hidden,
-                "priority": priority,
-                "title": title,
-            }
+        # Set core listener metadata
+        listener_metadata = ListenerMetadata(
+            dispatcher=CommandDispatcher,
+            meta_filter=MetaFilter((EVENT_CATEGORY_MESSAGE,), True, [], False),
+            init_params=kwargs,
+            priority=priority,
         )
-        setattr(func, "_listener_init_params", kwargs)
-        setattr(
-            func,
-            "_listener_meta_filter",
-            MetaFilter((EVENT_CATEGORY_MESSAGE,), True, [], False),
+        _get_or_create_metadata_list(func).append(listener_metadata)
+
+        # Set command-specific metadata
+        command_metadata = CommandMetadata(
+            name=name,
+            short_help_text=short_help_text,
+            help_text=help_text,
+            aliases=aliases or [],
+            verifier=verifier,
+            hidden=hidden,
+            priority=priority,
+            title=title,
         )
-        setattr(func, "_listener_dispatcher", CommandDispatcher)
+        _get_or_create_command_metadata_list(func).append(command_metadata)
+
         return func
 
     return decorator
@@ -87,6 +136,7 @@ def parameter[T: Callable[..., Any]](
         aliases = [aliases]
 
     def decorator(func: T) -> T:
+        # Keep _listener_command_params for now - listener will handle it
         if not hasattr(func, "_listener_command_params"):
             setattr(func, "_listener_command_params", {})
         command_params = cast(
@@ -117,7 +167,14 @@ def verification[T: Callable[..., Any]](
     """
 
     def decorator(func: T) -> T:
-        setattr(func, "_listener_command_verifier", verifier_func)
+        # Update the last command metadata entry
+        metadata_list = _get_or_create_command_metadata_list(func)
+        if metadata_list:
+            metadata_list[-1].verifier = verifier_func
+        else:
+            # Create a new metadata entry if none exists
+            metadata = CommandMetadata(verifier=verifier_func)
+            metadata_list.append(metadata)
         return func
 
     return decorator
