@@ -1,7 +1,11 @@
 import asyncio
+import contextlib
 import logging
 import os
+import time
 from dataclasses import dataclass
+
+import psutil
 
 from bot.core.components import BaseService
 
@@ -33,6 +37,18 @@ class WatchedProcess:
 
     process_name: str
     box_name: str | None = None
+
+
+@dataclass(frozen=True)
+class ProcessStatistics:
+    """Statistics for a process or group of processes."""
+
+    cpu_usage_percent: float
+    memory_rss_bytes: int
+    memory_vms_bytes: int
+    memory_percent: float
+    pid_count: int
+    uptime_seconds: float | None
 
 
 class ProcessManagerService(BaseService):
@@ -87,3 +103,97 @@ class ProcessManagerService(BaseService):
 
         shellcmd = f'cmd /c "{cmd_escaped}"'
         return await runshell(shellcmd)
+
+    async def get_process_statistics(
+        self, process_name: str, box_name: str | None = None
+    ) -> ProcessStatistics:
+        """Get statistics for a process, natively or in Sandboxie.
+
+        Args:
+            process_name: The executable name (e.g., 'notepad.exe').
+            box_name: The Sandboxie box name. If None, indicates a native host process.
+
+        Returns:
+            ProcessStatistics containing aggregated metrics across all matching instances.
+        """
+        target_name = process_name.lower()
+        matching_pids: set[int] = set()
+
+        if box_name:
+            # Sandboxie process: get PIDs in the box first
+            sandboxie_path = os.getenv("SANDBOXIE_START_PATH", "Start.exe")
+            shellcmd = f'"{sandboxie_path}" /box:{box_name} /silent /listpids'
+            code, text = await runshell(shellcmd)
+            if code == 0 and text:
+                box_pids: set[int] = set()
+                for line in text.splitlines():
+                    with contextlib.suppress(ValueError):
+                        box_pids.add(int(line.strip()))
+
+                # Filter by process name using psutil
+                for pid in box_pids:
+                    try:
+                        proc = psutil.Process(pid)
+                        if target_name in proc.name().lower():
+                            matching_pids.add(pid)
+                    except (
+                        psutil.NoSuchProcess,
+                        psutil.AccessDenied,
+                        psutil.ZombieProcess,
+                    ):
+                        pass
+        else:
+            # Native process: search all processes
+            for proc in psutil.process_iter(["pid", "name"]):
+                try:
+                    if (
+                        proc.info["pid"] is not None
+                        and isinstance(proc.info["name"], str)
+                        and target_name in proc.info["name"].lower()
+                    ):
+                        matching_pids.add(proc.info["pid"])
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+
+        if not matching_pids:
+            return ProcessStatistics(
+                cpu_usage_percent=0.0,
+                memory_rss_bytes=0,
+                memory_vms_bytes=0,
+                memory_percent=0.0,
+                pid_count=0,
+                uptime_seconds=None,
+            )
+
+        # Aggregate statistics across all matching PIDs
+        total_cpu = 0.0
+        total_rss = 0
+        total_vms = 0
+        total_percent = 0.0
+        oldest_uptime: float | None = None
+        current_time = time.time()
+
+        for pid in matching_pids:
+            try:
+                proc = psutil.Process(pid)
+                total_cpu += proc.cpu_percent()
+                mem_info = proc.memory_info()
+                total_rss += mem_info.rss
+                total_vms += mem_info.vms
+                total_percent += proc.memory_percent()
+
+                create_time = proc.create_time()
+                uptime = current_time - create_time
+                if oldest_uptime is None or uptime > oldest_uptime:
+                    oldest_uptime = uptime
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        return ProcessStatistics(
+            cpu_usage_percent=total_cpu,
+            memory_rss_bytes=total_rss,
+            memory_vms_bytes=total_vms,
+            memory_percent=total_percent,
+            pid_count=len(matching_pids),
+            uptime_seconds=oldest_uptime,
+        )

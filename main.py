@@ -2,9 +2,10 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, Literal, override
 
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 from bot.cogs.bot import BotStuffCog
 from bot.cogs.example import ExampleCog
@@ -14,9 +15,10 @@ from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
 from bot.db.models import update_schema
 from bot.db.service import DatabaseService
+from bot.integrations.chat_messages import MessageEvent
 from bot.integrations.chat_messages.event_processors import filter_message_event_text
-from bot.integrations.chat_messages.events import MessageEvent
-from bot.integrations.commands.dispatchers import CommandDispatcher
+from bot.integrations.commands import CommandDispatcher
+from bot.integrations.process_manager import ProcessEventSource
 from bot.integrations.ravenfall.event_sources import RavenfallEventSource
 from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
 from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
@@ -34,6 +36,25 @@ _ = load_dotenv()
 
 with Path("pid").open("w") as f:
     _ = f.write(str(os.getpid()))
+
+
+class BotConfig(BaseModel):
+    """Top-level bot config."""
+
+    log_level: Literal[
+        "debug",
+        "info",
+        "warn",
+        "warning",
+        "error",
+        "critical",
+    ] = "info"
+    command_prefix: str = "!"
+    owner_twitch_id: str
+
+
+config_service = ConfigService("config.toml")
+bot_config = config_service.get_table("bot", BotConfig)
 
 logging_level_strs = {
     "debug": logging.DEBUG,
@@ -94,14 +115,10 @@ logger_config = {
     # },
 }
 
-log_level = os.getenv("LOG_LEVEL", "info")
-default_console_logging_level = logging_level_strs.get(log_level.lower(), logging.INFO)
+default_console_logging_level = logging_level_strs.get(bot_config.log_level, logging.INFO)
 setup_logging(level=default_console_logging_level, loggers_config=logger_config)
-# setup_logging(level=default_console_logging_level)
 
 logger = logging.getLogger(__name__)
-if log_level.lower() not in logging_level_strs:
-    logger.warning(f"Invalid logging level '{log_level}'")
 
 
 class MyCmdDispatcher(CommandDispatcher):
@@ -112,7 +129,7 @@ class MyCmdDispatcher(CommandDispatcher):
 
     @override
     async def get_prefix(self, global_context: GlobalContext, event: MessageEvent) -> str:
-        return os.getenv("BOT_COMMAND_PREFIX", "!")
+        return bot_config.command_prefix
 
 
 async def run():
@@ -148,8 +165,8 @@ async def run():
         ],
     )
     tasks.append(event_manager.add_event_source(twitch))
-    ravenfall = RavenfallEventSource()
-    tasks.append(event_manager.add_event_source(ravenfall))
+    tasks.append(event_manager.add_event_source(RavenfallEventSource()))
+    tasks.append(event_manager.add_event_source(ProcessEventSource()))
 
     tasks.append(event_manager.add_cog(TestingCog))
     tasks.append(event_manager.add_cog(HelpCog))
@@ -160,21 +177,21 @@ async def run():
     await update_schema()
     tasks.append(global_ctx.register_service(DatabaseService()))
     tasks.append(global_ctx.register_service(RemoteBotService()))
-    tasks.append(global_ctx.register_service(ConfigService("config.toml")))
+    tasks.append(global_ctx.register_service(config_service))
     tasks.append(global_ctx.register_service(WebService()))
     tasks.append(global_ctx.register_service(PrometheusService()))
     __ = await asyncio.gather(*tasks)
 
     __ = await twitch.authenticate_user(
-        os.getenv("OWNER_TWITCH_ID", ""),
+        bot_config.owner_twitch_id,
         [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS],
     )
     __ = await twitch.add_eventsub_subscriptions(
-        os.getenv("OWNER_TWITCH_ID", ""),
+        bot_config.owner_twitch_id,
         EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD,
     )
     __ = await twitch.join_chat(
-        channel_id=os.getenv("OWNER_TWITCH_ID", ""), mode=MessageReceiveMode.EVENTSUB
+        channel_id=bot_config.owner_twitch_id, mode=MessageReceiveMode.IRC
     )
 
     logger.info("### Bot is ready ###")

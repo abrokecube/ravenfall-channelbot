@@ -1,13 +1,13 @@
 # Modified from twitchio utils.py
 
-from collections.abc import Mapping
-from typing import override, TextIO, cast
+import datetime
 import logging
 import logging.handlers
 import os
 import sys
-import datetime
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, TextIO, cast, override
+
 
 def setup_logging(
     *,
@@ -16,12 +16,11 @@ def setup_logging(
     level: int = logging.INFO,  # Default console level
     loggers_config: Mapping[str, str | Mapping[str, int | str]] | None = None,
 ) -> None:
-    """
-    Set up logging with both console and rotating file handlers.
-    
+    """Set up logging with both console and rotating file handlers.
+
     Console handler: Shows logs at the specified level (default: INFO)
     File handler: Rotates logs when they reach 5MB, keeping 5 backup files, logs everything at DEBUG level
-    
+
     Parameters:
         handler: Optional logging.Handler to use for console output
         formatter: Optional logging.Formatter to use for formatting log messages
@@ -30,14 +29,14 @@ def setup_logging(
             Example: {
                 # Simple format - just specify filename
                 'module1': 'module1.log',
-                
+
                 # Advanced format with file and console settings
                 'module2': {
                     'filename': 'module2.log',  # Required
                     'level': logging.INFO,      # File log level (default: DEBUG)
                     'console_level': logging.WARNING  # Console log level (default: use root level)
                 },
-                
+
                 # Multiple loggers can share the same file
                 'module3': {
                     'filename': 'shared.log',
@@ -47,8 +46,8 @@ def setup_logging(
             }
     """
     # Create logs directory if it doesn't exist
-    os.makedirs('logs', exist_ok=True)
-    
+    os.makedirs("logs", exist_ok=True)
+
     # Process loggers config to handle both string and dict formats
     log_files: dict[str, dict[str, Any]] = {}  # pyright: ignore [reportExplicitAny]
     if loggers_config:
@@ -56,149 +55,158 @@ def setup_logging(
             if isinstance(config, str):
                 # Simple case: {'logger_name': 'filename.log'}
                 log_files[logger_name] = {
-                    'filename': config,
-                    'level': logging.DEBUG,
-                    'console_level': level  # Use root console level
+                    "filename": config,
+                    "level": logging.DEBUG,
+                    "console_level": level,  # Use root console level
                 }
             else:
                 # Advanced case with custom configuration
                 log_files[logger_name] = {
-                    'filename': config.get('filename', None),
-                    'level': config.get('level', logging.DEBUG),
-                    'console_level': config.get('console_level', level)  # Default to root level
+                    "filename": config.get("filename", None),
+                    "level": config.get("level", logging.DEBUG),
+                    "console_level": config.get(
+                        "console_level", level
+                    ),  # Default to root level
                 }
-    
+
     # Create a mapping of filenames to their handlers to avoid duplicate handlers
     file_handlers: dict[str, logging.handlers.RotatingFileHandler] = {}
-    
+
     # Set up console handler with filter for per-logger levels
     if handler is None:
         handler = logging.StreamHandler()
     console_handler = handler
-    
+
     # Apply formatter to console handler
     if formatter is None:
         # Use color formatter for console if supported
-        if isinstance(console_handler, logging.StreamHandler) and stream_supports_colour(console_handler.stream):  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType]
+        if isinstance(console_handler, logging.StreamHandler) and stream_supports_colour(
+            console_handler.stream  # pyright: ignore [reportUnknownMemberType, reportUnknownArgumentType]
+        ):
             formatter = ColourFormatter()
         else:
             formatter = logging.Formatter(
-                '[{asctime}] [{levelname:<8}] {name}: {message}',
-                datefmt='%Y-%m-%d %H:%M:%S',
-                style='{'
+                "[{asctime}] [{levelname:<8}] {name}: {message}",
+                datefmt="%Y-%m-%d %H:%M:%S",
+                style="{",
             )
     console_handler.setFormatter(formatter)
-    
+
     # Create a filter function for console logging based on per-logger levels
     def console_filter(record: logging.LogRecord) -> bool:
         # First check for exact matches
         if record.name in log_files:
-            return record.levelno >= cast(int, log_files[record.name]['console_level'])
-            
+            return record.levelno >= cast("int", log_files[record.name]["console_level"])
+
         # Then check for child loggers (logger names that start with the configured name plus a dot)
         for name, config in log_files.items():
             if record.name.startswith(f"{name}."):
-                return record.levelno >= cast(int, config['console_level'])
-                
+                return record.levelno >= cast("int", config["console_level"])
+
         # Default to root level for unconfigured loggers
         return record.levelno >= level
-    
+
     console_handler.addFilter(console_filter)
-    console_handler.setLevel(logging.DEBUG)  # Set to most verbose, let the filter handle the actual level
-    
+    console_handler.setLevel(
+        logging.DEBUG
+    )  # Set to most verbose, let the filter handle the actual level
+
     # Configure the root logger to handle all messages
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
-    
+
     # Remove all existing handlers from root logger
     for h in root_logger.handlers[:]:
         root_logger.removeHandler(h)
-    
+
     # Add console handler to root logger
     root_logger.addHandler(console_handler)  # pyright: ignore [reportUnknownArgumentType]
-    
+
     # Set up file handlers for configured loggers
     for logger_name, config in log_files.items():
-        filename: str = cast(str, config['filename'])
+        filename: str = cast("str", config["filename"])
         if not filename:
             continue
-        
+
         # Create or get existing file handler for this filename
         if filename not in file_handlers:
             file_handler = logging.handlers.RotatingFileHandler(
-                f'logs/{filename}',
-                maxBytes=5*1024*1024,  # 5MB
+                f"logs/{filename}",
+                maxBytes=5 * 1024 * 1024,  # 5MB
                 backupCount=5,
-                encoding='utf-8'
+                encoding="utf-8",
             )
             file_handler.setLevel(logging.DEBUG)  # Always DEBUG for files
             # Use a simple formatter for file output
             file_formatter = logging.Formatter(
-                '[{asctime}.{msecs:03.0f}] [{levelname:<8}] {name}: {message}',
-                datefmt='%Y-%m-%d %H:%M:%S',
-                style='{'
+                "[{asctime}.{msecs:03.0f}] [{levelname:<8}] {name}: {message}",
+                datefmt="%Y-%m-%d %H:%M:%S",
+                style="{",
             )
             file_handler.setFormatter(file_formatter)
             file_handlers[filename] = file_handler
         else:
             file_handler = file_handlers[filename]
-        
+
         # Configure the specific logger
         logger = logging.getLogger(logger_name)
         logger.setLevel(logging.DEBUG)
-        
+
         # Remove any existing file handlers from this logger
         for h in logger.handlers[:]:
             if isinstance(h, logging.FileHandler):
                 logger.removeHandler(h)
-        
+
         # Add the file handler
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)  # pyright: ignore [reportUnknownArgumentType]
         logger.propagate = False  # Prevent logs from propagating to root logger
-    
+
     # Set up default file handler for all other loggers
     default_file_handler = logging.handlers.RotatingFileHandler(
-        'logs/ravenfall-bot.log',
-        maxBytes=5*1024*1024,  # 5MB
+        "logs/ravenfall-bot.log",
+        maxBytes=5 * 1024 * 1024,  # 5MB
         backupCount=5,
-        encoding='utf-8'
+        encoding="utf-8",
     )
     default_file_handler.setLevel(logging.DEBUG)
-    
+
     # Use a simple formatter for the default file output with milliseconds
     default_file_formatter = logging.Formatter(
-        '[{asctime}.{msecs:03.0f}] [{levelname:<8}] {name}: {message}',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        style='{'
+        "[{asctime}.{msecs:03.0f}] [{levelname:<8}] {name}: {message}",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        style="{",
     )
     default_file_handler.setFormatter(default_file_formatter)
-    
+
     # Add default file handler to root logger for any unconfigured loggers
     root_logger.addHandler(default_file_handler)
-    
+
     # Log startup message once per unique log file
-    startup_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]  # Include milliseconds
-    startup_msg = f"\n{'='*80}\nApplication started at {startup_time}\n{'='*80}"
-    
+    startup_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[
+        :-3
+    ]  # Include milliseconds
+    startup_msg = f"\n{'=' * 80}\nApplication started at {startup_time}\n{'=' * 80}"
+
     # Track which log files we've already written the startup message to
     logged_files: set[str] = set()
-    
+
     # Log to all configured log files, but only once per unique file
     for logger_name, config in log_files.items():
-        filename = cast(str, config['filename'])
+        filename = cast("str", config["filename"])
         if not filename:
             continue
         if filename not in logged_files:
             logger = logging.getLogger(logger_name)
             logger.debug(startup_msg)
             logged_files.add(filename)
-    
+
     # Also log to the default log file if we haven't already
-    default_log_file = 'logs/ravenfall-bot.log'
+    default_log_file = "logs/ravenfall-bot.log"
     if default_log_file not in logged_files:
         root_logger.debug(startup_msg)
         logged_files.add(default_log_file)
+
 
 def stream_supports_colour(stream: TextIO) -> bool:
     is_a_tty = hasattr(stream, "isatty") and stream.isatty()
@@ -224,11 +232,14 @@ def stream_supports_rgb(stream: TextIO) -> bool:
 
     return False
 
+
 class ColourFormatter(logging.Formatter):
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # pyright: ignore [reportExplicitAny, reportAny]
         super().__init__(*args, **kwargs)  # pyright: ignore [reportAny]
 
-        self._handler: logging.StreamHandler[TextIO] = kwargs.get("handler", logging.StreamHandler())
+        self._handler: logging.StreamHandler[TextIO] = kwargs.get(
+            "handler", logging.StreamHandler()
+        )
 
         self._supports_colour: bool = stream_supports_colour(self._handler.stream)
         self._supports_rgb: bool = stream_supports_rgb(self._handler.stream)

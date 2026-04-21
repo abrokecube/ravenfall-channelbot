@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Literal, override
 
 from anyio import Path as AsyncPath
 from msgspec import convert
 
+import ravenpy
 from bot.clients import ravenfall_middleman as rm
 from bot.clients import ravenfall_query as rq
 from bot.core.components import BaseEventSource
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
 
     from bot.core.components import EventManager
     from bot.integrations.ravenfall.events import RavenfallEvent
+    from ravenpy.ravenpy import RavenNest
 
     from .matcher import Match
     from .models import RavenfallInstanceConfig
@@ -38,23 +41,14 @@ LOGGER = logging.getLogger(__name__)
 RETURNED_NONE = -1
 
 
-class RavenfallCollectorBase[T]:
-    """Fetches data from Ravenfall."""
+class BaseCollector[T]:
+    """Collector."""
 
-    def __init__(
-        self,
-        ravenfall: RavenfallInstance,
-        interval: float = 1,
-        *,
-        only_online: bool = True,
-        cache_time: float = 0.05,
-    ) -> None:
-        self._loop_task: asyncio.Task[None] | None = None
-        self._last_data: T | None = None
+    def __init__(self, *, interval: float = 1, cache_time: float = 0.05) -> None:
         self.interval: float = interval
         self.cache_time: float = cache_time
-        self.ravenfall: RavenfallInstance = ravenfall
-        self.only_online: bool = only_online
+        self._loop_task: asyncio.Task[None] | None = None
+        self._last_data: T | None = None
         self._last_execution: float = time.monotonic() - self.interval
         self._processing_task: asyncio.Task[None] | None = None
 
@@ -89,14 +83,20 @@ class RavenfallCollectorBase[T]:
             self._processing_task = None
         return self._last_data
 
+    async def pre_fetch(self):
+        """Executes before data is fetched in the loop."""
+
+    async def post_fetch(self):
+        """Executes after data is fetched in the loop."""
+
     async def _loop(self):
         while True:
             try:
-                if self.only_online:
-                    _ = await self.ravenfall.is_online.wait()
+                await self.pre_fetch()
                 t = time.monotonic()
                 await asyncio.sleep(max(0, self.interval - (t - self._last_execution)))
                 _ = await self.get_latest()
+                await self.post_fetch()
             except Exception:
                 LOGGER.exception(f"Error in collector loop {self.__class__.__name__}")
 
@@ -114,6 +114,34 @@ class RavenfallCollectorBase[T]:
         Use the set_data and get_data functions to store and retrieve data.
         """
         raise NotImplementedError
+
+
+class RavenfallCollectorBase[T](BaseCollector[T]):
+    """Fetches data from Ravenfall."""
+
+    def __init__(
+        self,
+        ravenfall: RavenfallInstance,
+        interval: float = 1,
+        *,
+        only_online: bool = True,
+        cache_time: float = 0.05,
+    ) -> None:
+        super().__init__(interval=interval, cache_time=cache_time)
+        self.ravenfall: RavenfallInstance = ravenfall
+        self.only_online: bool = only_online
+
+    @override
+    async def get_latest(self) -> T | None:
+        """Fetch the latest data and return it."""
+        if self.only_online and not self.ravenfall.is_online.is_set():
+            return None
+        return await super().get_latest()
+
+    @override
+    async def pre_fetch(self):
+        if self.only_online:
+            _ = await self.ravenfall.is_online.wait()
 
 
 class SessionCollector(RavenfallCollectorBase[models.GameSession]):
@@ -561,7 +589,7 @@ class RavenfallInstance:
             result = await query_call
         except (rq.RavenfallTimeoutError, rq.RavenfallConnectionError):
             self._fail_counter += 1
-            if self.is_online.is_set() and self._fail_counter > self._max_conn_failures:
+            if self.is_online.is_set() and self._fail_counter >= self._max_conn_failures:
                 LOGGER.info(f"Ravenfall ({self.channel_name}) went offline.")
                 await self._set_is_offline()
                 await self._set_is_not_ready()
@@ -656,6 +684,113 @@ class RavenfallInstance:
     #     )
 
 
+class RavenNestCollectorBase[T](BaseCollector[T]):
+    """Fetches data from RavenNest."""
+
+    def __init__(
+        self,
+        event_src: RavenfallEventSource,
+        interval: float = 1,
+        *,
+        only_online: bool = True,
+        cache_time: float = 0.05,
+    ):
+        super().__init__(interval=interval, cache_time=cache_time)
+        self.event_source: RavenfallEventSource = event_src
+        self.only_online: bool = only_online
+
+    @override
+    async def get_latest(self) -> T | None:
+        """Fetch the latest data and return it."""
+        if self.only_online and not self.event_source.ravennest_is_online.is_set():
+            return None
+        return await super().get_latest()
+
+    @override
+    async def pre_fetch(self):
+        if self.only_online:
+            _ = await self.event_source.ravennest_is_online.wait()
+
+
+class GlobalMultCollector(RavenNestCollectorBase[ravenpy.ExpMult]):
+    """Global multiplier."""
+
+    def __init__(
+        self,
+        event_src: RavenfallEventSource,
+        interval: float = 5,
+        *,
+        only_online: bool = False,
+        cache_time: float = 1,
+    ):
+        super().__init__(
+            event_src, interval, only_online=only_online, cache_time=cache_time
+        )
+
+    @override
+    async def process(self) -> None:
+        new = None
+        async with self.event_source.ravennest_fetch_context(timeout=4) as r:
+            new = await r.get_global_mult()
+        if not new:
+            return
+        self.set_data(new)
+
+
+class MarketplaceCollector(RavenNestCollectorBase[tuple[ravenpy.MarketplaceItem, ...]]):
+    """Marketplace items."""
+
+    def __init__(
+        self,
+        event_src: RavenfallEventSource,
+        interval: float = 60,
+        *,
+        only_online: bool = True,
+        cache_time: float = 5,
+    ):
+        super().__init__(
+            event_src, interval, only_online=only_online, cache_time=cache_time
+        )
+
+    @override
+    async def process(self) -> None:
+        new = None
+        async with self.event_source.ravennest_fetch_context(timeout=30) as r:
+            new = await r.get_marketplace()
+        if not new:
+            return
+        self.set_data(new)
+
+
+class GameVersionCollector(RavenNestCollectorBase[ravenpy.GameUpdateCheckResult]):
+    """Marketplace items."""
+
+    def __init__(
+        self,
+        event_src: RavenfallEventSource,
+        interval: float = 60,
+        *,
+        only_online: bool = True,
+        cache_time: float = 1,
+    ):
+        super().__init__(
+            event_src, interval, only_online=only_online, cache_time=cache_time
+        )
+
+    @override
+    async def process(self) -> None:
+        try:
+            new = await self.event_source.ravennest_api.get_latest_game_version()
+        except (TimeoutError, ravenpy.FetchError, ravenpy.UnexpectedStatusCodeError):
+            await self.event_source._set_updater_is_offline()
+            return
+        else:
+            await self.event_source._set_updater_is_online()
+        if not new:
+            return
+        self.set_data(new)
+
+
 class RavenfallEventSource(BaseEventSource):
     """Event source for Ravenfall events.
 
@@ -690,6 +825,17 @@ class RavenfallEventSource(BaseEventSource):
                 self._ravenfall_processor_message
             )
         self._matcher: RavenfallMatcher | None = None
+
+        self.ravennest_api: RavenNest = ravenpy.RavenNest()
+        self.ravennest_is_online: asyncio.Event = asyncio.Event()
+        self.ravennest_updater_is_online: asyncio.Event = asyncio.Event()
+
+        self._multiplier_collector: GlobalMultCollector = GlobalMultCollector(self)
+        self._marketplace_collector: MarketplaceCollector = MarketplaceCollector(self)
+        self._game_version_collector: GameVersionCollector = GameVersionCollector(self)
+
+        self._ravennest_fail_counter: int = 0
+        self._ravennest_max_conn_failures: int = 3
 
     @override
     async def setup(self, event_manager: EventManager) -> None:
@@ -728,6 +874,12 @@ class RavenfallEventSource(BaseEventSource):
                 "the provided MessageProcessorServer"
             )
 
+        await self.ravennest_api.login(config.username, config.password)
+
+        self._multiplier_collector.start()
+        self._marketplace_collector.start()
+        self._game_version_collector.start()
+
     @override
     async def teardown(self) -> None:
         tasks: list[Awaitable[None]] = []
@@ -735,6 +887,10 @@ class RavenfallEventSource(BaseEventSource):
         __ = await asyncio.gather(*tasks, return_exceptions=False)
         if self.middleman_client:
             await self.middleman_client.disconnect_websocket()
+
+        self._multiplier_collector.stop()
+        self._marketplace_collector.stop()
+        self._game_version_collector.stop()
 
     async def _ravenfall_message(self, message: rm.RavenfallStreamMessage):
         ravenfall = self.middleman_id_to_instance.get(message.connection_id)
@@ -803,3 +959,44 @@ class RavenfallEventSource(BaseEventSource):
             message_source=ev.MessageOrigin.PROCESSOR,
         )
         await self.send_event(event)
+
+    async def _set_updater_is_offline(self):
+        if self.ravennest_updater_is_online.is_set():
+            self.ravennest_updater_is_online.clear()
+            await self.send_event(ev.RavenNestUpdaterOfflineEvent())
+
+    async def _set_updater_is_online(self):
+        if not self.ravennest_updater_is_online.is_set():
+            self.ravennest_updater_is_online.set()
+            await self.send_event(ev.RavenNestUpdaterOnlineEvent())
+
+    async def _set_is_offline(self):
+        await self._set_updater_is_offline()
+        if self.ravennest_is_online.is_set():
+            self.ravennest_is_online.clear()
+            await self.send_event(ev.RavenNestOfflineEvent())
+
+    async def _set_is_online(self):
+        if not self.ravennest_is_online.is_set():
+            self.ravennest_is_online.set()
+            await self.send_event(ev.RavenNestOnlineEvent())
+
+    @asynccontextmanager
+    async def ravennest_fetch_context(self, *, timeout: float = 15):
+        """Tracks RavenNest fetch errors.
+
+        WARNING: This suppresses TimeoutError, ravenpy.FetchError,
+        and ravenpy.UnexpectedStatusCodeError!
+        """
+        try:
+            async with asyncio.timeout(timeout):
+                yield self.ravennest_api
+        except (TimeoutError, ravenpy.FetchError, ravenpy.UnexpectedStatusCodeError):
+            self._ravennest_fail_counter += 1
+        else:
+            self._ravennest_fail_counter = 0
+
+        if self._ravennest_fail_counter >= self._ravennest_max_conn_failures:
+            await self._set_is_offline()
+        elif self._ravennest_fail_counter == 0:
+            await self._set_is_online()

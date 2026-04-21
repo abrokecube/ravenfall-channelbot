@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
 import logging
 import math
 from datetime import UTC, datetime, timedelta
@@ -11,11 +10,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast, override
 
 import aiohttp
-import thefuzz
-import thefuzz.fuzz
-import thefuzz.process
+import thefuzz  # pyright: ignore[reportMissingTypeStubs]
+import thefuzz.fuzz  # pyright: ignore[reportMissingTypeStubs]
+import thefuzz.process  # pyright: ignore[reportMissingTypeStubs]
 from anyio import Path as AsyncPath
-from async_lru import alru_cache
+from msgspec import Struct, json
 
 from .enums import (
     ClanRole,
@@ -145,9 +144,31 @@ class Buh(TypedDict):
     redeemable: RFItemRedeemableJson | None
 
 
+class GameCodeOfConduct(Struct, rename="camel"):
+    """Code of Conduct."""
+
+    title: str
+    message: str
+    last_modified: datetime
+    revision: int
+    visible_in_client: bool
+
+
+class GameUpdateCheckResult(Struct, rename="camel"):
+    """Result from https://www.ravenfall.stream/api/version/check."""
+
+    download_url: str
+    version: str
+    description: str
+    is_alpha: bool
+    is_beta: bool
+    released: datetime
+    code_of_conduct: GameCodeOfConduct
+
+
 async def _fetch_raw_item_data(rf: RavenNest):
     f = await AsyncPath(dirname, "data/internal_game_data.json").open("r")
-    a: InternalGameData = cast("InternalGameData", json.loads(await f.read()))
+    a: InternalGameData = cast("InternalGameData", json.decode(await f.read()))
     await f.aclose()
     item_effects: dict[str, ItemEffectsJSON] = a["item_effects"]
     item_raid_drops: dict[str, ItemRaidDropJSON] = a["item_raid_drops"]
@@ -1112,21 +1133,38 @@ class UnexpectedStatusCodeError(Exception):
     """Raised when the RavenNest API returns an unexpected status code."""
 
 
+class FetchError(BaseException):
+    """Error occurred while fetching."""
+
+
+class NotAuthenticatedError(BaseException):
+    """Not authenticated!"""
+
+
+_background_tasks: set[asyncio.Task[object]] = set()
+
+
 class RavenNest:
     """RavenNest API client."""
 
-    def __init__(self, username: str, password: str):
-        self._user: str = username
-        self._pass: str = password
+    def __init__(self, username: str | None = None, password: str | None = None):
+        self._user: str | None = username
+        self._pass: str | None = password
         self._auth: str = ""
         self._baseURL: str = "https://www.ravenfall.stream/api"
         self.is_authing: asyncio.Future[Any] | None = None  # pyright: ignore [reportExplicitAny]
 
-    async def login(self):
+    async def login(self, username: str | None = None, password: str | None = None):
         """Authenticate with the RavenNest API and load all item data."""
+        if username:
+            self._user = username
+        if password:
+            self._pass = password
         _ = await self._authenticate()
         if self._auth:
-            await self.refresh_items()
+            t = asyncio.create_task(self.refresh_items())
+            _background_tasks.add(t)
+            t.add_done_callback(_background_tasks.discard)
 
     async def refresh_items(self):
         """Refresh the item data from the API.
@@ -1161,29 +1199,62 @@ class RavenNest:
         self.is_authing.set_result(False)
         return False
 
+    async def _get_raw(self, path: str, *, reauth: bool = True) -> str | None:
+        if not self._auth:
+            if reauth:
+                _ = await self._authenticate()
+                return await self._get_raw(path, reauth=False)
+            raise NotAuthenticatedError
+
+        async with aiohttp.ClientSession() as s:
+            try:
+                r = await s.get(
+                    self._baseURL + path,
+                    headers={"auth-token": self._auth, "Accept": "application/json"},
+                    ssl=False,
+                )
+                if r.status == 204:  # noqa: PLR2004
+                    return None
+                if r.status != 200:  # noqa: PLR2004
+                    if reauth:
+                        LOGGER.info(f"Request failed with code {r.status}, reauthing")
+                        _ = await self._authenticate()
+                        return await self._get_raw(path, reauth=False)
+                    LOGGER.error(f"RavenNest: (got unexpected status {r.status})")
+                    msg = f"RavenNest API returned unexpected status code {r.status}"
+                    raise UnexpectedStatusCodeError(msg)
+                return await r.text()
+            except Exception as e:
+                LOGGER.exception("Exception occurred while fetching")
+                raise FetchError from e
+
     async def _get(
         self, path: str, *, reauth: bool = True
-    ) -> dict[str, int | float | bool | str] | list[Any]:  # pyright: ignore [reportExplicitAny]
+    ) -> dict[str, object] | list[Any]:  # pyright: ignore [reportExplicitAny]
         if not self._auth:
             LOGGER.warning("RavenNest: Not authenticated! Call login() first!")
             return {}
         async with aiohttp.ClientSession() as s:
-            r = await s.get(
-                self._baseURL + path,
-                headers={"auth-token": self._auth, "Accept": "application/json"},
-                ssl=False,
-            )
-            if r.status == 204:  # noqa: PLR2004
-                return {}
-            if r.status != 200:  # noqa: PLR2004
-                if reauth:
-                    _ = await self._authenticate()
-                    _ = await self._get(path, reauth=False)
-                else:
-                    LOGGER.error(f"RavenNest: (got unexpected status {r.status})")
-                    msg = f"RavenNest API returned unexpected status code {r.status}"
-                    raise UnexpectedStatusCodeError(msg)
-            return cast("dict[str, int | float | bool | str]", await r.json())
+            try:
+                r = await s.get(
+                    self._baseURL + path,
+                    headers={"auth-token": self._auth, "Accept": "application/json"},
+                    ssl=False,
+                )
+                if r.status == 204:  # noqa: PLR2004
+                    return {}
+                if r.status != 200:  # noqa: PLR2004
+                    if reauth:
+                        _ = await self._authenticate()
+                        _ = await self._get(path, reauth=False)
+                    else:
+                        LOGGER.error(f"RavenNest: (got unexpected status {r.status})")
+                        msg = f"RavenNest API returned unexpected status code {r.status}"
+                        raise UnexpectedStatusCodeError(msg)
+                return cast("dict[str, object] | list[Any]", await r.json())  # pyright: ignore[reportExplicitAny]
+            except Exception as e:
+                LOGGER.exception("Exception occurred while fetching")
+                raise FetchError from e
 
     async def _items(self) -> list[RFItemJson]:
         return cast("list[RFItemJson]", await self._get("/Items"))
@@ -1206,42 +1277,44 @@ class RavenNest:
     async def _get_character(self, character_id: str):
         return await self._get(f"/Players/{character_id}")
 
-    @alru_cache(ttl=29)
-    async def _get_marketplace(self, offset: int = 0, size: int = 99999, *_):
+    async def _get_marketplace(self, offset: int = 0, size: int = 99999):
         return cast(
-            "list[dict[str, Any]]",  # pyright: ignore [reportExplicitAny]
+            "list[dict[str, object]]",
             await self._get(f"/Marketplace/{offset}/{size}"),
         )
 
-    @alru_cache(ttl=4)
-    async def get_character(self, twitch_uid: str, character_id: int | str = 1, *_):
+    async def get_character(self, twitch_uid: str, character_id: int | str = 1):
         """Get a character by Twitch UID and character index (1-based)."""
         result = await self._get_players_twitch(twitch_uid, character_id)
         if not result:
             return None
-        return Character(cast("dict[str, Any]", result))  # pyright: ignore [reportExplicitAny]
+        return Character(cast("dict[str, object]", result))
 
-    @alru_cache(ttl=4)
-    async def get_character_from_id(self, ravenfall_char_id: str, *_):
+    async def get_character_from_id(self, ravenfall_char_id: str):
         """Get a character by Ravenfall character ID."""
         result = await self._get_character(ravenfall_char_id)
         if not result:
             return None
-        return Character(cast("dict[str, Any]", result))  # pyright: ignore [reportExplicitAny]
+        return Character(cast("dict[str, object]", result))
 
-    @alru_cache(ttl=3)
-    async def get_global_mult(self, *_):
+    async def get_global_mult(self):
         """Get the current global experience multiplier event, if there is one."""
         result = await self._exp_multiplier()
-        return ExpMult(**cast("dict[str, Any]", result))  # pyright: ignore [reportExplicitAny]
+        return ExpMult(**cast("dict[str, object]", result))
 
-    @alru_cache(ttl=30)
-    async def get_marketplace(self, *_) -> tuple[MarketplaceItem, ...]:
+    async def get_marketplace(self) -> tuple[MarketplaceItem, ...]:
         """Get all items currently listed on the marketplace."""
         result = await self._get_marketplace()
         market_items = [MarketplaceItem(rfapi=self, **x) for x in result]
         market_items.sort(key=lambda x: x.created, reverse=True)
         return tuple(market_items)
+
+    async def get_latest_game_version(self):
+        """Get the latest game version info."""
+        result = await self._get_raw("/version/check")
+        if not result:
+            raise FetchError
+        return json.decode(result, type=GameUpdateCheckResult)
 
 
 MAX_LEVEL = 999
@@ -1297,7 +1370,7 @@ def load_local_item_data():
     to get the latest item data from the API.
     """
     with Path(_dirname, "data/items.json").open("r") as f:
-        _a: list[InternalItemData] = cast("list[InternalItemData]", json.load(f))
+        _a: list[InternalItemData] = cast("list[InternalItemData]", json.decode(f.read()))
         _load_item_data(_a)
 
 

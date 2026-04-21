@@ -82,6 +82,14 @@ class RavenBotMessageEvent(BaseMiddlemanMessage):
 
 
 @dataclass(kw_only=True)
+class RavenNestEvent(BaseEvent):
+    """Base class for Ravenfall events."""
+
+    categories: Collection[str] = (EVENT_CATEGORY_GENERIC,)
+    platform: str = EVENT_SOURCE_RAVENFALL
+
+
+@dataclass(kw_only=True)
 class RavenfallEvent(BaseEvent):
     """Base class for Ravenfall events."""
 
@@ -100,6 +108,34 @@ class RavenfallOnlineEvent(RavenfallEvent):
 @dataclass(kw_only=True)
 class RavenfallOfflineEvent(RavenfallEvent):
     """A connection to Ravenfall was lost."""
+
+    data: None = None
+
+
+@dataclass(kw_only=True)
+class RavenNestOnlineEvent(RavenNestEvent):
+    """A connection to RavenNest was established."""
+
+    data: None = None
+
+
+@dataclass(kw_only=True)
+class RavenNestOfflineEvent(RavenNestEvent):
+    """A connection to RavenNest was lost."""
+
+    data: None = None
+
+
+@dataclass(kw_only=True)
+class RavenNestUpdaterOnlineEvent(RavenNestEvent):
+    """A connection to RavenNest was lost."""
+
+    data: None = None
+
+
+@dataclass(kw_only=True)
+class RavenNestUpdaterOfflineEvent(RavenNestEvent):
+    """A connection to RavenNest was lost."""
 
     data: None = None
 

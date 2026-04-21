@@ -44,6 +44,8 @@ class Dungeon(rq.Dungeon):
 class RavenfallConfig(BaseModel):
     """Configuration model for Ravenfall integration."""
 
+    username: str
+    password: str
     middleman_base_url: str | None = None
     ravenfall_message_definitions_path: str = "./data/definitions.yaml"
     instances: list[RavenfallInstanceConfig] = []
