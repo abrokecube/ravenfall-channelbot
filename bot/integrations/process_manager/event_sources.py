@@ -37,11 +37,13 @@ class ProcessEventSource(BaseEventSource):
         self._polling_task: asyncio.Task[None] | None = None
         self._known_processes: dict[WatchedProcess, set[int]] = defaultdict(set)
         self._poll_interval: int = 5
+        self._service: ProcessManagerService = ProcessManagerService()
 
     @override
     async def setup(self, event_manager: EventManager) -> None:
         await super().setup(event_manager)
         self._polling_task = asyncio.create_task(self._poll_loop())
+        await self.global_context.register_service(self._service)
 
     @override
     async def teardown(self) -> None:
@@ -54,7 +56,7 @@ class ProcessEventSource(BaseEventSource):
     async def _poll_loop(self) -> None:
         while True:
             try:
-                service = self.global_context.get_service(ProcessManagerService)
+                service = self._service
                 if service and service.watched_processes:
                     await self._scan_processes(service.watched_processes)
             except asyncio.CancelledError:

@@ -11,6 +11,7 @@ from bot.cogs.bot import BotStuffCog
 from bot.cogs.example import ExampleCog
 from bot.cogs.help import HelpCog
 from bot.cogs.process_watchdog import ProcessWatchdogCog
+from bot.cogs.ravenfall_watcher import RavenfallWatcherCog
 from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
 from bot.db.models import update_schema
@@ -24,7 +25,9 @@ from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
 from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
 from bot.services.config_service import ConfigService
+from bot.services.event_waiter import EventWaiterService
 from bot.services.prometheus_service import PrometheusService
+from bot.services.ravenfall_multichat import RavenfallMultichatService
 from bot.services.remote_bot_service import RemoteBotService
 from bot.services.web_service import WebService
 from utils.logging_fomatter import setup_logging
@@ -146,6 +149,7 @@ async def run():
     await update_schema()
 
     global_ctx = GlobalContext()
+    await global_ctx.register_service(EventWaiterService())
 
     tasks: list[Awaitable[None]] = []
     event_manager = EventManager(global_ctx)
@@ -172,6 +176,7 @@ async def run():
     tasks.append(event_manager.add_cog(HelpCog))
     tasks.append(event_manager.add_cog(ExampleCog))
     tasks.append(event_manager.add_cog(ProcessWatchdogCog))
+    tasks.append(event_manager.add_cog(RavenfallWatcherCog))
     tasks.append(event_manager.add_cog(BotStuffCog))
 
     await update_schema()
@@ -180,6 +185,7 @@ async def run():
     tasks.append(global_ctx.register_service(config_service))
     tasks.append(global_ctx.register_service(WebService()))
     tasks.append(global_ctx.register_service(PrometheusService()))
+    tasks.append(global_ctx.register_service(RavenfallMultichatService()))
     __ = await asyncio.gather(*tasks)
 
     __ = await twitch.authenticate_user(

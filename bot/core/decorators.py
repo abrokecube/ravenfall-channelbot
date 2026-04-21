@@ -84,7 +84,7 @@ def lambda_filter_decorator[T: Callable[..., Any], E: BaseEvent](
 
 
 def on_match[E: BaseEvent](
-    event_types: type[E] | list[type[E]], match_fn: Callable[[E], bool]
+    event_types: type[E] | list[type[E]], match_fn: Callable[[E], bool] = lambda x: True
 ):
     """Create a listener that matches events based on a function.
 

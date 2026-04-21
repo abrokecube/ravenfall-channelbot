@@ -4,15 +4,34 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
+from typing import NamedTuple, override
 
 import psutil
+from pydantic import BaseModel
 
 from bot.core.components import BaseService
+from bot.mixins.config_subscriber import ConfigSubscriberMixin
+from bot.services.config_service import ConfigService
 
 LOGGER = logging.getLogger(__name__)
 
 
-async def runshell(cmd: str) -> tuple[int, str | None]:
+class ProcessServiceConfig(BaseModel):
+    """Process service config."""
+
+    sandboxie_user_folder: str = f"C:\\Sandbox\\{os.getlogin()}"
+    sandboxie_start_exe_path: str = "C:\\PROGRAM FILES\\SANDBOXIE-PLUS\\Start.exe"
+
+
+class ShellResult(NamedTuple):
+    """Result from running shell command."""
+
+    code: int
+    stdout: str | None
+
+
+async def runshell(cmd: str) -> ShellResult:
     """Runs a shell command and returns the return code and stdout."""
     proc = await asyncio.create_subprocess_shell(
         cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -28,7 +47,7 @@ async def runshell(cmd: str) -> tuple[int, str | None]:
     if stderr:
         LOGGER.error(f"Command stderr: {stderr.decode().replace('\n', '\\n')}")
     code = proc.returncode if proc.returncode is not None else 1
-    return code, out_text
+    return ShellResult(code, out_text)
 
 
 @dataclass(frozen=True)
@@ -51,12 +70,37 @@ class ProcessStatistics:
     uptime_seconds: float | None
 
 
-class ProcessManagerService(BaseService):
+class ProcessManagerService(BaseService, ConfigSubscriberMixin):
     """Service to track processes that should be watched by the ProcessEventSource."""
 
     def __init__(self) -> None:
         super().__init__()
         self.watched_processes: set[WatchedProcess] = set()
+        self.sandboxie_user_path: Path = Path(f"C:\\Sandbox\\{os.getlogin()}")
+        self.sandboxie_start_path: Path = Path(
+            "C:\\PROGRAM FILES\\SANDBOXIE-PLUS\\Start.exe"
+        )
+
+    @override
+    async def setup(self) -> None:
+        config_service = await self.global_context.wait_for_service(ConfigService)
+        self.inject_config_service(config_service)
+        config = self.subscribe_config(
+            "integrations.process_manager", ProcessServiceConfig
+        )
+        self._process_config(config)
+
+    @override
+    def on_config_changed(
+        self, table: str, config: object, changed_fields: set[str]
+    ) -> None:
+        if not isinstance(config, ProcessServiceConfig):
+            return
+        self._process_config(config)
+
+    def _process_config(self, config: ProcessServiceConfig):
+        self.sandboxie_user_path = Path(config.sandboxie_user_folder)
+        self.sandboxie_start_path = Path(config.sandboxie_start_exe_path)
 
     def watch_process(self, process_name: str, box_name: str | None = None) -> None:
         """Add a process to the watch list.
@@ -75,12 +119,11 @@ class ProcessManagerService(BaseService):
 
     async def kill_process(
         self, process_name: str, box_name: str | None = None
-    ) -> tuple[int, str | None]:
+    ) -> ShellResult:
         """Kills a process, natively or in Sandboxie."""
         if box_name:
-            sandboxie_path = os.getenv("SANDBOXIE_START_PATH", "Start.exe")
             shellcmd = (
-                f'"{sandboxie_path}" /box:{box_name} /silent /wait '
+                f'"{self.sandboxie_start_path}" /box:{box_name} /silent /wait '
                 f"taskkill /f /im {process_name}"
             )
             return await runshell(shellcmd)
@@ -89,15 +132,22 @@ class ProcessManagerService(BaseService):
         return await runshell(shellcmd)
 
     async def spawn_process(
-        self, startup_command: str, box_name: str | None = None
-    ) -> tuple[int, str | None]:
+        self,
+        startup_command: str,
+        box_name: str | None = None,
+        working_dir: str | None = None,
+    ) -> ShellResult:
         """Spawns a process, natively or in Sandboxie."""
         cmd_escaped = startup_command.replace('"', '\\"')
 
+        # Prepend cd command if working_dir is provided
+        if working_dir:
+            cmd_escaped = f'cd /d "{working_dir}" && {cmd_escaped}'
+
         if box_name:
-            sandboxie_path = os.getenv("SANDBOXIE_START_PATH", "Start.exe")
             shellcmd = (
-                f'"{sandboxie_path}" /box:{box_name} /silent /wait cmd /c "{cmd_escaped}"'
+                f'"{self.sandboxie_start_path}" '
+                f'/box:{box_name} /silent /wait cmd /c "{cmd_escaped}"'
             )
             return await runshell(shellcmd)
 
@@ -121,8 +171,7 @@ class ProcessManagerService(BaseService):
 
         if box_name:
             # Sandboxie process: get PIDs in the box first
-            sandboxie_path = os.getenv("SANDBOXIE_START_PATH", "Start.exe")
-            shellcmd = f'"{sandboxie_path}" /box:{box_name} /silent /listpids'
+            shellcmd = f'"{self.sandboxie_start_path}" /box:{box_name} /silent /listpids'
             code, text = await runshell(shellcmd)
             if code == 0 and text:
                 box_pids: set[int] = set()

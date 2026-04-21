@@ -39,7 +39,7 @@ class ConfigSubscriberMixin:
         self,
         table: str,
         model: type[T],
-    ) -> None:
+    ) -> T:
         """Subscribe to changes on a specific config table.
 
         Args:
@@ -48,6 +48,9 @@ class ConfigSubscriberMixin:
         """
         svc = self._require_config_service()
         svc._subscribe(self, table, model)
+        if not self._config_service:
+            raise RuntimeError
+        return self._config_service.get_table(table, model)
 
     def unsubscribe_config(self, table: str) -> None:
         """Unsubscribe from a specific config table.

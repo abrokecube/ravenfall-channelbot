@@ -539,9 +539,10 @@ class RavenfallInstance:
         self.channel_id: str = config.twitch_id
         self._fail_counter: int = 0
         self._max_conn_failures: int = 12
+        self._first_off_online_event_sent: bool = False
 
     async def _dummy_event_hook(self, event: RavenfallEvent):  # pyright: ignore[reportUnusedParameter]
-        pass
+        LOGGER.warning("Dummy event hook was called")
 
     async def start(self):
         """Start the RavenfallInstance."""
@@ -566,14 +567,17 @@ class RavenfallInstance:
             __ = self._observed_loop_task.cancel()
 
     async def _set_is_offline(self):
-        if self.is_online.is_set():
+        if self.is_online.is_set() or not self._first_off_online_event_sent:
             self.is_online.clear()
+            LOGGER.info(f"Ravenfall ({self.channel_name}) went offline.")
             await self._event_hook(ev.RavenfallOfflineEvent(ravenfall=self))
+            self._first_off_online_event_sent = True
 
     async def _set_is_online(self):
         if not self.is_online.is_set():
             self.is_online.set()
             await self._event_hook(ev.RavenfallOnlineEvent(ravenfall=self))
+            self._first_off_online_event_sent = True
 
     async def _set_is_not_ready(self):
         if self.is_ready.is_set():
@@ -589,8 +593,9 @@ class RavenfallInstance:
             result = await query_call
         except (rq.RavenfallTimeoutError, rq.RavenfallConnectionError):
             self._fail_counter += 1
-            if self.is_online.is_set() and self._fail_counter >= self._max_conn_failures:
-                LOGGER.info(f"Ravenfall ({self.channel_name}) went offline.")
+            if not self._first_off_online_event_sent:
+                await self._set_is_offline()
+            if self._fail_counter >= self._max_conn_failures:
                 await self._set_is_offline()
                 await self._set_is_not_ready()
         except rq.RavenfallQueryError:
@@ -808,8 +813,6 @@ class RavenfallEventSource(BaseEventSource):
         self.channel_name_to_instance: dict[str, RavenfallInstance] = {}
         self.channel_id_to_instance: dict[str, RavenfallInstance] = {}
         self.middleman_id_to_instance: dict[str, RavenfallInstance] = {}
-        for i in self.ravenfall_instances:
-            i._event_hook = self.send_event
         self.middleman_client: rm.MiddlemanClient | None = None
         self.middleman_message_processor: rm.MessageProcessorServer | None = (
             middleman_message_processor
@@ -836,6 +839,8 @@ class RavenfallEventSource(BaseEventSource):
 
         self._ravennest_fail_counter: int = 0
         self._ravennest_max_conn_failures: int = 3
+        self._first_ravennest_offline_event_sent: bool = False
+        self._first_updater_offline_event_sent: bool = False
 
     @override
     async def setup(self, event_manager: EventManager) -> None:
@@ -843,6 +848,8 @@ class RavenfallEventSource(BaseEventSource):
         config = config_service.get_table("integrations.ravenfall", RavenfallConfig)
         self.ravenfall_config = config.instances
         self.ravenfall_instances = [RavenfallInstance(x) for x in self.ravenfall_config]
+        for i in self.ravenfall_instances:
+            i._event_hook = self.send_event
         self.channel_name_to_instance = {
             x.channel_name: x for x in self.ravenfall_instances
         }
@@ -961,25 +968,35 @@ class RavenfallEventSource(BaseEventSource):
         await self.send_event(event)
 
     async def _set_updater_is_offline(self):
-        if self.ravennest_updater_is_online.is_set():
+        if (
+            self.ravennest_updater_is_online.is_set()
+            or not self._first_updater_offline_event_sent
+        ):
             self.ravennest_updater_is_online.clear()
             await self.send_event(ev.RavenNestUpdaterOfflineEvent())
+            self._first_updater_offline_event_sent = True
 
     async def _set_updater_is_online(self):
         if not self.ravennest_updater_is_online.is_set():
             self.ravennest_updater_is_online.set()
             await self.send_event(ev.RavenNestUpdaterOnlineEvent())
+            self._first_updater_offline_event_sent = True
 
     async def _set_is_offline(self):
         await self._set_updater_is_offline()
-        if self.ravennest_is_online.is_set():
+        if (
+            self.ravennest_is_online.is_set()
+            or not self._first_ravennest_offline_event_sent
+        ):
             self.ravennest_is_online.clear()
             await self.send_event(ev.RavenNestOfflineEvent())
+            self._first_ravennest_offline_event_sent = True
 
     async def _set_is_online(self):
         if not self.ravennest_is_online.is_set():
             self.ravennest_is_online.set()
             await self.send_event(ev.RavenNestOnlineEvent())
+            self._first_ravennest_offline_event_sent = True
 
     @asynccontextmanager
     async def ravennest_fetch_context(self, *, timeout: float = 15):
@@ -993,6 +1010,8 @@ class RavenfallEventSource(BaseEventSource):
                 yield self.ravennest_api
         except (TimeoutError, ravenpy.FetchError, ravenpy.UnexpectedStatusCodeError):
             self._ravennest_fail_counter += 1
+            if not self._first_ravennest_offline_event_sent:
+                await self._set_is_offline()
         else:
             self._ravennest_fail_counter = 0
 
