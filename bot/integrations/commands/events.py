@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from bot.core import EVENT_SOURCE_ANY
 from bot.core.components import BaseEvent

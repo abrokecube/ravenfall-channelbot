@@ -100,9 +100,9 @@ class HelpCog(Cog):
             return "No data"
         return param_data.get_help_text(arg_name)
 
-    @command(name="help")
     @parameter("command_name", greedy=True)
     @parameter("all_", display_name="all", aliases=["a", "more", "m"])
+    @command(name="help")
     async def help(
         self,
         ctx: CommandEvent,

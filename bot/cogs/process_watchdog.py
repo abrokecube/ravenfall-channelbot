@@ -51,9 +51,9 @@ class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
             return
         self.watchers = [ProcessWatcherClient(base_url=x) for x in config.watcher_urls]
 
-    @command(name="startproc", aliases=["startprocess", "start_process", "procstart"])
     @parameter(name="process_name", greedy=True)
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
+    @command(name="startproc", aliases=["startprocess", "start_process", "procstart"])
     async def start_process(self, ctx: CommandEvent, process_name: str):
         """Start a process.
 
@@ -72,9 +72,9 @@ class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
             msg = "Failed to start process"
             raise CommandError(msg)
 
-    @command(name="stopproc", aliases=["stopprocess", "stop_process", "procstop"])
     @parameter(name="process_name", greedy=True)
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
+    @command(name="stopproc", aliases=["stopprocess", "stop_process", "procstop"])
     async def stop_process(self, ctx: CommandEvent, process_name: str):
         """Stop a process.
 
@@ -93,11 +93,11 @@ class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
             msg = "Failed to stop process"
             raise CommandError(msg)
 
+    @parameter(name="process_name", greedy=True)
+    @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     @command(
         name="restartproc", aliases=["restartprocess", "restart_processes", "procrestart"]
     )
-    @parameter(name="process_name", greedy=True)
-    @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     async def restart_process(self, ctx: CommandEvent, process_name: str):
         """Restart a process.
 
@@ -116,11 +116,11 @@ class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
             msg = "Failed to restart process"
             raise CommandError(msg)
 
+    @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     @command(
         name="listproc",
         aliases=["listprocess", "listprocesses", "list_processes", "proclist"],
     )
-    @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     async def list_processes(self, ctx: CommandEvent):
         """List all registered processes."""
         try:
@@ -151,10 +151,10 @@ class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
             msg = "Failed to get processes"
             raise CommandError(msg) from err
 
-    @command(name="pull", aliases=["pullproc", "pullprocess", "pull_process"])
     @parameter(name="process_name", greedy=True)
     @parameter(name="restart", aliases=["r"])
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
+    @command(name="pull", aliases=["pullproc", "pullprocess", "pull_process"])
     async def pull_process(
         self, ctx: CommandEvent, process_name: str, *, restart: bool = False
     ):
@@ -193,8 +193,8 @@ class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
             msg = "Failed to pull process"
             raise CommandError(msg)
 
-    @command(name="reloadwatchdog")
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
+    @command(name="reloadwatchdog")
     async def reload_watchdog_conf(self, ctx: CommandEvent):
         """Reloads config for all watchdog instances."""
         had_errored = False

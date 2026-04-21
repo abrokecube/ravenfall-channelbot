@@ -19,6 +19,7 @@ from bot.core.components import (
     GlobalContext,
 )
 from bot.core.listeners import GenericListener
+from bot.integrations.chat_messages.checks import BaseCheck
 from bot.integrations.chat_messages.exceptions import CheckFailure
 from utils.strutils import strjoin
 
@@ -45,23 +46,13 @@ if TYPE_CHECKING:
         Cog,
         Cooldown,
     )
-    from bot.integrations.chat_messages import BaseCheck
+    from bot.integrations.chat_messages import BaseCheck, ChatMessageMetadata
+    from bot.integrations.commands.models import ParameterConfig
 
+    from .models import CommandMetadata
     from .types import VerifierType
 
 LOGGER = logging.getLogger(__name__)
-
-
-def _warn_type_mismatch(
-    param_name: str, expected: object, actual: object, command_name: str
-):
-    LOGGER.warning(
-        "Type mismatch for parameter '%s' in command '%s': expected %s, got %s",
-        param_name,
-        command_name,
-        expected,
-        actual,
-    )
 
 
 class CommandListener(GenericListener):
@@ -70,71 +61,43 @@ class CommandListener(GenericListener):
     def __init__(
         self,
         func: Callable[[GlobalContext, BaseEvent], None | Awaitable[None]],
+        command_dispatcher_metadata: CommandMetadata,
+        chat_message_metadata: ChatMessageMetadata,
         *,
         cog: Cog | None = None,
-        name: str | None = None,
-        aliases: list[str] | None = None,
         cooldown: Cooldown | None = None,
         priority: int = 0,
-        checks: list[BaseCheck] | None = None,
-        verifier: VerifierType | None = None,
-        hidden: bool = False,
-        help_text: str | None = None,
-        short_help_text: str | None = None,
-        title: str | None = None,
     ):
         # prevent circular import :)
         from bot.integrations.commands.dispatchers import CommandDispatcher  # noqa: I001, PLC0415
 
-        super().__init__(func, cog, cooldown, CommandDispatcher, priority=priority)
-
-        # Get command metadata from decorator
-        command_metadata_list: list[
-            object
-        ] = getattr(func, "_command_metadata", [])
-        command_metadata = (
-            command_metadata_list[-1] if command_metadata_list else None
+        super().__init__(
+            func,
+            cog=cog,
+            cooldown=cooldown,
+            priority=priority,
+            expected_dispatcher=CommandDispatcher,
         )
 
-        if command_metadata:
-            # Extract properties from CommandMetadata
-            self.verifier: VerifierType | None = getattr(
-                command_metadata, "verifier", verifier
-            )
-            name = name or getattr(command_metadata, "name", None)
-            aliases = aliases or getattr(command_metadata, "aliases", None)
-            hidden = hidden or getattr(command_metadata, "hidden", False)
-            help_text = help_text or getattr(command_metadata, "help_text", None)
-            short_help_text = short_help_text or getattr(
-                command_metadata, "short_help_text", None
-            )
-            title = title or getattr(command_metadata, "title", None)
-            command_priority = getattr(command_metadata, "priority", 0)
-            if command_priority and not priority:
-                priority = command_priority
-        else:
-            # Fallback to old attribute-based approach
-            self.verifier = getattr(func, "_listener_command_verifier", verifier)
+        metadata = command_dispatcher_metadata
 
-        self.checks: list[BaseCheck] = []
-        if checks:
-            self.checks.extend(checks)
-        self.checks.extend(getattr(func, "_listener_command_checks", []))
+        self.checks: list[BaseCheck] = chat_message_metadata.checks
 
-        self.name: str = name or func.__name__  # ty:ignore[unresolved-attribute]
-        self.aliases: list[str] = []
-        if aliases:
-            self.aliases.extend(aliases)
+        self.name: str = metadata.name or func.__name__  # ty:ignore[unresolved-attribute]
+        self.aliases: list[str] = metadata.aliases
 
         self._id: str = self.name
 
         doc = docstring_parser.parse(func.__doc__ or "")
 
-        self.title: str = title or self.name.replace("_", " ").title()
-        self.short_help: str | None = short_help_text or doc.short_description
-        self.help: str | None = help_text or doc.long_description or doc.short_description
+        self.title: str = metadata.title or self.name.replace("_", " ").title()
+        self.short_help: str | None = metadata.short_help_text or doc.short_description
+        self.help: str | None = (
+            metadata.help_text or doc.long_description or doc.short_description
+        )
 
-        self.hidden: bool = hidden
+        self.hidden: bool = metadata.hidden
+        self.verifier: VerifierType | None = metadata.verifier
 
         # Store signature and resolve type hints
         self.signature: inspect.Signature = inspect.signature(func)
@@ -152,11 +115,6 @@ class CommandListener(GenericListener):
             # If get_type_hints fails, we'll fall back to the signature
             LOGGER.warning("Could not resolve type hints for %s: %s", func.__name__, e)
             self.type_hints = {}
-
-        # Load parameter configurations from decorator
-        params_config: dict[str, dict[str, object]] = getattr(
-            func, "_listener_command_params", {}
-        )
 
         kind_mapping = {
             inspect.Parameter.POSITIONAL_ONLY: ParameterType.POSITIONAL_ONLY,
@@ -192,29 +150,9 @@ class CommandListener(GenericListener):
             __ = sig_params.pop(0)
 
         for param in sig_params:
-            param_config: dict[str, object] = params_config.get(param.name, {})
-
-            # Resolve aliases
-            param_aliases = param_config.get("aliases", [])
-            if isinstance(param_aliases, str):
-                param_aliases = [param_aliases]
-            elif not isinstance(param_aliases, list):
-                _warn_type_mismatch(param.name, list, param_aliases, self.name)
-                param_aliases = []
-            new_param_aliases: list[str] = []
-            for alias in param_aliases:  # pyright: ignore[reportUnknownVariableType]
-                if not isinstance(alias, str):
-                    _warn_type_mismatch(param.name, str, alias, self.name)  # pyright: ignore[reportUnknownArgumentType]
-                else:
-                    new_param_aliases.append(alias)
-            param_aliases = new_param_aliases
-
-            display_name = param_config.get("display_name")
-            if not display_name:
-                display_name = param.name
-            if not isinstance(display_name, str):
-                _warn_type_mismatch(param.name, str, display_name, self.name)
-                display_name = param.name
+            display_name = param.name
+            param_aliases: list[str] = []
+            param_help = doc_params.get(param.name)
 
             # Resolve type and check for Optional
             raw_annotation = self.type_hints.get(
@@ -242,6 +180,10 @@ class CommandListener(GenericListener):
                     if non_none_types:
                         annotation = non_none_types[0]
 
+            converter: type | BaseConverter | type[BaseConverter] = str
+            if isinstance(annotation, type):
+                converter = annotation
+
             is_optional = (
                 is_optional
                 or (cast("object", param.default) != inspect.Parameter.empty)
@@ -251,54 +193,46 @@ class CommandListener(GenericListener):
                 )
             )
 
-            # Get help text
-            param_help = param_config.get("help")
-            if not param_help:
-                param_help = doc_params.get(param.name)
-            if not isinstance(param_help, str) and param_help is not None:
-                _warn_type_mismatch(param.name, str, param_help, self.name)
-                param_help = None
-
-            converter = param_config.get("converter") or annotation
-            if not converter:
-                converter = str
-            if not isinstance(converter, (type, BaseConverter)):
-                _warn_type_mismatch(
-                    param.name, (type, BaseConverter), converter, self.name
-                )
-                converter = str
-
+            param_greedy = False
+            param_hidden = False
+            param_regex: None | re.Pattern[str] = None
             param_kind = kind_mapping[param.kind]
 
-            param_greedy = param_config.get("greedy", False)
-            if not isinstance(param_greedy, bool):
-                _warn_type_mismatch(param.name, bool, param_greedy, self.name)
-                param_greedy = False
-            param_hidden = param_config.get("hidden", False)
-            if not isinstance(param_hidden, bool):
-                _warn_type_mismatch(param.name, bool, param_hidden, self.name)
-                param_hidden = False
-            param_regex = param_config.get("regex")
-            if param_regex is not None and not isinstance(param_regex, (str, re.Pattern)):
-                _warn_type_mismatch(param.name, (str, re.Pattern), param_regex, self.name)
-                param_regex = None
+            param_config: ParameterConfig | None = metadata.parameters.get(param.name)
+
+            if param_config is not None:
+                display_name = param_config.display_name
+                if not display_name:
+                    display_name = param.name
+
+                param_aliases = param_config.aliases
+
+                param_help = param_config.help_text
+
+                if param_config.converter is not None:
+                    converter = param_config.converter
+
+                param_greedy = param_config.greedy
+                param_hidden = param_config.hidden
+                if param_config.regex:
+                    param_regex = re.compile(param_config.regex)
 
             # Create Parameter object
             p = Parameter(
                 name=param.name,
                 display_name=display_name,
-                raw_annotation=raw_annotation,
-                annotation=annotation,
-                converter=converter,
-                is_optional=is_optional,
-                default=cast("object", param.default),
                 aliases=param_aliases,
+                converter=converter,
+                default=cast("object", param.default),
                 greedy=param_greedy,
                 hidden=param_hidden,
                 kind=param_kind,
                 help_text=param_help,
                 command=self,
                 regex=param_regex,
+                raw_annotation=raw_annotation,
+                annotation=annotation,
+                is_optional=is_optional,
             )
 
             # Extract documentation from converter if available

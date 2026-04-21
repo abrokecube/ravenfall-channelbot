@@ -32,7 +32,7 @@ class EventReceiverMixin:
     """
 
     _event_manager: EventManager | None = None
-    _registered_listeners: dict[str, BaseListener]
+    _registered_listeners: dict[str, BaseListener] | None = None
 
     def inject_event_manager(self, event_manager: EventManager) -> None:
         """Store a reference to the EventManager and auto-register listeners.
@@ -47,9 +47,7 @@ class EventReceiverMixin:
         """Return the injected event manager or raise."""
         event_manager: EventManager | None = getattr(self, "_event_manager", None)
         if event_manager is None:
-            msg = (
-                "EventManager has not been injected. Call inject_event_manager() first."
-            )
+            msg = "EventManager has not been injected. Call inject_event_manager() first."
             raise RuntimeError(msg)
         return event_manager
 
@@ -75,9 +73,7 @@ class EventReceiverMixin:
             for metadata in metadata_list:
                 if metadata.dispatcher is None:
                     continue
-                dispatcher = event_manager.dispatchers.get(
-                    metadata.dispatcher, None
-                )
+                dispatcher = event_manager.dispatchers.get(metadata.dispatcher, None)
                 if not dispatcher:
                     LOGGER.warning(
                         "Listener %s could not be registered. "
@@ -87,32 +83,16 @@ class EventReceiverMixin:
                     )
                     continue
 
-                listener_cls = (
-                    metadata.listener_cls or dispatcher._func_listener
-                )
+                listener_cls = metadata.listener_cls or dispatcher._func_listener
                 listener_kwargs = {
-                    k: v
-                    for k, v in metadata.init_params.items()
-                    if k != "cog"
+                    k: v for k, v in metadata.init_kwargs.items() if k != "cog"
                 }
-
-                listener_priority = (
-                    metadata.priority or listener_kwargs.get("priority", 0)
-                )
-                if not isinstance(listener_priority, int):
-                    LOGGER.warning(
-                        "Listener %s has an invalid priority value. "
-                        "Defaulting to 0.",
-                        attr_name,
-                    )
-                    listener_priority = 0
-                __ = listener_kwargs.pop("priority", None)
 
                 new_listener = listener_cls(
                     func=callback,
                     cog=None,
                     cooldown=metadata.cooldown,
-                    priority=listener_priority,
+                    priority=metadata.priority,
                     **listener_kwargs,
                 )
 

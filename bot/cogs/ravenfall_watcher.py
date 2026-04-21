@@ -7,6 +7,7 @@ from bot.integrations.process_manager import ProcessManagerService
 from bot.integrations.ravenfall import RavenfallService
 from bot.integrations.ravenfall.event_sources import RavenfallInstance
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
+from bot.mixins.event_receiver import EventReceiverMixin
 from bot.services.config_service import ConfigService
 
 
@@ -25,7 +26,7 @@ class WatcherConfig(BaseModel):
     instances: list[InstanceConfig]
 
 
-class RavenfallWatcher:
+class RavenfallWatcher(EventReceiverMixin):
     """Watches a Ravenfall instance."""
 
     def __init__(

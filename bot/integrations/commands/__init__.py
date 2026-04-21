@@ -26,5 +26,4 @@ from .exceptions import UnknownFlagError as UnknownFlagError
 from .exceptions import VerificationFailureError as VerificationFailureError
 from .listeners import CommandListener as CommandListener
 from .services import CommandService as CommandService
-from .types import ParameterConfig as ParameterConfig
 from .types import VerifierType as VerifierType

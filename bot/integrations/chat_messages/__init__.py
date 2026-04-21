@@ -14,5 +14,6 @@ from .event_processors import filter_text as filter_text
 from .events import EVENT_CATEGORY_MESSAGE as EVENT_CATEGORY_MESSAGE
 from .events import MessageEvent as MessageEvent
 from .exceptions import CheckFailure as CheckFailure
+from .models import ChatMessageMetadata as ChatMessageMetadata
 from .models import ChatRoomCapabilities as ChatRoomCapabilities
 from .types import CheckFuncType as CheckFuncType

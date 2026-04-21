@@ -26,21 +26,21 @@ class TestingCog(Cog):
     Includes basic chat commands and sample redeems used in CI/manual testing.
     """
 
-    @command(name="test")
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
+    @command(name="test")
     async def test(self, ctx: CommandEvent):
         """Test command."""
         await ctx.message.reply("Hello, world! Args: " + str(ctx.parsed_args.args))
 
-    @command(name="test_error", help_text="Test error command")
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
+    @command(name="test_error", help_text="Test error command")
     async def test_error(self, ctx: CommandEvent):
         """Test error command."""
         msg = "Test error"
         raise Exception(msg)
 
-    @command(name="test_error_listener", help_text="Test error command")
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
+    @command(name="test_error_listener", help_text="Test error command")
     async def test_error_listener(self, ctx: CommandEvent):
         """Test error command."""
         msg = "Test error but cool"

@@ -27,6 +27,7 @@ def _get_or_create_metadata_list(func: Callable[..., Any]) -> list[ListenerMetad
         setattr(func, "_listener_metadata", metadata_list)
     return metadata_list
 
+
 # Matchers
 
 
@@ -74,7 +75,7 @@ def lambda_filter_decorator[T: Callable[..., Any], E: BaseEvent](
         metadata = ListenerMetadata(
             dispatcher=dispatcher_type,
             listener_cls=listener_cls,
-            init_params={"event_types": event_types, "match_fn": match_fn},
+            init_kwargs={"event_types": event_types, "match_fn": match_fn},
         )
         _get_or_create_metadata_list(func).append(metadata)
         return func

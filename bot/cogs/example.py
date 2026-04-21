@@ -149,8 +149,8 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         result = a * b
         await ctx.message.reply(f"{a} × {b} = {result}")
 
-    @command(name="divide")
     @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    @command(name="divide")
     async def divide(
         self, ctx: CommandEvent, numerator: float, denominator: float
     ) -> None:
@@ -197,10 +197,10 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         """
         await ctx.message.reply(f"Set your color to {color.name} ({color.hex_code})")
 
-    @command(name="transfer", help_text="Transfer currency to another user")
     @verification(transfer_verify)
     @parameter("amount", description="Amount to transfer")
     @parameter("user", description="User to transfer to")
+    @command(name="transfer", help_text="Transfer currency to another user")
     async def transfer(self, ctx: CommandEvent, amount: int, user: str) -> None:
         """Transfer coins to another user.
 
@@ -211,8 +211,8 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         """
         await ctx.message.reply(f"Transferred {amount} coins to {user}.")
 
-    @command(name="modcommand")
     @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command(name="modcommand")
     async def modcommand(self, ctx: CommandEvent) -> None:
         """Only moderators and the bot owner can use this command.
 
@@ -282,11 +282,11 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
             return
         await ctx.message.reply(f"{a} {symbol} {b} = {result}")
 
+    @parameter("verbose", display_name="verb", aliases=["v", "debug"])
     @command(
         name="verbose_test",
         aliases=["verbose", "verb", "db"],
     )
-    @parameter("verbose", display_name="verb", aliases=["v", "debug"])
     async def verbose_test(self, ctx: CommandEvent, verbose: bool = False) -> None:
         """Test boolean flags and argument aliases.
 
@@ -306,8 +306,8 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         else:
             await ctx.message.reply("Verbose mode disabled.")
 
-    @command(name="greedy_test")
     @parameter("rest", greedy=True, display_name="reast")
+    @command(name="greedy_test")
     async def greedy_test(self, ctx: CommandEvent, first: str, rest: str) -> None:
         """Test greedy argument parsing.
 
@@ -321,8 +321,8 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         """
         await ctx.message.reply(f"First: '{first}', Rest: '{rest}'")
 
-    @command(name="owner_only", aliases=["owner only"])
     @checks(HasRole(UserRole.BOT_ADMINISTRATOR))
+    @command(name="owner_only", aliases=["owner only"])
     async def owner_only_command(self, ctx: CommandEvent) -> None:
         """Only the bot owner can use this command.
 
@@ -334,10 +334,10 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         """
         await ctx.message.reply("✅ You are the bot owner!")
 
-    @command(name="multi_check")
     @checks(
         HasRole(UserRole.BOT_ADMINISTRATOR, UserRole.MODERATOR, UserRole.ADMINISTRATOR),
     )
+    @command(name="multi_check")
     async def multi_check_command(self, ctx: CommandEvent) -> None:
         """Demonstrates multiple checks.
 
@@ -351,9 +351,9 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         """
         await ctx.message.reply("✅ You passed all checks!")
 
-    @command()
     @parameter("item_name", description="The name of the item", regex=r"^[a-zA-Z ]+$")
     @parameter("amount", description="The amount of the item")
+    @command()
     async def item_amount(self, ctx: CommandEvent, item_name: str, amount: int) -> None:
         """Display the amount of an item.
 
@@ -365,13 +365,13 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         """
         await ctx.message.reply(f"You have {amount} of {item_name}.")
 
-    @command()
     @cooldown(1, 10, [BucketType.USER, BucketType.CHANNEL])
+    @command()
     async def cooldown_test(self, ctx: CommandEvent) -> None:
         await ctx.message.reply("buh")
 
-    @command()
     @cooldown(1, 90, [BucketType.USER, BucketType.CHANNEL])
+    @command()
     async def cooldown_test_long(self, ctx: CommandEvent) -> None:
         await ctx.message.reply("buh (long cooldown)")
 

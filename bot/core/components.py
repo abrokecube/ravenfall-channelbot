@@ -49,7 +49,7 @@ class ListenerMetadata:
     dispatcher: type[BaseDispatcher] | None = None
     listener_cls: type[BaseListener] | None = None
     meta_filter: MetaFilter | None = None
-    init_params: dict[str, Any] = dataclasses.field(default_factory=dict)
+    init_kwargs: dict[str, object] = dataclasses.field(default_factory=dict)
     cooldown: Cooldown | None = None
     priority: int = 0
 
@@ -714,10 +714,10 @@ class Cog:
 
                 listener_cls = metadata.listener_cls or d._func_listener
                 listener_kwargs = {
-                    k: v for k, v in metadata.init_params.items() if k != "cog"
+                    k: v for k, v in metadata.init_kwargs.items() if k != "cog"
                 }
-                listener_priority = (
-                    metadata.priority or listener_kwargs.get("priority", 0)
+                listener_priority = metadata.priority or listener_kwargs.get(
+                    "priority", 0
                 )
                 if not isinstance(listener_priority, int):
                     LOGGER.warning(

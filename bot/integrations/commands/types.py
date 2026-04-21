@@ -1,19 +1,9 @@
-from bot.integrations.commands.events import CommandEvent
-from . import BaseConverter
-from typing import TypedDict, Concatenate
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Concatenate
+
 from bot.core.components import GlobalContext
+from bot.integrations.commands.events import CommandEvent
 
 VerifierType = Callable[
     Concatenate[GlobalContext, CommandEvent, ...], bool | str | Awaitable[bool | str]
 ]
-
-
-class ParameterConfig(TypedDict):
-    aliases: list[str]
-    greedy: bool
-    hidden: bool
-    help_: str
-    regex: str
-    display_name: str
-    converter: BaseConverter | type[BaseConverter] | None
