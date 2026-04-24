@@ -1,6 +1,8 @@
 # ravenfall-channelbot
 Runs under the username `CubedHelperBot` in my Ravenfall towns. It is not very configurable (you will have to edit the code directly). Code written with AI assistance.
 
+I am currently working on a rewrite in the `modularize-compartment` branch. :D  
+
 Bot is configured in `channels.json` and `.env`. These files must exist.  
 Examples of these files are in [`channels_example.json`](/channels_example.json) and [`.env.example`](/.env.example)
 If all dependencies are set up, you can run the bot by executing `uv run main.py` in a terminal window, or by running `run.ps1`
