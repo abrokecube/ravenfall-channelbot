@@ -393,13 +393,14 @@ class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
                         (self.max_boss_hp, TimestampedValue(t, 0))
                     )
                     max_rate_factor = 1.2
-                    if (
-                        old_dungeon.enemies_alive > 0
-                        or recent_drop_rate / total_drop_rate > max_rate_factor
-                    ):
-                        reason = enums.DungeonEndReason.PLAYERS_DEFEATED
-                    else:
-                        reason = enums.DungeonEndReason.BOSS_DEFEATED
+                    if total_drop_rate > 0:
+                        if (
+                            old_dungeon.enemies_alive > 0
+                            or recent_drop_rate / total_drop_rate > max_rate_factor
+                        ):
+                            reason = enums.DungeonEndReason.PLAYERS_DEFEATED
+                        else:
+                            reason = enums.DungeonEndReason.BOSS_DEFEATED
                 await self._send_dungeon_end_event(reason)
             elif new_stage == DungeonStage.LOADING:
                 await self._send_dungeon_spawned_event(new_dungeon)

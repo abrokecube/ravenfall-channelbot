@@ -35,7 +35,8 @@ class RestartBlocker(BaseCollector[RavenfallInstance]):
         dungeon = await self.instance.get_dungeon()
         raid = await self.instance.get_raid()
         if not dungeon or not raid:
-            self.set_status(failing=True, reason="Could not check Ravenfall's status.")
+            # self.set_status(failing=True, reason="Could not check Ravenfall's status.")
+            self.set_status(failing=False)
             return
 
         if not self.ravenfall_service.ravennest_is_online.is_set():

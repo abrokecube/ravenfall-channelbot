@@ -179,7 +179,6 @@ async def run():
     tasks.append(event_manager.add_cog(HelpCog))
     tasks.append(event_manager.add_cog(ExampleCog))
     tasks.append(event_manager.add_cog(ProcessWatchdogCog))
-    tasks.append(event_manager.add_cog(RavenfallWatcherCog))
     tasks.append(event_manager.add_cog(BotStuffCog))
 
     tasks.append(global_ctx.register_service(DatabaseService()))
@@ -196,9 +195,9 @@ async def run():
 
     twitch_auths: defaultdict[str, set[AuthScope]] = defaultdict(set)
 
-    twitch_auths[bot_config.owner_twitch_id].update(
-        [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
-    )
+    # twitch_auths[bot_config.owner_twitch_id].update(
+    #     [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
+    # )
 
     for instance in ravenfall_ev_src.ravenfall_instances:
         twitch_auths[instance.channel_id].add(AuthScope.CHANNEL_BOT)
@@ -225,6 +224,10 @@ async def run():
                 )
             )
 
+    __ = await asyncio.gather(*tasks)
+    tasks.clear()
+
+    tasks.append(event_manager.add_cog(RavenfallWatcherCog))
     __ = await asyncio.gather(*tasks)
     tasks.clear()
 
