@@ -88,12 +88,6 @@ class RavenfallWatcher(EventReceiverMixin):
             0, self._auto_restart_callback, from_end=True
         )
         if self.config.restart_warning_times:
-            __ = self.restart_timeline.add_event(
-                -self.config.restart_warning_times[0],
-                0,
-                self._start_restart_blocker,
-                self._stop_restart_blocker,
-            )
             list_len = len(self.config.restart_warning_times)
             for x in range(list_len - 1):
                 event_start = self.config.restart_warning_times[x]
@@ -107,13 +101,6 @@ class RavenfallWatcher(EventReceiverMixin):
                     self._announce_restart_countdown,
                     end_callback,
                 )
-        else:
-            __ = self.restart_timeline.add_event(
-                -self.config.restart_unblock_min_seconds,
-                0,
-                self._start_restart_blocker,
-                self._stop_restart_blocker,
-            )
 
         __ = self.restart_timeline.add_event(
             0,
@@ -127,6 +114,22 @@ class RavenfallWatcher(EventReceiverMixin):
             self._pre_restart,
             None,
         )
+
+        if self.config.restart_warning_times:
+            __ = self.restart_timeline.add_event(
+                -self.config.restart_warning_times[0],
+                0,
+                self._start_restart_blocker,
+                self._stop_restart_blocker,
+            )
+        else:
+            __ = self.restart_timeline.add_event(
+                -self.config.restart_unblock_min_seconds,
+                0,
+                self._start_restart_blocker,
+                self._stop_restart_blocker,
+            )
+
         self.inject_event_manager(self.event_manager)
         if self.ravenfall.is_online:
             fire_and_forget(self.on_online())

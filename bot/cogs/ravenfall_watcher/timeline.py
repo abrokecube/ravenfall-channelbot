@@ -301,6 +301,11 @@ class Timeline:
         """
         forward = self._end_time >= self._start_time
 
+        # Fire callbacks for any events active at the very start position
+        # before the first sleep.  This handles events whose start_time equals
+        # the timeline start_time (e.g. start(-120, 0) with an event at -120).
+        await self._sync_active_events(self._current_time)
+
         while self._state != _PlaybackState.STOPPED:
             # Block here while paused.
             await self._pause_event.wait()
@@ -317,7 +322,15 @@ class Timeline:
                 not forward and now <= self._end_time
             ):
                 self._current_time = self._end_time
+                # Sync first: fires enter for anything whose boundary lands
+                # exactly on end_time (e.g. a zero-duration event at t=0).
                 await self._sync_active_events(self._end_time)
+                # Deactivate everything still active.  A second sync would
+                # not help here: events whose end_time == self._end_time still
+                # satisfy contains(), so they never transition to "outside"
+                # through the normal diff and their exit callback would be lost.
+                await self._deactivate_all(self._end_time)
+                self._active_events.clear()
                 logger.debug("Timeline reached end: %f", self._end_time)
                 self._state = _PlaybackState.STOPPED
                 break
@@ -339,21 +352,29 @@ class Timeline:
                 break
 
     def _sleep_until_next_boundary(self, now: float, forward: bool) -> float:
-        """Return the number of seconds to sleep before the next interesting
-        moment (an event boundary or the end of the timeline).
+        """Return the number of *wall-clock* seconds to sleep before the next
+        interesting moment (an event boundary or the end of the timeline).
+
+        Timeline-time advances at 1 s/s, so the gap in timeline units equals
+        the gap in wall-clock seconds.  We add a small epsilon so the loop
+        wakes just *after* the boundary rather than exactly on it, and cap at
+        _MAX_SLEEP so a very distant boundary doesn't cause a minutes-long sleep.
         """
+        _EPSILON = 0.001  # wake 1 ms after the boundary
         candidates: list[float] = [self._end_time]
 
         for ev in self._events.values():
             if forward:
-                if ev.start_time > now:
+                # >= so a boundary exactly at now is still a candidate
+                # (happens right after a seek lands on a boundary).
+                if ev.start_time >= now:
                     candidates.append(ev.start_time)
-                if ev.end_time > now:
+                if ev.end_time >= now:
                     candidates.append(ev.end_time)
             else:
-                if ev.start_time < now:
+                if ev.start_time <= now:
                     candidates.append(ev.start_time)
-                if ev.end_time < now:
+                if ev.end_time <= now:
                     candidates.append(ev.end_time)
 
         if forward:
@@ -363,8 +384,8 @@ class Timeline:
             next_boundary = max(candidates)
             gap = now - next_boundary
 
-        # Clamp to a reasonable maximum so we don't sleep forever.
-        return max(0.0, min(gap, self._MAX_SLEEP))
+        # gap is in timeline-seconds == wall-clock seconds (speed = 1 s/s).
+        return max(0.0, min(gap + _EPSILON, self._MAX_SLEEP))
 
     # ------------------------------------------------------------------
     # Internal — cursor helpers
