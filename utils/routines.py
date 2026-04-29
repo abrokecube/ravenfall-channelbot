@@ -1,6 +1,5 @@
 # pyright: reportAny=false, reportExplicitAny=false
-"""
-MIT License
+"""MIT License
 
 Copyright (c) 2017 - Present PythonistaGuild
 
@@ -33,7 +32,6 @@ from typing import Any, TypeAlias, TypeVar
 
 from .backoff import Backoff
 
-
 __all__ = ("Routine", "routine")
 
 
@@ -60,7 +58,7 @@ class Routine:
         You should not instantiate this class manually, instead use the :func:`routine` decorator instead.
 
 
-    Examples
+    Examples:
     --------
 
     .. code:: python3
@@ -109,7 +107,10 @@ class Routine:
         delta: datetime.timedelta | None,
     ) -> None:
         self._coro: CoroT = coro
-        self._name: str = name or f"twitchio.ext.routines: <{self.__class__.__qualname__}[{self._coro.__qualname__}]>"
+        self._name: str = (
+            name
+            or f"twitchio.ext.routines: <{self.__class__.__qualname__}[{self._coro.__qualname__}]>"
+        )
         self._task: asyncio.Task[None] | None = None
         self._injected = None
         self._time: datetime.datetime | None = time
@@ -185,7 +186,7 @@ class Routine:
         backoff: Backoff = Backoff(base=3, maximum_time=10, maximum_tries=5)
 
         if self._should_stop:
-            return
+            return None
 
         if self._before_routine:
             try:
@@ -203,7 +204,9 @@ class Routine:
         attempts: int | None = self._max_attempts
         try:
             while True:
-                self._last_start: datetime.datetime | None = datetime.datetime.now(tz=datetime.UTC)
+                self._last_start: datetime.datetime | None = datetime.datetime.now(
+                    tz=datetime.UTC
+                )
                 self._current_iteration += 1
 
                 try:
@@ -232,7 +235,10 @@ class Routine:
                     attempts = self._max_attempts
                     self._completed += 1
 
-                if self.remaining_iterations is not None and self.remaining_iterations <= 0:
+                if (
+                    self.remaining_iterations is not None
+                    and self.remaining_iterations <= 0
+                ):
                     break
 
                 if self._should_stop:
@@ -240,14 +246,18 @@ class Routine:
                     break
 
                 if self._time:
-                    sleep = compute_timedelta(self._time + datetime.timedelta(days=self._current_iteration))
+                    sleep = compute_timedelta(
+                        self._time + datetime.timedelta(days=self._current_iteration)
+                    )
                 else:
                     assert self._delta is not None
 
                     if not self._wait_remainder:
                         sleep = self._delta
                     else:
-                        maxxed = (self._last_start - datetime.datetime.now(tz=datetime.UTC)).total_seconds()
+                        maxxed = (
+                            self._last_start - datetime.datetime.now(tz=datetime.UTC)
+                        ).total_seconds()
                         sleep = max(maxxed + self._delta, 0)
 
                 await asyncio.sleep(sleep)
@@ -263,6 +273,7 @@ class Routine:
                 await self._call_error(e)
 
         self.cancel()
+        return None
 
     @property
     def args(self) -> tuple[Any, ...]:
@@ -288,13 +299,15 @@ class Routine:
         **kwargs: Any
             Any keyword arguments passed to this method will also be passed to your :class:`~Routine` callback.
 
-        Returns
+        Returns:
         -------
         :class:`asyncio.Task`
             The internal background task associated with this :class:`~Routine`.
         """
         if self._task and not self._task.done() and not self._restarting:
-            raise RuntimeError(f"Routine {self!r} is currently running and has not completed.")
+            raise RuntimeError(
+                f"Routine {self!r} is currently running and has not completed."
+            )
 
         self._args = args
         self._kwargs = kwargs
@@ -365,10 +378,14 @@ class Routine:
         Any arguments passed to :meth:`.start` will also be passed to this coroutine callback.
         """
         if not asyncio.iscoroutinefunction(func):
-            raise TypeError(f'"before_routine" for {self!r} expected a coroutine function not {type(func).__name__!r}')
+            raise TypeError(
+                f'"before_routine" for {self!r} expected a coroutine function not {type(func).__name__!r}'
+            )
 
         if self._before_routine is not None:
-            LOGGER.warning("The before_routine for %s has previously been set.", self.__repr__())
+            LOGGER.warning(
+                "The before_routine for %s has previously been set.", self.__repr__()
+            )
 
         self._before_routine = func
 
@@ -380,10 +397,14 @@ class Routine:
         Any arguments passed to :meth:`.start` will also be passed to this coroutine callback.
         """
         if not asyncio.iscoroutinefunction(func):
-            raise TypeError(f'"after_routine" for {self!r} expected a coroutine function not {type(func).__name__!r}')
+            raise TypeError(
+                f'"after_routine" for {self!r} expected a coroutine function not {type(func).__name__!r}'
+            )
 
         if self._after_routine is not None:
-            LOGGER.warning("The after_routine for %s has previously been set.", self.__repr__())
+            LOGGER.warning(
+                "The after_routine for %s has previously been set.", self.__repr__()
+            )
 
         self._after_routine = func
 
@@ -408,7 +429,9 @@ class Routine:
         Decorator used to set a coroutine as an error handler for this :class:`~Routine`.
         """
         if not asyncio.iscoroutinefunction(func):
-            raise TypeError(f'"error" for {self!r} expected a coroutine function not {type(func).__name__!r}')
+            raise TypeError(
+                f'"error" for {self!r} expected a coroutine function not {type(func).__name__!r}'
+            )
 
         self._on_error = func
 
@@ -443,14 +466,19 @@ class Routine:
     def next_iteration(self) -> float:
         """Method which returns the time until the next iteration as a float of seconds."""
         if self._time:
-            return compute_timedelta(self._time + datetime.timedelta(days=self._current_iteration))
+            return compute_timedelta(
+                self._time + datetime.timedelta(days=self._current_iteration)
+            )
 
         assert self._delta is not None
 
         if self._last_start is None:
             return self._delta
-        else:
-            return max((self._last_start - datetime.datetime.now(tz=datetime.UTC)).total_seconds() + self._delta, 0)
+        return max(
+            (self._last_start - datetime.datetime.now(tz=datetime.UTC)).total_seconds()
+            + self._delta,
+            0,
+        )
 
 
 def routine(
@@ -461,7 +489,7 @@ def routine(
     iterations: int | None = None,
     wait_first: bool = False,
     wait_remainder: bool = False,
-    max_attempts: int | None = 5,
+    max_attempts: int | None = None,
     stop_on_error: bool = False,
 ) -> Callable[[CoroT], Routine]:
     """|deco|
@@ -505,7 +533,7 @@ def routine(
         A bool indicating whether the :class:`~Routine` should immediately stop when encountering an error. This parameter
         takes precedence over ``max_attempts``. Defaults to ``False``.
 
-    Raises
+    Raises:
     ------
     :class:`TypeError`
         The function decorated is not a coroutine function.
@@ -519,10 +547,14 @@ def routine(
         nonlocal time
 
         if not asyncio.iscoroutinefunction(func):
-            raise TypeError(f"Routine expected coroutine function not {type(func).__name__!r}")
+            raise TypeError(
+                f"Routine expected coroutine function not {type(func).__name__!r}"
+            )
 
         if not time and not delta:
-            raise RuntimeError('One of either the "time" or "delta" arguments must be passed.')
+            raise RuntimeError(
+                'One of either the "time" or "delta" arguments must be passed.'
+            )
 
         if time is not None and delta is not None:
             raise RuntimeError(

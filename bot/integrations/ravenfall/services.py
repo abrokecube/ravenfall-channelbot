@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 from bot.core.components import BaseService
 
 if TYPE_CHECKING:
+    from asyncio.locks import Event
+
     from bot.integrations.ravenfall.event_sources import RavenfallEventSource
 
 
@@ -14,6 +16,10 @@ class RavenfallService(BaseService):
     def __init__(self, ravenfall: RavenfallEventSource) -> None:
         super().__init__()
         self.event_source: RavenfallEventSource = ravenfall
+        self.ravennest_is_online: Event = self.event_source.ravennest_is_online
+        self.ravennest_updater_is_online: Event = (
+            self.event_source.ravennest_updater_is_online
+        )
 
     def get_ravenfall_instance(
         self, *, channel_name: str | None = None, channel_id: str | None = None
@@ -32,3 +38,7 @@ class RavenfallService(BaseService):
     def get_ravennest(self):
         """Get an authenticated RavenNest instance."""
         return self.event_source.ravennest_api
+
+    async def get_latest_game_version(self):
+        """Get changelog for the latest game version."""
+        return await self.event_source._game_version_collector.get_latest()

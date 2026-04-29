@@ -11,10 +11,8 @@ from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.models import ChatRoomCapabilities
 from utils.strutils import split_by_utf16_bytes
 
+from .consts import EVENT_SOURCE_TWITCH
 from .enums import TwitchCustomRewardRedemptionStatus
-
-EVENT_SOURCE_TWITCH = "twitch"
-
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -29,16 +27,6 @@ if TYPE_CHECKING:
     from bot.integrations.twitch.services import TwitchService
 
 LOGGER = logging.getLogger(__name__)
-
-
-def _filter_text(context: MessageEvent, text: str, *, max_length: int | None = None):
-    if not context.room_capabilities.multiline:
-        text = " - ".join(text.splitlines())
-    split_text = [text]
-    char_limit = max_length or context.room_capabilities.max_message_length
-    if char_limit > 0:
-        split_text = split_by_utf16_bytes(text, char_limit)
-    return split_text
 
 
 @dataclass(kw_only=True)
@@ -64,26 +52,22 @@ class TwitchIRCMessageEvent(MessageEvent):
         reply_id: str | None = None,
         **kwargs: object,
     ):
-        char_limit = self.room_capabilities.max_message_length
+        final_text = text
         if me:
-            char_limit -= 4
-        for text_ in _filter_text(self, text, max_length=char_limit):
-            final_text = text_
-            if me:
-                final_text = f"/me {text_}"
-            await self.twitch_service.send_chat_message(
-                self.room_id, final_text, use_http=use_http, reply_id=reply_id
-            )
+            final_text = f"/me {text}"
+        __ = await self.twitch_service.send_message(
+            final_text, self.room_id, use_http=use_http, reply_id=reply_id
+        )
 
     @override
     async def reply(self, text: str, *, use_http: bool = True, **kwargs: object):
-        char_limit = (
-            self.room_capabilities.max_message_length - len(self.author_login) - 2
+        __ = await self.twitch_service.send_message(
+            text,
+            self.room_id,
+            use_http=use_http,
+            reply_id=self.id,
+            reply_username=self.author_login,
         )
-        for text_ in _filter_text(self, text, max_length=char_limit):
-            await self.twitch_service.send_chat_message(
-                self.room_id, text_, use_http=use_http, reply_id=self.id
-            )
 
 
 @dataclass(kw_only=True)
@@ -111,23 +95,22 @@ class TwitchEventSubMessageEvent(MessageEvent):
         char_limit = self.room_capabilities.max_message_length
         if me:
             char_limit -= 4
-        for text_ in _filter_text(self, text, max_length=char_limit):
-            final_text = text_
-            if me:
-                final_text = f"/me {text_}"
-            await self.twitch_service.send_chat_message(
-                self.room_id, final_text, use_http=use_http, reply_id=reply_id
-            )
+        final_text = text
+        if me:
+            final_text = f"/me {text}"
+        __ = await self.twitch_service.send_message(
+            final_text, self.room_id, use_http=use_http, reply_id=reply_id
+        )
 
     @override
     async def reply(self, text: str, *, use_http: bool = True, **kwargs: object):
-        char_limit = (
-            self.room_capabilities.max_message_length - len(self.author_login) - 2
+        __ = await self.twitch_service.send_message(
+            text,
+            self.room_id,
+            use_http=use_http,
+            reply_id=self.id,
+            reply_username=self.author_login,
         )
-        for text_ in _filter_text(self, text, max_length=char_limit):
-            await self.twitch_service.send_chat_message(
-                self.room_id, text_, use_http=use_http, reply_id=self.id
-            )
 
 
 @dataclass(kw_only=True)

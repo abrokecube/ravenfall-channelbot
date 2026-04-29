@@ -111,6 +111,7 @@ class CommandListener(GenericListener):
                 "something inside a TYPE_CHECKING if statement.",
                 func.__name__,
             )
+            self.type_hints = {}
         except Exception as e:  # noqa: BLE001
             # If get_type_hints fails, we'll fall back to the signature
             LOGGER.warning("Could not resolve type hints for %s: %s", func.__name__, e)

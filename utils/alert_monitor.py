@@ -1,17 +1,21 @@
 import asyncio
+import contextlib
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
 from dataclasses import dataclass
+from typing import Any
+
 from utils.format_time import format_seconds
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class AlertConfig:
     interval: float
     timeout: float
     alert_interval: float
+
 
 @dataclass
 class AlertStatus:
@@ -20,15 +24,20 @@ class AlertStatus:
     failure_duration_seconds: float
     config: AlertConfig
 
+
 class AlertMonitor(ABC):
-    """
-    A base class for monitoring a condition and triggering an alert if the condition
+    """A base class for monitoring a condition and triggering an alert if the condition
     remains in a 'bad' state (returns False) for a specified duration.
     """
 
-    def __init__(self, interval: float, timeout: float, alert_interval: float | None = None, name: str = "AlertMonitor"):
-        """
-        Initialize the AlertMonitor.
+    def __init__(
+        self,
+        interval: float,
+        timeout: float,
+        alert_interval: float | None = None,
+        name: str = "AlertMonitor",
+    ):
+        """Initialize the AlertMonitor.
 
         Args:
             interval (float): The interval in seconds between checks.
@@ -41,7 +50,9 @@ class AlertMonitor(ABC):
         self.name: str = name
         self.interval: float = interval
         self.timeout: float = timeout
-        self.alert_interval: float = alert_interval if alert_interval is not None else interval
+        self.alert_interval: float = (
+            alert_interval if alert_interval is not None else interval
+        )
         self._running: bool = False
         self._task: asyncio.Task[Any] | None = None  # pyright: ignore [reportExplicitAny]
         self._first_failure_time: float | None = None
@@ -49,8 +60,7 @@ class AlertMonitor(ABC):
         self._is_alerting: bool = False
 
     def get_status(self) -> AlertStatus:
-        """
-        Get the current status of the monitor.
+        """Get the current status of the monitor.
 
         Returns:
             AlertStatus: An object containing the current status.
@@ -70,38 +80,31 @@ class AlertMonitor(ABC):
             config=AlertConfig(
                 interval=self.interval,
                 timeout=self.timeout,
-                alert_interval=self.alert_interval
-            )
+                alert_interval=self.alert_interval,
+            ),
         )
 
     @abstractmethod
     async def check_condition(self) -> bool | str | tuple[bool, str]:
-        """
-        Check the condition.
+        """Check the condition.
 
         Returns:
             bool: True if the condition is normal/good.
                   False if the condition is bad (starts the timer).
         """
-        pass
 
     @abstractmethod
     async def trigger_alert(self, reason: str):
-        """
-        Trigger the alert. This method is called every interval while the
+        """Trigger the alert. This method is called every interval while the
         condition remains False after the timeout has passed.
 
         Args:
             reason (str): The reason for the alert (e.g., exception message or failure description).
         """
-        pass
 
     @abstractmethod
     async def resolve_alert(self):
-        """
-        Called when the condition returns to normal after an alert has been triggered.
-        """
-        pass
+        """Called when the condition returns to normal after an alert has been triggered."""
 
     async def start(self):
         """Start the monitoring loop."""
@@ -112,7 +115,9 @@ class AlertMonitor(ABC):
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
         logger.info(f"[{self.name}] AlertMonitor started.")
-        logger.debug(f"[{self.name}] configuration: interval={self.interval}, timeout={self.timeout}, alert_interval={self.alert_interval}")
+        logger.debug(
+            f"[{self.name}] configuration: interval={self.interval}, timeout={self.timeout}, alert_interval={self.alert_interval}"
+        )
 
     async def stop(self):
         """Stop the monitoring loop."""
@@ -143,58 +148,76 @@ class AlertMonitor(ABC):
                     elif isinstance(is_good, str):
                         reason = is_good
                         is_good = False
-                except Exception as e:
-                    logger.error(f"[{self.name}] Error in check_condition: {e}", exc_info=True)
+                except Exception:
+                    logger.exception(
+                        f"[{self.name}] Error in check_condition",
+                    )
                     # Assume bad state on error
                     is_good = False
-                    reason = f"Check failed with error: {e}"
+                    reason = "Check failed with error"
 
                 now = asyncio.get_running_loop().time()
-                
+
                 if is_good:
-                    logger.debug(f"[{self.name}] condition good, is_alerting={self._is_alerting}")
+                    logger.debug(
+                        f"[{self.name}] condition good, is_alerting={self._is_alerting}"
+                    )
                     # Condition is good (True)
                     if self._is_alerting:
-                        logger.info(f"[{self.name}] Condition returned to normal. Resolving alert.")
+                        logger.info(
+                            f"[{self.name}] Condition returned to normal. Resolving alert."
+                        )
                         try:
                             await self.resolve_alert()
-                        except Exception as e:
-                            logger.error(f"[{self.name}] Error in resolve_alert: {e}", exc_info=True)
+                        except Exception:
+                            logger.exception(
+                                f"[{self.name}] Error in resolve_alert",
+                            )
                     elif self._first_failure_time is not None:
                         elapsed = now - self._first_failure_time
-                        logger.info(f"[{self.name}] Condition returned to normal before alert triggered after {format_seconds(elapsed)}.")
-                    
+                        logger.info(
+                            f"[{self.name}] Condition returned to normal before alert triggered after {format_seconds(elapsed)}."
+                        )
+
                     self._first_failure_time = None
                     self._last_alert_time = None
                     self._is_alerting = False
+                # Condition is bad (False)
+                elif self._first_failure_time is None:
+                    self._first_failure_time = now
+                    # Timer starts
                 else:
-                    # Condition is bad (False)
-                    if self._first_failure_time is None:
-                        self._first_failure_time = now
-                        # Timer starts
-                    else:
-                        elapsed = now - self._first_failure_time
-                        if elapsed >= self.timeout:
-                            # Timer ran out, trigger alert
-                            if not self._is_alerting:
-                                logger.warning(f"[{self.name}] Alert timer expired. Starting alerts.")
-                                self._is_alerting = True
-                            
-                            if self._last_alert_time is None or (now - self._last_alert_time) >= self.alert_interval:
-                                try:
-                                    logger.info(f"[{self.name}] Triggering alert: {reason}")
-                                    await self.trigger_alert(reason)
-                                    self._last_alert_time = now
-                                except Exception as e:
-                                    logger.error(f"[{self.name}] Error in trigger_alert: {e}", exc_info=True)
+                    elapsed = now - self._first_failure_time
+                    if elapsed >= self.timeout:
+                        # Timer ran out, trigger alert
+                        if not self._is_alerting:
+                            logger.warning(
+                                f"[{self.name}] Alert timer expired. Starting alerts."
+                            )
+                            self._is_alerting = True
+
+                        if (
+                            self._last_alert_time is None
+                            or (now - self._last_alert_time) >= self.alert_interval
+                        ):
+                            try:
+                                logger.info(f"[{self.name}] Triggering alert: {reason}")
+                                await self.trigger_alert(reason)
+                                self._last_alert_time = now
+                            except Exception:
+                                logger.exception(
+                                    f"[{self.name}] Error in trigger_alert",
+                                )
 
                 await asyncio.sleep(self.interval)
 
         except asyncio.CancelledError:
             logger.info(f"[{self.name}] AlertMonitor loop cancelled.")
             raise
-        except Exception as e:
-            logger.critical(f"[{self.name}] AlertMonitor loop crashed: {e}", exc_info=True)
+        except Exception:
+            logger.critical(
+                f"[{self.name}] AlertMonitor loop crashed",
+            )
             self._running = False
 
 
@@ -204,15 +227,20 @@ class MonitorState:
     last_alert_time: float | None = None
     is_alerting: bool = False
 
+
 class BatchAlertMonitor(ABC):
-    """
-    A base class for monitoring multiple conditions in a batch and triggering alerts
+    """A base class for monitoring multiple conditions in a batch and triggering alerts
     independently for each condition.
     """
 
-    def __init__(self, interval: float, timeout: float, alert_interval: float | None = None, name: str = "BatchAlertMonitor"):
-        """
-        Initialize the BatchAlertMonitor.
+    def __init__(
+        self,
+        interval: float,
+        timeout: float,
+        alert_interval: float | None = None,
+        name: str = "BatchAlertMonitor",
+    ):
+        """Initialize the BatchAlertMonitor.
 
         Args:
             interval (float): The interval in seconds between checks.
@@ -225,14 +253,15 @@ class BatchAlertMonitor(ABC):
         self.name: str = name
         self.interval: float = interval
         self.timeout: float = timeout
-        self.alert_interval: float = alert_interval if alert_interval is not None else interval
+        self.alert_interval: float = (
+            alert_interval if alert_interval is not None else interval
+        )
         self._running: bool = False
         self._task: asyncio.Task[Any] | None = None  # pyright: ignore [reportExplicitAny]
         self._states: dict[str, MonitorState] = {}
 
     def get_status(self) -> dict[str, AlertStatus]:
-        """
-        Get the current status of all monitors.
+        """Get the current status of all monitors.
 
         Returns:
             dict[str, AlertStatus]: A dictionary mapping alert names to their status.
@@ -256,15 +285,14 @@ class BatchAlertMonitor(ABC):
                 config=AlertConfig(
                     interval=self.interval,
                     timeout=self.timeout,
-                    alert_interval=self.alert_interval
-                )
+                    alert_interval=self.alert_interval,
+                ),
             )
         return statuses
 
     @abstractmethod
     async def check_condition(self) -> dict[str, bool | str | tuple[bool, str]]:
-        """
-        Check the conditions.
+        """Check the conditions.
 
         Returns:
             dict[str, bool | str | tuple[bool, str]]: A dictionary mapping alert names to their status.
@@ -273,28 +301,23 @@ class BatchAlertMonitor(ABC):
                 - str: Bad condition (string is reason)
                 - tuple(bool, str): Explicit status and reason
         """
-        pass
 
     @abstractmethod
     async def trigger_alert(self, name: str, reason: str):
-        """
-        Trigger an alert for a specific condition.
+        """Trigger an alert for a specific condition.
 
         Args:
             name (str): The name of the alert.
             reason (str): The reason for the alert.
         """
-        pass
 
     @abstractmethod
     async def resolve_alert(self, name: str):
-        """
-        Called when a specific condition returns to normal after an alert has been triggered.
+        """Called when a specific condition returns to normal after an alert has been triggered.
 
         Args:
             name (str): The name of the alert.
         """
-        pass
 
     async def start(self):
         """Start the monitoring loop."""
@@ -305,7 +328,9 @@ class BatchAlertMonitor(ABC):
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
         logger.info(f"[{self.name}] BatchAlertMonitor started.")
-        logger.debug(f"[{self.name}] configuration: interval={self.interval}, timeout={self.timeout}, alert_interval={self.alert_interval}")
+        logger.debug(
+            f"[{self.name}] configuration: interval={self.interval}, timeout={self.timeout}, alert_interval={self.alert_interval}"
+        )
 
     async def stop(self):
         """Stop the monitoring loop."""
@@ -316,10 +341,8 @@ class BatchAlertMonitor(ABC):
         logger.debug(f"[{self.name}] stopping batch monitor, cancelling task")
         if self._task:
             _ = self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         logger.info(f"[{self.name}] BatchAlertMonitor stopped.")
 
@@ -329,22 +352,26 @@ class BatchAlertMonitor(ABC):
             while self._running:
                 try:
                     results = await self.check_condition()
-                    logger.debug(f"[{self.name}] check_condition returned keys: {list(results.keys())}")
-                except Exception as e:
-                    logger.error(f"[{self.name}] Error in check_condition: {e}", exc_info=True)
-                    results = {} # Or handle global failure?
+                    logger.debug(
+                        f"[{self.name}] check_condition returned keys: {list(results.keys())}"
+                    )
+                except Exception:
+                    logger.exception(
+                        f"[{self.name}] Error in check_condition",
+                    )
+                    results = {}  # Or handle global failure?
 
                 now = asyncio.get_running_loop().time()
-                
+
                 # Process results
                 all_keys = set(results.keys()) | set(self._states.keys())
                 logger.debug(f"[{self.name}] processing keys: {all_keys}")
                 for name in all_keys:
                     if name not in self._states:
                         self._states[name] = MonitorState()
-                    
+
                     state = self._states[name]
-                    
+
                     if name in results:
                         result = results[name]
                         is_good = True
@@ -360,47 +387,67 @@ class BatchAlertMonitor(ABC):
                     else:
                         is_good = False
                         reason = "Key missing from check results"
-                    
+
                     if is_good:
-                        logger.debug(f"[{self.name}] '{name}' is good, alerting={state.is_alerting}")
+                        logger.debug(
+                            f"[{self.name}] '{name}' is good, alerting={state.is_alerting}"
+                        )
                         if state.is_alerting:
-                            logger.info(f"[{self.name}] Condition '{name}' returned to normal. Resolving alert.")
+                            logger.info(
+                                f"[{self.name}] Condition '{name}' returned to normal. Resolving alert."
+                            )
                             try:
                                 await self.resolve_alert(name)
-                            except Exception as e:
-                                logger.error(f"[{self.name}] Error in resolve_alert for '{name}': {e}", exc_info=True)
+                            except Exception:
+                                logger.exception(
+                                    f"[{self.name}] Error in resolve_alert for '{name}'",
+                                )
                         elif state.first_failure_time is not None:
                             elapsed = now - state.first_failure_time
-                            logger.info(f"[{self.name}] Condition '{name}' returned to normal before alert triggered after {format_seconds(elapsed)}.")
-                        
+                            logger.info(
+                                f"[{self.name}] Condition '{name}' returned to normal before alert triggered after {format_seconds(elapsed)}."
+                            )
+
                         state.first_failure_time = None
                         state.last_alert_time = None
                         state.is_alerting = False
+                    elif state.first_failure_time is None:
+                        state.first_failure_time = now
+                        logger.debug(f"[{self.name}] '{name}' first failure at {now}")
                     else:
-                        if state.first_failure_time is None:
-                            state.first_failure_time = now
-                            logger.debug(f"[{self.name}] '{name}' first failure at {now}")
-                        else:
-                            elapsed = now - state.first_failure_time
-                            logger.debug(f"[{self.name}] '{name}' failure elapsed {elapsed:.2f}s")
-                            if elapsed >= self.timeout:
-                                if not state.is_alerting:
-                                    logger.warning(f"[{self.name}] Alert timer expired for '{name}'. Starting alerts.")
-                                    state.is_alerting = True
-                                
-                                if state.last_alert_time is None or (now - state.last_alert_time) >= self.alert_interval:
-                                    try:
-                                        logger.info(f"[{self.name}] Triggering alert for '{name}': {reason}")
-                                        await self.trigger_alert(name, reason)
-                                        state.last_alert_time = now
-                                    except Exception as e:
-                                        logger.error(f"[{self.name}] Error in trigger_alert for '{name}': {e}", exc_info=True)
+                        elapsed = now - state.first_failure_time
+                        logger.debug(
+                            f"[{self.name}] '{name}' failure elapsed {elapsed:.2f}s"
+                        )
+                        if elapsed >= self.timeout:
+                            if not state.is_alerting:
+                                logger.warning(
+                                    f"[{self.name}] Alert timer expired for '{name}'. Starting alerts."
+                                )
+                                state.is_alerting = True
+
+                            if (
+                                state.last_alert_time is None
+                                or (now - state.last_alert_time) >= self.alert_interval
+                            ):
+                                try:
+                                    logger.info(
+                                        f"[{self.name}] Triggering alert for '{name}': {reason}"
+                                    )
+                                    await self.trigger_alert(name, reason)
+                                    state.last_alert_time = now
+                                except Exception:
+                                    logger.exception(
+                                        f"[{self.name}] Error in trigger_alert for '{name}'",
+                                    )
 
                 await asyncio.sleep(self.interval)
 
         except asyncio.CancelledError:
             logger.info(f"[{self.name}] BatchAlertMonitor loop cancelled.")
             raise
-        except Exception as e:
-            logger.critical(f"[{self.name}] BatchAlertMonitor loop crashed: {e}", exc_info=True)
+        except Exception:
+            logger.critical(
+                f"[{self.name}] BatchAlertMonitor loop crashed",
+            )
             self._running = False

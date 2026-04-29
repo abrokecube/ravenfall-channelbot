@@ -30,7 +30,7 @@ from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailure
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.services.config_service import ConfigService
 
-from . import events
+from . import MessageRateMode, events
 from .enums import (
     TOPIC_REQUIRES_TARGET_CHANNEL,
     EventSubTopic,
@@ -437,6 +437,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         result = db_result.scalar_one_or_none()
         if not result:
             result = TwitchChannelSettings(id=channel_id)
+            session.add(result)
             await session.flush()
         return result
 
@@ -660,6 +661,13 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         channel_id = message.room.room_id
         channel_login = message.room.name
         channel_twitch = self._twitch_service.twitches.get(channel_id or " ")
+        if message.user.id == self.bot_user_id:
+            settings = self.connected_chats[channel_id]
+            if "moderator" in message.user.badges:  # pyright: ignore[reportUnknownMemberType]
+                settings.message_rate = MessageRateMode.UPGRADED
+            else:
+                settings.message_rate = MessageRateMode.STANDARD
+
         if not channel_twitch:
             LOGGER.warning(
                 f"Received a message from {channel_login}, "
@@ -821,6 +829,14 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 "but the bot has no authentication stored for this channel."
             )
             return
+        if event.event.chatter_user_id == self.bot_user_id:
+            settings = self.connected_chats[event.event.broadcaster_user_id]
+            for badge in event.event.badges:
+                if badge.set_id == "moderator":
+                    settings.message_rate = MessageRateMode.UPGRADED
+                    break
+            else:
+                settings.message_rate = MessageRateMode.STANDARD
         await self.send_event(
             events.TwitchEventSubMessageEvent(
                 data=data,

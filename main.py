@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, override
 
@@ -16,17 +17,18 @@ from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
 from bot.db.models import update_schema
 from bot.db.service import DatabaseService
-from bot.integrations.chat_messages import MessageEvent
+from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent
 from bot.integrations.chat_messages.event_processors import filter_message_event_text
 from bot.integrations.commands import CommandDispatcher
 from bot.integrations.process_manager import ProcessEventSource
 from bot.integrations.ravenfall.event_sources import RavenfallEventSource
+from bot.integrations.twitch import EVENT_SOURCE_TWITCH, EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
-from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
 from bot.services.config_service import ConfigService
 from bot.services.event_waiter import EventWaiterService
 from bot.services.prometheus_service import PrometheusService
+from bot.services.ravenfall_channels import RavenfallChannelService
 from bot.services.ravenfall_multichat import RavenfallMultichatService
 from bot.services.remote_bot_service import RemoteBotService
 from bot.services.web_service import WebService
@@ -149,9 +151,8 @@ async def run():
     await update_schema()
 
     global_ctx = GlobalContext()
-    await global_ctx.register_service(EventWaiterService())
 
-    tasks: list[Awaitable[None]] = []
+    tasks: list[Awaitable[object]] = []
     event_manager = EventManager(global_ctx)
     command_d = MyCmdDispatcher()
     await event_manager.add_dispatcher(command_d)
@@ -168,8 +169,10 @@ async def run():
             AuthScope.MODERATOR_MANAGE_ANNOUNCEMENTS,
         ],
     )
+    await global_ctx.register_service(EventWaiterService())
     tasks.append(event_manager.add_event_source(twitch))
-    tasks.append(event_manager.add_event_source(RavenfallEventSource()))
+    ravenfall_ev_src = RavenfallEventSource()
+    tasks.append(event_manager.add_event_source(ravenfall_ev_src))
     tasks.append(event_manager.add_event_source(ProcessEventSource()))
 
     tasks.append(event_manager.add_cog(TestingCog))
@@ -179,26 +182,51 @@ async def run():
     tasks.append(event_manager.add_cog(RavenfallWatcherCog))
     tasks.append(event_manager.add_cog(BotStuffCog))
 
-    await update_schema()
     tasks.append(global_ctx.register_service(DatabaseService()))
     tasks.append(global_ctx.register_service(RemoteBotService()))
     tasks.append(global_ctx.register_service(config_service))
     tasks.append(global_ctx.register_service(WebService()))
     tasks.append(global_ctx.register_service(PrometheusService()))
     tasks.append(global_ctx.register_service(RavenfallMultichatService()))
-    __ = await asyncio.gather(*tasks)
+    tasks.append(global_ctx.register_service(GlobalMessengerService()))
+    tasks.append(global_ctx.register_service(RavenfallChannelService()))
 
-    __ = await twitch.authenticate_user(
-        bot_config.owner_twitch_id,
-        [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS],
+    __ = await asyncio.gather(*tasks)
+    tasks.clear()
+
+    twitch_auths: defaultdict[str, set[AuthScope]] = defaultdict(set)
+
+    twitch_auths[bot_config.owner_twitch_id].update(
+        [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
     )
-    __ = await twitch.add_eventsub_subscriptions(
-        bot_config.owner_twitch_id,
-        EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD,
-    )
-    __ = await twitch.join_chat(
-        channel_id=bot_config.owner_twitch_id, mode=MessageReceiveMode.IRC
-    )
+
+    for instance in ravenfall_ev_src.ravenfall_instances:
+        twitch_auths[instance.channel_id].add(AuthScope.CHANNEL_BOT)
+        # for linked in instance.config.linked_channels:
+        #     if linked.platform == EVENT_SOURCE_TWITCH:
+        #         twitch_auths[linked.id].add(AuthScope.CHANNEL_BOT)
+
+    for channel_id, scopes in twitch_auths.items():
+        tasks.append(twitch.authenticate_user(channel_id, scopes))
+
+    __ = await asyncio.gather(*tasks)
+    tasks.clear()
+
+    for channel_id, scopes in twitch_auths.items():
+        if AuthScope.CHANNEL_BOT in scopes:
+            tasks.append(
+                twitch.join_chat(channel_id=channel_id, mode=MessageReceiveMode.EVENTSUB)
+            )
+        if AuthScope.CHANNEL_MANAGE_REDEMPTIONS in scopes:
+            tasks.append(
+                twitch.add_eventsub_subscriptions(
+                    bot_config.owner_twitch_id,
+                    EventSubTopic.CHANNEL_POINTS_CUSTOM_REWARD_REDEMPTION_ADD,
+                )
+            )
+
+    __ = await asyncio.gather(*tasks)
+    tasks.clear()
 
     logger.info("### Bot is ready ###")
     wait_forever = asyncio.Event()

@@ -14,9 +14,10 @@ from .enums import (
 from .event_sources import TwitchConfig as TwitchConfig
 from .event_sources import TwitchEventSource as TwitchEventSource
 from .event_sources import TwitchEventSub as TwitchEventSub
-from .events import EVENT_SOURCE_TWITCH as EVENT_SOURCE_TWITCH
 from .events import TwitchEventSubMessageEvent as TwitchEventSubMessageEvent
 from .events import TwitchIRCMessageEvent as TwitchIRCMessageEvent
 from .events import TwitchRedemptionEvent as TwitchRedemptionEvent
 from .exceptions import EventSubUnsubscriptionFailure as EventSubUnsubscriptionFailure
 from .services import TwitchService as TwitchService
+
+from .consts import EVENT_SOURCE_TWITCH

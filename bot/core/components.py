@@ -33,6 +33,17 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
+background_tasks: set[asyncio.Task[object]] = set()
+
+
+def fire_and_forget(coro: Coroutine[object, object, object]) -> None:
+    """Run a coroutine in the background."""
+    task = asyncio.create_task(coro)
+
+    background_tasks.add(task)
+
+    task.add_done_callback(background_tasks.discard)
+
 
 async def _log_on_invoke_error[T](awaitable: Awaitable[T], error_msg: str) -> T:
     try:
@@ -457,15 +468,14 @@ class EventManager:
             LOGGER.warning(f'A matching dispatcher for event "{event}" was not found.')
 
         # Execute dispatchers concurrently
-        tasks: list[Awaitable[None]] = []
+        # tasks: list[Awaitable[None]] = []
         for dispatcher in matching_dispatchers:
-            tasks.append(  # noqa: PERF401
+            fire_and_forget(
                 _log_on_invoke_error(
                     dispatcher.dispatch(self.global_context, event),
                     f"Exception while sending event to dispatcher: {dispatcher}",
                 )
             )
-        __ = await asyncio.gather(*tasks, return_exceptions=True)
 
     async def teardown(self) -> None:
         """Stop and remove all loaded components."""

@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, override
 
-from bot.core.components import BaseService
+from bot.core.components import BaseEvent, BaseService
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from bot.core.components import BaseEvent
+    from bot.core.components import GlobalContext
 
-import logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -117,13 +117,14 @@ class EventWaiterService(BaseService):
             if not future.done():
                 __ = future.cancel()
 
-    async def process_event(self, event: BaseEvent) -> BaseEvent:
+    async def process_event(self, _g_ctx: GlobalContext, event: BaseEvent) -> BaseEvent:
         """Process an event and dispatch to matching waiters.
 
         This method should be called by the event processing pipeline
         to check if any waiters are waiting for this event.
 
         Args:
+            _g_ctx: The global context.
             event: The event to process.
 
         Returns:
@@ -152,6 +153,15 @@ class EventWaiterService(BaseService):
                 waiter.future.set_result(event)
 
         return event
+
+    @override
+    async def setup(self) -> None:
+        if not self.global_context.event_manager:
+            msg = "EventWaiterService requires EventManager to be set in GlobalContext"
+            raise RuntimeError(msg)
+        self.global_context.event_manager.add_event_processor(
+            BaseEvent, self.process_event
+        )
 
     def get_active_waiters_count(self) -> int:
         """Return the number of active event waiters."""
@@ -252,3 +262,7 @@ class EventWaiterService(BaseService):
             self._waiters.clear()
         async with self._history_lock:
             self._event_history.clear()
+        if self.global_context.event_manager:
+            self.global_context.event_manager.remove_event_processor(
+                self.process_event,
+            )

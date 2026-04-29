@@ -7,6 +7,7 @@ from .enums import RaidEndReason as RaidEndReason
 from .enums import RaidStartReason as RaidStartReason
 from .enums import RFChannelEvent as RFChannelEvent
 from .enums import RFChannelSubEvent as RFChannelSubEvent
+from .event_sources import RavenfallInstance as RavenfallInstance
 from .events import EVENT_SOURCE_RAVENFALL as EVENT_SOURCE_RAVENFALL
 from .events import BaseMiddlemanMessage as BaseMiddlemanMessage
 from .events import DungeonEndedEvent as DungeonEndedEvent

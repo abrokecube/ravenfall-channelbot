@@ -51,6 +51,7 @@ class BaseCollector[T]:
         self._last_data: T | None = None
         self._last_execution: float = time.monotonic() - self.interval
         self._processing_task: asyncio.Task[None] | None = None
+        self._new_data_set: bool = False
 
     def start(self):
         """Start the processing loop."""
@@ -64,6 +65,7 @@ class BaseCollector[T]:
 
     def set_data(self, data: T | None):
         """Set current data."""
+        self._new_data_set = True
         self._last_data = data
 
     def get_data(self) -> T | None:
@@ -75,13 +77,16 @@ class BaseCollector[T]:
         if time.monotonic() - self._last_execution < self.cache_time:
             return self._last_data
 
+        self._new_data_set = False
         if self._processing_task is not None:
             await self._processing_task
         else:
             self._processing_task = asyncio.create_task(self._run_process())
             await self._processing_task
             self._processing_task = None
-        return self._last_data
+        if self._new_data_set:
+            return self._last_data
+        return None
 
     async def pre_fetch(self):
         """Executes before data is fetched in the loop."""

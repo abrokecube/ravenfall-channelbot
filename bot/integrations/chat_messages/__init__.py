@@ -16,4 +16,7 @@ from .events import MessageEvent as MessageEvent
 from .exceptions import CheckFailure as CheckFailure
 from .models import ChatMessageMetadata as ChatMessageMetadata
 from .models import ChatRoomCapabilities as ChatRoomCapabilities
+from .services import BaseMessageService as BaseMessageService
+from .services import GlobalMessengerService as GlobalMessengerService
+from .services import MessageSendResult as MessageSendResult
 from .types import CheckFuncType as CheckFuncType
