@@ -3,7 +3,7 @@ import contextlib
 import logging
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple, override
 
@@ -66,8 +66,8 @@ class ProcessStatistics:
     memory_rss_bytes: int
     memory_vms_bytes: int
     memory_percent: float
-    pid_count: int
     uptime_seconds: float | None
+    pids: set[int]
 
 
 class ProcessManagerService(BaseService, ConfigSubscriberMixin):
@@ -210,8 +210,8 @@ class ProcessManagerService(BaseService, ConfigSubscriberMixin):
                 memory_rss_bytes=0,
                 memory_vms_bytes=0,
                 memory_percent=0.0,
-                pid_count=0,
                 uptime_seconds=None,
+                pids=set(),
             )
 
         # Aggregate statistics across all matching PIDs
@@ -243,6 +243,6 @@ class ProcessManagerService(BaseService, ConfigSubscriberMixin):
             memory_rss_bytes=total_rss,
             memory_vms_bytes=total_vms,
             memory_percent=total_percent,
-            pid_count=len(matching_pids),
             uptime_seconds=oldest_uptime,
+            pids=matching_pids,
         )

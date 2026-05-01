@@ -18,6 +18,7 @@ class GenericApiResponse[T](Struct, tag_field="status", tag="success"):
     """Generic API response wrapper for successful responses."""
 
     data: T
+    error: str | None = None
 
 
 class GenericApiPostResponse(Struct, tag_field="status", tag="success"):
@@ -37,24 +38,13 @@ class DesyncInfo(Struct):
     last_updated: float
 
 
-class DesyncResponse(Struct):
-    """Response containing desync information."""
-
-    status: int
-    data: DesyncInfo
-
-
 class TotalItemCountInfo(Struct):
-    """Information about total item counts per town."""
+    """Information about total item counts per town.
 
-    towns: dict[str, float]
+    towns: A dictionary mapping town twitch ids to their total item counts.
+    """
 
-
-class TotalItemCountResponse(Struct):
-    """Response containing total item count information."""
-
-    status: int
-    data: TotalItemCountInfo
+    towns: dict[str, int]
 
 
 class CharInfo(Struct):
@@ -72,14 +62,6 @@ class CharInfo(Struct):
     total_item_count: int
 
 
-class CharInfoResponse(Struct):
-    """Response containing character information for multiple characters."""
-
-    status: int
-    data: list[CharInfo]
-    error: str
-
-
 class CharCoins(Struct):
     """Character coin information."""
 
@@ -87,13 +69,6 @@ class CharCoins(Struct):
     user_name: str
     char_index: int
     coins: int
-
-
-class CharCoinsResponse(Struct):
-    """Response containing character coin information."""
-
-    status: int
-    data: list[CharCoins]
 
 
 class CharItem(Struct):
@@ -114,13 +89,6 @@ class CharItems(Struct):
     items: list[CharItem]
 
 
-class CharItemsResponse(Struct):
-    """Response containing character items information."""
-
-    status: str
-    data: list[CharItems]
-
-
 class ScrollCounts(Struct):
     """Counts of different scroll types."""
 
@@ -135,13 +103,6 @@ class Scrolls(Struct):
 
     channel: ScrollCounts
     total: ScrollCounts
-
-
-class ScrollsResponse(Struct):
-    """Response containing scroll count information."""
-
-    status: int
-    data: Scrolls
 
 
 class ErrorResponse(Struct):
@@ -190,18 +151,18 @@ class RavenfallMultichatClient:
                     f"{self.base_url}/{url_suffix.lstrip('/')}"
                 ) as response:
                     text = await response.text()
+                    response.raise_for_status()
                     response_data = cast(
                         "GenericApiResponse[T] | GenericApiErrorResponse",
                         json.decode(
                             text,
-                            type=GenericApiResponse[T] | GenericApiErrorResponse,
+                            type=GenericApiResponse[_out_type] | GenericApiErrorResponse,
                         ),
                     )
                     if isinstance(response_data, GenericApiErrorResponse):
                         logger.error(f"Failed to fetch: {response_data.error}")
                         error_msg = f"Failed to fetch: {response_data.error}"
                         raise ServerError(error_msg)
-                    response.raise_for_status()
                     return response_data.data
             except TimeoutError as e:
                 logger.exception(f"Timeout fetching from {self.base_url}")
@@ -209,7 +170,7 @@ class RavenfallMultichatClient:
             except aiohttp.ClientConnectorError as e:
                 logger.exception(f"Connection error fetching from {self.base_url}")
                 raise RavenfallConnectionError from e
-            except Exception as e:
+            except Exception:
                 logger.exception(f"Error fetching from {self.base_url}")
                 raise
 
@@ -244,7 +205,7 @@ class RavenfallMultichatClient:
             except aiohttp.ClientConnectorError as e:
                 logger.exception(f"Connection error posting to {self.base_url}")
                 raise RavenfallConnectionError from e
-            except Exception as e:
+            except Exception:
                 logger.exception(f"Error posting to {self.base_url}")
                 raise
 
@@ -278,7 +239,8 @@ class RavenfallMultichatClient:
         }
 
         logger.debug(
-            f"Sent command to multichat: {text}, {user_name}, {user_id}, {channel_name}, {channel_id}"
+            f"Sent command to multichat: "
+            f"{text}, {user_name}, {user_id}, {channel_name}, {channel_id}"
         )
         await self._post("command", payload, timeout_seconds=timeout_seconds)
 
@@ -323,55 +285,51 @@ class RavenfallMultichatClient:
         payload = {"user_name": user_name, "amount": amount}
         await self._post("track_coin_use", payload, timeout_seconds=timeout_seconds)
 
-    async def get_desync_info(self, *, timeout_seconds: int = 3) -> DesyncResponse:
+    async def get_desync_info(self, *, timeout_seconds: int = 3) -> DesyncInfo:
         """Fetch desync information from the server.
 
         Args:
             timeout_seconds: Timeout in seconds for the request
 
         Returns:
-            DesyncResponse: The response containing desync information
+            DesyncInfo: The info containing desync information
 
         """
-        return await self._get(
-            "get_desync", DesyncResponse, timeout_seconds=timeout_seconds
-        )
+        return await self._get("get_desync", DesyncInfo, timeout_seconds=timeout_seconds)
 
     async def get_total_item_count(
         self, *, timeout_seconds: int = 3
-    ) -> TotalItemCountResponse:
+    ) -> TotalItemCountInfo:
         """Fetch total item count from the server.
 
         Args:
             timeout_seconds: Timeout in seconds for the request
 
         Returns:
-            TotalItemCountResponse: The response containing total item count information
+            TotalItemCountInfo: The info containing total item count information
 
         """
         return await self._get(
             "get_total_item_count",
-            TotalItemCountResponse,
+            TotalItemCountInfo,
             timeout_seconds=timeout_seconds,
         )
 
-    async def get_char_info(self, *, timeout_seconds: int = 3) -> CharInfoResponse:
+    async def get_char_info(self, *, timeout_seconds: int = 3) -> CharInfo:
         """Fetch character information from the server.
 
         Args:
             timeout_seconds: Timeout in seconds for the request
 
         Returns:
-            CharInfoResponse: The response containing character information
+            CharInfo: The info containing character information
 
         """
-        return await self._get(
-            "get_char_data", CharInfoResponse, timeout_seconds=timeout_seconds
-        )
+        return await self._get("get_char_data", CharInfo, timeout_seconds=timeout_seconds)
 
     async def get_char_items(
         self, channel_id: str, *, timeout_seconds: int = 3
-    ) -> CharItemsResponse:
+    ) -> CharItems:
         """Fetch character items from the server.
 
         Args:
@@ -379,18 +337,18 @@ class RavenfallMultichatClient:
             timeout_seconds: Timeout in seconds for the request
 
         Returns:
-            CharItemsResponse: The response containing character items
+            CharItems: The info containing character items
 
         """
         return await self._get(
             f"get_char_items/{channel_id}",
-            CharItemsResponse,
+            CharItems,
             timeout_seconds=timeout_seconds,
         )
 
     async def get_char_coins(
         self, channel_id: str, *, timeout_seconds: int = 3
-    ) -> CharCoinsResponse:
+    ) -> CharCoins:
         """Fetch character coins from the server.
 
         Args:
@@ -398,18 +356,18 @@ class RavenfallMultichatClient:
             timeout_seconds: Timeout in seconds for the request
 
         Returns:
-            CharCoinsResponse: The response containing character coins
+            CharCoins: The info containing character coins
 
         """
         return await self._get(
             f"get_char_coins/{channel_id}",
-            CharCoinsResponse,
+            CharCoins,
             timeout_seconds=timeout_seconds,
         )
 
     async def get_scroll_counts(
         self, channel_id: str, *, timeout_seconds: int = 3
-    ) -> ScrollsResponse:
+    ) -> Scrolls:
         """Fetch scroll counts from the server.
 
         Args:
@@ -421,5 +379,5 @@ class RavenfallMultichatClient:
 
         """
         return await self._get(
-            f"get_scrolls/{channel_id}", ScrollsResponse, timeout_seconds=timeout_seconds
+            f"get_scrolls/{channel_id}", Scrolls, timeout_seconds=timeout_seconds
         )

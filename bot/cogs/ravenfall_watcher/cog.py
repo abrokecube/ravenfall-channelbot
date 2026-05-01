@@ -12,8 +12,11 @@ from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.services.config_service import ConfigService
 from bot.services.event_waiter import EventWaiterService
 from bot.services.ravenfall_channels import RavenfallChannelService
+from bot.services.ravenfall_multichat import RavenfallMultichatService
 
+from . import collectors
 from .config import WatcherConfig
+from .service import RavenfallWatcherService
 from .watcher import RavenfallWatcher
 
 if TYPE_CHECKING:
@@ -42,12 +45,20 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         ravenfall_service = await self.global_context.wait_for_service(RavenfallService)
         __ = await self.global_context.wait_for_service(RavenfallChannelService)
         __ = await self.global_context.wait_for_service(EventWaiterService)
+        multichat_service = await self.global_context.wait_for_service(
+            RavenfallMultichatService
+        )
+        process_manager_service = await self.global_context.wait_for_service(
+            ProcessManagerService
+        )
+
         self.inject_config_service(config_service)
 
         config = self.subscribe_config("cogs.ravenfall_watcher", WatcherConfig)
         self.config = config
 
         self.watchers = []
+        ravenfall_instances: list[RavenfallInstance] = []
         for instance in config.instances:
             ravenfall = ravenfall_service.get_ravenfall_instance(
                 channel_name=instance.channel_name
@@ -55,6 +66,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             if not ravenfall:
                 LOGGER.warning(f"Instance {instance} not found, check config.")
                 continue
+            ravenfall_instances.append(ravenfall)
             watcher = RavenfallWatcher(
                 ravenfall,
                 self,
@@ -67,8 +79,17 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             await watcher.start()
             self.watchers.append(watcher)
 
+        self.collectors = [
+            collectors.MultiplierCheck(ravenfall_instances, ravenfall_service),
+            collectors.ItemCountCheck(ravenfall_instances, multichat_service),
+            collectors.RamUsageCheck(
+                ravenfall_instances, process_manager_service, self, self.watchers
+            ),
+        ]
+
         for c in self.collectors:
             c.start()
+        await self.global_context.register_service(RavenfallWatcherService(self))
 
     @override
     async def teardown(self) -> None:

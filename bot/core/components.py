@@ -36,13 +36,20 @@ LOGGER = logging.getLogger(__name__)
 background_tasks: set[asyncio.Task[object]] = set()
 
 
+def _finished_task(task: asyncio.Task[object]) -> None:
+    background_tasks.discard(task)
+    exception = task.exception()
+    if exception is not None:
+        LOGGER.exception("Background task failed", exc_info=exception)
+
+
 def fire_and_forget(coro: Coroutine[object, object, object]) -> None:
     """Run a coroutine in the background."""
     task = asyncio.create_task(coro)
 
     background_tasks.add(task)
 
-    task.add_done_callback(background_tasks.discard)
+    task.add_done_callback(_finished_task)
 
 
 async def _log_on_invoke_error[T](awaitable: Awaitable[T], error_msg: str) -> T:

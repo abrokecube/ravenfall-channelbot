@@ -40,6 +40,11 @@ class Alert:
         self._recovery_callback = callback
 
     def set_failing(self, reason: str | None = None):
+        """Mark the alert as in a failing condition.
+
+        Args:
+            reason: Optional reason for the failure.
+        """
         if not self._is_in_alerting_condition:
             self._is_in_alerting_condition = True
             self._alert_start_time = time.monotonic()
@@ -50,6 +55,7 @@ class Alert:
         self._alert_reason = reason
 
     def set_normal(self):
+        """Clear the failing condition and return to normal."""
         if self._is_in_alerting_condition:
             self._is_in_alerting_condition = False
             self._alert_start_time = None
@@ -63,6 +69,11 @@ class Alert:
                 )
 
     def get_is_alerting(self):
+        """Check if the alert is currently alerting.
+
+        Returns:
+            True if the alert condition has persisted longer than the fail duration.
+        """
         if not self._is_in_alerting_condition:
             return False
         return bool(
@@ -72,6 +83,11 @@ class Alert:
         )
 
     def get_alert_reason(self):
+        """Get the reason for the current alert condition.
+
+        Returns:
+            The alert reason string, or None if not alerting.
+        """
         return self._alert_reason
 
     async def _trigger_recovery_callback(self) -> None:
@@ -97,6 +113,12 @@ class Alert:
 
 
 class BaseCollector[T]:
+    """Base class for collecting data from a single instance with alert capabilities.
+
+    This class manages a periodic processing loop that can be started and stopped,
+    with built-in alerting when the process fails for a specified duration.
+    """
+
     def __init__(
         self,
         instance: T,
@@ -114,6 +136,7 @@ class BaseCollector[T]:
         self._registered_recovery_callback: Callable[[], Awaitable[None]] | None = None
         self._alert.set_alerting_callback(self._alert_callback)
         self._alert.set_recovery_callback(self._recovery_callback)
+        self._exception_count: int = 0
         self.is_urgent_failure: bool = is_urgent_failure
 
     def start(self):
@@ -136,9 +159,19 @@ class BaseCollector[T]:
         self.set_status(failing=False)
 
     def set_alert_callback(self, callback: Callable[[], Awaitable[None]] | None):
+        """Set the callback to be invoked when an alert is triggered.
+
+        Args:
+            callback: Async callable or None.
+        """
         self._registered_alert_callback = callback
 
     def set_recovery_callback(self, callback: Callable[[], Awaitable[None]] | None):
+        """Set the callback to be invoked when the alert recovers.
+
+        Args:
+            callback: Async callable or None.
+        """
         self._registered_recovery_callback = callback
 
     async def _loop(self):
@@ -149,14 +182,21 @@ class BaseCollector[T]:
                 _ = await self.run_process_now()
             except Exception:
                 logger.exception(f"Error in collector loop {self.__class__.__name__}")
+                self._exception_count += 1
+            _max_exceptions = 3
+            if self._exception_count >= _max_exceptions:
+                self._exception_count = 0
+                await asyncio.sleep(10)
 
     async def run_process_now(self):
+        """Execute the process method and update last execution time."""
         try:
             t = time.monotonic()
             await self.process()
             self._last_execution = t
         except Exception:
             logger.exception(f"Error in collector {self.__class__.__name__}")
+            self._exception_count += 1
 
     async def _alert_callback(self):
         try:
@@ -175,12 +215,32 @@ class BaseCollector[T]:
             await self._registered_recovery_callback()
 
     def get_is_alerting(self) -> bool:
+        """Check if the collector is currently alerting.
+
+        Returns:
+            True if the alert condition has persisted longer than the fail duration.
+        """
         return self._alert.get_is_alerting()
 
     def get_alert_reason(self) -> str | None:
+        """Get the reason for the current alert condition.
+
+        Returns:
+            The alert reason string, or None if not alerting.
+        """
         return self._alert.get_alert_reason()
 
+    def clear_alert(self):
+        """Clear the alert condition and return to normal."""
+        self._alert.set_normal()
+
     def set_status(self, *, failing: bool, reason: str = ""):
+        """Set the alert status for the collector.
+
+        Args:
+            failing: Whether the collector is failing.
+            reason: The reason for the status change.
+        """
         if failing:
             self._alert.set_failing(reason)
         else:
@@ -201,13 +261,20 @@ class BaseCollector[T]:
 
 
 class BaseGroupCollector[T]:
+    """Base class for collecting data from multiple instances
+    with per-instance alert capabilities.
+
+    This class manages a periodic processing loop for a collection of instances,
+    with independent alert tracking and callbacks for each instance.
+    """
+
     def __init__(
         self,
         instances: Collection[T],
         *,
         loop_interval: float = 1,
         fail_duration: float = 60,
-        urgent_failure: bool = False,
+        is_urgent_failure: bool = False,
     ) -> None:
         self.instances: list[T] = list(instances)
         self.interval: float = loop_interval
@@ -226,7 +293,8 @@ class BaseGroupCollector[T]:
         self._registered_recovery_callbacks: dict[
             T, Callable[[], Awaitable[None]] | None
         ] = dict.fromkeys(self.instances)
-        self.is_urgent_failure: bool = urgent_failure
+        self.is_urgent_failure: bool = is_urgent_failure
+        self._exception_count: int = 0
 
     def start(self):
         """Start the processing loop."""
@@ -245,6 +313,15 @@ class BaseGroupCollector[T]:
     def set_alert_callback(
         self, instance: T, callback: Callable[[], Awaitable[None]] | None
     ):
+        """Set the alert callback for a specific instance.
+
+        Args:
+            instance: The instance to set the callback for.
+            callback: Async callable or None.
+
+        Raises:
+            ValueError: If the instance is not registered with this collector.
+        """
         if instance not in self.instances:
             msg = f"This GroupCollector does not have this instance {instance} registered"
             raise ValueError(msg)
@@ -253,6 +330,15 @@ class BaseGroupCollector[T]:
     def set_recovery_callback(
         self, instance: T, callback: Callable[[], Awaitable[None]] | None
     ):
+        """Set the recovery callback for a specific instance.
+
+        Args:
+            instance: The instance to set the callback for.
+            callback: Async callable or None.
+
+        Raises:
+            ValueError: If the instance is not registered with this collector.
+        """
         if instance not in self.instances:
             msg = f"This GroupCollector does not have this instance {instance} registered"
             raise ValueError(msg)
@@ -266,14 +352,21 @@ class BaseGroupCollector[T]:
                 _ = await self.run_process_now()
             except Exception:
                 logger.exception(f"Error in collector loop {self.__class__.__name__}")
+                self._exception_count += 1
+            _max_exceptions = 3
+            if self._exception_count >= _max_exceptions:
+                self._exception_count = 0
+                await asyncio.sleep(10)
 
     async def run_process_now(self):
+        """Execute the process method and update last execution time."""
         try:
             t = time.monotonic()
             await self.process()
             self._last_execution = t
         except Exception:
             logger.exception(f"Error in collector {self.__class__.__name__}")
+            self._exception_count += 1
 
     async def _alert_callback(self, instance: T):
         if instance not in self.instances:
@@ -300,18 +393,61 @@ class BaseGroupCollector[T]:
             await callback()
 
     def get_status(self, instance: T) -> bool:
+        """Get the alert status for a specific instance.
+
+        Args:
+            instance: The instance to check.
+
+        Returns:
+            True if the instance is currently alerting.
+
+        Raises:
+            ValueError: If the instance is not registered with this collector.
+        """
         if instance not in self.instances:
             msg = f"This GroupCollector does not have this instance {instance} registered"
             raise ValueError(msg)
         return self._alerts[instance].get_is_alerting()
 
     def get_alert_reason(self, instance: T) -> str | None:
+        """Get the alert reason for a specific instance.
+
+        Args:
+            instance: The instance to check.
+
+        Returns:
+            The alert reason string, or None if not alerting.
+
+        Raises:
+            ValueError: If the instance is not registered with this collector.
+        """
         if instance not in self.instances:
             msg = f"This GroupCollector does not have this instance {instance} registered"
             raise ValueError(msg)
         return self._alerts[instance].get_alert_reason()
 
-    def set_status(self, instance: T, *, failing: bool, reason: str):
+    def clear_alert(self, instance: T):
+        """Clear the alert condition for a specific instance and return to normal.
+
+        Args:
+            instance: The instance to clear the alert for.
+        """
+        if instance not in self.instances:
+            msg = f"This GroupCollector does not have this instance {instance} registered"
+            raise ValueError(msg)
+        self._alerts[instance].set_normal()
+
+    def set_status(self, instance: T, *, failing: bool, reason: str = ""):
+        """Set the alert status for a specific instance.
+
+        Args:
+            instance: The instance to update.
+            failing: Whether the instance is failing.
+            reason: The reason for the status change.
+
+        Raises:
+            ValueError: If the instance is not registered with this collector.
+        """
         if instance not in self.instances:
             msg = f"This GroupCollector does not have this instance {instance} registered"
             raise ValueError(msg)
@@ -320,10 +456,10 @@ class BaseGroupCollector[T]:
         else:
             self._alerts[instance].set_normal()
 
-    async def on_alert(self, instance: T):
+    async def on_alert(self, instance: T):  # pyright: ignore[reportUnusedParameter]
         """Fires when an alert goes off."""
 
-    async def on_recovery(self, instance: T):
+    async def on_recovery(self, instance: T):  # pyright: ignore[reportUnusedParameter]
         """Fires when an alert goes off."""
 
     async def process(self) -> None:

@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import enum
 import logging
@@ -20,6 +21,8 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import NamedTuple
+
+from bot.core.components import fire_and_forget
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +103,8 @@ class _TimeRange(NamedTuple):
 async def _invoke(cb: Callback, info: EventInfo) -> None:
     result = cb(info)
     if asyncio.iscoroutine(result):
-        await result
+        # await result
+        fire_and_forget(result)
 
 
 type Crossing = tuple[float, str, TimelineEvent]  # (t, kind, event)
@@ -181,11 +185,9 @@ class Timeline:
         self._pause_event.set()  # unblock loop so it can exit
 
         if self._task is not None:
-            self._task.cancel()
-            try:
+            __ = self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
 
         # Fire exit callbacks for any events still active.
@@ -246,9 +248,8 @@ class Timeline:
     ) -> TimelineEvent:
         """Register an event and return the ``TimelineEvent`` handle."""
         if start_time > end_time:
-            raise ValueError(
-                f"start_time ({start_time}) must be <= end_time ({end_time})"
-            )
+            msg = f"start_time ({start_time}) must be <= end_time ({end_time})"
+            raise ValueError(msg)
         event = TimelineEvent(
             id=str(uuid.uuid4()),
             start_time=start_time,
@@ -262,7 +263,7 @@ class Timeline:
 
     def remove_event(self, event: TimelineEvent) -> None:
         """Unregister *event*.  No callbacks are fired."""
-        self._events.pop(event.id, None)
+        __ = self._events.pop(event.id, None)
         self._active_events.discard(event.id)
         logger.debug("Removed event %s", event.id)
 
@@ -308,10 +309,7 @@ class Timeline:
 
         while self._state != _PlaybackState.STOPPED:
             # Block here while paused.
-            await self._pause_event.wait()
-
-            if self._state == _PlaybackState.STOPPED:
-                break
+            __ = await self._pause_event.wait()
 
             # Advance the cursor to "now".
             self._snapshot_time()
@@ -339,7 +337,7 @@ class Timeline:
             await self._sync_active_events(now)
 
             # Calculate how long to sleep until the next event boundary.
-            sleep_duration = self._sleep_until_next_boundary(now, forward)
+            sleep_duration = self._sleep_until_next_boundary(now, forward=forward)
             logger.debug(
                 "Tick: time=%f, active=%d, sleeping=%fs",
                 now,
@@ -351,7 +349,7 @@ class Timeline:
             except asyncio.CancelledError:
                 break
 
-    def _sleep_until_next_boundary(self, now: float, forward: bool) -> float:
+    def _sleep_until_next_boundary(self, now: float, *, forward: bool = True) -> float:
         """Return the number of *wall-clock* seconds to sleep before the next
         interesting moment (an event boundary or the end of the timeline).
 
@@ -360,7 +358,7 @@ class Timeline:
         wakes just *after* the boundary rather than exactly on it, and cap at
         _MAX_SLEEP so a very distant boundary doesn't cause a minutes-long sleep.
         """
-        _EPSILON = 0.001  # wake 1 ms after the boundary
+        _epsilon = 0.001  # wake 1 ms after the boundary
         candidates: list[float] = [self._end_time]
 
         for ev in self._events.values():
@@ -385,7 +383,7 @@ class Timeline:
             gap = now - next_boundary
 
         # gap is in timeline-seconds == wall-clock seconds (speed = 1 s/s).
-        return max(0.0, min(gap + _EPSILON, self._MAX_SLEEP))
+        return max(0.0, min(gap + _epsilon, self._MAX_SLEEP))
 
     # ------------------------------------------------------------------
     # Internal — cursor helpers
@@ -441,7 +439,7 @@ class Timeline:
 
     async def _seek_range(self, old_time: float, new_time: float) -> None:
         """Fire callbacks for every event boundary crossed between old and new."""
-        rng = _TimeRange.ordered(old_time, new_time)
+        __ = _TimeRange.ordered(old_time, new_time)
         moving_forward = new_time >= old_time
 
         # Collect all crossed boundaries with their type ('enter'/'exit').

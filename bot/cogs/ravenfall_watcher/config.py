@@ -15,6 +15,7 @@ class InstanceConfig(BaseModel):
     restart_unblock_min_seconds: float = 45
     restart_timeout_seconds: float = 120
     message_on_restart_timeout: str = "@abrokecube"
+    max_memory_usage_gb: float | None = None
 
 
 class WatcherConfig(BaseModel):
@@ -22,3 +23,6 @@ class WatcherConfig(BaseModel):
 
     instances: list[InstanceConfig]
     ravenfall_folder: str
+    max_total_memory_use_gb: float | None = None
+    default_max_instance_memory_usage_gb: float = 6.0
+    memory_kill_min_threshold_gb: float = 2.0

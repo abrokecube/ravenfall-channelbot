@@ -42,3 +42,15 @@ class RavenfallService(BaseService):
     async def get_latest_game_version(self):
         """Get changelog for the latest game version."""
         return await self.event_source._game_version_collector.get_latest()
+
+    async def get_multiplier(self):
+        """Get the current active multiplier, if any."""
+        return await self.event_source._multiplier_collector.get_latest()
+
+    async def get_marketplace(self):
+        """Get the current marketplace items."""
+        return await self.event_source._marketplace_collector.get_latest()
+
+    async def get_game_update(self):
+        """Get the current game update."""
+        return await self.event_source._game_version_collector.get_latest()

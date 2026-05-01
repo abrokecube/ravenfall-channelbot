@@ -27,6 +27,15 @@ class EventWaiterRequest[T: BaseEvent]:
     event_type: type[T] | None = None
 
 
+@dataclass
+class EventTypePredicate:
+    """Defines an event type matcher for wait_for_multiple."""
+
+    event_type: type[BaseEvent]
+    predicate: Callable[[BaseEvent], bool] | None = None
+    seconds_before: float | None = None
+
+
 class EventWaiterService(BaseService):
     """Service that allows awaiting for matching events.
 
@@ -109,6 +118,125 @@ class EventWaiterService(BaseService):
                 f"Timed out waiting for event "
                 f"{event_type.__name__ if event_type else 'matching criteria'}"
             )
+            raise TimeoutError(msg) from e
+        finally:
+            async with self._lock:
+                if waiter in self._waiters:
+                    self._waiters.remove(waiter)
+            if not future.done():
+                __ = future.cancel()
+
+    async def wait_for_multiple(
+        self,
+        event_type_predicates: list[EventTypePredicate],
+        *,
+        timeout: float | None = None,
+        seconds_before: float | None = None,
+    ) -> BaseEvent:
+        """Wait for the first event matching any of the provided event type predicates.
+
+        Args:
+            event_type_predicates: A list of EventTypePredicate instances. Each
+                item defines an event type, an optional predicate, and an optional
+                seconds_before value used only for checking past events.
+            timeout: Maximum time in seconds to wait. Raises TimeoutError if exceeded.
+            seconds_before: Default time window for past events when a specific
+                EventTypePredicate does not define its own seconds_before.
+
+        Returns:
+            The first event that matches any of the provided event criteria.
+
+        Raises:
+            TimeoutError: If the timeout is exceeded.
+            asyncio.CancelledError: If the wait is cancelled.
+        """
+        if not event_type_predicates:
+            msg = "event_type_predicates must contain at least one event type"
+            raise ValueError(msg)
+
+        def matches_criteria(event: BaseEvent) -> bool:
+            for criteria in event_type_predicates:
+                if isinstance(event, criteria.event_type):
+                    if criteria.predicate is None:
+                        return True
+                    try:
+                        return criteria.predicate(event)
+                    except Exception:
+                        LOGGER.exception(
+                            "Error in event waiter predicate for %s: %s",
+                            criteria.event_type,
+                            criteria.predicate,
+                        )
+                        return False
+            return False
+
+        if seconds_before is not None or any(
+            criteria.seconds_before is not None for criteria in event_type_predicates
+        ):
+            now = time.time()
+            windows: list[float] = []
+            for criteria in event_type_predicates:
+                window = (
+                    criteria.seconds_before
+                    if criteria.seconds_before is not None
+                    else seconds_before
+                )
+                if window is not None:
+                    windows.append(window)
+
+            max_window = max(windows)
+            cutoff = now - max_window
+
+            async with self._history_lock:
+                for event_timestamp, event in reversed(self._event_history):
+                    if event_timestamp < cutoff:
+                        break
+                    for criteria in event_type_predicates:
+                        window = (
+                            criteria.seconds_before
+                            if criteria.seconds_before is not None
+                            else seconds_before
+                        )
+                        if window is None:
+                            continue
+                        if event_timestamp < now - window:
+                            continue
+                        if isinstance(event, criteria.event_type):
+                            if criteria.predicate is None:
+                                return event
+                            try:
+                                if criteria.predicate(event):
+                                    return event
+                            except Exception:
+                                LOGGER.exception(
+                                    "Error in event waiter predicate for %s: %s",
+                                    criteria.event_type,
+                                    criteria.predicate,
+                                )
+                                continue
+
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+
+        waiter = EventWaiterRequest(
+            predicate=matches_criteria,
+            future=future,
+            timeout=timeout,
+            event_type=None,
+        )
+
+        async with self._lock:
+            self._waiters.append(waiter)
+
+        try:
+            if timeout is not None:
+                return await asyncio.wait_for(future, timeout=timeout)  # pyright: ignore[reportAny]
+            return await future  # pyright: ignore[reportAny]
+        except TimeoutError as e:
+            type_names = ", ".join(
+                criteria.event_type.__name__ for criteria in event_type_predicates
+            )
+            msg = f"Timed out waiting for event matching one of: {type_names}"
             raise TimeoutError(msg) from e
         finally:
             async with self._lock:
