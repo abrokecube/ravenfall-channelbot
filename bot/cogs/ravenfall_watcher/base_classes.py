@@ -68,6 +68,14 @@ class Alert:
                     self._trigger_recovery_callback()
                 )
 
+    def get_is_failing(self):
+        """Check if the alert is currently in a failing condition.
+
+        Returns:
+            True if the alert condition is currently failing, regardless of duration.
+        """
+        return self._is_in_alerting_condition
+
     def get_is_alerting(self):
         """Check if the alert is currently alerting.
 
@@ -241,6 +249,16 @@ class BaseCollector[T]:
             failing: Whether the collector is failing.
             reason: The reason for the status change.
         """
+        if failing and not self._alert.get_is_failing():
+            logger.debug(
+                f"[{self.__class__.__name__}] "
+                f"Instance {self.instance} is now failing: {reason}"
+            )
+        elif not failing and self._alert.get_is_failing():
+            logger.debug(
+                f"[{self.__class__.__name__}] "
+                f"Instance {self.instance} has recovered from failing: {reason}"
+            )
         if failing:
             self._alert.set_failing(reason)
         else:
@@ -451,10 +469,21 @@ class BaseGroupCollector[T]:
         if instance not in self.instances:
             msg = f"This GroupCollector does not have this instance {instance} registered"
             raise ValueError(msg)
+        alert = self._alerts[instance]
+        if failing and not alert.get_is_failing():
+            logger.debug(
+                f"[{self.__class__.__name__}] "
+                f"Instance {instance} is now failing: {reason}"
+            )
+        elif not failing and alert.get_is_failing():
+            logger.debug(
+                f"[{self.__class__.__name__}] "
+                f"Instance {instance} has recovered from failing: {reason}"
+            )
         if failing:
-            self._alerts[instance].set_failing(reason)
+            alert.set_failing(reason)
         else:
-            self._alerts[instance].set_normal()
+            alert.set_normal()
 
     async def on_alert(self, instance: T):  # pyright: ignore[reportUnusedParameter]
         """Fires when an alert goes off."""

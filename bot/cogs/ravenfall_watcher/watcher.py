@@ -303,7 +303,7 @@ class RavenfallWatcher(EventReceiverMixin):
         await self.restart_ravenfall()
 
     async def _pre_restart(self, event_ctx: EventInfo):
-        LOGGER.info(f"[{self.ravenfall.channel_name}] Pre-restart called")
+        LOGGER.debug(f"[{self.ravenfall.channel_name}] Pre-restart called")
         if event_ctx.event_progress - event_ctx.event_end < 1:
             return
         multichat_serv = self.global_ctx.get_service(RavenfallMultichatService)
@@ -319,7 +319,7 @@ class RavenfallWatcher(EventReceiverMixin):
         )
 
     async def _post_restart(self):
-        LOGGER.info(f"[{self.ravenfall.channel_name}] Post-restart called")
+        LOGGER.debug(f"[msg={self.ravenfall.channel_name}] Post-restart called")
         multichat_serv = self.global_ctx.get_service(RavenfallMultichatService)
         if not multichat_serv:
             return
@@ -464,11 +464,11 @@ class RavenfallWatcher(EventReceiverMixin):
                         ],
                     )
                     if isinstance(result, RavenfallReadyEvent):
-                        LOGGER.info(
+                        LOGGER.debug(
                             f"[{self.ravenfall.channel_name}] Ravenfall is ready!"
                         )
                     else:
-                        LOGGER.info(
+                        LOGGER.debug(
                             f"[{self.ravenfall.channel_name}] "
                             "Ravenfall went offline again during restart!"
                         )

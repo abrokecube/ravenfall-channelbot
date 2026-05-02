@@ -111,34 +111,34 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             msg = "Instance not found."
             raise CommandError(msg)
 
-    @command()
-    async def test_restart_proc(self, ctx: CommandEvent, instance_name: str):
-        """Restart a ravenfall instance."""
-        instance_name = instance_name.lower()
-        for instance in self.watchers:
-            if instance.config.channel_name.lower() == instance_name:
-                await ctx.reply(f"Restarting {instance_name}...")
-                await instance.restart_ravenfall()
-                await ctx.reply("Restart complete.")
-                break
-        else:
-            msg = "Instance not found."
-            raise CommandError(msg)
+    # @command()
+    # async def test_restart_proc(self, ctx: CommandEvent, instance_name: str):
+    #     """Restart a ravenfall instance."""
+    #     instance_name = instance_name.lower()
+    #     for instance in self.watchers:
+    #         if instance.config.channel_name.lower() == instance_name:
+    #             await ctx.reply(f"Restarting {instance_name}...")
+    #             await instance.restart_ravenfall()
+    #             await ctx.reply("Restart complete.")
+    #             break
+    #     else:
+    #         msg = "Instance not found."
+    #         raise CommandError(msg)
 
-    @command()
-    async def test_kill_proc(self, ctx: CommandEvent, instance_name: str):
-        """Kill a ravenfall instance."""
-        instance_name = instance_name.lower()
-        for instance in self.watchers:
-            if instance.config.channel_name.lower() == instance_name:
-                await ctx.reply(f"Kill {instance_name}...")
-                result = await instance.kill_ravenfall()
-                if result:
-                    await ctx.reply("Done.")
-                else:
-                    msg = "Kill failed."
-                    raise CommandError(msg)
-                break
-        else:
-            msg = "Instance not found."
-            raise CommandError(msg)
+    # @command()
+    # async def test_kill_proc(self, ctx: CommandEvent, instance_name: str):
+    #     """Kill a ravenfall instance."""
+    #     instance_name = instance_name.lower()
+    #     for instance in self.watchers:
+    #         if instance.config.channel_name.lower() == instance_name:
+    #             await ctx.reply(f"Kill {instance_name}...")
+    #             result = await instance.kill_ravenfall()
+    #             if result:
+    #                 await ctx.reply("Done.")
+    #             else:
+    #                 msg = "Kill failed."
+    #                 raise CommandError(msg)
+    #             break
+    #     else:
+    #         msg = "Instance not found."
+    #         raise CommandError(msg)
