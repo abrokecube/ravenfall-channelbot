@@ -321,7 +321,7 @@ class CommandListener(GenericListener):
         
         # Check for custom converter
         if hasattr(conv_obj, 'convert'):
-            if value == True:
+            if isinstance(value, bool) and value is True:
                 raise EmptyFlagValueError(param)
             if not isinstance(value, str):
                 if type(value) is type(conv_obj):
