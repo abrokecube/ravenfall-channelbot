@@ -11,12 +11,14 @@ from bot.cogs.ravenfall_watcher.base_classes import BaseGroupCollector
 from bot.core.components import fire_and_forget
 from bot.core.decorators import on_match
 from bot.integrations.ravenfall import (
+    RavenBotMessageEvent,
     RavenfallEvent,
     RavenfallOfflineEvent,
     RavenfallOnlineEvent,
     RavenfallReadyEvent,
 )
 from bot.integrations.ravenfall.event_sources import RavenfallInstance
+from bot.integrations.twitch import TwitchService
 from bot.mixins.event_receiver import EventReceiverMixin
 from bot.services.event_waiter import EventTypePredicate, EventWaiterService
 from bot.services.ravenfall_channels import RavenfallChannelService
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Coroutine
 
     from bot.core.components import BaseEvent, EventManager, GlobalContext
+    from bot.integrations.chat_messages import MessageEvent
     from bot.integrations.process_manager import ProcessManagerService
     from bot.integrations.ravenfall import (
         RavenfallInstance,
@@ -75,7 +78,8 @@ class RavenfallWatcher(EventReceiverMixin):
         self.restart_timeline: Timeline = Timeline()
         self.restart_timeline.set_seek_mode(SeekMode.POINT)
         self.restart_reason: str = ""
-        self.restart_lock: asyncio.Lock = asyncio.Lock()
+        self.ravenfall_restart_lock: asyncio.Lock = asyncio.Lock()
+        self.ravenbot_restart_lock: asyncio.Lock = asyncio.Lock()
 
         self.config.restart_warning_times.sort(reverse=True)
 
@@ -87,6 +91,19 @@ class RavenfallWatcher(EventReceiverMixin):
 
     async def start(self):
         """Start the watcher, including setting up the restart timeline if configured."""
+        if (
+            self.watcher_cog.config.ravenfall_executable_name.lower()
+            not in self.config.start_command.lower()
+        ):
+            LOGGER.warning(
+                f"[{self.ravenfall.channel_name}] "
+                "The start command does not contain "
+                "the configured ravenfall executable name, "
+                "this may cause issues with auto-restart and memory monitoring. "
+                "Check your config and make sure 'start_command' "
+                "contains the executable name."
+            )
+
         self.collectors = [collectors.BuggedRaidCheck(self.ravenfall)]
         for c in self.collectors:
             c.set_alert_callback(partial(self._collector_alerting, c))
@@ -150,12 +167,25 @@ class RavenfallWatcher(EventReceiverMixin):
         else:
             fire_and_forget(self.restart_ravenfall())
 
+        channel_serv = self.global_ctx.get_service(RavenfallChannelService)
+        if not channel_serv:
+            LOGGER.warning("Ravenfall channel service not available")
+        else:
+            channel_serv.register_message_event_callback(
+                self._on_ravenfall_chat_message, self.ravenfall.twitch_login
+            )
+
     async def stop(self):
         """Stop the watcher and all its collectors."""
         for c in self.collectors:
             c.stop()
         await self.auto_restart_timer.stop()
         await self.restart_timeline.stop()
+        channel_serv = self.global_ctx.get_service(RavenfallChannelService)
+        if channel_serv:
+            channel_serv.unregister_message_event_callback(
+                self._on_ravenfall_chat_message
+            )
 
     async def _collector_alerting(
         self,
@@ -189,7 +219,7 @@ class RavenfallWatcher(EventReceiverMixin):
 
     async def queue_restart(self, countdown_seconds: float, reason: str = ""):
         """Queue a ravenfall restart with the specified countdown."""
-        if self.restart_lock.locked():
+        if self.ravenfall_restart_lock.locked():
             LOGGER.info(
                 f"[{self.ravenfall.channel_name}] "
                 "Restart already in progress, not queueing another."
@@ -366,7 +396,7 @@ class RavenfallWatcher(EventReceiverMixin):
 
         LOGGER.info(f"[{self.ravenfall.channel_name}] Requesting restart.")
 
-        __ = await self.restart_lock.acquire()
+        __ = await self.ravenfall_restart_lock.acquire()
         try:
             channel_service = self.global_ctx.get_service(RavenfallChannelService)
             if self.watcher_cog.restart_lock.locked() and announce and channel_service:
@@ -402,7 +432,8 @@ class RavenfallWatcher(EventReceiverMixin):
                         )
                 config = self.config
                 __ = await self.process_service.kill_process(
-                    "Ravenfall.exe", config.sandboxie_box_name
+                    self.watcher_cog.config.ravenfall_executable_name,
+                    config.sandboxie_box_name,
                 )
                 while True:
                     try:
@@ -445,7 +476,7 @@ class RavenfallWatcher(EventReceiverMixin):
                         f"[{self.ravenfall.channel_name}] "
                         "Ravenfall did not come back online in time."
                     )
-                    self.restart_lock.release()
+                    self.ravenfall_restart_lock.release()
                     await self.queue_restart(1, "Restart failed")
                     return
                 LOGGER.info(
@@ -475,27 +506,114 @@ class RavenfallWatcher(EventReceiverMixin):
                         return
             except TimeoutError:
                 LOGGER.info(f"[{self.ravenfall.channel_name}] Restart may have failed.")
-                self.restart_lock.release()
+                self.ravenfall_restart_lock.release()
                 await self.queue_restart(1, "Restart failed")
                 return
         except Exception:
             LOGGER.exception(f"[{self.ravenfall.channel_name}] Error during restart")
-            if self.restart_lock.locked():
-                self.restart_lock.release()
+            if self.ravenfall_restart_lock.locked():
+                self.ravenfall_restart_lock.release()
             await self.queue_restart(1, "Restart failed")
             return
 
-        if self.restart_lock.locked():
-            self.restart_lock.release()
+        if self.ravenfall_restart_lock.locked():
+            self.ravenfall_restart_lock.release()
 
         await self._post_restart()
+
+    async def _on_ravenfall_chat_message(self, event: MessageEvent, _: RavenfallInstance):
+        await self._check_ravenbot(event)
+
+    async def _check_ravenbot(self, event: MessageEvent):
+        rf_event_src = self.ravenfall_service.event_source
+        if (
+            rf_event_src.middleman_message_processor is not None
+            and rf_event_src.middleman_message_processor.connected_client_count == 0
+        ):
+            return
+        if (
+            rf_event_src.middleman_client is not None
+            and not rf_event_src.middleman_client.is_websocket_connected
+        ):
+            return
+        if self.config.ravenbot_channel_id is not None:
+            if self.config.ravenbot_channel_id != event.room_id:
+                return
+        elif event.room_id != self.ravenfall.channel_id:
+            return
+
+        waiter_service = self.global_ctx.get_service(EventWaiterService)
+        if not waiter_service:
+            return
+
+        split = event.text.lower().split(" ", maxsplit=1)
+        if not split:
+            return
+        first_word = split[0]
+        prefix = self.config.ravenbot_prefix
+        if not first_word.startswith(prefix):
+            return
+        the_rest = first_word[len(prefix) :]
+        if the_rest not in self.watcher_cog.config.commands_to_watch:
+            return
+
+        def predicate(event: BaseEvent):
+            if not isinstance(event, RavenBotMessageEvent):
+                return False
+            return event.ravenfall == self.ravenfall
+
+        try:
+            __ = await waiter_service.wait_for(
+                RavenBotMessageEvent, predicate=predicate, timeout=1
+            )
+        except TimeoutError:
+            LOGGER.info("RavenBot did not respond, restarting.")
+            await self.restart_ravenbot()
+            await event.reply("RavenBot wasn't responding. Try this command again.")
+
+    async def restart_ravenbot(self, *, announce: bool = True):
+        """Restarts ravenbot."""
+        if self.ravenbot_restart_lock.locked():
+            LOGGER.debug("restart_ravenbot was called during a restart.")
+            return
+
+        async with self.ravenbot_restart_lock:
+            if announce:
+                twitch = self.global_ctx.get_service(TwitchService)
+                if twitch:
+                    __ = await twitch.send_message(
+                        "Restarting RavenBot...", self.ravenfall.channel_id
+                    )
+            config = self.config
+            __ = await self.process_service.kill_process(
+                self.watcher_cog.config.ravenbot_executable_name,
+                config.sandboxie_box_name,
+            )
+            while True:
+                try:
+                    async with asyncio.timeout(10):
+                        # Sometimes sandboxie shows a popup that pauses this process
+                        result = await self.process_service.spawn_process(
+                            "RavenBot.exe",
+                            config.sandboxie_box_name,
+                            self.watcher_cog.config.ravenbot_folder,
+                        )
+                except TimeoutError:
+                    LOGGER.warning(
+                        f"[{self.ravenfall.channel_name}] "
+                        "Spawn process timed out, retrying..."
+                    )
+                    continue
+                if result.code == 0:
+                    break
+                await asyncio.sleep(10)
 
     @on_match(RavenfallOfflineEvent)
     async def on_offline(
         self, _g_ctx: GlobalContext, event: RavenfallOfflineEvent, _match: object
     ):
         """Runs when Ravenfall goes offline."""
-        if self.restart_lock.locked():
+        if self.ravenfall_restart_lock.locked():
             return
         if event.ravenfall == self.ravenfall:
             await self.queue_restart(1, "Ravenfall is offline")

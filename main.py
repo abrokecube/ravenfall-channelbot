@@ -188,7 +188,7 @@ async def run():
     tasks.append(global_ctx.register_service(PrometheusService()))
     tasks.append(global_ctx.register_service(RavenfallMultichatService()))
     tasks.append(global_ctx.register_service(GlobalMessengerService()))
-    tasks.append(global_ctx.register_service(RavenfallChannelService()))
+    tasks.append(global_ctx.register_service(RavenfallChannelService(event_manager)))
 
     __ = await asyncio.gather(*tasks)
     tasks.clear()

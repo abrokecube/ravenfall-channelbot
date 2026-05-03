@@ -688,6 +688,7 @@ class MessageProcessorServer:
         self._ravenfall_message_hooks: list[
             Callable[[RavenfallProcessorMessage], Awaitable[None]]
         ] = []
+        self._active_client_count: int = 0
         self._setup_routes()
 
     def _setup_routes(self) -> None:
@@ -745,7 +746,12 @@ class MessageProcessorServer:
     async def _websocket_handler(self, request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse()
         __ = await ws.prepare(request)
-        LOGGER.info(f"Message processor client connected from {request.remote}")
+        self._active_client_count += 1
+        LOGGER.info(
+            "Message processor client connected from %s (active clients=%d)",
+            request.remote,
+            self._active_client_count,
+        )
 
         try:
             async for msg in ws:
@@ -766,10 +772,19 @@ class MessageProcessorServer:
         except Exception:
             LOGGER.exception("Error in WebSocket handler")
         finally:
+            self._active_client_count = max(0, self._active_client_count - 1)
             __ = await ws.close()
-            LOGGER.info("Message processor WebSocket connection closed")
+            LOGGER.info(
+                "Message processor WebSocket connection closed (active clients=%d)",
+                self._active_client_count,
+            )
 
         return ws
+
+    @property
+    def connected_client_count(self) -> int:
+        """Return the number of currently connected processor clients."""
+        return self._active_client_count
 
     def add_ravenfall_message_hook(
         self,

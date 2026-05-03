@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class InstanceConfig(BaseModel):
@@ -16,6 +16,8 @@ class InstanceConfig(BaseModel):
     restart_timeout_seconds: float = 120
     message_on_restart_timeout: str = "@abrokecube"
     max_memory_usage_gb: float | None = None
+    ravenbot_prefix: str = "!"
+    ravenbot_channel_id: str | None = None
 
 
 class WatcherConfig(BaseModel):
@@ -23,6 +25,50 @@ class WatcherConfig(BaseModel):
 
     instances: list[InstanceConfig]
     ravenfall_folder: str
+    ravenfall_executable_name: str = "Ravenfall.exe"
+    ravenbot_folder: str
+    ravenbot_executable_name: str = "RavenBot.exe"
     max_total_memory_use_gb: float | None = None
     default_max_instance_memory_usage_gb: float = 6.0
     memory_kill_min_threshold_gb: float = 2.0
+    commands_to_watch: set[str] = {
+        "coins",
+        "count",
+        "damage",
+        "dmg",
+        "dps",
+        "effects",
+        "ferry",
+        "items",
+        "multiplier",
+        "online",
+        "res",
+        "resources",
+        "rested",
+        "status",
+        "stats",
+        "town",
+        "townres",
+        "training",
+        "value",
+        "version",
+        "village",
+        "villagers",
+        "where",
+        "consume",
+        "disenchant",
+        "drink",
+        "eat",
+        "enchant",
+        "gift",
+        "join",
+        "leave",
+        "scrolls",
+    }
+
+    @field_validator("commands_to_watch", mode="after")
+    @classmethod
+    def _lowercase_commands_to_watch(cls, value: set[str]):
+        if isinstance(value, str):
+            return {value.lower()}
+        return {str(item).lower() for item in value}

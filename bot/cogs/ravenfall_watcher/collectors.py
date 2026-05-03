@@ -7,13 +7,18 @@ from typing import TYPE_CHECKING, override
 
 from bot.integrations.process_manager import ProcessStatistics
 from bot.integrations.ravenfall import DungeonStage, RavenfallInstance
+from bot.services.ravenfall_multichat import RavenfallMultichatService
 
-from .base_classes import BaseCollector, BaseGroupCollector
+from .base_classes import (
+    BaseCollector,
+    BaseGroupCollector,
+    RavenfallWatcherGroupCollector,
+)
 
 if TYPE_CHECKING:
+    from bot.core.components import GlobalContext
     from bot.integrations.process_manager import ProcessManagerService
     from bot.integrations.ravenfall import RavenfallService
-    from bot.services.ravenfall_multichat import RavenfallMultichatService
 
     from .cog import RavenfallWatcherCog
     from .watcher import RavenfallWatcher
@@ -73,13 +78,14 @@ class RestartBlocker(BaseCollector[RavenfallInstance]):
             self.set_status(failing=False)
 
 
-class MultiplierCheck(BaseGroupCollector[RavenfallInstance]):
+class MultiplierCheck(RavenfallWatcherGroupCollector[RavenfallInstance]):
     """Checks if an instance's multiplier is in sync with the global multiplier."""
 
     def __init__(
         self,
         instances: list[RavenfallInstance],
         ravenfall_service: RavenfallService,
+        global_context: GlobalContext,
         *,
         loop_interval: float = 30,
         fail_duration: float = 120,
@@ -92,6 +98,7 @@ class MultiplierCheck(BaseGroupCollector[RavenfallInstance]):
             is_urgent_failure=is_urgent_failure,
         )
         self.ravenfall_service: RavenfallService = ravenfall_service
+        self.global_context: GlobalContext = global_context
 
     @override
     async def process(self) -> None:
@@ -115,6 +122,21 @@ class MultiplierCheck(BaseGroupCollector[RavenfallInstance]):
                 self.set_status(instance, failing=True, reason=reason)
             else:
                 self.set_status(instance, failing=False)
+
+    @override
+    async def on_alert(self, instance: RavenfallInstance) -> None:
+        multichat_serv = self.global_context.get_service(RavenfallMultichatService)
+        if not multichat_serv:
+            return
+        multichat = multichat_serv.get_client()
+        watcher_instance = self.get_watcher_service().get_watcher(instance.channel_name)
+        await multichat.send_multichat_command(
+            f"?say {watcher_instance.config.ravenbot_prefix}multiplier",
+            instance.channel_id,
+            instance.channel_name,
+            instance.channel_id,
+            instance.channel_name,
+        )
 
 
 class ItemCountCheck(BaseGroupCollector[RavenfallInstance]):
@@ -265,6 +287,61 @@ class RamUsageCheck(BaseGroupCollector[RavenfallInstance]):
             instance_result_watcher_filtered[0][0],
             failing=True,
             reason=reason,
+        )
+
+
+class DesyncCheck(BaseGroupCollector[RavenfallInstance]):
+    """Checks if an instance is desynced."""
+
+    def __init__(
+        self,
+        instances: list[RavenfallInstance],
+        multichat_service: RavenfallMultichatService,
+        global_context: GlobalContext,
+        *,
+        loop_interval: float = 15,
+        fail_duration: float = 60,
+        is_urgent_failure: bool = False,
+    ) -> None:
+        super().__init__(
+            instances,
+            loop_interval=loop_interval,
+            fail_duration=fail_duration,
+            is_urgent_failure=is_urgent_failure,
+            alert_callback_repeat_interval=90,
+        )
+        self.multichat_service: RavenfallMultichatService = multichat_service
+        self.min_desync_seconds: float = 30
+        self.global_context: GlobalContext = global_context
+
+    @override
+    async def process(self) -> None:
+        town_desync = await self.multichat_service.get_client().get_desync_info()
+        desyncs = dict(town_desync.towns)
+        for instance in self.instances:
+            if instance.channel_id not in desyncs:
+                self.set_status(instance, failing=False)
+            elif desyncs[instance.channel_id] > self.min_desync_seconds:
+                self.set_status(
+                    instance,
+                    failing=True,
+                    reason="Town is desynced; character data stopped updating.",
+                )
+            else:
+                self.set_status(instance, failing=False)
+
+    @override
+    async def on_alert(self, instance: RavenfallInstance):
+        multichat_serv = self.global_context.get_service(RavenfallMultichatService)
+        if not multichat_serv:
+            return
+        multichat = multichat_serv.get_client()
+        await multichat.send_multichat_command(
+            "?resync",
+            instance.channel_id,
+            instance.channel_name,
+            instance.channel_id,
+            instance.channel_name,
         )
 
 

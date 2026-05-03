@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Collection
 
+    from bot.cogs.ravenfall_watcher import RavenfallWatcherService
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +22,7 @@ class Alert:
         fail_duration_seconds: float = 60,
         failure_callback: Callable[[], Awaitable[None]] | None = None,
         recovery_callback: Callable[[], Awaitable[None]] | None = None,
+        repeat_interval_seconds: float | None = None,
     ) -> None:
         self._is_in_alerting_condition: bool = False
         self._alert_reason: str | None = None
@@ -30,6 +33,7 @@ class Alert:
         self._recovery_callback: Callable[[], Awaitable[None]] | None = recovery_callback
         self._recovery_callback_task: asyncio.Task[None] | None = None
         self._has_sent_alert: bool = False
+        self._repeat_interval: float | None = repeat_interval_seconds
 
     def set_alerting_callback(self, callback: Callable[[], Awaitable[None]]):
         """Overwrites the current alert callback."""
@@ -107,13 +111,25 @@ class Alert:
             logger.exception("Error in Alert recovery callback")
 
     async def _trigger_alerting_callback(self) -> None:
-        """Wait for fail duration, then trigger callback if still failing."""
+        """Wait for fail duration, then trigger callback if still failing,
+        and repeat every repeat_interval if set.
+        """
         try:
             await asyncio.sleep(self._fail_duration)
             if self._is_in_alerting_condition:
                 self._has_sent_alert = True
                 if self._alerting_callback is not None:
                     await self._alerting_callback()
+                # Repeat the callback every _repeat_interval if set
+                while (
+                    self._repeat_interval is not None and self._is_in_alerting_condition
+                ):
+                    await asyncio.sleep(self._repeat_interval)
+                    if (
+                        self._is_in_alerting_condition
+                        and self._alerting_callback is not None
+                    ):
+                        await self._alerting_callback()
         except asyncio.CancelledError:
             pass
         except Exception:
@@ -134,10 +150,13 @@ class BaseCollector[T]:
         loop_interval: float = 1,
         fail_duration: float = 60,
         is_urgent_failure: bool = False,
+        alert_callback_repeat_interval: float | None = None,
     ) -> None:
         self.instance: T = instance
         self.interval: float = loop_interval
-        self._alert: Alert = Alert(fail_duration, None)
+        self._alert: Alert = Alert(
+            fail_duration, None, None, alert_callback_repeat_interval
+        )
         self._loop_task: asyncio.Task[None] | None = None
         self._last_execution: float = time.monotonic() - self.interval
         self._registered_alert_callback: Callable[[], Awaitable[None]] | None = None
@@ -293,13 +312,16 @@ class BaseGroupCollector[T]:
         loop_interval: float = 1,
         fail_duration: float = 60,
         is_urgent_failure: bool = False,
+        alert_callback_repeat_interval: float | None = None,
     ) -> None:
         self.instances: list[T] = list(instances)
         self.interval: float = loop_interval
         self._alerts: dict[T, Alert] = {
             x: Alert(
+                fail_duration,
                 failure_callback=functools.partial(self._alert_callback, x),
                 recovery_callback=functools.partial(self._recovery_callback, x),
+                repeat_interval_seconds=alert_callback_repeat_interval,
             )
             for x in self.instances
         }
@@ -497,3 +519,40 @@ class BaseGroupCollector[T]:
         Use the set_data and get_data functions to store and retrieve data.
         """
         raise NotImplementedError
+
+
+class RavenfallWatcherGroupCollector[T](BaseGroupCollector[T]):
+    """BaseGroupCollector with injected watcher service for alert callbacks."""
+
+    def __init__(
+        self,
+        instances: Collection[T],
+        *,
+        loop_interval: float = 1,
+        fail_duration: float = 60,
+        is_urgent_failure: bool = False,
+        alert_callback_repeat_interval: float | None = None,
+    ) -> None:
+        super().__init__(
+            instances,
+            loop_interval=loop_interval,
+            fail_duration=fail_duration,
+            is_urgent_failure=is_urgent_failure,
+            alert_callback_repeat_interval=alert_callback_repeat_interval,
+        )
+        self._watcher_service: RavenfallWatcherService | None = None
+
+    def inject_watcher_service(self, watcher_service: RavenfallWatcherService) -> None:
+        """Inject the watcher service."""
+        self._watcher_service = watcher_service
+
+    def get_watcher_service(self) -> RavenfallWatcherService:
+        """Get the injected watcher service.
+
+        Raises:
+            ValueError: If the watcher service has not been injected.
+        """
+        if self._watcher_service is None:
+            msg = "Watcher service has not been injected"
+            raise ValueError(msg)
+        return self._watcher_service
