@@ -8,6 +8,7 @@ from bot.core.decorators import _get_or_create_metadata_list
 from bot.core.modals import MetaFilter
 from bot.integrations.chat_messages import EVENT_CATEGORY_MESSAGE, ChatMessageMetadata
 
+from .classes import _EMPTY
 from .dispatchers import CommandDispatcher
 from .models import CommandMetadata, ParameterConfig
 
@@ -37,7 +38,6 @@ def command[T: Callable[..., object]](
     aliases: list[str] | None = None,
     verifier: VerifierType | None = None,
     hidden: bool = False,
-    priority: int = 0,
     title: str | None = None,  # i forgot what this was for
 ) -> Callable[[T], T]:
     """Decorator to mark a function as a command listener."""
@@ -62,7 +62,7 @@ def command[T: Callable[..., object]](
             dispatcher=CommandDispatcher,
             meta_filter=MetaFilter((EVENT_CATEGORY_MESSAGE,), True, [], False),
             init_kwargs=kwargs,
-            priority=priority,
+            priority=0,
         )
         _get_or_create_metadata_list(func).append(listener_metadata)
 
@@ -78,6 +78,7 @@ def parameter[T: Callable[..., object]](
     regex: str = "",
     display_name: str = "",
     converter: BaseConverter | type[BaseConverter] | None = None,
+    default: object = _EMPTY,
     *,
     greedy: bool = False,
     hidden: bool = False,
@@ -112,6 +113,7 @@ def parameter[T: Callable[..., object]](
             regex=regex,
             display_name=display_name,
             converter=converter,
+            default=default,
         )
         return func
 

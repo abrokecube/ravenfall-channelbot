@@ -42,6 +42,7 @@ class ParameterConfig:
     regex: str | None
     display_name: str | None
     converter: BaseConverter | type[BaseConverter] | None
+    default: object
 
 
 @dataclass

@@ -642,6 +642,10 @@ class RavenfallInstance:
         """Get the latest dungeon."""
         return await self._dungeon_collector.get_latest()
 
+    def get_dungeon_status(self):
+        """Get the current stage of the dungeon."""
+        return self._dungeon_collector.stage
+
     async def get_raid(self) -> models.Raid | None:
         """Get the latest raid."""
         return await self._raid_collector.get_latest()
@@ -857,7 +861,7 @@ class RavenfallEventSource(BaseEventSource):
         for i in self.ravenfall_instances:
             i._event_hook = self.send_event
         self.channel_name_to_instance = {
-            x.channel_name: x for x in self.ravenfall_instances
+            x.channel_name.lower(): x for x in self.ravenfall_instances
         }
         self.channel_id_to_instance = {x.channel_id: x for x in self.ravenfall_instances}
         self.middleman_id_to_instance = {

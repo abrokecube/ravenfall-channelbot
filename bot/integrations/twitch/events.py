@@ -74,6 +74,7 @@ class TwitchIRCMessageEvent(MessageEvent):
 class TwitchEventSubMessageEvent(MessageEvent):
     """Twitch EventSub chat message event."""
 
+    platform: str = EVENT_SOURCE_TWITCH
     bot_twitch: Twitch
     channel_twitch: Twitch
     twitch_service: TwitchService

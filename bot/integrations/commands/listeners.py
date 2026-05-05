@@ -23,7 +23,7 @@ from bot.integrations.chat_messages.checks import BaseCheck
 from bot.integrations.chat_messages.exceptions import CheckFailure
 from utils.strutils import strjoin
 
-from .classes import Flag, Parameter
+from .classes import _EMPTY, Flag, Parameter
 from .converters import BaseConverter
 from .enums import ParameterType
 from .events import CommandEvent
@@ -104,14 +104,13 @@ class CommandListener(GenericListener):
         try:
             # get_type_hints resolves string annotations to actual types
             self.type_hints: dict[str, type] = get_type_hints(func)
-        except NameError:
-            LOGGER.warning(
-                "Could not resolve type hints for %s. "
+        except NameError as e:
+            msg = (
+                f"Could not resolve type hints for {func.__name__}. "
                 "Make sure all type hints are defined on runtime. You may have imported "
-                "something inside a TYPE_CHECKING if statement.",
-                func.__name__,
+                "something inside a TYPE_CHECKING if statement."
             )
-            self.type_hints = {}
+            raise RuntimeError(msg) from e
         except Exception as e:  # noqa: BLE001
             # If get_type_hints fails, we'll fall back to the signature
             LOGGER.warning("Could not resolve type hints for %s: %s", func.__name__, e)
@@ -198,6 +197,7 @@ class CommandListener(GenericListener):
             param_hidden = False
             param_regex: None | re.Pattern[str] = None
             param_kind = kind_mapping[param.kind]
+            param_default: object = cast("object", param.default)
 
             param_config: ParameterConfig | None = metadata.parameters.get(param.name)
 
@@ -217,6 +217,8 @@ class CommandListener(GenericListener):
                 param_hidden = param_config.hidden
                 if param_config.regex:
                     param_regex = re.compile(param_config.regex)
+                if param_config.default != _EMPTY:
+                    param_default = param_config.default
 
             # Create Parameter object
             p = Parameter(
@@ -224,7 +226,7 @@ class CommandListener(GenericListener):
                 display_name=display_name,
                 aliases=param_aliases,
                 converter=converter,
-                default=cast("object", param.default),
+                default=param_default,
                 greedy=param_greedy,
                 hidden=param_hidden,
                 kind=param_kind,
@@ -320,13 +322,6 @@ class CommandListener(GenericListener):
         if isinstance(value, bool) and conv_obj is not bool:
             raise EmptyFlagValueError(param)
 
-        if not isinstance(value, str):
-            msg = (
-                "Expected argument to be a string for conversion, "
-                f"got {type(value).__name__}"
-            )
-            raise ArgumentConversionError(msg, str(value), param)
-
         if isinstance(conv_obj, BaseConverter) or issubclass(conv_obj, BaseConverter):
             try:
                 if isinstance(conv_obj, BaseConverter):
@@ -334,12 +329,12 @@ class CommandListener(GenericListener):
                 else:
                     result = conv_obj.cls_convert(g_ctx, ctx, value)
             except ArgumentConversionError as e:
-                raise ArgumentConversionError(e.message, value, param) from None
+                raise ArgumentConversionError(e.message, str(value), param) from None
             except Exception as e:
                 msg = f"An error occurred while converting the argument: {e}"
                 raise ArgumentConversionError(
                     msg,
-                    value,
+                    str(value),
                     param,
                     e,
                 ) from e
@@ -347,6 +342,13 @@ class CommandListener(GenericListener):
                 if asyncio.iscoroutine(result):
                     return await result
                 return result
+
+        if not isinstance(value, str):
+            msg = (
+                "Expected argument to be a string for conversion, "
+                f"got {type(value).__name__}"
+            )
+            raise ArgumentConversionError(msg, str(value), param)
 
         if conv_obj is bool:
             if value.lower() in ("true", "yes", "1", "on"):

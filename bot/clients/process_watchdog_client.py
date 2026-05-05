@@ -35,7 +35,7 @@ class GitPullResponse(TypedDict):
     latest_commit: NotRequired[GitPullLatestCommit]
 
 
-class WatchdogClientError(BaseException):
+class WatchdogClientError(Exception):
     """Error occurred while calling the client."""
 
 

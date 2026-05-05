@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, override
 
 from bot.integrations.process_manager import ProcessStatistics
 from bot.integrations.ravenfall import DungeonStage, RavenfallInstance
+from bot.services.prometheus_service import PrometheusService
 from bot.services.ravenfall_multichat import RavenfallMultichatService
 
 from .base_classes import (
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from bot.core.components import GlobalContext
     from bot.integrations.process_manager import ProcessManagerService
     from bot.integrations.ravenfall import RavenfallService
+    from bot.services.prometheus_service import Vector
 
     from .cog import RavenfallWatcherCog
     from .watcher import RavenfallWatcher
@@ -383,3 +385,59 @@ class BuggedRaidCheck(BaseCollector[RavenfallInstance]):
             )
             return
         self.set_status(failing=False)
+
+
+class RavenfallFrozenCheck(BaseGroupCollector[RavenfallInstance]):
+    """Checks for crash using prometheus."""
+
+    def __init__(
+        self,
+        instances: list[RavenfallInstance],
+        global_context: GlobalContext,
+        *,
+        loop_interval: float = 25,
+        fail_duration: float = 60,
+        is_urgent_failure: bool = False,
+        alert_callback_repeat_interval: float | None = None,
+    ) -> None:
+        super().__init__(
+            instances,
+            loop_interval=loop_interval,
+            fail_duration=fail_duration,
+            is_urgent_failure=is_urgent_failure,
+            alert_callback_repeat_interval=alert_callback_repeat_interval,
+        )
+        self.global_context: GlobalContext = global_context
+
+    @override
+    async def process(self) -> None:
+        prometheus_serv = self.global_context.get_service(PrometheusService)
+        if not prometheus_serv:
+            return
+        sessions = "|".join(x.channel_name for x in self.instances)
+        query = """
+        sum by (player_id, player_name, session) (
+            rate(
+                rf_player_stat_experience_total{session=~"%s"}[30s]
+            )
+        )
+        """ % [sessions]
+        result = await prometheus_serv.query(query)
+        results_grouped: dict[str, list[Vector]] = defaultdict(list)
+        for r in result:
+            session_name = r.metric.get("session")
+            if not session_name:
+                continue
+            results_grouped[session_name].append(r)
+
+        for instance in self.instances:
+            if instance.get_dungeon_status() == DungeonStage.LOADING:
+                self.set_status(instance, failing=False)
+                continue
+            if instance.channel_name not in results_grouped:
+                self.set_status(instance, failing=False)
+                continue
+            if any(x.value.value > 0 for x in results_grouped[instance.channel_name]):
+                self.set_status(instance, failing=False)
+                continue
+            self.set_status(instance, failing=True, reason="Ravenfall might be frozen.")

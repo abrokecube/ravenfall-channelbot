@@ -8,7 +8,6 @@ from .converters import Glob as Glob
 from .converters import RangeFloat as RangeFloat
 from .converters import RangeInt as RangeInt
 from .converters import Regex as Regex
-from .converters import RFItemConverter as RFItemConverter
 from .deco import command as command
 from .deco import parameter as parameter
 from .deco import verification as verification

@@ -120,7 +120,7 @@ class RavenfallConnectionError(Exception):
     """Custom connection exception for Ravenfall API requests."""
 
 
-class QueryException(BaseException):
+class QueryException(Exception):
     """Exception raised for query-related errors."""
 
 

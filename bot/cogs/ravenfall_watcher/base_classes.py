@@ -193,6 +193,10 @@ class BaseCollector[T]:
         """
         self._registered_alert_callback = callback
 
+    def remove_alert_callback(self):
+        """Remove the registered alert callback."""
+        self._registered_alert_callback = None
+
     def set_recovery_callback(self, callback: Callable[[], Awaitable[None]] | None):
         """Set the callback to be invoked when the alert recovers.
 
@@ -200,6 +204,10 @@ class BaseCollector[T]:
             callback: Async callable or None.
         """
         self._registered_recovery_callback = callback
+
+    def remove_recovery_callback(self):
+        """Remove the registered recovery callback."""
+        self._registered_recovery_callback = None
 
     async def _loop(self):
         while True:
@@ -367,6 +375,20 @@ class BaseGroupCollector[T]:
             raise ValueError(msg)
         self._registered_alert_callbacks[instance] = callback
 
+    def remove_alert_callback(self, instance: T):
+        """Remove the registered alert callback for a specific instance.
+
+        Args:
+            instance: The instance to remove the callback for.
+
+        Raises:
+            ValueError: If the instance is not registered with this collector.
+        """
+        if instance not in self.instances:
+            msg = f"This GroupCollector does not have this instance {instance} registered"
+            raise ValueError(msg)
+        self._registered_alert_callbacks[instance] = None
+
     def set_recovery_callback(
         self, instance: T, callback: Callable[[], Awaitable[None]] | None
     ):
@@ -383,6 +405,20 @@ class BaseGroupCollector[T]:
             msg = f"This GroupCollector does not have this instance {instance} registered"
             raise ValueError(msg)
         self._registered_recovery_callbacks[instance] = callback
+
+    def remove_recovery_callback(self, instance: T):
+        """Remove the registered recovery callback for a specific instance.
+
+        Args:
+            instance: The instance to remove the callback for.
+
+        Raises:
+            ValueError: If the instance is not registered with this collector.
+        """
+        if instance not in self.instances:
+            msg = f"This GroupCollector does not have this instance {instance} registered"
+            raise ValueError(msg)
+        self._registered_recovery_callbacks[instance] = None
 
     async def _loop(self):
         while True:

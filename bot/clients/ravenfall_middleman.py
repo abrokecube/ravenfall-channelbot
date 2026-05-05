@@ -200,11 +200,11 @@ StreamMessageType = (
 )
 
 
-class ClientError(BaseException):
+class ClientError(Exception):
     """Exception raised for client-side errors."""
 
 
-class MiddlemanError(BaseException):
+class MiddlemanError(Exception):
     """Exception raised for middleman server errors."""
 
 

@@ -107,6 +107,9 @@ ignore = [
     "PLR0911",
     "ARG",
     "D205",
+    "EM101",
+    "TRY003",
+    "PLC0415",
 ]
 
 [tool.ruff.format]

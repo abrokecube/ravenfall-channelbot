@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Generic, Literal, NamedTuple, TypeVar, override
 
 import aiohttp
 import msgspec
@@ -41,33 +41,47 @@ type CollectorFunc = Callable[
 ]
 
 
-# Prometheus query response structs
-class InstantQueryResult(msgspec.Struct):
-    """Result from an instant Prometheus query."""
+class FloatValue(NamedTuple):
+    """Timestamped value from Prometheus."""
+
+    timestamp: float
+    value: float
+
+
+class Vector(msgspec.Struct):
+    """Vector value."""
 
     metric: dict[str, str]
-    value: list[float]
+    value: FloatValue
 
 
-class RangeQueryResult(msgspec.Struct):
-    """Result from a range Prometheus query."""
+class VectorResult(msgspec.Struct, tag_field="resultType", tag="vector"):
+    """Vector result."""
+
+    result: list[Vector]
+
+
+class Matrix(msgspec.Struct):
+    """Matrix value."""
 
     metric: dict[str, str]
-    values: list[list[float]]
+    values: list[FloatValue]
 
 
-class InstantQueryResponse(msgspec.Struct):
-    """Wrapper for instant query API responses."""
+class MatrixResult(msgspec.Struct, tag_field="resultType", tag="matrix"):
+    """Matrix result."""
 
-    status: str
-    data: dict[str, list[InstantQueryResult]]
+    result: list[Matrix]
 
 
-class RangeQueryResponse(msgspec.Struct):
-    """Wrapper for range query API responses."""
+T = TypeVar("T")
 
-    status: str
-    data: dict[str, list[RangeQueryResult]]
+
+class PrometheusResponse(msgspec.Struct, Generic[T]):  # noqa: UP046
+    """Response from Prometheus."""
+
+    status: Literal["success"]
+    data: T
 
 
 class PrometheusServiceConfig(BaseModel):
@@ -275,14 +289,27 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
 
     # Query functions for external Prometheus servers
     async def query(
-        self, query: str, server_id: str | None = None, server_url: str | None = None
-    ) -> InstantQueryResponse:
+        self,
+        query: str,
+        server_id: str | None = None,
+        server_url: str | None = None,
+        time: str | float | None = None,
+        timeout: str | None = None,
+        limit: int | None = None,
+        lookback_delta: str | float | None = None,
+        stats: str | None = None,
+    ):
         """Query an external Prometheus server.
 
         Args:
             query: The Prometheus query.
             server_id: The server ID from config.
             server_url: Override URL for the server.
+            time: Evaluation timestamp (rfc3339 or unix_timestamp). Optional.
+            timeout: Evaluation timeout (duration). Optional.
+            limit: Maximum number of returned series. Optional. 0 means disabled.
+            lookback_delta: Override lookback period (duration or float seconds). Optional.
+            stats: Include query statistics in response. Optional.
 
         Returns:
             The query result as a typed struct.
@@ -309,10 +336,25 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
             msg = "HTTP client not initialized"
             raise RuntimeError(msg)
 
-        response = await self._http_client.get(url, params={"query": query})
+        params: dict[str, str | int | float] = {"query": query}
+        if time is not None:
+            params["time"] = time
+        if timeout is not None:
+            params["timeout"] = timeout
+        if limit is not None:
+            params["limit"] = limit
+        if lookback_delta is not None:
+            params["lookback_delta"] = lookback_delta
+        if stats is not None:
+            params["stats"] = stats
+
+        response = await self._http_client.get(url, params=params)
+        text_data = await response.text()
         response.raise_for_status()
-        json_data = await response.json()  # pyright: ignore[reportAny]
-        return msgspec.convert(json_data, InstantQueryResponse)
+        response_data = msgspec.json.decode(
+            text_data, type=PrometheusResponse[VectorResult]
+        )
+        return response_data.data.result
 
     async def query_range(
         self,
@@ -321,7 +363,11 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
         step_s: int = 20,
         server_id: str | None = None,
         server_url: str | None = None,
-    ) -> RangeQueryResponse:
+        timeout: str | None = None,
+        limit: int | None = None,
+        lookback_delta: str | float | None = None,
+        stats: str | None = None,
+    ):
         """Query an external Prometheus server with a range.
 
         Args:
@@ -330,6 +376,10 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
             step_s: The step size in seconds.
             server_id: The server ID from config.
             server_url: Override URL for the server.
+            timeout: Evaluation timeout (duration). Optional.
+            limit: Maximum number of returned series. Optional. 0 means disabled.
+            lookback_delta: Override lookback period (duration or float seconds). Optional.
+            stats: Include query statistics in response. Optional.
 
         Returns:
             The query result as a typed struct.
@@ -355,14 +405,25 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
             msg = "HTTP client not initialized"
             raise RuntimeError(msg)
 
-        params = {
+        params: dict[str, str | int | float] = {
             "query": query,
             "start": time.time() - duration_s,
             "end": time.time(),
             "step": step_s,
         }
+        if timeout is not None:
+            params["timeout"] = timeout
+        if limit is not None:
+            params["limit"] = limit
+        if lookback_delta is not None:
+            params["lookback_delta"] = lookback_delta
+        if stats is not None:
+            params["stats"] = stats
 
         response = await self._http_client.get(url, params=params)
+        text_data = await response.text()
         response.raise_for_status()
-        json_data = await response.json()  # pyright: ignore[reportAny]
-        return msgspec.convert(json_data, RangeQueryResponse)
+        response_data = msgspec.json.decode(
+            text_data, type=PrometheusResponse[MatrixResult]
+        )
+        return response_data.data.result

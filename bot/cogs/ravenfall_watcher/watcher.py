@@ -49,6 +49,18 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
+class RestartCancelFailureError(Exception):
+    """Failed to cancel the active restart task."""
+
+
+class PausedError(Exception):
+    """Watcher is paused."""
+
+
+class NoRestartTaskError(Exception):
+    """There is no active restart task."""
+
+
 class RavenfallWatcher(EventReceiverMixin):
     """Watches a Ravenfall instance."""
 
@@ -88,6 +100,7 @@ class RavenfallWatcher(EventReceiverMixin):
         )
         self._block_next_restart_countdown_message_until: float = 0
         self._restart_reason_announced: bool = False
+        self._auto_restart_paused: bool = False
 
     async def start(self):
         """Start the watcher, including setting up the restart timeline if configured."""
@@ -105,14 +118,8 @@ class RavenfallWatcher(EventReceiverMixin):
             )
 
         self.collectors = [collectors.BuggedRaidCheck(self.ravenfall)]
-        for c in self.collectors:
-            c.set_alert_callback(partial(self._collector_alerting, c))
-            c.start()
-        for c in self.group_collectors:
-            c.set_alert_callback(
-                self.ravenfall,
-                partial(self._collector_alerting, c),
-            )
+        self._hook_collectors()
+        self._start_watcher_collectors()
 
         await self.auto_restart_timer.register_callback(
             0, self._auto_restart_callback, from_end=True
@@ -151,21 +158,17 @@ class RavenfallWatcher(EventReceiverMixin):
                 -self.config.restart_warning_times[0],
                 0,
                 self._start_restart_blocker,
-                None,
+                self._stop_restart_blocker,
             )
         else:
             __ = self.restart_timeline.add_event(
                 -self.config.restart_unblock_min_seconds,
                 0,
                 self._start_restart_blocker,
-                None,
+                self._stop_restart_blocker,
             )
 
         self.inject_event_manager(self.event_manager)
-        if self.ravenfall.is_online:
-            fire_and_forget(self.on_online())
-        else:
-            fire_and_forget(self.restart_ravenfall())
 
         channel_serv = self.global_ctx.get_service(RavenfallChannelService)
         if not channel_serv:
@@ -175,10 +178,15 @@ class RavenfallWatcher(EventReceiverMixin):
                 self._on_ravenfall_chat_message, self.ravenfall.twitch_login
             )
 
+        if self.ravenfall.is_online:
+            await self.on_online()
+        else:
+            await self.restart_ravenfall()
+
     async def stop(self):
         """Stop the watcher and all its collectors."""
-        for c in self.collectors:
-            c.stop()
+        self._unhook_collectors()
+        self._stop_watcher_collectors()
         await self.auto_restart_timer.stop()
         await self.restart_timeline.stop()
         channel_serv = self.global_ctx.get_service(RavenfallChannelService)
@@ -187,11 +195,36 @@ class RavenfallWatcher(EventReceiverMixin):
                 self._on_ravenfall_chat_message
             )
 
+    def _start_watcher_collectors(self):
+        for c in self.collectors:
+            c.start()
+
+    def _stop_watcher_collectors(self):
+        for c in self.collectors:
+            c.stop()
+
+    def _hook_collectors(self):
+        for c in self.collectors:
+            c.set_alert_callback(partial(self._collector_alerting, c))
+        for c in self.group_collectors:
+            c.set_alert_callback(
+                self.ravenfall,
+                partial(self._collector_alerting, c),
+            )
+
+    def _unhook_collectors(self):
+        for c in self.collectors:
+            c.remove_alert_callback()
+        for c in self.group_collectors:
+            c.remove_alert_callback(self.ravenfall)
+
     async def _collector_alerting(
         self,
         collector: BaseCollector[RavenfallInstance]
         | BaseGroupCollector[RavenfallInstance],
     ):
+        if self._auto_restart_paused:
+            return
         countdown_time = self.config.restart_unblock_min_seconds + 10
         if self.config.restart_warning_times:
             countdown_time = max(
@@ -208,6 +241,8 @@ class RavenfallWatcher(EventReceiverMixin):
         await self.queue_restart(countdown_time, alert_reason or "")
 
     async def _auto_restart_callback(self):
+        if self._auto_restart_paused:
+            return
         countdown_time = self.config.restart_unblock_min_seconds + 10
         if self.config.restart_warning_times:
             countdown_time = max(
@@ -219,6 +254,9 @@ class RavenfallWatcher(EventReceiverMixin):
 
     async def queue_restart(self, countdown_seconds: float, reason: str = ""):
         """Queue a ravenfall restart with the specified countdown."""
+        if countdown_seconds < 0:
+            msg = "Countdown must be positive."
+            raise ValueError(msg)
         if self.ravenfall_restart_lock.locked():
             LOGGER.info(
                 f"[{self.ravenfall.channel_name}] "
@@ -233,12 +271,76 @@ class RavenfallWatcher(EventReceiverMixin):
         if self.restart_timeline.get_is_playing():
             if self.restart_reason != reason:
                 self._restart_reason_announced = False
-            if -countdown_seconds > self.restart_timeline.get_current_time():
-                await self.restart_timeline.seek(-countdown_seconds)
+            current_time = self.restart_timeline.get_current_time()
+            if -countdown_seconds > current_time:
+                await self.advance_restart((-current_time) - countdown_seconds)
         else:
             self._restart_reason_announced = False
             await self.restart_timeline.start(-countdown_seconds, 0)
         self.restart_reason = reason
+
+    async def postpone_restart(self, seconds: float):
+        """Postpone a running restart task."""
+        if seconds < 0:
+            msg = "Seconds must be positive."
+            raise ValueError(msg)
+        if self.ravenfall_restart_lock.locked():
+            raise RestartCancelFailureError
+        if not self.restart_timeline.get_is_playing():
+            raise NoRestartTaskError
+
+        current_time_left = -self.restart_timeline.get_current_time()
+        if (
+            self.config.restart_warning_times
+            and current_time_left + seconds > self.config.restart_warning_times[0]
+        ):
+            self._restart_reason_announced = False
+        await self.restart_timeline.seek(-current_time_left - seconds)
+
+    async def advance_restart(self, seconds: float):
+        """Advance a running restart task."""
+        if seconds < 0:
+            msg = "Seconds must be positive."
+            raise ValueError(msg)
+        if self.ravenfall_restart_lock.locked():
+            raise RestartCancelFailureError
+        if not self.restart_timeline.get_is_playing():
+            raise NoRestartTaskError
+        current_time = self.restart_timeline.get_current_time()
+        await self.restart_timeline.seek(current_time + seconds)
+
+    async def cancel_restart(self):
+        """Stops an active restart."""
+        if self.ravenfall_restart_lock.locked():
+            raise RestartCancelFailureError
+        if not self.restart_timeline.get_is_playing():
+            raise NoRestartTaskError
+        await self._stop_restart_blocker(None)
+        await self.restart_timeline.stop()
+        self.clear_alerts()
+
+    async def pause_auto_restarts(self):
+        """Stop the watcher from auto-restarting."""
+        if self.ravenfall_restart_lock.locked():
+            raise RestartCancelFailureError
+        self._auto_restart_paused = True
+        self._unhook_collectors()
+        self.clear_alerts()
+        self._stop_watcher_collectors()
+        if self.restart_timeline.get_is_playing():
+            await self.cancel_restart()
+        await self.auto_restart_timer.stop()
+
+    async def resume_auto_restarts(self):
+        """Enable auto-restarts again."""
+        self._auto_restart_paused = False
+        self._hook_collectors()
+        self._start_watcher_collectors()
+        await self._refresh_auto_restart_timer()
+
+    def get_restarts_are_paused(self):
+        """Auto-restarts are paused."""
+        return self._auto_restart_paused
 
     async def _block_restart(self):
         LOGGER.info(f"[{self.ravenfall.channel_name}] Blocking restart timeline")
@@ -454,8 +556,6 @@ class RavenfallWatcher(EventReceiverMixin):
                         break
                     await asyncio.sleep(10)
 
-                self.clear_alerts()
-
                 def predicate(x: BaseEvent):
                     if not isinstance(x, RavenfallEvent):
                         return False
@@ -527,6 +627,11 @@ class RavenfallWatcher(EventReceiverMixin):
     async def _check_ravenbot(self, event: MessageEvent):
         rf_event_src = self.ravenfall_service.event_source
         if (
+            rf_event_src.middleman_message_processor is None
+            and rf_event_src.middleman_client is None
+        ):
+            return
+        if (
             rf_event_src.middleman_message_processor is not None
             and rf_event_src.middleman_message_processor.connected_client_count == 0
         ):
@@ -597,6 +702,7 @@ class RavenfallWatcher(EventReceiverMixin):
                             "RavenBot.exe",
                             config.sandboxie_box_name,
                             self.watcher_cog.config.ravenbot_folder,
+                            wait=False,
                         )
                 except TimeoutError:
                     LOGGER.warning(
@@ -608,24 +714,9 @@ class RavenfallWatcher(EventReceiverMixin):
                     break
                 await asyncio.sleep(10)
 
-    @on_match(RavenfallOfflineEvent)
-    async def on_offline(
-        self, _g_ctx: GlobalContext, event: RavenfallOfflineEvent, _match: object
-    ):
-        """Runs when Ravenfall goes offline."""
-        if self.ravenfall_restart_lock.locked():
+    async def _refresh_auto_restart_timer(self):
+        if self._auto_restart_paused:
             return
-        if event.ravenfall == self.ravenfall:
-            await self.queue_restart(1, "Ravenfall is offline")
-
-    @on_match(RavenfallOnlineEvent)
-    async def on_online(
-        self,
-        _g_ctx: GlobalContext | None = None,
-        _event: RavenfallOnlineEvent | None = None,
-        _match: object | None = None,
-    ):
-        """Runs when Ravenfall goes online."""
         if self.config.auto_restart_period_seconds:
             uptime = None
             try:
@@ -657,6 +748,30 @@ class RavenfallWatcher(EventReceiverMixin):
                 "for scheduled auto-restart."
             )
             await self.auto_restart_timer.start(time_remaining)
+
+    @on_match(RavenfallOfflineEvent)
+    async def on_offline(
+        self, _g_ctx: GlobalContext, event: RavenfallOfflineEvent, _match: object
+    ):
+        """Runs when Ravenfall goes offline."""
+        if self._auto_restart_paused:
+            return
+        if self.ravenfall_restart_lock.locked():
+            return
+        if event.ravenfall == self.ravenfall:
+            await self.queue_restart(1, "Ravenfall is offline")
+
+    @on_match(RavenfallOnlineEvent)
+    async def on_online(
+        self,
+        _g_ctx: GlobalContext | None = None,
+        _event: RavenfallOnlineEvent | None = None,
+        _match: object | None = None,
+    ):
+        """Runs when Ravenfall goes online."""
+        if self._auto_restart_paused:
+            return
+        await self._refresh_auto_restart_timer()
 
     def add_event_to_restart_timeline(
         self,

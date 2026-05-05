@@ -145,13 +145,6 @@ class TwitchService(BaseMessageService):
         if reply_id is not None:
             max_len -= len(reply_username) + 2
 
-        input_text_len = len(text.encode("utf-16-le")) / 2
-        if input_text_len > max_len:
-            msg = (
-                f"Text must be below {max_len} characters. "
-                f"(Text is {input_text_len} chars long)"
-            )
-            raise ValueError(msg)
         if channel_id not in self.event_source.connected_chats:
             msg = f"Not connected to chat room of {channel_id}"
             raise ValueError(msg)

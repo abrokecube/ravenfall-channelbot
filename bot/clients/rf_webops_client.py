@@ -3,7 +3,7 @@ from typing import Any, cast
 import aiohttp
 
 
-class WebOpsException(BaseException):
+class WebOpsException(Exception):
     """WebOps Exception."""
 
 

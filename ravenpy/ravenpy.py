@@ -1133,11 +1133,11 @@ class UnexpectedStatusCodeError(Exception):
     """Raised when the RavenNest API returns an unexpected status code."""
 
 
-class FetchError(BaseException):
+class FetchError(Exception):
     """Error occurred while fetching."""
 
 
-class NotAuthenticatedError(BaseException):
+class NotAuthenticatedError(Exception):
     """Not authenticated!"""
 
 

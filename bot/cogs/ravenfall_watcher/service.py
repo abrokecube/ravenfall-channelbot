@@ -18,8 +18,8 @@ class RavenfallWatcherService(BaseService):
 
     def get_watcher(self, channel_name: str) -> RavenfallWatcher:
         """Get the watcher for a given channel name."""
-        for watcher in self.watcher_cog.watchers:
-            if watcher.ravenfall.channel_name == channel_name:
-                return watcher
-        msg = f"No watcher found for channel {channel_name}."
-        raise ValueError(msg)
+        result = self.watcher_cog.channel_name_to_watcher.get(channel_name.lower())
+        if not result:
+            msg = f"No watcher found for channel {channel_name}."
+            raise ValueError(msg)
+        return result

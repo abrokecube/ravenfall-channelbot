@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING, NamedTuple, override
 
 from pydantic import BaseModel
 
-from bot.core.components import BaseService
+from bot.core.components import BaseService, GlobalContext
 from bot.core.decorators import on_match
 from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent
-from bot.integrations.ravenfall import RavenfallService
 from bot.integrations.twitch.consts import EVENT_SOURCE_TWITCH
 from bot.mixins.event_receiver import EventReceiverMixin
 from bot.services.config_service import ConfigService
@@ -19,7 +18,7 @@ from bot.services.config_service import ConfigService
 if TYPE_CHECKING:
     from collections.abc import Collection
 
-    from bot.core.components import EventManager, GlobalContext
+    from bot.core.components import EventManager
     from bot.integrations.ravenfall import RavenfallInstance
 
 LOGGER = logging.getLogger(__name__)
@@ -84,6 +83,8 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
             ConfigService
         )
         __ = await self.global_context.wait_for_service(GlobalMessengerService)
+        from bot.integrations.ravenfall import RavenfallService
+
         ravenfall_service: RavenfallService = await self.global_context.wait_for_service(
             RavenfallService
         )
@@ -197,6 +198,8 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         ravenfall_channel_names: str | Collection[str] | None = None,
     ):
         """Register a callback for message events."""
+        from bot.integrations.ravenfall import RavenfallService
+
         ravenfall_service = self.global_context.require_service(RavenfallService)
 
         self.message_event_callbacks.add(callback)
@@ -219,16 +222,25 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         self.message_event_callbacks.discard(callback)
         __ = self.callback_settings.pop(callback, None)
 
-    @on_match(MessageEvent)
-    async def _on_message_event(self, event: MessageEvent):
+    def get_matching_instance_for_message_event(self, event: MessageEvent):
+        """Get the Ravenfall instance associated with the message event's channel."""
         if event.room_id not in self._channel_id_matcher:
-            return
+            return None
         possible_instances = self._channel_id_matcher[event.room_id]
         matching_instance: RavenfallInstance | None = None
         for item in possible_instances:
             if item.platform == event.platform:
                 matching_instance = item.ravenfall
                 break
+        if not matching_instance:
+            return None
+        return matching_instance
+
+    @on_match(MessageEvent)
+    async def _on_message_event(
+        self, _g_ctx: GlobalContext, event: MessageEvent, _match: object
+    ):
+        matching_instance = self.get_matching_instance_for_message_event(event)
         if not matching_instance:
             return
         tasks: list[Awaitable[None]] = []

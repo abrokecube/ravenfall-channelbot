@@ -7,24 +7,36 @@ from typing import TYPE_CHECKING, override
 
 from bot.cogs.ravenfall_watcher.base_classes import RavenfallWatcherGroupCollector
 from bot.core.components import Cog
-from bot.integrations.commands import CommandError, CommandEvent, command  # noqa: TC001
+from bot.integrations.chat_messages import UserRole, checks
+from bot.integrations.commands import (
+    CommandError,
+    CommandEvent,  # noqa: TC001
+    MinPermissionLevel,
+    RangeFloat,
+    command,
+    parameter,
+)
 from bot.integrations.process_manager import ProcessManagerService
-from bot.integrations.ravenfall import RavenfallService
+from bot.integrations.ravenfall import (
+    RavenfallInstance,  # noqa: TC001
+    RavenfallInstanceConverter,
+    RavenfallService,
+)
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.services.config_service import ConfigService
 from bot.services.event_waiter import EventWaiterService
 from bot.services.ravenfall_channels import RavenfallChannelService
 from bot.services.ravenfall_multichat import RavenfallMultichatService
+from utils.format_time import TimeSize, format_seconds
 from utils.routines import routine
 
 from . import collectors
 from .config import WatcherConfig
 from .service import RavenfallWatcherService
-from .watcher import RavenfallWatcher
+from .watcher import NoRestartTaskError, RavenfallWatcher, RestartCancelFailureError
 
 if TYPE_CHECKING:
     from bot.core.components import EventManager
-    from bot.integrations.ravenfall import RavenfallInstance
 
     from .base_classes import BaseGroupCollector
 
@@ -37,6 +49,8 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
     def __init__(self, event_manager: EventManager) -> None:
         super().__init__(event_manager)
         self.watchers: list[RavenfallWatcher] = []
+        self.ravenfall_instance_to_watcher: dict[RavenfallInstance, RavenfallWatcher] = {}
+        self.channel_name_to_watcher: dict[str, RavenfallWatcher] = {}
         self.alerting_collectors: list[BaseGroupCollector[RavenfallInstance]] = []
         self.non_alerting_collectors: list[BaseGroupCollector[RavenfallInstance]] = []
         self.config: WatcherConfig = WatcherConfig(
@@ -84,6 +98,8 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             )
             await watcher.start()
             self.watchers.append(watcher)
+            self.ravenfall_instance_to_watcher[ravenfall] = watcher
+            self.channel_name_to_watcher[ravenfall.channel_name.lower()] = watcher
 
         self.alerting_collectors = [
             collectors.MultiplierCheck(
@@ -93,6 +109,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             collectors.RamUsageCheck(
                 ravenfall_instances, process_manager_service, self, self.watchers
             ),
+            collectors.RavenfallFrozenCheck(ravenfall_instances, self.global_context),
         ]
         self.non_alerting_collectors = [
             collectors.DesyncCheck(
@@ -147,49 +164,188 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             )
             await asyncio.sleep(120)
 
-    # @command()
-    # async def rfrestartstatus(self, ctx: CommandEvent, instance_name: str):
-    #     """Check if a ravenfall instance is currently in the restart process."""
-    #     instance_name = instance_name.lower()
-    #     for instance in self.watchers:
-    #         if instance.config.channel_name.lower() == instance_name:
-    #             if instance.ravenfall_restart_lock.locked():
-    #                 await ctx.reply(f"{instance_name} is currently restarting.")
-    #             else:
-    #                 await ctx.reply(f"{instance_name} is not restarting.")
-    #             break
-    #     else:
-    #         msg = "Instance not found."
-    #         raise CommandError(msg)
+    def _get_watcher_or_error(self, instance: RavenfallInstance):
+        result = self.ravenfall_instance_to_watcher.get(instance)
+        if not result:
+            msg = "This Ravenfall instance is not being monitored."
+            raise CommandError(msg)
+        return result
 
-    # @command()
-    # async def test_restart_proc(self, ctx: CommandEvent, instance_name: str):
-    #     """Restart a ravenfall instance."""
-    #     instance_name = instance_name.lower()
-    #     for instance in self.watchers:
-    #         if instance.config.channel_name.lower() == instance_name:
-    #             await ctx.reply(f"Restarting {instance_name}...")
-    #             await instance.restart_ravenfall()
-    #             await ctx.reply("Restart complete.")
-    #             break
-    #     else:
-    #         msg = "Instance not found."
-    #         raise CommandError(msg)
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    # @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command()
+    async def rfrestartstatus(self, ctx: CommandEvent, *, instance: RavenfallInstance):
+        """Get the auto-restart status of Ravenfall."""
+        watcher = self._get_watcher_or_error(instance)
+        if watcher.ravenfall_restart_lock.locked():
+            await ctx.reply("Ravenfall is currently restarting.")
+            return
+        if watcher.restart_timeline.get_is_playing():
+            seconds_left = watcher.restart_timeline.get_current_time()
+            seconds_left_formatted = format_seconds(
+                -seconds_left, TimeSize.LONG, 2, False
+            )
+            restart_reason = watcher.restart_reason.rstrip(".")
+            reply = (
+                f"Ravenfall will restart in {seconds_left_formatted} "
+                f"with reason: {restart_reason}."
+            )
+            await ctx.reply(reply)
+            return
+        if watcher.auto_restart_timer.get_is_running():
+            seconds_left = await watcher.auto_restart_timer.get_time_remaining()
+            if watcher.config.restart_warning_times:
+                seconds_left += watcher.config.restart_warning_times[0]
+            seconds_left_formatted = format_seconds(
+                -seconds_left, TimeSize.LONG, 2, False
+            )
+            reply = f"Ravenfall is scheduled to restart in {seconds_left_formatted}."
+            await ctx.reply(reply)
+            return
+        await ctx.reply("No active restart task.")
 
-    # @command()
-    # async def test_kill_proc(self, ctx: CommandEvent, instance_name: str):
-    #     """Kill a ravenfall instance."""
-    #     instance_name = instance_name.lower()
-    #     for instance in self.watchers:
-    #         if instance.config.channel_name.lower() == instance_name:
-    #             await ctx.reply(f"Kill {instance_name}...")
-    #             result = await instance.kill_ravenfall()
-    #             if result:
-    #                 await ctx.reply("Done.")
-    #             else:
-    #                 msg = "Kill failed."
-    #                 raise CommandError(msg)
-    #             break
-    #     else:
-    #         msg = "Instance not found."
-    #         raise CommandError(msg)
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("seconds", converter=RangeFloat(0, None))
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command()
+    async def rfrestart(
+        self,
+        ctx: CommandEvent,
+        seconds: float = 30,
+        *,
+        reason: str = "Queued restart.",
+        force: bool = False,
+        instance: RavenfallInstance,
+    ):
+        """Queue a restart of Ravenfall."""
+        watcher = self._get_watcher_or_error(instance)
+        if force:
+            await watcher.restart_ravenfall(reason=reason)
+        if (
+            watcher.restart_timeline.get_is_playing()
+            and -watcher.restart_timeline.get_current_time() < seconds
+        ):
+            await ctx.reply("A restart has already been queued.")
+            return
+        if watcher.ravenfall_restart_lock.locked():
+            raise CommandError("Ravenfall is currently restarting.")
+        await watcher.queue_restart(seconds, reason)
+        await ctx.reply("Restart queued.")
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command("rfrestart cancel")
+    async def rfrestart_cancel(
+        self,
+        ctx: CommandEvent,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Cancel an active restart task."""
+        watcher = self._get_watcher_or_error(instance)
+        try:
+            await watcher.cancel_restart()
+        except RestartCancelFailureError:
+            raise CommandError("Ravenfall is currently restarting.") from None
+        except NoRestartTaskError:
+            raise CommandError("There is no active restart task.") from None
+        await ctx.reply("Restart canceled.")
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("seconds", converter=RangeFloat(0, None))
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command("rfrestart postpone")
+    async def rfrestart_postpone(
+        self,
+        ctx: CommandEvent,
+        seconds: float = 30,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Postpone a restart task."""
+        watcher = self._get_watcher_or_error(instance)
+        try:
+            await watcher.postpone_restart(seconds)
+        except RestartCancelFailureError:
+            raise CommandError("Ravenfall is currently restarting.") from None
+        except NoRestartTaskError:
+            raise CommandError("There is no active restart task.") from None
+        await ctx.reply("Restart postpones.")
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command("rfrestart auto stop")
+    async def rfrestart_stop(
+        self,
+        ctx: CommandEvent,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Stop auto-restarts from occurring."""
+        watcher = self._get_watcher_or_error(instance)
+        if watcher.ravenfall_restart_lock.locked():
+            raise CommandError("Ravenfall is currently restarting.")
+        if watcher.get_restarts_are_paused():
+            raise CommandError("Auto-restarts are already paused")
+        await watcher.pause_auto_restarts()
+        await ctx.reply("Auto restarts are now paused.")
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command("rfrestart auto resume")
+    async def rfrestart_resume(
+        self,
+        ctx: CommandEvent,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Resume auto-restarts."""
+        watcher = self._get_watcher_or_error(instance)
+        if not watcher.get_restarts_are_paused():
+            raise CommandError("Auto-restarts are already active.")
+        await watcher.resume_auto_restarts()
+        await ctx.reply("Auto restarts have been resumed.")
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command("rfrestart bot")
+    async def rfrestart_bot(
+        self,
+        ctx: CommandEvent,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Restart the instance's associated RavenBot."""
+        watcher = self._get_watcher_or_error(instance)
+        if watcher.ravenbot_restart_lock.locked():
+            await ctx.reply("A restart is already underway.")
+            return
+        await watcher.restart_ravenbot()

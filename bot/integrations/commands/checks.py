@@ -1,10 +1,14 @@
-from typing import override
+from __future__ import annotations
 
-from bot.core.components import BaseEvent, GlobalContext
+from typing import TYPE_CHECKING, override
+
 from bot.integrations.chat_messages import BaseCheck
-from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.commands.events import CommandEvent
+
+if TYPE_CHECKING:
+    from bot.core.components import BaseEvent, GlobalContext
+    from bot.integrations.chat_messages.enums import UserRole
 
 
 class HasRole(BaseCheck):

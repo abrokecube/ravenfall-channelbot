@@ -117,6 +117,9 @@ class CommandArgs:
         self.grouped_args = grouped
 
 
+_EMPTY = object()
+
+
 @dataclass
 class Parameter:
     """Command parameter definition."""

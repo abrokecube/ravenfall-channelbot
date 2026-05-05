@@ -136,10 +136,14 @@ class ProcessManagerService(BaseService, ConfigSubscriberMixin):
         startup_command: str,
         box_name: str | None = None,
         working_dir: str | None = None,
+        *,
+        wait: bool = True,
     ) -> ShellResult:
         """Spawns a process, natively or in Sandboxie."""
         cmd_escaped = startup_command.replace('"', '\\"')
-
+        wait_str: str = ""
+        if wait:
+            wait_str = "/wait "
         # Prepend cd command if working_dir is provided
         if working_dir:
             cmd_escaped = f'cd /d "{working_dir}" && {cmd_escaped}'
@@ -147,7 +151,7 @@ class ProcessManagerService(BaseService, ConfigSubscriberMixin):
         if box_name:
             shellcmd = (
                 f'"{self.sandboxie_start_path}" '
-                f'/box:{box_name} /silent /wait cmd /c "{cmd_escaped}"'
+                f'/box:{box_name} /silent {wait_str}cmd /c "{cmd_escaped}"'
             )
             return await runshell(shellcmd)
 

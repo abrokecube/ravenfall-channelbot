@@ -26,7 +26,7 @@ class RavenfallService(BaseService):
     ):
         """Get a Ravenfall instance by channel name or channel id."""
         if channel_name is not None:
-            return self.event_source.channel_name_to_instance.get(channel_name)
+            return self.event_source.channel_name_to_instance.get(channel_name.lower())
         if channel_id is not None:
             return self.event_source.channel_id_to_instance.get(channel_id)
         return None

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .converters import RavenfallInstanceConverter as RavenfallInstanceConverter
+from .converters import RFItemConverter as RFItemConverter
 from .enums import DungeonEndReason as DungeonEndReason
 from .enums import DungeonStage as DungeonStage
 from .enums import DungeonStartReason as DungeonStartReason
