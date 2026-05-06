@@ -127,7 +127,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
                 c.inject_watcher_service(watcher_service)
             c.start()
         await self.global_context.register_service(watcher_service)
-        await self.update_boosts_routine.start()
+        __ = self.update_boosts_routine.start()
 
     @override
     async def teardown(self) -> None:

@@ -542,6 +542,11 @@ class EventManager:
 
     async def teardown(self) -> None:
         """Stop and remove all loaded components."""
+        # Cancel all background tasks spawned by fire_and_forget
+        for task in background_tasks:
+            if not task.done():
+                __ = task.cancel()
+
         tasks: list[Coroutine[None, None, None]] = []
         for cog in list(self.cogs):
             tasks.append(self.remove_cog(cog))  # noqa: PERF401
