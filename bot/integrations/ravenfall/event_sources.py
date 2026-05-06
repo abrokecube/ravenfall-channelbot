@@ -893,7 +893,7 @@ class RavenfallEventSource(BaseEventSource):
     @override
     async def setup(self, event_manager: EventManager) -> None:
         config_service = await self.global_context.wait_for_service(ConfigService)
-        config = config_service.get_table("integrations.ravenfall", RavenfallConfig)
+        config = config_service.get_table(RavenfallConfig)
         self.ravenfall_config = config.instances
         self.ravenfall_instances = [
             RavenfallInstance(x, self) for x in self.ravenfall_config

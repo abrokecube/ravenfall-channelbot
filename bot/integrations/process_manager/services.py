@@ -5,20 +5,24 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import NamedTuple, override
+from typing import TYPE_CHECKING, ClassVar, NamedTuple, override
 
 import psutil
-from pydantic import BaseModel
 
 from bot.core.components import BaseService
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
+
+if TYPE_CHECKING:
+    from typing import ClassVar
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ProcessServiceConfig(BaseModel):
+class ProcessServiceConfig(ConfigModel):
     """Process service config."""
+
+    config_table_name: ClassVar[str | None] = "integrations.process_manager"
 
     sandboxie_user_folder: str = f"C:\\Sandbox\\{os.getlogin()}"
     sandboxie_start_exe_path: str = "C:\\PROGRAM FILES\\SANDBOXIE-PLUS\\Start.exe"
@@ -85,9 +89,7 @@ class ProcessManagerService(BaseService, ConfigSubscriberMixin):
     async def setup(self) -> None:
         config_service = await self.global_context.wait_for_service(ConfigService)
         self.inject_config_service(config_service)
-        config = self.subscribe_config(
-            "integrations.process_manager", ProcessServiceConfig
-        )
+        config = self.subscribe_config(ProcessServiceConfig)
         self._process_config(config)
 
     @override

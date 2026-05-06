@@ -1,8 +1,9 @@
-from __future__ import annotations
+from typing import ClassVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bot.clients import ravenfall_query as rq
+from bot.services.config_service import ConfigModel
 
 from . import enums
 
@@ -41,16 +42,6 @@ class Dungeon(rq.Dungeon):
     stage: enums.DungeonStage = enums.DungeonStage.NONE
 
 
-class RavenfallConfig(BaseModel):
-    """Configuration model for Ravenfall integration."""
-
-    username: str
-    password: str
-    middleman_base_url: str | None = None
-    ravenfall_message_definitions_path: str = "./data/definitions.yaml"
-    instances: list[RavenfallInstanceConfig] = []
-
-
 class RavenfallInstanceConfig(BaseModel):
     """Configuration model for a Ravenfall instance."""
 
@@ -58,3 +49,15 @@ class RavenfallInstanceConfig(BaseModel):
     twitch_login: str
     query_server_base_url: str
     middleman_connection_id: str | None = None
+
+
+class RavenfallConfig(ConfigModel):
+    """Configuration model for Ravenfall integration."""
+
+    config_table_name: ClassVar[str | None] = "integrations.ravenfall"
+
+    username: str
+    password: str
+    middleman_base_url: str | None = None
+    ravenfall_message_definitions_path: str = "./data/definitions.yaml"
+    instances: list[RavenfallInstanceConfig] = Field(default_factory=list)

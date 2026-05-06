@@ -4,11 +4,11 @@ import asyncio
 import contextlib
 import functools
 import logging
-from typing import TYPE_CHECKING, Any, cast, overload, override
+from typing import TYPE_CHECKING, Any, ClassVar, cast, overload, override
 
 from bidict import bidict
 from colorama import Back, Fore
-from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy import select
 from twitchAPI import helper
 from twitchAPI.chat import Chat
@@ -28,7 +28,7 @@ from bot.db.service import DatabaseService
 from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailure
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 
 from . import MessageRateMode, events
 from .enums import (
@@ -65,13 +65,15 @@ def print_to_console(msg: str):
     )
 
 
-class TwitchConfig(BaseModel):
+class TwitchConfig(ConfigModel):
     """Configuration for Twitch integration."""
+
+    config_table_name: ClassVar[str | None] = "integrations.twitch"
 
     app_id: str
     app_secret: str
     bot_user_id: str
-    bot_admin_uids: set[str] = set()
+    bot_admin_uids: set[str] = Field(default_factory=set)
 
 
 class TwitchEventSub:
@@ -467,8 +469,8 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         config = await self.global_context.wait_for_service(ConfigService)
         self.inject_config_service(config)
 
-        twitch_config = config.get_table("integrations.twitch", TwitchConfig)
-        self.subscribe_config("integrations.twitch", TwitchConfig)
+        twitch_config = config.get_table(TwitchConfig)
+        __ = self.subscribe_config(TwitchConfig)
 
         self.app_id = twitch_config.app_id
         self.app_secret = twitch_config.app_secret

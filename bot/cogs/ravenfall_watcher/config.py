@@ -1,7 +1,14 @@
-from pydantic import BaseModel, field_validator
+from typing import TYPE_CHECKING, ClassVar
+
+from pydantic import Field, field_validator
+
+from bot.services.config_service import ConfigModel
+
+if TYPE_CHECKING:
+    pass
 
 
-class InstanceConfig(BaseModel):
+class InstanceConfig(ConfigModel):
     """Ravenfall instance config.
 
     'channel_name' maps to 'twitch_login' on the ravenfall config
@@ -11,7 +18,7 @@ class InstanceConfig(BaseModel):
     sandboxie_box_name: str | None = None
     start_command: str
     auto_restart_period_seconds: float | None = None
-    restart_warning_times: list[float] = [120, 30]
+    restart_warning_times: list[float] = Field(default_factory=lambda: [120, 30])
     restart_unblock_min_seconds: float = 45
     restart_timeout_seconds: float = 120
     message_on_restart_timeout: str = "@abrokecube"
@@ -20,8 +27,10 @@ class InstanceConfig(BaseModel):
     ravenbot_channel_id: str | None = None
 
 
-class WatcherConfig(BaseModel):
+class WatcherConfig(ConfigModel):
     """Ravenfall watcher cog config."""
+
+    config_table_name: ClassVar[str | None] = "cogs.ravenfall_watcher"
 
     instances: list[InstanceConfig]
     ravenfall_folder: str

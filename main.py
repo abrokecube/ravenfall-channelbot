@@ -3,10 +3,9 @@ import logging
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, override
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, override
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
 
 from bot.cogs.bot import BotStuffCog
 from bot.cogs.example import ExampleCog
@@ -22,10 +21,10 @@ from bot.integrations.chat_messages.event_processors import filter_message_event
 from bot.integrations.commands import CommandDispatcher
 from bot.integrations.process_manager import ProcessEventSource
 from bot.integrations.ravenfall.event_sources import RavenfallEventSource
-from bot.integrations.twitch import EVENT_SOURCE_TWITCH, EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
+from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.event_waiter import EventWaiterService
 from bot.services.prometheus_service import PrometheusService
 from bot.services.ravenfall_channels import RavenfallChannelService
@@ -43,8 +42,10 @@ with Path("pid").open("w") as f:
     _ = f.write(str(os.getpid()))
 
 
-class BotConfig(BaseModel):
+class BotConfig(ConfigModel):
     """Top-level bot config."""
+
+    config_table_name: ClassVar[str | None] = "bot"
 
     log_level: Literal[
         "debug",
@@ -59,7 +60,7 @@ class BotConfig(BaseModel):
 
 
 config_service = ConfigService("config.toml")
-bot_config = config_service.get_table("bot", BotConfig)
+bot_config = config_service.get_table(BotConfig)
 
 logging_level_strs = {
     "debug": logging.DEBUG,

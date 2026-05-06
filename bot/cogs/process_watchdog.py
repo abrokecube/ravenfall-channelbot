@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, ClassVar, override
 
-from pydantic import BaseModel
+from pydantic import Field
 
 from bot.clients.process_watchdog_client import ProcessWatcherClient, WatchdogClientError
 from bot.core.components import Cog
@@ -16,16 +16,18 @@ from bot.integrations.commands import (  # noqa: TC001
     parameter,
 )
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 
 if TYPE_CHECKING:
     from bot.core.components import EventManager
 
 
-class WatchdogCogSettings(BaseModel):
+class WatchdogCogSettings(ConfigModel):
     """Cog config."""
 
-    watcher_urls: list[str] = ["http://localhost:8110"]
+    config_table_name: ClassVar[str | None] = "cogs.watchdog"
+
+    watcher_urls: list[str] = Field(default_factory=lambda: ["http://localhost:8110"])
 
 
 class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
@@ -39,8 +41,8 @@ class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
     async def setup(self) -> None:
         config_service = await self.global_context.wait_for_service(ConfigService)
         self.inject_config_service(config_service)
-        config = config_service.get_table("cogs.watchdog", WatchdogCogSettings)
-        self.subscribe_config("cogs.watchdog", WatchdogCogSettings)
+        config = config_service.get_table(WatchdogCogSettings)
+        __ = self.subscribe_config(WatchdogCogSettings)
         self.watchers = [ProcessWatcherClient(base_url=x) for x in config.watcher_urls]
 
     @override

@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Any, NamedTuple, cast, override
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, cast, override
 
 import aiohttp
 from fastapi import HTTPException
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from bot.core.components import BaseService
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.mixins.fastapi_routes import FastAPIRoutesMixin, api_route
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.web_service import APIServer
 
 if TYPE_CHECKING:
@@ -68,7 +68,7 @@ class RemoteCallRequestBody(Struct):
     kwargs: dict[str, Any] = {}  # pyright: ignore[reportExplicitAny]
 
 
-class RemoteBotConfig(BaseModel):
+class RemoteBotConfig(ConfigModel):
     """Configuration for a remote bot instance.
 
     Attributes:
@@ -77,6 +77,8 @@ class RemoteBotConfig(BaseModel):
         api_key: Optional API key for authentication
 
     """
+
+    config_table_name: ClassVar[str | None] = "remote_bots"
 
     name: str
     base_url: str = Field(..., min_length=1)
@@ -141,7 +143,7 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
         self.inject_config_service(config_service)
 
         try:
-            self.subscribe_config("remote_bots", list[RemoteBotConfig])
+            self.subscribe_config(list[RemoteBotConfig])
         except KeyError:
             LOGGER.debug("No remote_bots configuration found")
 

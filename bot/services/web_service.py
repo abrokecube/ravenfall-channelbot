@@ -5,16 +5,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from enum import StrEnum
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, ClassVar, override
 
 import uvicorn
 from fastapi import FastAPI
-from pydantic import BaseModel
 from uvicorn.server import Server
 
 from bot.core.components import BaseService
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 
 if TYPE_CHECKING:
     from fastapi import APIRouter
@@ -30,8 +29,10 @@ class APIServer(StrEnum):
     PRIVATE = "private"
 
 
-class ServerConfigModel(BaseModel):
+class ServerConfigModel(ConfigModel):
     """Pydantic model for server configuration."""
+
+    config_table_name: ClassVar[str | None] = "services.web.public"
 
     host: str = "0.0.0.0"  # noqa: S104
     port: int = 8080
@@ -87,8 +88,8 @@ class WebService(BaseService, ConfigSubscriberMixin):
         for server in APIServer:
             try:
                 table_name = f"services.web.{server.value}"
-                config = config_service.get_table(table_name, ServerConfigModel)
-                self.subscribe_config(table_name, ServerConfigModel)
+                config = config_service.get_table(ServerConfigModel, table_name)
+                self.subscribe_config(ServerConfigModel, table_name)
                 self._configs[server] = WebServiceConfig(
                     host=config.host,
                     port=config.port,

@@ -74,7 +74,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
 
         self.inject_config_service(config_service)
 
-        config = self.subscribe_config("cogs.ravenfall_watcher", WatcherConfig)
+        config = self.subscribe_config(WatcherConfig)
         self.config = config
 
         self.watchers = []

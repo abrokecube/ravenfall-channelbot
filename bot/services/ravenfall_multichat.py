@@ -1,15 +1,15 @@
-from typing import override
-
-from pydantic import BaseModel
+from typing import ClassVar, override
 
 from bot.clients.ravenfall_multichat import RavenfallMultichatClient
 from bot.core.components import BaseService
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 
 
-class MultichatConfig(BaseModel):
+class MultichatConfig(ConfigModel):
     """Multichat config."""
+
+    config_table_name: ClassVar[str | None] = "services.ravenfall_multichat"
 
     url: str
 
@@ -27,7 +27,7 @@ class RavenfallMultichatService(BaseService, ConfigSubscriberMixin):
             ConfigService
         )
         self.inject_config_service(config_service)
-        config = self.subscribe_config("services.ravenfall_multichat", MultichatConfig)
+        config = self.subscribe_config(MultichatConfig)
         self.client = RavenfallMultichatClient(config.url)
 
     def get_client(self):

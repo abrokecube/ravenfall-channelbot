@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from bot.services.config_service import ConfigService
@@ -37,29 +37,32 @@ class ConfigSubscriberMixin:
 
     def subscribe_config[T](
         self,
-        table: str,
         model: type[T],
+        table: str | None = None,
     ) -> T:
         """Subscribe to changes on a specific config table.
 
         Args:
-            table: Dot-separated TOML table name.
             model: The type to validate against.
+            table: Dot-separated TOML table name. If None, inferred from model.
         """
         svc = self._require_config_service()
-        svc._subscribe(self, table, model)
-        if not self._config_service:
-            raise RuntimeError
-        return self._config_service.get_table(table, model)
+        svc._subscribe(self, model, table)
+        return svc.get_table(model, table)
 
-    def unsubscribe_config(self, table: str) -> None:
+    def unsubscribe_config(
+        self,
+        model: type[Any] | None = None,
+        table: str | None = None,
+    ) -> None:
         """Unsubscribe from a specific config table.
 
         Args:
+            model: The type to validate against (used for table inference).
             table: The table name to stop watching.
         """
         svc = self._require_config_service()
-        svc._unsubscribe(self, table)
+        svc._unsubscribe(self, model, table)
 
     def on_config_changed(
         self,

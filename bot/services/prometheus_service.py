@@ -12,7 +12,7 @@ import aiohttp
 import msgspec
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, model_validator
+from pydantic import Field, model_validator
 
 from bot.clients.prometheus import (
     Counter,
@@ -24,10 +24,11 @@ from bot.clients.prometheus import (
 )
 from bot.core.components import BaseService
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.web_service import APIServer, WebService
 
 if TYPE_CHECKING:
+    from typing import ClassVar
     from collections.abc import Callable
 
     from bot.clients.prometheus import (
@@ -84,14 +85,18 @@ class PrometheusResponse(msgspec.Struct, Generic[T]):  # noqa: UP046
     data: T
 
 
-class PrometheusServiceConfig(BaseModel):
+class PrometheusServiceConfig(ConfigModel):
     """Configuration for PrometheusService."""
+
+    config_table_name: ClassVar[str | None] = "services.prometheus"
 
     enabled: bool = True
     collector_timeout_s: int = 10
     metrics_server: str = "private"
     default_query_server: str = "main"
-    servers: dict[str, str] = {"main": "http://localhost:9090"}
+    servers: dict[str, str] = Field(
+        default_factory=lambda: {"main": "http://localhost:9090"}
+    )
 
     @model_validator(mode="after")
     def validate_config(self):
@@ -141,11 +146,8 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
         config_service = await self.global_context.wait_for_service(ConfigService)
         self.inject_config_service(config_service)
 
-        config_table_name = "services.prometheus"
-        self._config = config_service.get_table(
-            config_table_name, PrometheusServiceConfig
-        )
-        self.subscribe_config(config_table_name, PrometheusServiceConfig)
+        self._config = config_service.get_table(PrometheusServiceConfig)
+        self.subscribe_config(PrometheusServiceConfig)
 
         router = APIRouter()
 

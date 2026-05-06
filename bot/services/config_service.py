@@ -8,7 +8,7 @@ import os
 import sys
 import tomllib
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin
 
 from pydantic import BaseModel, TypeAdapter
 
@@ -18,6 +18,12 @@ if TYPE_CHECKING:
     from bot.mixins.config_subscriber import ConfigSubscriberMixin
 
 LOGGER = logging.getLogger(__name__)
+
+
+class ConfigModel(BaseModel):
+    """Base class for configuration models with an associated table name."""
+
+    config_table_name: ClassVar[str | None] = None
 
 
 class ConfigService(BaseService):
@@ -73,24 +79,34 @@ class ConfigService(BaseService):
 
     def get_table[T](
         self,
-        table: str,
         model: type[T],
+        table: str | None = None,
     ) -> T:
         """Validate a TOML table against a type.
 
         Args:
-            table: Dot-separated table name (e.g. ``"server"``).
             model: The type to validate against.  Can be a
                 ``BaseModel`` subclass, a ``list[SomeModel]``, or any
                 type supported by :class:`pydantic.TypeAdapter`.
+            table: Dot-separated table name (e.g. ``"server"``).
+                If None, uses ``model.config_table_name`` if available.
 
         Returns:
             A validated instance of *model*.
 
         Raises:
             KeyError: If the table does not exist.
+            ValueError: If no table name is provided or inferred.
             pydantic.ValidationError: If validation fails.
         """
+        if table is None:
+            table = _infer_table_name(model)
+
+        if table is None:
+            model_name = model.__name__ if hasattr(model, "__name__") else str(model)
+            msg = f"No table name provided for model {model_name}"
+            raise ValueError(msg)
+
         raw = dict(self._resolve_table(table))
         self._apply_env_overrides(table, raw)
         self._apply_cli_overrides(table, raw)
@@ -239,7 +255,7 @@ class ConfigService(BaseService):
         for subscriber, entries in self._subscribers.items():
             for table, entry in entries.items():
                 try:
-                    new_value = self.get_table(table, entry.model_type)
+                    new_value = self.get_table(entry.model_type, table)
                 except Exception:
                     LOGGER.exception(
                         "Failed to validate table '%s' for subscriber %s during reload",
@@ -272,17 +288,29 @@ class ConfigService(BaseService):
     def _subscribe[T](
         self,
         subscriber: ConfigSubscriberMixin,
-        table: str,
         model_type: type[T],
+        table: str | None = None,
     ) -> None:
         """Register a subscriber for a specific table.
 
         Args:
             subscriber: The mixin instance subscribing.
-            table: Dot-separated TOML table name.
             model_type: The type to validate against.
+            table: Dot-separated TOML table name. If None, inferred from model.
         """
-        snapshot = self.get_table(table, model_type)
+        if table is None:
+            table = _infer_table_name(model_type)
+
+        if table is None:
+            model_name = (
+                model_type.__name__
+                if hasattr(model_type, "__name__")
+                else str(model_type)
+            )
+            msg = f"No table name provided for model {model_name}"
+            raise ValueError(msg)
+
+        snapshot = self.get_table(model_type, table)
         entry = _SubscriptionEntry(model_type=model_type, snapshot=snapshot)
         self._subscribers.setdefault(subscriber, {})[table] = entry
         LOGGER.debug(
@@ -294,17 +322,35 @@ class ConfigService(BaseService):
     def _unsubscribe(
         self,
         subscriber: ConfigSubscriberMixin,
-        table: str,
+        model_type: type[Any] | None = None,
+        table: str | None = None,
     ) -> None:
         """Remove a subscriber's registration for a specific table.
 
         Args:
             subscriber: The mixin instance unsubscribing.
+            model_type: The type to validate against (used for table inference).
             table: Dot-separated TOML table name to stop watching.
 
         Raises:
-            KeyError: If the subscriber is not subscribed to *table*.
+            KeyError: If the subscriber is not subscribed to the table.
+            ValueError: If neither table nor model_type is provided.
         """
+        if table is None:
+            if model_type is None:
+                msg = "Either table or model_type must be provided to unsubscribe"
+                raise ValueError(msg)
+            table = _infer_table_name(model_type)
+
+        if table is None:
+            model_name = (
+                model_type.__name__
+                if model_type and hasattr(model_type, "__name__")
+                else str(model_type)
+            )
+            msg = f"No table name provided for model {model_name}"
+            raise ValueError(msg)
+
         entries = self._subscribers.get(subscriber)
         if entries is None or table not in entries:
             msg = f"{type(subscriber).__name__} is not subscribed to table '{table}'"
@@ -366,3 +412,18 @@ def _diff_snapshots(
 
 
 _SENTINEL = object()
+
+
+def _infer_table_name(model: object) -> str | None:
+    """Helper to extract table name from a ConfigModel or list of ConfigModels."""
+    if isinstance(model, type) and issubclass(model, ConfigModel):
+        return model.config_table_name
+
+    # Handle list[ConfigModel]
+    origin = get_origin(model)
+    if origin is list:
+        args = get_args(model)
+        if args and isinstance(args[0], type) and issubclass(args[0], ConfigModel):
+            return args[0].config_table_name
+
+    return None

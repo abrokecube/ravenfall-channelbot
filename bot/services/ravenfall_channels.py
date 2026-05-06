@@ -4,30 +4,33 @@ import asyncio
 import logging
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, NamedTuple, override
+from typing import TYPE_CHECKING, ClassVar, NamedTuple, override
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from bot.core.components import BaseService, GlobalContext
+from bot.core.components import BaseService
 from bot.core.decorators import on_match
 from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent
 from bot.integrations.twitch.consts import EVENT_SOURCE_TWITCH
+from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.mixins.event_receiver import EventReceiverMixin
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 
 if TYPE_CHECKING:
     from collections.abc import Collection
 
-    from bot.core.components import EventManager
+    from bot.core.components import EventManager, GlobalContext
     from bot.integrations.ravenfall import RavenfallInstance
 
 LOGGER = logging.getLogger(__name__)
 
 
-class RavenfallChannelsConfig(BaseModel):
+class RavenfallChannelsConfig(ConfigModel):
     """Ravenfall channel service config."""
 
-    instances: list[ChannelRavenfallInstance] = []
+    config_table_name: ClassVar[str | None] = "services.ravenfall_channels"
+
+    instances: list[ChannelRavenfallInstance] = Field(default_factory=list)
 
 
 class ChannelRavenfallInstance(BaseModel):
@@ -88,9 +91,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         ravenfall_service: RavenfallService = await self.global_context.wait_for_service(
             RavenfallService
         )
-        config = config_service.get_table(
-            "services.ravenfall_channels", RavenfallChannelsConfig
-        )
+        config = config_service.get_table(RavenfallChannelsConfig)
         a = {x.channel_name for x in ravenfall_service.event_source.ravenfall_instances}
         b = {x.twitch_login for x in config.instances}
         diff = b - a
