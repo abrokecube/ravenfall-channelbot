@@ -25,6 +25,7 @@ It includes event sources, dispatchers, listeners, cogs, and rate-limiting helpe
 
 
 if TYPE_CHECKING:
+    import concurrent.futures
     from collections.abc import Callable, Collection, Coroutine
 
     from .enums import BucketType
@@ -36,19 +37,55 @@ LOGGER = logging.getLogger(__name__)
 background_tasks: set[asyncio.Task[object]] = set()
 
 
-def _finished_task(task: asyncio.Task[object]) -> None:
-    background_tasks.discard(task)
-    exception = task.exception()
+def _finished_task(
+    task: asyncio.Task[object]
+    | asyncio.Future[object]
+    | concurrent.futures.Future[object],
+) -> None:
+    if isinstance(task, asyncio.Task):
+        background_tasks.discard(task)
+        exception = task.exception()
+    elif isinstance(task, asyncio.Future):
+        exception = task.exception()
+    else:
+        # For Concurrent Futures (from run_coroutine_threadsafe)
+        exception = task.exception()
+
     if exception is not None:
         LOGGER.exception("Background task failed", exc_info=exception)
 
 
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_main_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Set the main event loop for background tasks."""
+    global _main_loop
+    _main_loop = loop
+
+
 def fire_and_forget(coro: Coroutine[object, object, object]) -> None:
-    """Run a coroutine in the background."""
-    task = asyncio.get_running_loop().create_task(coro)
+    """Run a coroutine in the background, ensuring it runs on the main loop."""
+    if _main_loop is not None and _main_loop.is_running():
+        try:
+            # If we are in the same loop, create_task is faster
+            if asyncio.get_running_loop() == _main_loop:
+                task = _main_loop.create_task(coro)
+            else:
+                # If we are in another loop/thread, use threadsafe scheduling
+                fut = asyncio.run_coroutine_threadsafe(coro, _main_loop)
+                fut.add_done_callback(_finished_task)
+                return
+        except RuntimeError:
+            # If get_running_loop() fails or other loop issues
+            fut = asyncio.run_coroutine_threadsafe(coro, _main_loop)
+            fut.add_done_callback(_finished_task)
+            return
+    else:
+        # Fallback to current loop if no main loop is set
+        task = asyncio.get_running_loop().create_task(coro)
 
     background_tasks.add(task)
-
     task.add_done_callback(_finished_task)
 
 
@@ -307,6 +344,8 @@ class EventManager:
         self.cogs: dict[str, Cog] = {}
         self.global_context: GlobalContext = global_context
         global_context.event_manager = self
+        self._loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+        set_main_event_loop(self._loop)
 
     async def add_event_source(self, source: BaseEventSource) -> None:
         """Add a source to begin receiving events."""
@@ -452,6 +491,20 @@ class EventManager:
 
     async def process_event(self, event: BaseEvent) -> None:
         """Apply processors and dispatch the event to matching dispatchers."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop != self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._process_event_internal(event), self._loop
+            )
+            return
+        await self._process_event_internal(event)
+
+    async def _process_event_internal(self, event: BaseEvent) -> None:
+        """Internal event processing logic."""
         LOGGER.debug(f"Processing event {event}")
         matching_processors: list[EventProcessor[BaseEvent]] = []
         for event_type, processors in self.event_processors.items():

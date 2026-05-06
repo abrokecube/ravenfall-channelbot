@@ -1,8 +1,15 @@
 """Async rate limiter utility."""
 
+from __future__ import annotations
+
 import asyncio
 import time
 from collections import deque
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 class AsyncRateLimiter:
@@ -88,3 +95,16 @@ class AsyncRateLimiter:
             __ = history.popleft()
 
         history.append(now)
+
+    @asynccontextmanager
+    async def request(self, key: str | None = None) -> AsyncIterator[None]:
+        """Wait for a slot and record the event time.
+
+        Args:
+            key (str | None, optional): The key to rate limit on. Defaults to None.
+
+        Yields:
+            None
+        """
+        await self.acquire(key)
+        yield

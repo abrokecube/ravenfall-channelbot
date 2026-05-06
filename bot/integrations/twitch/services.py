@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, override
 
 from twitchAPI.object.api import SendMessageResponse
@@ -52,31 +53,38 @@ class TwitchService(BaseMessageService):
         """Get an authenticated Twitch instance."""
         return self.twitches.get(channel_id)
 
+    @asynccontextmanager
     async def _chat_rate_limit(self, channel_id: str, settings: ConnectedChat):
         async with self._channel_bucket_lock[channel_id]:
             if settings.message_rate == MessageRateMode.STANDARD:
-                await self._channel_bucket.acquire(channel_id)
-                await self._standard_user_bucket.acquire()
+                async with (
+                    self._channel_bucket.request(channel_id),
+                    self._standard_user_bucket.request(),
+                ):
+                    yield
             elif settings.message_rate == MessageRateMode.UPGRADED:
-                self._channel_bucket.add(channel_id)
-                self._standard_user_bucket.add()
-                await self._upgraded_user_bucket.acquire()
+                async with self._upgraded_user_bucket.request():
+                    self._channel_bucket.add(channel_id)
+                    self._standard_user_bucket.add()
+                    yield
 
     async def _send_irc(self, channel_id: str, text: str, *, reply_id: str | None = None):
         settings = self.event_source.connected_chats[channel_id]
         if not self.event_source.twitch_chat:
             msg = "IRC Twitch chat has not been initialized"
             raise RuntimeError(msg)
-        await self._chat_rate_limit(channel_id, settings)
-        if (
-            settings.message_rate == MessageRateMode.STANDARD
-            and self._last_messages[channel_id] == text
-        ):
-            text += " ͏"
-        await self.event_source.twitch_chat.send_message(
-            settings.channel_name, text, reply_id
-        )
-        self._last_messages[channel_id] = text
+        async with self._chat_rate_limit(channel_id, settings):
+            if (
+                settings.message_rate == MessageRateMode.STANDARD
+                and self._last_messages[channel_id] == text
+            ):
+                text += " ͏"
+
+            await self.event_source.twitch_chat.send_message(
+                settings.channel_name, text, reply_id
+            )
+
+            self._last_messages[channel_id] = text
         return MessageSendResult(is_sent=True, reply_id=None)
 
     async def _send_http(
@@ -88,35 +96,35 @@ class TwitchService(BaseMessageService):
             msg = f"Channel id {channel_id} has not been authorized"
             raise ValueError(msg)
         settings = self.event_source.connected_chats[channel_id]
-        await self._chat_rate_limit(channel_id, settings)
-        if (
-            settings.message_rate == MessageRateMode.STANDARD
-            and self._last_messages[channel_id] == text
-        ):
-            text += " ͏"
-        max_retries = 2
-        result = SendMessageResponse()  # satisfy type checker
-        while max_retries > 0:
-            try:
-                result = await twitch.send_chat_message(
-                    channel_id, self.event_source.bot_user_id, text, reply_id
-                )
-            except KeyError:  # funny twitchapi bug when rate limited
-                LOGGER.debug("possibly rate limited, retrying")
-                max_retries -= 1
-                if max_retries == 0:
-                    raise
-            else:
-                break
-        if result.is_sent:
-            self._last_messages[channel_id] = text
-        elif (
-            not result.is_sent
-            and result.drop_reason
-            and result.drop_reason.code == "msg_duplicate"
-        ):
-            self._last_messages[channel_id] = text
-            return await self._send_http(channel_id, text, reply_id=reply_id)
+        async with self._chat_rate_limit(channel_id, settings):
+            if (
+                settings.message_rate == MessageRateMode.STANDARD
+                and self._last_messages[channel_id] == text
+            ):
+                text += " ͏"
+            max_retries = 2
+            result = SendMessageResponse()  # satisfy type checker
+            while max_retries > 0:
+                try:
+                    result = await twitch.send_chat_message(
+                        channel_id, self.event_source.bot_user_id, text, reply_id
+                    )
+                except KeyError:  # funny twitchapi bug when rate limited
+                    LOGGER.debug("possibly rate limited, retrying")
+                    max_retries -= 1
+                    if max_retries == 0:
+                        raise
+                else:
+                    break
+            if result.is_sent:
+                self._last_messages[channel_id] = text
+            elif (
+                not result.is_sent
+                and result.drop_reason
+                and result.drop_reason.code == "msg_duplicate"
+            ):
+                self._last_messages[channel_id] = text
+                return await self._send_http(channel_id, text, reply_id=reply_id)
         return MessageSendResult(is_sent=result.is_sent, reply_id=result.message_id)
 
     @override
