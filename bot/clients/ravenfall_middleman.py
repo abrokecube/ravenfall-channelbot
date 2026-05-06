@@ -231,7 +231,7 @@ class MiddlemanClient:
         self._connected: bool = False
 
     def _raise_on_code(self, code: int, response_data: Any) -> None:
-        if not isinstance(response_data, dict):
+        if not isinstance(response_data, str):
             msg = f"Invalid response from middleman API: {response_data}"
             raise ClientError(msg)
         if code in {400, 404}:
@@ -255,7 +255,7 @@ class MiddlemanClient:
         headers = {"Content-Type": "application/json"}
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"{self.base_url}/{endpoint}",
+                f"{self.base_url}{endpoint}",
                 headers=headers,
             ) as response:
                 response_text = await response.text()
@@ -287,11 +287,12 @@ class MiddlemanClient:
     ) -> T | None:
         headers = {"Content-Type": "application/json"}
         async with aiohttp.ClientSession() as session:
-            encoded = json_encode.encode(data)
+            # encoded = json_encode.encode(data)
             async with session.post(
-                f"{self.base_url}/{endpoint}",
-                data=encoded,
+                f"{self.base_url}{endpoint}",
+                json=data,
                 headers=headers,
+                allow_redirects=False,
             ) as response:
                 response_text = await response.text()
                 self._raise_on_code(response.status, response_text)
@@ -299,7 +300,9 @@ class MiddlemanClient:
                 return None
             return json.decode(response_text, type=out_type)
 
-    async def force_reconnect(self, connection_id: str, timeout_seconds: int = 0) -> None:
+    async def force_reconnect(
+        self, connection_id: str, timeout_seconds: float = 0
+    ) -> None:
         """Force the middleman to reconnect to Ravenfall.
 
         Args:
@@ -358,7 +361,7 @@ class MiddlemanClient:
     async def ensure_connection(
         self,
         connection_id: str,
-        timeout_extension: int = 30,
+        timeout_extension: float = 30,
     ) -> EnsureConnectionResult:
         """Ensure the connection is active by extending its timeout.
 

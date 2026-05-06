@@ -177,7 +177,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
     )
     # @checks(MinPermissionLevel(UserRole.MODERATOR))
-    @command()
+    @command("rfrestart status")
     async def rfrestartstatus(self, ctx: CommandEvent, *, instance: RavenfallInstance):
         """Get the auto-restart status of Ravenfall."""
         watcher = self._get_watcher_or_error(instance)
@@ -200,9 +200,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             seconds_left = await watcher.auto_restart_timer.get_time_remaining()
             if watcher.config.restart_warning_times:
                 seconds_left += watcher.config.restart_warning_times[0]
-            seconds_left_formatted = format_seconds(
-                -seconds_left, TimeSize.LONG, 2, False
-            )
+            seconds_left_formatted = format_seconds(seconds_left, TimeSize.LONG, 2, False)
             reply = f"Ravenfall is scheduled to restart in {seconds_left_formatted}."
             await ctx.reply(reply)
             return
@@ -286,7 +284,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             raise CommandError("Ravenfall is currently restarting.") from None
         except NoRestartTaskError:
             raise CommandError("There is no active restart task.") from None
-        await ctx.reply("Restart postpones.")
+        await ctx.reply("Restart postponed.")
 
     @parameter(
         "instance",

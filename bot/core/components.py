@@ -45,7 +45,7 @@ def _finished_task(task: asyncio.Task[object]) -> None:
 
 def fire_and_forget(coro: Coroutine[object, object, object]) -> None:
     """Run a coroutine in the background."""
-    task = asyncio.create_task(coro)
+    task = asyncio.get_running_loop().create_task(coro)
 
     background_tasks.add(task)
 
@@ -275,7 +275,10 @@ class BaseEvent:
     categories: Collection[str]
     platform: str = EVENT_SOURCE_ANY
     data: Any  # pyright: ignore[reportExplicitAny]
-    timestamp: float = time.time()
+    timestamp: float = 0.0
+
+    def __post_init__(self):
+        self.timestamp = time.time()
 
     async def get_bucket_key(self, bucket_type: str | BucketType) -> str:  # pyright: ignore[reportUnusedParameter]
         """Return a string key used for rate limiting/bucketing.

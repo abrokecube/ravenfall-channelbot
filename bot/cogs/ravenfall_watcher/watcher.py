@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Collection
+from datetime import timedelta
 from functools import partial
 from time import monotonic
 from typing import TYPE_CHECKING
 
 from bot.cogs.ravenfall_watcher.base_classes import BaseGroupCollector
-from bot.core.components import fire_and_forget
 from bot.core.decorators import on_match
 from bot.integrations.ravenfall import (
+    DungeonEndedEvent,
+    RaidEndedEvent,
+    RaidStartedEvent,
     RavenBotMessageEvent,
     RavenfallEvent,
     RavenfallOfflineEvent,
@@ -18,12 +21,14 @@ from bot.integrations.ravenfall import (
     RavenfallReadyEvent,
 )
 from bot.integrations.ravenfall.event_sources import RavenfallInstance
+from bot.integrations.ravenfall.events import DungeonReachedBossEvent
 from bot.integrations.twitch import TwitchService
 from bot.mixins.event_receiver import EventReceiverMixin
 from bot.services.event_waiter import EventTypePredicate, EventWaiterService
 from bot.services.ravenfall_channels import RavenfallChannelService
 from bot.services.ravenfall_multichat import RavenfallMultichatService
 from utils.format_time import TimeSize, format_seconds
+from utils.routines import routine
 
 from . import collectors
 from .base_classes import BaseCollector
@@ -326,7 +331,7 @@ class RavenfallWatcher(EventReceiverMixin):
         self._auto_restart_paused = True
         self._unhook_collectors()
         self.clear_alerts()
-        self._stop_watcher_collectors()
+        # self._stop_watcher_collectors()
         if self.restart_timeline.get_is_playing():
             await self.cancel_restart()
         await self.auto_restart_timer.stop()
@@ -335,7 +340,7 @@ class RavenfallWatcher(EventReceiverMixin):
         """Enable auto-restarts again."""
         self._auto_restart_paused = False
         self._hook_collectors()
-        self._start_watcher_collectors()
+        # self._start_watcher_collectors()
         await self._refresh_auto_restart_timer()
 
     def get_restarts_are_paused(self):
@@ -348,12 +353,13 @@ class RavenfallWatcher(EventReceiverMixin):
             return
         await self.restart_timeline.pause()
         channel = self.global_ctx.require_service(RavenfallChannelService)
-        await channel.send_global_message(
-            f"Postponing restart. "
-            f"Reason: {self._restart_blocker_collector.get_alert_reason()}",
-            "announcements.restart_postponed",
-            self.ravenfall.channel_name,
-        )
+        if self._restart_reason_announced:
+            await channel.send_global_message(
+                f"Postponing restart. "
+                f"Reason: {self._restart_blocker_collector.get_alert_reason()}",
+                "announcements.restart_postponed",
+                self.ravenfall.channel_name,
+            )
 
     async def _unblock_restart(self):
         LOGGER.info(f"[{self.ravenfall.channel_name}] Unblocking restart timeline")
@@ -583,6 +589,15 @@ class RavenfallWatcher(EventReceiverMixin):
                     f"[{self.ravenfall.channel_name}] Ravenfall is back online, "
                     "waiting for it to be ready..."
                 )
+                if (
+                    self.ravenfall.get_is_linked_to_middleman()
+                    and self.ravenfall.event_source.get_has_configured_middleman()
+                ):
+                    try:
+                        await self.ravenfall.reconnect_middleman_to_ravenfall(60)
+                    except Exception:
+                        LOGGER.exception("Failed to communicate with middleman.")
+                self._start_keep_middleman_connected_routine()
 
             try:
                 async with asyncio.timeout(self.config.restart_timeout_seconds):
@@ -598,22 +613,25 @@ class RavenfallWatcher(EventReceiverMixin):
                         LOGGER.debug(
                             f"[{self.ravenfall.channel_name}] Ravenfall is ready!"
                         )
+                        self._stop_keep_middleman_connected_routine(force=True)
                     else:
                         LOGGER.debug(
                             f"[{self.ravenfall.channel_name}] "
                             "Ravenfall went offline again during restart!"
                         )
+                        self.ravenfall_restart_lock.release()
+                        self._stop_keep_middleman_connected_routine(force=True)
                         return
             except TimeoutError:
                 LOGGER.info(f"[{self.ravenfall.channel_name}] Restart may have failed.")
                 self.ravenfall_restart_lock.release()
-                await self.queue_restart(1, "Restart failed")
+                await self.queue_restart(5, "Restart failed")
                 return
         except Exception:
             LOGGER.exception(f"[{self.ravenfall.channel_name}] Error during restart")
             if self.ravenfall_restart_lock.locked():
                 self.ravenfall_restart_lock.release()
-            await self.queue_restart(1, "Restart failed")
+            await self.queue_restart(5, "Restart failed")
             return
 
         if self.ravenfall_restart_lock.locked():
@@ -669,7 +687,7 @@ class RavenfallWatcher(EventReceiverMixin):
 
         try:
             __ = await waiter_service.wait_for(
-                RavenBotMessageEvent, predicate=predicate, timeout=1
+                RavenBotMessageEvent, predicate=predicate, timeout=1, seconds_before=1
             )
         except TimeoutError:
             LOGGER.info("RavenBot did not respond, restarting.")
@@ -749,30 +767,6 @@ class RavenfallWatcher(EventReceiverMixin):
             )
             await self.auto_restart_timer.start(time_remaining)
 
-    @on_match(RavenfallOfflineEvent)
-    async def on_offline(
-        self, _g_ctx: GlobalContext, event: RavenfallOfflineEvent, _match: object
-    ):
-        """Runs when Ravenfall goes offline."""
-        if self._auto_restart_paused:
-            return
-        if self.ravenfall_restart_lock.locked():
-            return
-        if event.ravenfall == self.ravenfall:
-            await self.queue_restart(1, "Ravenfall is offline")
-
-    @on_match(RavenfallOnlineEvent)
-    async def on_online(
-        self,
-        _g_ctx: GlobalContext | None = None,
-        _event: RavenfallOnlineEvent | None = None,
-        _match: object | None = None,
-    ):
-        """Runs when Ravenfall goes online."""
-        if self._auto_restart_paused:
-            return
-        await self._refresh_auto_restart_timer()
-
     def add_event_to_restart_timeline(
         self,
         time_from_restart: float,
@@ -798,6 +792,101 @@ class RavenfallWatcher(EventReceiverMixin):
     def remove_event_from_restart_timeline(self, event: TimelineEvent) -> None:
         """Remove an event from the restart timeline."""
         self.restart_timeline.remove_event(event)
+
+    @routine(delta=timedelta(seconds=30))
+    async def _keep_middleman_connected_routine(self):
+        """Keep the linked middleman connected to Ravenfall."""
+        ev_src = self.ravenfall.event_source
+        if not (
+            ev_src.get_has_configured_middleman()
+            and self.ravenfall.get_is_linked_to_middleman()
+        ):
+            return
+        __ = await self.ravenfall.ensure_middleman_connection(45)
+
+    def _start_keep_middleman_connected_routine(self):
+        __ = self._keep_middleman_connected_routine.start()
+
+    def _stop_keep_middleman_connected_routine(self, *, force: bool = False):
+        if not force and self.ravenfall_restart_lock.locked():
+            return
+        self._keep_middleman_connected_routine.stop()
+
+    @on_match(RavenfallOfflineEvent)
+    async def on_offline(
+        self, _g_ctx: GlobalContext, event: RavenfallOfflineEvent, _match: object
+    ):
+        """Runs when Ravenfall goes offline."""
+        if event.ravenfall != self.ravenfall:
+            return
+        if self._auto_restart_paused:
+            return
+        if self.ravenfall_restart_lock.locked():
+            return
+        if event.ravenfall == self.ravenfall:
+            await self.queue_restart(1, "Ravenfall is offline")
+
+    @on_match(RavenfallOnlineEvent)
+    async def on_online(
+        self,
+        _g_ctx: GlobalContext | None = None,
+        event: RavenfallOnlineEvent | None = None,
+        _match: object | None = None,
+    ):
+        """Runs when Ravenfall goes online."""
+        if event and event.ravenfall != self.ravenfall:
+            return
+        if self._auto_restart_paused:
+            return
+        await self._refresh_auto_restart_timer()
+
+    @on_match(DungeonReachedBossEvent)
+    async def on_reached_dungeon_boss(
+        self,
+        _g_ctx: GlobalContext | None,
+        event: DungeonReachedBossEvent,
+        _match: object | None,
+    ):
+        """Runs when the dungeon boss is reached."""
+        if event.ravenfall != self.ravenfall:
+            return
+        self._start_keep_middleman_connected_routine()
+
+    @on_match(DungeonEndedEvent)
+    async def on_dungeon_ended(
+        self,
+        _g_ctx: GlobalContext | None,
+        event: DungeonEndedEvent,
+        _match: object | None,
+    ):
+        """Runs when the dungeon boss is reached."""
+        if event.ravenfall != self.ravenfall:
+            return
+        self._stop_keep_middleman_connected_routine()
+
+    @on_match(RaidStartedEvent)
+    async def on_raid_started(
+        self,
+        _g_ctx: GlobalContext,
+        event: RaidStartedEvent,
+        _match: object | None,
+    ):
+        """Runs when the dungeon boss is reached."""
+        if event.ravenfall != self.ravenfall:
+            return
+        self._start_keep_middleman_connected_routine()
+
+    @on_match(RaidEndedEvent)
+    async def on_raid_ended(
+        self,
+        _g_ctx: GlobalContext | None,
+        event: RaidEndedEvent,
+        _match: object | None,
+    ):
+        """Runs when the dungeon boss is reached."""
+        if event.ravenfall != self.ravenfall:
+            return
+        self._stop_keep_middleman_connected_routine()
 
     # @on_match(MessageEvent, lambda x: x.text == "!unblockrestart")
     # async def on_unblock_restart_command(

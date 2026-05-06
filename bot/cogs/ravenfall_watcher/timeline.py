@@ -186,7 +186,8 @@ class Timeline:
 
         if self._task is not None:
             __ = self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            # with contextlib.suppress(asyncio.CancelledError):
+            with contextlib.suppress(asyncio.CancelledError, RuntimeError):
                 await self._task
             self._task = None
 
@@ -223,7 +224,7 @@ class Timeline:
         logger.debug(
             "Seeking from %f to %f (mode=%s)", old_time, target_time, self._seek_mode.name
         )
-        new_time = max(self._start_time, min(self._end_time, target_time))
+        new_time = target_time
 
         await self._fire_seek_callbacks(old_time, new_time)
 
@@ -396,10 +397,11 @@ class Timeline:
         elapsed = time.monotonic() - self._wall_anchor
         direction = 1.0 if self._end_time >= self._start_time else -1.0
         raw = self._current_time + direction * elapsed
-        self._current_time = max(
-            min(self._start_time, self._end_time),
-            min(raw, max(self._start_time, self._end_time)),
-        )
+        # Cap at end_time only
+        if direction > 0:
+            self._current_time = min(raw, self._end_time)
+        else:
+            self._current_time = max(raw, self._end_time)
         self._wall_anchor = time.monotonic()
 
     # ------------------------------------------------------------------

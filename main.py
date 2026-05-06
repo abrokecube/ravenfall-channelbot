@@ -195,9 +195,9 @@ async def run():
 
     twitch_auths: defaultdict[str, set[AuthScope]] = defaultdict(set)
 
-    # twitch_auths[bot_config.owner_twitch_id].update(
-    #     [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
-    # )
+    twitch_auths[bot_config.owner_twitch_id].update(
+        [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
+    )
 
     for instance in ravenfall_ev_src.ravenfall_instances:
         twitch_auths[instance.channel_id].add(AuthScope.CHANNEL_BOT)
@@ -243,5 +243,4 @@ async def run():
 
 
 if __name__ == "__main__":
-    # asyncio.run(run())
-    asyncio.get_event_loop().run_until_complete(future=run())
+    asyncio.run(run())

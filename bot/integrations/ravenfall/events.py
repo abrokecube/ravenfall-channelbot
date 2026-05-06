@@ -183,6 +183,13 @@ class DungeonStartedEvent(RavenfallEvent):
 
 
 @dataclass(kw_only=True)
+class DungeonReachedBossEvent(RavenfallEvent):
+    """A dungeon has started."""
+
+    data: rq.Dungeon
+
+
+@dataclass(kw_only=True)
 class DungeonEndedEvent(RavenfallEvent):
     """A dungeon has ended."""
 

@@ -62,6 +62,9 @@ class BaseCollector[T]:
         if self._loop_task is not None:
             __ = self._loop_task.cancel()
             self._loop_task = None
+        if self._processing_task:
+            __ = self._processing_task.cancel()
+            self._processing_task = None
 
     def set_data(self, data: T | None):
         """Set current data."""
@@ -373,7 +376,7 @@ class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
                 partial(self._send_dungeon_spawned_event, new_dungeon),
                 partial(self._send_dungeon_prepared_event, new_dungeon),
                 partial(self._send_dungeon_started_event, new_dungeon),
-                None,
+                partial(self._send_dungeon_reached_boss_event, new_dungeon),
             ]
             idx = old_stage
             while idx != new_stage:
@@ -408,6 +411,8 @@ class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
                 await self._send_dungeon_prepared_event(new_dungeon)
             elif new_stage == DungeonStage.FIGHTING_ENEMIES:
                 await self._send_dungeon_started_event(new_dungeon)
+            elif new_stage == DungeonStage.FIGHTING_BOSS:
+                await self._send_dungeon_reached_boss_event(new_dungeon)
 
         if new_stage < DungeonStage.FIGHTING_ENEMIES:
             self.max_boss_hp = TimestampedValue(t, 0)
@@ -441,6 +446,11 @@ class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
     async def _send_dungeon_started_event(self, dungeon: models.Dungeon):
         await self.ravenfall._event_hook(
             ev.DungeonStartedEvent(ravenfall=self.ravenfall, data=dungeon)
+        )
+
+    async def _send_dungeon_reached_boss_event(self, dungeon: models.Dungeon):
+        await self.ravenfall._event_hook(
+            ev.DungeonReachedBossEvent(ravenfall=self.ravenfall, data=dungeon)
         )
 
     async def _send_dungeon_end_event(
@@ -519,7 +529,9 @@ class RaidCollector(RavenfallCollectorBase[models.Raid]):
 class RavenfallInstance:
     """A Ravenfall instance."""
 
-    def __init__(self, config: RavenfallInstanceConfig) -> None:
+    def __init__(
+        self, config: RavenfallInstanceConfig, event_src: RavenfallEventSource
+    ) -> None:
         self.config: RavenfallInstanceConfig = config
         self.twitch_id: str = config.twitch_id
         self.twitch_login: str = config.twitch_login
@@ -531,6 +543,7 @@ class RavenfallInstance:
         self._event_hook: RavenfallInstanceEventHook = self._dummy_event_hook
         self.is_online: asyncio.Event = asyncio.Event()
         self.is_ready: asyncio.Event = asyncio.Event()
+        self.event_source: RavenfallEventSource = event_src
 
         self._session_collector: SessionCollector = SessionCollector(self)
         self._ferry_collector: FerryCollector = FerryCollector(self)
@@ -649,6 +662,41 @@ class RavenfallInstance:
     async def get_raid(self) -> models.Raid | None:
         """Get the latest raid."""
         return await self._raid_collector.get_latest()
+
+    def get_is_linked_to_middleman(self):
+        """Get whether this instance has a configured middleman connection ID."""
+        return self.config.middleman_connection_id is not None
+
+    def _get_middleman(self) -> tuple[rm.MiddlemanClient, str]:
+        middleman = self.event_source.middleman_client
+        if not middleman:
+            msg = "Middleman has not been configured."
+            raise RuntimeError(msg)
+        conn_id = self.config.middleman_connection_id
+        if not conn_id:
+            msg = (
+                "A middleman connection id "
+                f"has not been configured for {self.channel_name}."
+            )
+            raise RuntimeError(msg)
+        return middleman, conn_id
+
+    async def ensure_middleman_connection(self, timeout_extension: float = 30):
+        """Ensure the middleman's connection to Ravenfall is active
+        by extending its timeout.
+        """
+        middleman, conn_id = self._get_middleman()
+        return await middleman.ensure_connection(conn_id, timeout_extension)
+
+    async def reconnect_middleman_to_ravenfall(self, timeout: float = 0):
+        """Force the middleman to reconnect to Ravenfall."""
+        middleman, conn_id = self._get_middleman()
+        return await middleman.force_reconnect(conn_id, timeout)
+
+    async def get_middleman_connection_status(self):
+        """Get middleman connection status for this Ravenfall instance."""
+        middleman, conn_id = self._get_middleman()
+        return await middleman.get_connection_status(conn_id)
 
     # Ravenfall's "observed" endpoint does NOT work
     # async def _observed_loop(self):
@@ -827,16 +875,6 @@ class RavenfallEventSource(BaseEventSource):
         self.middleman_message_processor: rm.MessageProcessorServer | None = (
             middleman_message_processor
         )
-        if self.middleman_client is not None and self.middleman_message_processor is None:
-            self.middleman_client.add_ravenbot_message_hook(self._ravenbot_message)
-            self.middleman_client.add_ravenfall_message_hook(self._ravenfall_message)
-        elif self.middleman_message_processor is not None:
-            self.middleman_message_processor.add_ravenbot_message_hook(
-                self._ravenbot_processor_message
-            )
-            self.middleman_message_processor.add_ravenfall_message_hook(
-                self._ravenfall_processor_message
-            )
         self._matcher: RavenfallMatcher | None = None
 
         self.ravennest_api: RavenNest = ravenpy.RavenNest()
@@ -857,7 +895,9 @@ class RavenfallEventSource(BaseEventSource):
         config_service = await self.global_context.wait_for_service(ConfigService)
         config = config_service.get_table("integrations.ravenfall", RavenfallConfig)
         self.ravenfall_config = config.instances
-        self.ravenfall_instances = [RavenfallInstance(x) for x in self.ravenfall_config]
+        self.ravenfall_instances = [
+            RavenfallInstance(x, self) for x in self.ravenfall_config
+        ]
         for i in self.ravenfall_instances:
             i._event_hook = self.send_event
         self.channel_name_to_instance = {
@@ -871,6 +911,17 @@ class RavenfallEventSource(BaseEventSource):
         }
         if config.middleman_base_url:
             self.middleman_client = rm.MiddlemanClient(config.middleman_base_url)
+
+        if self.middleman_client is not None and self.middleman_message_processor is None:
+            self.middleman_client.add_ravenbot_message_hook(self._ravenbot_message)
+            self.middleman_client.add_ravenfall_message_hook(self._ravenfall_message)
+        elif self.middleman_message_processor is not None:
+            self.middleman_message_processor.add_ravenbot_message_hook(
+                self._ravenbot_processor_message
+            )
+            self.middleman_message_processor.add_ravenfall_message_hook(
+                self._ravenfall_processor_message
+            )
 
         def_path = AsyncPath(config.ravenfall_message_definitions_path)
         if await def_path.exists():
@@ -1007,6 +1058,16 @@ class RavenfallEventSource(BaseEventSource):
             self.ravennest_is_online.set()
             await self.send_event(ev.RavenNestOnlineEvent())
             self._first_ravennest_offline_event_sent = True
+
+    def get_has_configured_middleman(self):
+        """Check if the Event Source has a configured Ravenfall middleman."""
+        return self.middleman_client is not None
+
+    def get_has_middleman_message_processor(self):
+        """Check if the Event Source has a configured Ravenfall middleman
+        message processor.
+        """
+        return self.middleman_message_processor is not None
 
     @asynccontextmanager
     async def ravennest_fetch_context(self, *, timeout: float = 15):
