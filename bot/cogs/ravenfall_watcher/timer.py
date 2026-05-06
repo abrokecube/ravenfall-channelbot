@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from collections import defaultdict
@@ -129,7 +130,8 @@ class Timer:
         """Stop the timer and reset to initial state."""
         async with self._lock:
             if self._task:
-                __ = self._task.cancel()
+                with contextlib.suppress(RuntimeError):
+                    __ = self._task.cancel()
                 self._task = None
 
             self._tracker.stop()
@@ -407,7 +409,8 @@ class Timeline:
         """Stop the timeline and reset to initial state."""
         async with self._lock:
             if self._task:
-                __ = self._task.cancel()
+                with contextlib.suppress(RuntimeError):
+                    __ = self._task.cancel()
                 self._task = None
 
             self._tracker.stop()

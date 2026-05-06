@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Collection
 from datetime import timedelta
@@ -318,8 +319,7 @@ class RavenfallWatcher(EventReceiverMixin):
         """Stops an active restart."""
         if self.ravenfall_restart_lock.locked():
             raise RestartCancelFailureError
-        if not self.restart_timeline.get_is_playing():
-            raise NoRestartTaskError
+
         await self._stop_restart_blocker(None)
         await self.restart_timeline.stop()
         self.clear_alerts()
@@ -331,10 +331,12 @@ class RavenfallWatcher(EventReceiverMixin):
         self._auto_restart_paused = True
         self._unhook_collectors()
         self.clear_alerts()
-        # self._stop_watcher_collectors()
-        if self.restart_timeline.get_is_playing():
+
+        # Stop both the timeline and the timer regardless of state
+        with contextlib.suppress(NoRestartTaskError):
             await self.cancel_restart()
         await self.auto_restart_timer.stop()
+        LOGGER.info(f"[{self.ravenfall.channel_name}] Auto-restarts paused")
 
     async def resume_auto_restarts(self):
         """Enable auto-restarts again."""
@@ -342,6 +344,7 @@ class RavenfallWatcher(EventReceiverMixin):
         self._hook_collectors()
         # self._start_watcher_collectors()
         await self._refresh_auto_restart_timer()
+        LOGGER.info(f"[{self.ravenfall.channel_name}] Auto-restarts resumed")
 
     def get_restarts_are_paused(self):
         """Auto-restarts are paused."""

@@ -187,7 +187,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         if watcher.restart_timeline.get_is_playing():
             seconds_left = watcher.restart_timeline.get_current_time()
             seconds_left_formatted = format_seconds(
-                -seconds_left, TimeSize.LONG, 2, False
+                -seconds_left, TimeSize.LONG, 2, include_zero=False
             )
             restart_reason = watcher.restart_reason.rstrip(".")
             reply = (
@@ -200,7 +200,9 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             seconds_left = await watcher.auto_restart_timer.get_time_remaining()
             if watcher.config.restart_warning_times:
                 seconds_left += watcher.config.restart_warning_times[0]
-            seconds_left_formatted = format_seconds(seconds_left, TimeSize.LONG, 2, False)
+            seconds_left_formatted = format_seconds(
+                seconds_left, TimeSize.LONG, 2, include_zero=False
+            )
             reply = f"Ravenfall is scheduled to restart in {seconds_left_formatted}."
             await ctx.reply(reply)
             return
@@ -347,3 +349,27 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             await ctx.reply("A restart is already underway.")
             return
         await watcher.restart_ravenbot()
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command()
+    async def middleman_connection_status(
+        self, ctx: CommandEvent, *, instance: RavenfallInstance
+    ):
+        """Check the connection status of the middleman."""
+        watcher = self._get_watcher_or_error(instance)
+        if not watcher.ravenfall.get_is_linked_to_middleman():
+            raise CommandError("Ravenfall is not linked to a middleman.")
+        conn_status = (await watcher.ravenfall.get_middleman_connection_status()).status
+        time_formatted = format_seconds(
+            conn_status.time_until_close, TimeSize.SMALL_SPACES, 2, include_zero=False
+        )
+        await ctx.reply(
+            f"Client connected: {conn_status.client_connected} - "
+            f"Server connected: {conn_status.server_connected} - "
+            f"Time until close: {time_formatted}"
+        )

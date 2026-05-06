@@ -16,13 +16,15 @@ import asyncio
 import contextlib
 import dataclasses
 import enum
+import inspect
 import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
-from bot.core.components import fire_and_forget
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +104,8 @@ class _TimeRange(NamedTuple):
 
 async def _invoke(cb: Callback, info: EventInfo) -> None:
     result = cb(info)
-    if asyncio.iscoroutine(result):
-        # await result
-        fire_and_forget(result)
+    if inspect.isawaitable(result):
+        await result
 
 
 type Crossing = tuple[float, str, TimelineEvent]  # (t, kind, event)
@@ -151,6 +152,10 @@ class Timeline:
         self._pause_event: asyncio.Event = asyncio.Event()
         self._pause_event.set()  # not paused initially
 
+        # Track background event fires to prevent them being garbage collected
+        # and to allow clean shutdown if needed.
+        self._pending_tasks: set[asyncio.Task[None]] = set()
+
     # ------------------------------------------------------------------
     # Public API — control
     # ------------------------------------------------------------------
@@ -182,17 +187,20 @@ class Timeline:
 
         logger.debug("Stopping timeline")
         self._state = _PlaybackState.STOPPED
-        self._pause_event.set()  # unblock loop so it can exit
+
+        # Unblock loop so it can exit
+        with contextlib.suppress(RuntimeError):
+            self._pause_event.set()
 
         if self._task is not None:
             __ = self._task.cancel()
-            # with contextlib.suppress(asyncio.CancelledError):
             with contextlib.suppress(asyncio.CancelledError, RuntimeError):
                 await self._task
             self._task = None
 
         # Fire exit callbacks for any events still active.
-        await self._deactivate_all(self._current_time)
+        with contextlib.suppress(RuntimeError):
+            await self._deactivate_all(self._current_time)
         self._active_events.clear()
 
     async def pause(self) -> None:
@@ -418,16 +426,22 @@ class Timeline:
 
             if inside and not was_inside:
                 self._active_events.add(ev.id)
-                await self._fire_enter(ev, now)
+                self._fire_and_forget(self._fire_enter(ev, now))
             elif not inside and was_inside:
                 self._active_events.discard(ev.id)
-                await self._fire_exit(ev, now)
+                self._fire_and_forget(self._fire_exit(ev, now))
 
     async def _deactivate_all(self, now: float) -> None:
         for eid in list(self._active_events):
             ev = self._events.get(eid)
             if ev is not None:
                 await self._fire_exit(ev, now)
+
+    def _fire_and_forget(self, coro: Coroutine[None, None, None]) -> None:
+        """Schedule a background task and track it."""
+        task = asyncio.create_task(coro)
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
 
     # ------------------------------------------------------------------
     # Internal — seek callback logic
@@ -484,10 +498,10 @@ class Timeline:
         for t, kind, ev in crossings:
             if kind == "enter":
                 self._active_events.add(ev.id)
-                await self._fire_enter(ev, t)
+                self._fire_and_forget(self._fire_enter(ev, t))
             else:
                 self._active_events.discard(ev.id)
-                await self._fire_exit(ev, t)
+                self._fire_and_forget(self._fire_exit(ev, t))
 
         # Final sync at the new position.
         await self._sync_active_events(new_time)
@@ -501,13 +515,13 @@ class Timeline:
             ev = self._events.get(eid)
             if ev is not None and not ev.contains(new_time):
                 self._active_events.discard(eid)
-                await self._fire_exit(ev, old_time)
+                self._fire_and_forget(self._fire_exit(ev, old_time))
 
         # Enter events at new position that weren't active at old position.
         for ev in self._events.values():
             if ev.contains(new_time) and ev.id not in self._active_events:
                 self._active_events.add(ev.id)
-                await self._fire_enter(ev, new_time)
+                self._fire_and_forget(self._fire_enter(ev, new_time))
 
     # ------------------------------------------------------------------
     # Internal — callback dispatch
