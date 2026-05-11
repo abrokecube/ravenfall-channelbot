@@ -146,8 +146,7 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
         config_service = await self.global_context.wait_for_service(ConfigService)
         self.inject_config_service(config_service)
 
-        self._config = config_service.get_table(PrometheusServiceConfig)
-        self.subscribe_config(PrometheusServiceConfig)
+        self._config = self.subscribe_config(PrometheusServiceConfig)
 
         router = APIRouter()
 

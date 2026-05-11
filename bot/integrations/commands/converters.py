@@ -101,6 +101,8 @@ class Choice(BaseConverter):
 
 
 class Regex(BaseConverter):
+    """Regex converter for command arguments."""
+
     title: str = "Regex"
     short_help: str = "A python regular expression"
     help: str = "A python regular expression"
@@ -115,11 +117,13 @@ class Regex(BaseConverter):
 
         try:
             return re.compile(arg)
-        except Exception:
-            raise ArgumentConversionError("Couldn't compile regex")
+        except Exception as e:
+            raise ArgumentConversionError("Couldn't compile regex") from e
 
 
 class Glob(BaseConverter):
+    """Glob converter for command arguments."""
+
     title: str = "Glob"
     short_help: str = "A glob pattern"
     help: str = "A glob pattern"
@@ -133,11 +137,13 @@ class Glob(BaseConverter):
             raise TypeError(msg)
         try:
             return re.compile(glob.translate(arg))
-        except Exception:
-            raise ArgumentConversionError("Couldn't compile glob expression")
+        except Exception as e:
+            raise ArgumentConversionError("Couldn't compile glob expression") from e
 
 
 class RangeInt(BaseConverter):
+    """Range converter for command arguments."""
+
     def __init__(self, min_: int | None, max_: int | None):
         super().__init__()
         self.min: int | None = min_
@@ -161,27 +167,27 @@ class RangeInt(BaseConverter):
     async def convert(
         self, g_ctx: GlobalContext, event: CommandEvent, arg: str | object
     ) -> int:
-        if not isinstance(arg, str):
+        if not isinstance(arg, (str, int)):
             msg = "Input was an invalid type."
             raise TypeError(msg)
         try:
             number = int(arg)
         except ValueError:
-            raise ArgumentConversionError("Expected an integer")
+            raise ArgumentConversionError("Expected an integer") from None
 
         if self.max is not None and number > self.max:
-            raise ArgumentConversionError(
-                f"Number is out of range! Maximum value: {self.max}"
-            )
+            msg = f"Number is out of range! Maximum value: {self.max}"
+            raise ArgumentConversionError(msg)
         if self.min is not None and number < self.min:
-            raise ArgumentConversionError(
-                f"Number is out of range! Minimum value: {self.min}"
-            )
+            msg = f"Number is out of range! Minimum value: {self.min}"
+            raise ArgumentConversionError(msg)
 
         return number
 
 
 class RangeFloat(BaseConverter):
+    """Range converter for command arguments."""
+
     def __init__(self, min_: float | None, max_: float | None):
         super().__init__()
         self.min: float | None = min_
@@ -191,11 +197,11 @@ class RangeFloat(BaseConverter):
             self.short_help: str = f"A decimal number in the range {min_} to {max_}"
             self.help: str = f"A decimal number in the range {min_} to {max_}"
         elif min_ is None and max_ is not None:
-            self.title = f"Decimal ({max_}+)"
+            self.title = f"Decimal ({max_}-)"
             self.short_help = f"A decimal number less than or equal to {max_}"
             self.help = f"A decimal number less than or equal to {max_}"
         elif min_ is not None and max_ is None:
-            self.title = f"Decimal ({min_}-)"
+            self.title = f"Decimal ({min_}+)"
             self.short_help = f"A decimal number greater than or equal to {min_}"
             self.help = f"A decimal number greater than or equal to {min_}"
         else:
@@ -205,22 +211,20 @@ class RangeFloat(BaseConverter):
     async def convert(
         self, g_ctx: GlobalContext, event: CommandEvent, arg: str | object
     ) -> float:
-        if not isinstance(arg, str):
+        if not isinstance(arg, (str, float, int)):
             msg = "Input was an invalid type."
             raise TypeError(msg)
         try:
             number = float(arg)
         except ValueError:
-            raise ArgumentConversionError("Expected a number")
+            raise ArgumentConversionError("Expected a number") from None
 
         if self.max is not None and number > self.max:
-            raise ArgumentConversionError(
-                f"Number is out of range! Maximum value: {self.max}"
-            )
+            msg = f"Number is out of range! Maximum value: {self.max}"
+            raise ArgumentConversionError(msg)
         if self.min is not None and number < self.min:
-            raise ArgumentConversionError(
-                f"Number is out of range! Minimum value: {self.min}"
-            )
+            msg = f"Number is out of range! Minimum value: {self.min}"
+            raise ArgumentConversionError(msg)
 
         return number
 

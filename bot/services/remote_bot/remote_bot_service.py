@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from fastapi import status as http_status
 from fastapi.responses import JSONResponse
 from msgspec import Struct, convert, defstruct, json, structs
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from bot.core.components import BaseService
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
-type RemoteMethod[T: Struct] = Callable[..., T | Awaitable[T]]
+type RemoteMethodAsync[T: Struct] = Callable[..., T | Awaitable[T]]
 
 DEFAULT_ENCODER = json.Encoder()
 
@@ -42,7 +42,7 @@ def dumps(x: Any) -> str:  # pyright: ignore[reportExplicitAny, reportAny]
 class RegisteredMethod(NamedTuple):
     """Data structure for a registered remote method."""
 
-    method: RemoteMethod[Struct]
+    method: RemoteMethodAsync[Struct]
     return_type: type[Struct]
     cog_instance: Cog
     struct: type[Struct]
@@ -143,7 +143,7 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
         self.inject_config_service(config_service)
 
         try:
-            self.subscribe_config(list[RemoteBotConfig])
+            __ = self.subscribe_config(list[RemoteBotConfig])
         except KeyError:
             LOGGER.debug("No remote_bots configuration found")
 
@@ -165,7 +165,7 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
         self,
         cog_name: str,
         method_name: str,
-        bound_method: RemoteMethod[T],
+        bound_method: RemoteMethodAsync[T],
         return_type: type[T],
         cog_instance: Cog,
     ) -> None:

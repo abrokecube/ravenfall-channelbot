@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 import inspect
 from inspect import Parameter
 from typing import TYPE_CHECKING, Any, cast
@@ -12,9 +13,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from bot.core.components import Cog
-    from bot.services.remote_bot_service import RemoteBotInstance
+    from bot.services.remote_bot import RemoteBotInstance
 
-from bot.services.remote_bot_service import RemoteBotService
+from bot.services.remote_bot import RemoteBotService
 
 type RemoteMethod[T: Struct] = Callable[..., T]
 
@@ -62,7 +63,7 @@ class RemoteCallableMixin:
         return None
 
 
-class RemoteCallable[T: Struct]:
+class RemoteCallable[U: Struct, T: Callable[..., Awaitable[Struct]]]:
     """Wrapper for remotely callable methods.
 
     Wraps a function to enable both local and remote execution.
@@ -85,8 +86,8 @@ class RemoteCallable[T: Struct]:
 
     def __init__(
         self,
-        func: RemoteMethod[T],
-        return_type: type[T],
+        func: T,
+        return_type: type[U],
         enc_hook: Callable[[Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
         dec_hook: Callable[[type, Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
     ) -> None:
@@ -99,8 +100,8 @@ class RemoteCallable[T: Struct]:
             dec_hook: Optional decoder hook override
 
         """
-        self.func: Callable[..., T] = func
-        self.return_type: type[T] = return_type
+        self.func: T = func
+        self.return_type: type[U] = return_type
         self.cog_instance: Cog | None = None
         self.enc_hook: Callable[[Any], Any] | None = enc_hook  # pyright: ignore[reportExplicitAny]
         self.dec_hook: Callable[[type, Any], Any] | None = dec_hook  # pyright: ignore[reportExplicitAny]
@@ -126,7 +127,7 @@ class RemoteCallable[T: Struct]:
         """
         self._method_name = name
 
-    def __get__(self, obj: Any, objtype: type | None = None) -> RemoteCallable[T]:  # pyright: ignore[reportExplicitAny, reportAny]
+    def __get__(self, obj: Any, objtype: type | None = None) -> RemoteCallable[U, T]:  # pyright: ignore[reportExplicitAny, reportAny]
         """Get the descriptor instance.
 
         Args:
@@ -142,7 +143,7 @@ class RemoteCallable[T: Struct]:
         self.cog_instance = obj
         return self
 
-    def __call__(self, *args: Any, **kwargs: Any) -> T:  # pyright: ignore[reportExplicitAny, reportAny]
+    def __call__(self, *args: Any, **kwargs: Any) -> Awaitable[U]:  # pyright: ignore[reportExplicitAny, reportAny]
         """Call the function locally without HTTP.
 
         Args:
@@ -156,14 +157,14 @@ class RemoteCallable[T: Struct]:
         if self.cog_instance is None:
             msg = "RemoteCallable must be accessed through an instance"
             raise RuntimeError(msg)
-        return self.func(self.cog_instance, *args, **kwargs)
+        return cast("Awaitable[U]", self.func(self.cog_instance, *args, **kwargs))
 
     async def call_remote(
         self,
         remote_bot: RemoteBotInstance,
         *args: Any,  # pyright: ignore[reportExplicitAny, reportAny]
         **kwargs: Any,  # pyright: ignore[reportExplicitAny, reportAny]
-    ) -> T:
+    ) -> U:
         """Call the function on a remote bot via HTTP.
 
         Args:
@@ -242,65 +243,3 @@ class RemoteCallable[T: Struct]:
         )
 
         self._registered = True
-
-
-def remote_callable[T: RemoteMethod[Struct], U: Struct](
-    enc_hook: Callable[[Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
-    dec_hook: Callable[[type, Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
-) -> Callable[[T], RemoteCallable[U]]:
-    """Decorator to mark a method as remotely callable.
-
-    This decorator transforms a function into a RemoteCallable object
-    that can be called locally (without HTTP) or remotely (via HTTP
-    to another bot instance).
-
-    Args:
-        enc_hook: Optional encoder hook to override class-level hook
-        dec_hook: Optional decoder hook to override class-level hook
-
-    Returns:
-        A decorator function that returns a RemoteCallable
-
-    Example:
-        ```python
-        class MyCog(Cog, RemoteCallableMixin):
-            @remote_callable()
-            def get_data(self) -> MyStruct:
-                return MyStruct(value="hello")
-
-            async def some_command(self, ctx):
-                # Local call
-                local = self.get_data()
-
-                # Remote call
-                remote_bot = self.global_context.get_service(RemoteBotService)
-                    .get_remote_bot("bot2")
-                remote = await self.get_data.call_remote(remote_bot)
-        ```
-
-    """
-
-    def decorator(func: T) -> RemoteCallable[U]:
-        """Inner decorator function.
-
-        Args:
-            func: The function to decorate
-
-        Returns:
-            A RemoteCallable wrapping the function
-
-        """
-        # Get return type from type hints
-        return_annotation = inspect.signature(func).return_annotation  # pyright: ignore[reportAny]
-        if return_annotation is inspect.Signature.empty:
-            msg = f"Function {func.__name__} must have a return type annotation"
-            raise TypeError(msg)
-
-        return RemoteCallable[U](
-            func=cast("RemoteMethod[U]", func),
-            return_type=return_annotation,  # pyright: ignore[reportAny]
-            enc_hook=enc_hook,
-            dec_hook=dec_hook,
-        )
-
-    return decorator

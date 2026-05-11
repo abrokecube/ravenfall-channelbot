@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from .checks import TwitchOnly as TwitchOnly
+from .consts import EVENT_SOURCE_TWITCH as EVENT_SOURCE_TWITCH
+from .converters import TwitchUsername as TwitchUsername
 from .deco import on_twitch_redeem as on_twitch_redeem
 from .dispatchers import TwitchRedeemDispatcher as TwitchRedeemDispatcher
 from .enums import TOPIC_REQUIRES_TARGET_CHANNEL as TOPIC_REQUIRES_TARGET_CHANNEL
@@ -19,5 +21,3 @@ from .events import TwitchIRCMessageEvent as TwitchIRCMessageEvent
 from .events import TwitchRedemptionEvent as TwitchRedemptionEvent
 from .exceptions import EventSubUnsubscriptionFailure as EventSubUnsubscriptionFailure
 from .services import TwitchService as TwitchService
-
-from .consts import EVENT_SOURCE_TWITCH

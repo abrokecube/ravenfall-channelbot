@@ -1,271 +1,382 @@
-"""Info cog: town, player, and system queries.
-
-Provides commands for querying towns, players, diagnostics and metrics.
-"""
-
 from __future__ import annotations
 
-from utils.format_time import seconds_to_dhms, format_seconds, format_timedelta, TimeSize
-from utils.is_twitch_username import is_twitch_username
-from utils.bytes_to_human_readable import bytes_to_human_readable
-from utils.runshell import runshell
-from utils import strutils, utils
+import asyncio
+import contextlib
+import re  # noqa: TC003
+import time
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
-from ..commands.cog import Cog
-from ..commands.events import CommandEvent
-from ..commands.decorators import command, parameter, cooldown
-from ..commands.enums import BucketType
-from ..commands.converters import (
-    Glob,
-    RFChannelConverter,
-    TwitchUsername,
-    RFSkill,
-    Choice,
+import psutil
+from msgspec import Struct
+from numerize.numerize import (  # pyright: ignore[reportMissingTypeStubs]
+    numerize,  # pyright: ignore[reportUnknownVariableType]
 )
 
-from ..prometheus import get_prometheus_instant, get_prometheus_series
-
-from ..ravenfallmanager import RFChannelManager
-from ..models import Village, GameSession, GameMultiplier
-from .. import braille
-from ..ravenfall_query import Character, Skills
-
-from ..ravenfallchannel import RFChannel
-from ..models import Player
-import re
-
 import ravenpy
+from bot.clients.ravenfall_query import Character, Village
+from bot.cogs.ravenfall_watcher import RavenfallWatcherService
+from bot.core.components import Cog
+from bot.core.decorators import cooldown
+from bot.core.enums import BucketType
+from bot.integrations.commands import (  # noqa: TC001
+    Choice,
+    CommandError,
+    CommandEvent,
+    Glob,
+    command,
+    parameter,
+)
+from bot.integrations.process_manager import ProcessManagerService
+from bot.integrations.ravenfall import (
+    RavenfallInstance,  # noqa: TC001
+    RavenfallInstanceConverter,
+    RavenfallService,
+    RavenfallSkillChoice,
+)
+from bot.integrations.twitch import TwitchUsername
+from bot.services.pastebin_service import PastebinService
+from bot.services.prometheus_service import PrometheusService
+from bot.services.remote_bot import RemoteBotService, RemoteCallableMixin, remote_callable
+from ravenpy.enums import Skills
+from utils import braille_graphics, strutils, utils
+from utils.bytes_to_human_readable import bytes_to_human_readable
+from utils.format_time import TimeSize, format_seconds, format_timedelta, seconds_to_dhms
+from utils.strings import DIAMOND, EN_DASH, MULTIPICATION_SIGN
 
-from datetime import timezone, timedelta, datetime
-import psutil
-import asyncio
-import time
-import os
-from collections import defaultdict
-
-from numerize.numerize import numerize
+if TYPE_CHECKING:
+    from bot.clients.ravenfall_query import Player
+    from bot.core.components import EventManager
+    from bot.services.prometheus_service import FloatValue
 
 
-class InfoCog(Cog):
-    """Cog exposing informational queries about towns, players and system status.
+class TownInfo(Struct):
+    name: str
+    boost: str
 
-    Commands include character lookup, uptime, system diagnostics and metrics.
-    """
 
-    @command(name="towns")
+class TownInfos(Struct):
+    towns: list[TownInfo]
+
+
+class InfoCog(Cog, RemoteCallableMixin):
+    """Epic info cog."""
+
+    def __init__(self, event_manager: EventManager) -> None:
+        super().__init__(event_manager)
+
+    @remote_callable(TownInfos)
+    async def get_towns(self) -> TownInfos:
+        """Get a list of registered towns."""
+        ravenfall_srv = self.g_ctx.get_service(RavenfallService)
+        town_info = TownInfos([])
+        if not ravenfall_srv:
+            return town_info
+        tasks = [x.get_village() for x in ravenfall_srv.get_all_ravenfall_instances()]
+        town_villages = await asyncio.gather(*tasks, return_exceptions=True)
+        for t in town_villages:
+            if not isinstance(t, Village):
+                continue
+            if not t.boost:
+                boost_str = "No boost"
+            else:
+                boost_str = ", ".join(
+                    f"{x.skill.name}: {x.multiplier:%}" for x in t.boost
+                )
+            town_info.towns.append(TownInfo(t.name, boost_str))
+        return town_info
+
+    @command()
     async def towns(self, ctx: CommandEvent):
         """Lists my towns."""
-        out_str = []
-        for idx, channel in enumerate(self.global_context.ravenfall_manager.channels):
-            village: Village = await channel.get_query("select * from village")
-            if not isinstance(village, dict):
-                continue
-            if len(village["boost"].strip()) > 0:
-                split = village["boost"].split()
-                boost_stat = split[0]
-                boost_value = float(split[1].rstrip("%"))
-                asdf = f"Town #{idx + 1}: @{channel.channel_name} - {boost_stat} {int(round(boost_value))}%"
+        remote_call_srv = self.g_ctx.get_service(RemoteBotService)
+        towns: list[TownInfo] = []
+        towns.extend((await self.get_towns()).towns)
+        if remote_call_srv:
+            tasks = [
+                self.get_towns.call_remote(x)
+                for x in remote_call_srv.remote_bots.values()
+            ]
+            for x in await asyncio.gather(*tasks, return_exceptions=True):
+                if not isinstance(x, TownInfos):
+                    continue
+                towns.extend(x.towns)
+        await ctx.reply(f" {DIAMOND} ".join(f"@{x.name} - {x.boost}" for x in towns))
+
+    async def _event_text(self, instance: RavenfallInstance):
+        watcher_service = self.g_ctx.get_service(RavenfallWatcherService)
+        watcher = None
+        if watcher_service:
+            with contextlib.suppress(ValueError):
+                watcher = watcher_service.get_watcher(instance.channel_name)
+            if watcher and watcher.ravenfall_restart_lock.locked():
+                return "Ravenfall is restarting..."
+
+        raid = await instance.get_raid()
+        if raid and raid.started:
+            return (
+                f"RAID {EN_DASH} "
+                f"Boss HP: {raid.boss.health:,}/{raid.boss.max_health:,} "
+                f"({raid.boss.health / raid.boss.max_health:.1%}) {EN_DASH} "
+                f"Players: {raid.players:,} {EN_DASH} "
+                f"Time left: {format_seconds(raid.time_left)}"
+            )
+
+        event_text = "No active event."
+        dungeon = await instance.get_dungeon()
+        if dungeon and dungeon.enemies > 0:
+            dungeon_name = "DUNGEON"
+            if dungeon.name:
+                dungeon_name = f"DUNGEON: {dungeon.name}"
+            if not dungeon.started:
+                time_starting = format_seconds(dungeon.seconds_until_start)
+                if dungeon.boss.health > 0:
+                    event_text = (
+                        f"{dungeon_name} starting in {time_starting} {EN_DASH} "
+                        f"Boss HP: {dungeon.boss.health:,} {EN_DASH} "
+                        f"Enemies: {dungeon.enemies:,} {EN_DASH} "
+                        f"Players: {dungeon.players:,}"
+                    )
+                else:
+                    event_text = (
+                        f"{dungeon_name} is being prepared... {EN_DASH} "
+                        f"Enemies: {dungeon.enemies:,}/49"
+                    )
             else:
-                asdf = f"Town #{idx + 1}: @{channel.channel_name} - No boost"
-            if channel.custom_town_msg:
-                asdf += f" {channel.custom_town_msg}"
-            out_str.append(asdf)
-        out_str.append("Other Ravenfall towns - https://www.ravenfall.stream/towns")
-        await ctx.message.reply(" ✦ ".join(out_str))
+                event_text = (
+                    f"{dungeon_name} {EN_DASH} "
+                    f"Boss HP: {dungeon.boss.health:,}/{dungeon.boss.max_health:,} "
+                    f"({dungeon.boss.health / dungeon.boss.max_health:.1%}) {EN_DASH} "
+                    f"Enemies: {dungeon.enemies_alive:,}/{dungeon.enemies:,} {EN_DASH} "
+                    f"Players: {dungeon.players_alive:,}/{dungeon.players:,} {EN_DASH} "
+                    f"Elapsed time: {format_seconds(dungeon.elapsed)}"
+                )
+                if watcher:
+                    time_left = watcher.config.max_dungeon_time_seconds - dungeon.elapsed
+                    event_text += f" {EN_DASH} Time limit: {format_seconds(time_left)}"
+        return event_text
 
-    @command(name="event")
-    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def event(self, ctx: CommandEvent, channel: RFChannel = "this"):
-        """Show the current town event.
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @command()
+    async def event(self, ctx: CommandEvent, *, instance: RavenfallInstance):
+        """Shows the current town event."""
+        event_text = await self._event_text(instance)
+        if event_text:
+            await ctx.reply(event_text)
+            return
 
-        Args:
-            channel: Target channel.
-        """
-        await ctx.message.reply(channel.event_text)
-
-    @command(name="uptime")
-    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def uptime(self, ctx: CommandEvent, *, channel: RFChannel = "this"):
-        """Reports Ravenfall's uptime.
-
-        Args:
-            channel: Target channel.
-        """
-        session: GameSession = await channel.get_query("select * from session")
-        if not isinstance(session, dict):
-            await ctx.message.reply("Ravenfall seems to be offline!")
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @command()
+    async def uptime(self, ctx: CommandEvent, *, instance: RavenfallInstance):
+        """Ravenfall uptime."""
+        session = await instance.get_session()
+        if not session:
+            await ctx.reply("Ravenfall seems to be offline!")
             return
         await ctx.message.reply(
-            f"Ravenfall uptime: {seconds_to_dhms(session['secondssincestart'])}"
+            f"Ravenfall uptime: {seconds_to_dhms(session.seconds_since_start)}"
         )
 
-    @command(name="system")
+    @command()
     async def system(self, ctx: CommandEvent):
-        """Return system diagnostics (CPU, RAM, battery, uptime)."""
+        """System diagnostics (CPU, RAM, battery, uptime)."""
         cpu_usage = await asyncio.to_thread(psutil.cpu_percent, 1)
         cpu_freq = psutil.cpu_freq().current
         ram = psutil.virtual_memory()
-        ram_usage = ram.used
-        ram_total = ram.total
-        battery = psutil.sensors_battery()
+        ram_usage = ram.used  # pyright: ignore[reportAny]
+        ram_total = ram.total  # pyright: ignore[reportAny]
+        battery = psutil.sensors_battery()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         battery_text = ""
         if battery:
-            battery_percent = battery.percent
-            battery_plugged = "Charging" if battery.power_plugged else "Not charging"
-            battery_time_left = format_seconds(battery.secsleft)
-            battery_text = f"Battery: {battery_percent}%, {battery_plugged} ({battery_time_left} left)"
+            battery_percent = battery.percent  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            battery_plugged = "Charging" if battery.power_plugged else "Not charging"  # pyright: ignore[reportUnknownMemberType]
+            battery_time_left = format_seconds(battery.secsleft)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+            battery_text = (
+                f"Battery: {battery_percent}%, {battery_plugged} "
+                f"({battery_time_left} left)"
+            )
         uptime = time.time() - psutil.boot_time()
         await ctx.message.reply(
             strutils.strjoin(
-                " – ",
+                f" {EN_DASH} ",
                 f"CPU: {cpu_usage / 100:.1%}, {cpu_freq:.0f} MHz",
-                f"RAM: {bytes_to_human_readable(ram_usage)}/{bytes_to_human_readable(ram_total)}",
+                f"RAM: {bytes_to_human_readable(ram_usage)}/"  # pyright: ignore[reportAny]
+                f"{bytes_to_human_readable(ram_total)}",  # pyright: ignore[reportAny]
                 battery_text,
                 f"Uptime: {seconds_to_dhms(uptime)}",
             )
         )
 
-    @command(name="rfram", help_text="Ravenfall RAM usage")
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
     @parameter("all_", display_name="all", aliases=["a"])
-    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @command()
     async def rfram(
-        self, ctx: CommandEvent, *, channel: RFChannel = "this", all_: bool = False
+        self, ctx: CommandEvent, *, instance: RavenfallInstance | None, all_: bool = False
     ):
-        """Show Ravenfall RAM usage for a channel or all channels.
+        """Show Ravenfall RAM usage for a channel or all channels."""
+        prometheus_srv = self.g_ctx.require_service(PrometheusService)
+        watcher_srv = self.g_ctx.require_service(RavenfallWatcherService)
+        process_srv = self.g_ctx.require_service(ProcessManagerService)
 
-        Args:
-            channel: Target channel.
-            all_: Show usage for all channels.
-        """
-        processes: dict[str, list[float]] = {}
-        working_set = await get_prometheus_instant(
+        watchers = watcher_srv.get_all_watchers()
+        proc_stats = await asyncio.gather(
+            *[
+                process_srv.get_process_statistics(
+                    "Ravenfall", i.config.sandboxie_box_name
+                )
+                for i in watchers
+            ]
+        )
+        watcher_stats = dict(zip(watchers, proc_stats, strict=True))
+
+        working_set = await prometheus_srv.query(
             "windows_process_working_set_private_bytes{process='Ravenfall'}"
         )
-        change_over_time = await get_prometheus_instant(
+        working_set_pids = {
+            int(x.metric["process_id"]): x.value.value for x in working_set
+        }
+
+        change_over_time = await prometheus_srv.query(
             "deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])"
         )
-        working_set_series = await get_prometheus_series(
+        change_over_time_pids = {
+            int(x.metric["process_id"]): x.value.value for x in change_over_time
+        }
+        working_set_series = await prometheus_srv.query_range(
             "windows_process_working_set_private_bytes{process='Ravenfall'}", 60 * 10
         )
-        tasks = []
-        for ch in self.global_context.ravenfall_manager.channels:
-            shellcmd = f'"{os.getenv("SANDBOXIE_START_PATH")}" /box:{ch.sandboxie_box} /silent /listpids'
-            tasks.append(runshell(shellcmd))
-        responses: list[str | None] = await asyncio.gather(*tasks)
-        if None in responses:
-            await ctx.message.reply("Could not get data")
-            return
-        pid_lists = [x.splitlines() for code, x in responses]
-        box_pids = {}
-        for i in range(len(self.global_context.ravenfall_manager.channels)):
-            box_pids[self.global_context.ravenfall_manager.channels[i].channel_name] = (
-                pid_lists[i]
-            )
-        for metric in working_set:
-            m = metric["metric"]
-            name = m["process_id"]
-            processes[name] = [int(metric["value"][1])]
-        for metric in change_over_time:
-            m = metric["metric"]
-            name = m["process_id"]
-            if name in processes:
-                processes[name].append(float(metric["value"][1]))
-        for metric in working_set_series:
-            m = metric["metric"]
-            name = m["process_id"]
-            data_pairs = [(x[0], float(x[1])) for x in metric["values"]]
-            if name in processes:
-                processes[name].append(data_pairs)
-        processes_named: dict[str, list[float]] = {}
-        for name, pids in box_pids.items():
-            for pid in pids:
-                if pid in processes:
-                    processes_named[name] = processes[pid]
-                    break
-        out_str = []
+        working_set_series_pids = {
+            int(x.metric["process_id"]): x.values for x in working_set_series
+        }
         if all_:
-            for name, (bytes_used, change, series) in processes_named.items():
-                s = "+"
-                if change < 0:
-                    s = ""
+            out_str: list[str] = []
+            for w in watchers:
+                stats = watcher_stats[w]
+                if not stats.pids:
+                    continue
+                pid = next(iter(stats.pids))
+                proc_working_set = working_set_pids[pid]
+                proc_change_over_time = change_over_time_pids[pid]
+
+                sign = "+"
+                if proc_change_over_time < 0:
+                    sign = "-"
                 out_str.append(
-                    f"{name} - {bytes_to_human_readable(bytes_used)} ({s}{bytes_to_human_readable(change)}/s)"
+                    f"{w.ravenfall.channel_name} - "
+                    f"{bytes_to_human_readable(int(proc_working_set))} "
+                    f"({sign}{bytes_to_human_readable(int(proc_change_over_time))}/s)"
                 )
-            await ctx.message.reply(
-                f"Ravenfall ram usage: {' • '.join(out_str)} | Showing change over 3 minutes"
+            await ctx.reply(
+                f"Ravenfall ram usage: {' • '.join(out_str)} | "
+                "Showing change over 3 minutes"
             )
         else:
-            bytes_used, change, series = processes_named[channel.channel_name]
-            graph = braille.simple_line_graph(
-                series, max_gap=30, width=26, fill_type=1, hard_min_val=1
+            if not instance:
+                raise CommandError("An instance must be specified.")
+            try:
+                watcher = watcher_srv.get_watcher(instance.channel_name)
+            except ValueError as e:
+                raise CommandError("Instance is not monitored.") from e
+            stats = watcher_stats[watcher]
+            pid = next(iter(stats.pids))
+            proc_working_set = working_set_pids[pid]
+            proc_change_over_time = change_over_time_pids[pid]
+            proc_working_set_series = working_set_series_pids[pid]
+            graph = braille_graphics.simple_line_graph(
+                proc_working_set_series, max_gap=30, width=26, fill_type=1, hard_min_val=1
             )
-            await ctx.message.reply(
-                f"[{graph}] Ravenfall is using {bytes_to_human_readable(bytes_used)} of memory; "
-                f"changed by {bytes_to_human_readable(change)}/s over 3 mins. (Graph: 10 minutes)"
+            await ctx.reply(
+                f"[{graph}] Ravenfall is using "
+                f"{bytes_to_human_readable(int(proc_working_set))} of memory; "
+                f"changed by {bytes_to_human_readable(int(proc_change_over_time))}/s "
+                "over 3 mins. (Graph: 10 minutes)"
             )
 
-    @command(name="exprate", aliases=["expirate"])
-    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("target_user", converter=TwitchUsername)
+    @command()
     async def exprate(
         self,
         ctx: CommandEvent,
-        target_user: TwitchUsername = None,
+        target_user: str | None = None,
         *,
-        channel: RFChannel = "this",
+        instance: RavenfallInstance,
     ):
-        """Show a user's experience earn rate (exp/hour).
-
-        Args:
-            target_user: Twitch username to query (defaults to command author).
-            channel: Target channel.
-        """
+        """Show a user's experience earn rate (exp/hour)."""
         if not target_user:
             target_user = ctx.message.author_login
+
+        prometheus_srv = self.g_ctx.require_service(PrometheusService)
         query = (
-            'sum(rate(rf_player_stat_experience_total{player_name="%s",session="%s",stat!="health"}[30s]))'
-            % (target_user, channel.channel_name)
+            f"sum(rate(rf_player_stat_experience_total"
+            f'{{player_name="{target_user}",session="{instance.channel_name}",stat!="health"}}[30s]))'
         )
-        data = await get_prometheus_series(query, 10 * 60)
+        data = await prometheus_srv.query_range(query, 10 * 60)
         if len(data) == 0:
-            await ctx.message.reply(
+            await ctx.reply(
                 "No data recorded. Your character may not be in this town right now."
             )
             return
-        data_pairs = [(x[0], float(x[1])) for x in data[0]["values"]]
-        graph = braille.simple_line_graph(
-            data_pairs, max_gap=30, width=26, min_val=1, fill_type=1
+        graph = braille_graphics.simple_line_graph(
+            data[0].values, max_gap=30, width=26, min_val=1, fill_type=1
         )
-        await ctx.message.reply(
-            f"[{graph}] Earning {data_pairs[-1][1] * 60 * 60:,.0f} exp/h (graph: last 10 minutes)"
-        )
+        rate = data[0].values[-1].value * 60 * 60
+        await ctx.reply(f"[{graph}] Earning {rate:,.0f} exp/h (graph: last 10 minutes)")
 
-    @command(name="character", aliases=["char", "show"])
-    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("target_user", converter=TwitchUsername)
+    @command(aliases=["char", "show"])
     async def character(
         self,
         ctx: CommandEvent,
-        target_user: TwitchUsername = None,
+        target_user: str | None = None,
         *,
-        channel: RFChannel = "this",
+        instance: RavenfallInstance,
     ):
-        """Show a player's character information and training status.
+        """Show a player's character information and training status."""
+        prometheus_srv = self.g_ctx.require_service(PrometheusService)
 
-        Args:
-            target_user: Twitch username to query (defaults to command author).
-            channel: Target channel.
-        """
         if not target_user:
             target_user = ctx.message.author_login
-
-        player_info = await channel.get_query(
-            "select * from players where name = '%s'" % target_user
-        )
-        if isinstance(player_info, dict) and player_info:
-            char = Character(player_info)
-        else:
-            await ctx.message.reply("You are not currently playing.")
+        players = await instance.get_players()
+        if not players:
+            raise CommandError("Unable to get player data.")
+        player: Player | None = None
+        for p in players:
+            if p.name == target_user:
+                player = p
+                break
+        if not player:
+            if target_user == ctx.message.author_login:
+                await ctx.reply("You are not currently playing.")
+            else:
+                await ctx.reply("This user is currenly not playing.")
             return
-        ferry_info = await channel.get_query("select * from ferry")
+        char = Character(player)
+        ferry = await instance.get_ferry()
+        if not ferry:
+            raise CommandError("Unable to get player data.")
 
         where = ""
         if char.in_raid:
@@ -297,10 +408,8 @@ class InfoCog(Cog):
             else:
                 what = f"{char.training.name.lower()}"
         elif char.training == Skills.Alchemy:
-            what = f"training alchemy"
-        elif char.training == Skills.Sailing:
-            pass
-        elif char.training is None:
+            what = "training alchemy"
+        elif char.training == Skills.Sailing or char.training is None:
             pass
         else:
             what = f"{char.training.name.lower()}"
@@ -310,7 +419,10 @@ class InfoCog(Cog):
 
         target_item = ""
         if char.target_item and what and not char.in_onsen:
-            target_item = f"{char.target_item.amount}× {char.target_item.item.name}"
+            target_item = (
+                f"{char.target_item.amount}{MULTIPICATION_SIGN} "
+                f"{char.target_item.item.name}"
+            )
 
         where_island = ""
         if char.island:
@@ -326,10 +438,10 @@ class InfoCog(Cog):
             )
 
         captain = ""
-        if ferry_info["captain"]["name"] == char.user_name:
+        if ferry.captain.name == char.user_name:
             captain = "as the ship captain"
 
-        stats = []
+        stats: list[str] = []
         if not char.in_onsen:
             for char_stat in char.training_stats:
                 skill_name = char_stat.skill.name.capitalize()
@@ -339,16 +451,14 @@ class InfoCog(Cog):
                     f"{char_stat.level_exp:,.0f}/{char_stat.total_exp_for_level:,.0f} EXP"
                 )
         query = (
-            'sum(deriv(rf_player_stat_experience_total{player_name="%s",session="%s",stat!="health"}[2m]))'
-            % (target_user, channel.channel_name)
+            f"sum(deriv(rf_player_stat_experience_total"
+            f'{{player_name="{target_user}",session="{instance.channel_name}",stat!="health"}}[2m]))'
         )
-        data = await get_prometheus_series(query, 1)
-
+        player_exp_data = await prometheus_srv.query(query)
         char_exp_per_h = 0.0
         has_exp_data = False
-        if data:
-            data_pairs = [(x[0], float(x[1])) for x in data[0]["values"]]
-            char_exp_per_h = data_pairs[-1][1] * 60 * 60
+        if player_exp_data:
+            char_exp_per_h = player_exp_data[0].value.value
             has_exp_data = True
 
         training_time_exp = timedelta(weeks=9999)
@@ -366,107 +476,85 @@ class InfoCog(Cog):
             train_time_format = format_timedelta(training_time_exp, s)
             if char.island and not char.in_onsen:
                 if training_time_exp.total_seconds() > 60 * 60 * 24 * 100:  # 99 days
-                    train_time = f"Level in ∞"
+                    train_time = "Level in ∞"
                 else:
                     train_time = f"Level in {train_time_format}"
             if char.island and not char.in_onsen:
                 exp_per_hr = f"{char_exp_per_h:,.0f} exp/hr"
 
-        coins = f"{utils.pl(char.coins, 'coin')}"
+        coins = f"{strutils.pl(char.coins, 'coin')}"
 
-        summary = utils.strjoin(
+        summary = strutils.strjoin(
             " ", index_and_combat_level, "is", what, where, where_island, captain, rested
         )
-        out_str = utils.strjoin(
-            " – ",
+        out_str = strutils.strjoin(
+            f" {EN_DASH} ",
             summary,
             target_item,
-            utils.strjoin(", ", *stats),
+            strutils.strjoin(", ", *stats),
             exp_per_hr,
             train_time,
             coins,
         )
         user_name = f"{utils.unping(char.user_name)}"
-        out_msgs = utils.strjoin(" ", user_name, out_str)
+        out_msgs = strutils.strjoin(" ", user_name, out_str)
         if train_time:
-            out_msgs = utils.strjoin("", out_msgs, f" | Training time is estimated")
+            out_msgs = strutils.strjoin("", out_msgs, " | Training time is estimated")
         await ctx.message.reply(out_msgs)
 
-    @command(
-        name="mult",
+    @parameter("skill", converter=RavenfallSkillChoice)
+    @parameter(
+        "name_glob", aliases=["g", "f", "filter", "glob"], converter=Glob, default="*"
     )
-    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    async def mult(self, ctx: CommandEvent, *, channel: RFChannel = "this"):
-        """Show the current global experience multiplier for a channel.
-
-        Args:
-            channel: Target channel.
-        """
-        multiplier = await channel.get_query("select * from multiplier")
-        mult = int(multiplier["multiplier"])
-        if not isinstance(multiplier, dict):
-            await ctx.message.reply("Ravenfall seems to be offline!")
-            return
-        if mult <= 1:
-            await ctx.message.reply(f"Current global exp multiplier is {mult}×.")
-        else:
-            await ctx.message.reply(
-                f"Current global exp multiplier is {mult}×, "
-                f"ending in {format_seconds(multiplier['timeleft'], TimeSize.LONG)}, "
-                f"thanks to {multiplier['eventname']}!"
-            )
-
-    @command(aliases=["h", "top_", "t"])
-    @parameter("skill", converter=RFSkill)
-    @parameter("name_glob", aliases=["g", "f", "filter", "glob"], converter=Glob)
     @parameter(
         "invert_glob",
         aliases=["invert_filter", "if", "ig"],
-        help_text="Invert the name filter",
+        description="Invert the name filter",
     )
-    @parameter("enchanted", aliases=["e"], help_text="Display enchanted stats")
-    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("enchanted", aliases=["e"], description="Display enchanted stats")
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @command(aliases=["h", "top_", "t"])
     async def highest_(
         self,
         ctx: CommandEvent,
         skill: str,
         *,
-        name_glob: re.Pattern = "*",
+        name_glob: re.Pattern[str],
         invert_glob: bool = False,
         enchanted: bool = False,
-        channel: RFChannel = "this",
+        instance: RavenfallInstance,
     ):
-        """Show the top player(s) for a given skill.
-
-        Args:
-            skill: Skill name to query.
-            channel: Target channel.
-        """
+        """Show the top player(s) for a given skill."""
         skill = skill.lower()
-        players: list[Player] = await channel.get_query("select * from players")
-        if not isinstance(players, list):
+        players = await instance.get_players()
+        if not players:
             await ctx.message.reply("Ravenfall seems to be offline!")
             return
         if not invert_glob:
-            players = list(filter(lambda x: name_glob.match(x["name"]), players))
+            players = list(filter(lambda x: name_glob.match(x.name), players))
         else:
-            players = list(
-                filter(lambda x: not bool(name_glob.match(x["name"])), players)
-            )
+            players = list(filter(lambda x: not bool(name_glob.match(x.name)), players))
 
         if not players:
             await ctx.message.reply("No players!")
             return
-        a = "level"
-        if enchanted:
-            a = "maxlevel"
-        players.sort(key=lambda x: x["stats"][skill][a], reverse=True)
 
-        top_level = players[0]["stats"][skill][a]
-        top_players = []
-        for player in players:
-            if player["stats"][skill][a] == top_level:
-                top_players.append(utils.unping(player["name"]))
+        if enchanted:
+            player_levels = [(x, x.stats.get_stat(skill).max_level) for x in players]
+        else:
+            player_levels = [(x, x.stats.get_stat(skill).level) for x in players]
+
+        player_levels.sort(key=lambda x: x[1], reverse=True)
+        top_level = player_levels[0][1]
+
+        top_players: list[str] = []
+        for player, level in player_levels:
+            if level == top_level:
+                top_players.append(utils.unping(player.name))
             else:
                 break
 
@@ -479,88 +567,82 @@ class InfoCog(Cog):
             joined = strutils.strjoin(", ", *top_players, before_end=" and ")
             await ctx.message.reply(f"{joined} have level {top_level} {skill}!")
 
-    @command(name="playerlist", aliases=["player list", "players"])
     @parameter(
         "sort_by", aliases=["s"], converter=Choice(["name", "combatlevel", "none"])
     )
     @parameter(
         "group_by", aliases=["g"], converter=Choice(["training", "island", "none"])
     )
-    @parameter("channel", aliases=["c"], converter=RFChannelConverter)
-    @parameter("name_glob", aliases=["filter", "f", "glob"], converter=Glob)
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("name_glob", aliases=["filter", "f", "glob"], converter=Glob, default="*")
     @parameter(
         "invert_glob",
         aliases=["invert_filter", "if", "ig"],
-        help_text="Invert the name filter",
+        description="Invert the name filter",
     )
     @cooldown(1, 10, BucketType.CHANNEL)
-    async def player_list(
+    @command(aliases=["player list", "players"])
+    async def playerlist(
         self,
         ctx: CommandEvent,
         *,
         sort_by: str = "name",
         group_by: str = "none",
-        name_glob: re.Pattern = "*",
+        name_glob: re.Pattern[str],
         invert_glob: bool = False,
-        channel: RFChannel = "this",
+        instance: RavenfallInstance,
     ):
-        """list players in the channel with optional sorting and grouping.
-
-        Args:
-            sort_by: Field to sort by.
-            group_by: Optional grouping field.
-            channel: Target channel.
-        """
-        tasks = [
-            channel.get_query("select * from players"),
-            channel.get_query("select * from multiplier"),
-            channel.get_query("select * from village"),
-        ]
-        players: list[Player]
-        multiplier: GameMultiplier
-        village: Village
-        players, multiplier, village = await asyncio.gather(*tasks)
-        if any([x is None for x in [players, multiplier, village]]):
-            await ctx.message.reply("Ravenfall seems to be offline!")
+        """List players in the channel with optional sorting and grouping."""
+        prometheus_srv = self.g_ctx.require_service(PrometheusService)
+        pastebin_srv = self.g_ctx.require_service(PastebinService)
+        players = await instance.get_players()
+        multiplier = await instance.get_multiplier()
+        village = await instance.get_village()
+        if players is None or multiplier is None or village is None:
+            await ctx.reply("Ravenfall seems to be offline!")
             return
 
         total_player_count = len(players)
         if not invert_glob:
-            players = list(filter(lambda x: name_glob.match(x["name"]), players))
+            players = list(filter(lambda x: name_glob.match(x.name), players))
         else:
-            players = list(
-                filter(lambda x: not bool(name_glob.match(x["name"])), players)
-            )
+            players = list(filter(lambda x: not bool(name_glob.match(x.name)), players))
         filtered_player_count = len(players)
         if not players:
             await ctx.message.reply("No players!")
             return
         players_parsed = [Character(x) for x in players]
 
-        username_to_id = {}
-        id_to_username = {}
-        char_ids = []
+        username_to_id: dict[str, str] = {}
+        id_to_username: dict[str, str] = {}
+        char_ids: list[str] = []
         for p in players_parsed:
             username_to_id[p.user_name] = p.id
             id_to_username[p.id] = p.user_name
             char_ids.append(p.id)
         query = (
-            'sum by (player_id) (rate(rf_player_stat_experience_total{player_id=~"%s",session="%s",stat!="health"}[30s]))'
-            % ("|".join(char_ids), channel.channel_name)
+            "sum by (player_id) (rate(rf_player_stat_experience_total"
+            '{{player_id=~"{}",session="{}",stat!="health"}}[30s]))'.format(
+                "|".join(char_ids), instance.channel_name
+            )
         )
-        char_exprate_series = await get_prometheus_series(query, 10 * 60)
+        char_exprate_series = await prometheus_srv.query_range(query, 10 * 60)
 
-        char_exprates = {}
+        char_exprates: dict[str, list[FloatValue]] = {}
         for series in char_exprate_series:
-            char_exprates[id_to_username[series["metric"]["player_id"]]] = [
-                [x, float(y)] for x, y in series["values"]
-            ]
+            char_exprates[id_to_username[series.metric["player_id"]]] = series.values
 
         match sort_by:
             case "name":
                 players_parsed.sort(key=lambda x: x.user_name)
             case "combatlevel":
                 players_parsed.sort(key=lambda x: x.combat_level, reverse=True)
+            case _:
+                pass
 
         players_grouped: dict[str, list[Character]] = defaultdict(list)
 
@@ -613,32 +695,30 @@ class InfoCog(Cog):
             case _:
                 players_grouped[""] = players_parsed
 
-        out_str = []
+        out_str: list[str] = []
 
-        top_line = []
-        top_line.append(f"Player info for {channel.channel_name} ")
+        top_line: list[str] = []
+        top_line.append(f"Player info for {instance.channel_name} ")
         if total_player_count != filtered_player_count:
             top_line.append("(filtered) ")
-        top_line.append(
-            f"(as of {datetime.now(timezone.utc).strftime('%d %b %Y %H:%M:%S UTC')})"
-        )
+        top_line.append(f"(as of {datetime.now(UTC).strftime('%d %b %Y %H:%M:%S UTC')})")
 
         out_str.append("".join(top_line))
         out_str.append("")
-        mult = int(multiplier["multiplier"])
+        mult = int(multiplier.multiplier)
         if mult <= 1:
             out_str.append(f"Global multiplier: {mult}x.")
         else:
             out_str.append(
                 f"Global multiplier: {mult} - "
-                f"Ends in: {format_seconds(multiplier['timeleft'], TimeSize.LONG)} - "
-                f"Event: {multiplier['eventname']}"
+                f"Ends in: {format_seconds(multiplier.time_left, TimeSize.LONG)} - "
+                f"Event: {multiplier.event_name}"
             )
-        out_str.append(f"Boosts: {village['boost']}")
-        out_str.append(f"Current event: {channel.event_text}")
+        out_str.append(f"Boosts: {village.boost}")
+        out_str.append(f"Current event: {await self._event_text(instance)}")
         out_str.append("")
 
-        char_actions = {}
+        char_actions: dict[str, tuple[str, str]] = {}
         for char in players_parsed:
             action_symbol = " "
             training_skill_is_maxed = False
@@ -649,50 +729,48 @@ class InfoCog(Cog):
                     )
                 else:
                     t_skill = char.get_skill(char.training)
-                training_skill_is_maxed = (
-                    t_skill.level == 999
-                    and (t_skill.level_exp / t_skill.total_exp_for_level) > 0.99
-                )
+                _max_lvl = 999
+                training_skill_is_maxed = t_skill.level == _max_lvl
             if training_skill_is_maxed:
                 action_symbol = "-"
 
             rec_island = ""
-            if char.training and not char.training == Skills.Sailing:
-                if not (char.in_raid or char.in_dungeon):
-                    if char.training in (Skills.All, Skills.Health):
-                        skill = max(
-                            char.attack,
-                            char.defense,
-                            char.strength,
-                            key=lambda x: x.level,
-                        )
-                    else:
-                        skill = char.get_skill(char.training)
+            if (
+                char.training
+                and char.training != Skills.Sailing
+                and not (char.in_raid or char.in_dungeon)
+            ):
+                if char.training in (Skills.All, Skills.Health):
+                    skill = max(
+                        char.attack,
+                        char.defense,
+                        char.strength,
+                        key=lambda x: x.level,
+                    )
+                else:
+                    skill = char.get_skill(char.training)
 
-                    is_training_combat = skill.skill in ravenpy.fighting_skills
-                    recommended_island_min = ravenpy.get_island_for_level(skill.level)
-                    recommended_island_max = recommended_island_min
-                    if is_training_combat and skill.level < char.combat_level:
-                        recommended_island_max = max(
-                            ravenpy.get_island_for_level(char.combat_level),
-                            recommended_island_min,
-                            key=lambda x: x.value,
-                        )
+                is_training_combat = skill.skill in ravenpy.fighting_skills
+                recommended_island_min = ravenpy.get_island_for_level(skill.level)
+                recommended_island_max = recommended_island_min
+                if is_training_combat and skill.level < char.combat_level:
+                    recommended_island_max = max(
+                        ravenpy.get_island_for_level(char.combat_level),
+                        recommended_island_min,
+                        key=lambda x: x.value,
+                    )
 
-                    if (not training_skill_is_maxed) and (
-                        (
-                            not char.island
-                            or char.island.value > recommended_island_max.value
-                        )
-                        or char.island.value < recommended_island_min.value
-                    ):
-                        rec_island = f"Sail to {recommended_island_max.name.capitalize()}"
-                        action_symbol = "*"
+                if (not training_skill_is_maxed) and (
+                    (not char.island or char.island.value > recommended_island_max.value)
+                    or char.island.value < recommended_island_min.value
+                ):
+                    rec_island = f"Sail to {recommended_island_max.name.capitalize()}"
+                    action_symbol = "*"
 
             not_earning = ""
             if (
                 (not char.is_resting)
-                and (not any([y != 0 for x, y in char_exprates[char.user_name][-15:]]))
+                and (not any(y != 0 for _, y in char_exprates[char.user_name][-15:]))
                 and not training_skill_is_maxed
             ):
                 not_earning = "Not earning exp"
@@ -700,7 +778,7 @@ class InfoCog(Cog):
 
             char_actions[char.user_name] = (
                 action_symbol,
-                utils.strjoin(", ", not_earning, rec_island),
+                strutils.strjoin(", ", not_earning, rec_island),
             )
 
         out_str.append(
@@ -730,23 +808,20 @@ class InfoCog(Cog):
             for char in items:
                 what = ""
 
-                stats = []
+                stats: list[str] = []
                 for char_stat in char.training_stats:
                     skill_name = char_stat.skill.name
                     enchant_levels = ""
                     if char_stat.enchant_levels > 0:
                         enchant_levels = f"[+{char_stat.enchant_levels}]"
-                    stats.append(
-                        utils.strjoin(
-                            " ",
-                            *(
-                                f"{skill_name} {char_stat.level}",
-                                enchant_levels,
-                                f"({char_stat.level_exp / char_stat.total_exp_for_level:.1%})",
-                            ),
-                        )
+                    stat_text = strutils.strjoin(
+                        " ",
+                        f"{skill_name} {char_stat.level}",
+                        enchant_levels,
+                        f"({char_stat.level_exp / char_stat.total_exp_for_level:.1%})",
                     )
-                what = utils.strjoin(", ", *stats)
+                    stats.append(stat_text)
+                what = strutils.strjoin(", ", *stats)
 
                 where = ""
                 if char.in_raid:
@@ -772,7 +847,7 @@ class InfoCog(Cog):
                         rest_time += "-"
 
                 series = char_exprates[char.user_name]
-                graph = braille.simple_line_graph(
+                graph = braille_graphics.simple_line_graph(
                     series,
                     max_gap=30,
                     width=26,
@@ -802,7 +877,7 @@ class InfoCog(Cog):
             out_str.append("")
 
         has_required_actions = False
-        for _, a in char_actions.items():
+        for a in char_actions.values():
             if a:
                 has_required_actions = True
                 break
@@ -817,18 +892,23 @@ class InfoCog(Cog):
             out_str.append("")
 
         if total_player_count == filtered_player_count:
-            player_count_text = f"{utils.pl2(total_player_count, 'player', 'players')} in {channel.channel_name}"
-            out_str.append(f"{utils.pl2(total_player_count, 'player', 'players')} total")
+            player_count_text = (
+                f"{strutils.pl2(total_player_count, 'player', 'players')} "
+                f"in {instance.channel_name}"
+            )
+            out_str.append(
+                f"{strutils.pl2(total_player_count, 'player', 'players')} total"
+            )
         else:
             player_count_text = (
                 f"{filtered_player_count}/{total_player_count} "
-                f"{utils.pl2(filtered_player_count, 'player', 'players', False)} "
-                f"in {channel.channel_name}"
+                f"{strutils.pl2(filtered_player_count, 'player', 'players', False)} "
+                f"in {instance.channel_name}"
             )
             out_str.append(
                 f"{filtered_player_count}/{total_player_count} "
-                f"{utils.pl2(filtered_player_count, 'player', 'players', False)} total"
+                f"{strutils.pl2(filtered_player_count, 'player', 'players', False)} total"
             )
         out_str.append("")
-        url = await utils.upload_to_bin("\n".join(out_str))
-        await ctx.message.reply(f"{player_count_text}: {url}")
+        upload_result = await pastebin_srv.upload_text("\n".join(out_str))
+        await ctx.message.reply(f"{player_count_text}: {upload_result.url}")

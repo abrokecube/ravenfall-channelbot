@@ -26,10 +26,11 @@ from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
 from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.event_waiter import EventWaiterService
+from bot.services.pastebin_service import PastebinService
 from bot.services.prometheus_service import PrometheusService
 from bot.services.ravenfall_channels import RavenfallChannelService
 from bot.services.ravenfall_multichat import RavenfallMultichatService
-from bot.services.remote_bot_service import RemoteBotService
+from bot.services.remote_bot import RemoteBotService
 from bot.services.web_service import WebService
 from utils.logging_fomatter import setup_logging
 
@@ -180,7 +181,7 @@ async def run():
 
         tasks.append(event_manager.add_cog(TestingCog))
         tasks.append(event_manager.add_cog(HelpCog))
-        tasks.append(event_manager.add_cog(ExampleCog))
+        # tasks.append(event_manager.add_cog(ExampleCog))
         tasks.append(event_manager.add_cog(ProcessWatchdogCog))
         tasks.append(event_manager.add_cog(BotStuffCog))
 
@@ -191,6 +192,7 @@ async def run():
         tasks.append(global_ctx.register_service(PrometheusService()))
         tasks.append(global_ctx.register_service(RavenfallMultichatService()))
         tasks.append(global_ctx.register_service(GlobalMessengerService()))
+        tasks.append(global_ctx.register_service(PastebinService()))
         tasks.append(global_ctx.register_service(RavenfallChannelService(event_manager)))
 
         __ = await asyncio.gather(*tasks)

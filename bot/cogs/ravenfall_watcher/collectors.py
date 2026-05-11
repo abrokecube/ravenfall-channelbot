@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, override
 from bot.integrations.process_manager import ProcessStatistics
 from bot.integrations.ravenfall import DungeonStage, RavenfallInstance
 from bot.services.prometheus_service import PrometheusService
+from bot.services.ravenfall_channels import RavenfallChannelService
 from bot.services.ravenfall_multichat import RavenfallMultichatService
 
 from .base_classes import (
@@ -15,6 +16,7 @@ from .base_classes import (
     BaseGroupCollector,
     RavenfallWatcherGroupCollector,
 )
+from .timer import Timer
 
 if TYPE_CHECKING:
     from bot.core.components import GlobalContext
@@ -441,3 +443,62 @@ class RavenfallFrozenCheck(BaseGroupCollector[RavenfallInstance]):
                 self.set_status(instance, failing=False)
                 continue
             self.set_status(instance, failing=True, reason="Ravenfall might be frozen.")
+
+
+class DungeonLengthCheck(BaseCollector[RavenfallInstance]):
+    def __init__(
+        self,
+        instance: RavenfallInstance,
+        watcher: RavenfallWatcher,
+        global_context: GlobalContext,
+        *,
+        loop_interval: float = 30,
+        fail_duration: float = 0,
+        is_urgent_failure: bool = False,
+        alert_callback_repeat_interval: float | None = 60,
+    ) -> None:
+        super().__init__(
+            instance,
+            loop_interval=loop_interval,
+            fail_duration=fail_duration,
+            is_urgent_failure=is_urgent_failure,
+            alert_callback_repeat_interval=alert_callback_repeat_interval,
+        )
+        self.timer: Timer = Timer()
+        self._timer_ready: bool = False
+        self.watcher: RavenfallWatcher = watcher
+        self.global_context: GlobalContext = global_context
+
+    async def _timer_alert(self):
+        self.set_status(failing=True)
+
+    @override
+    async def process(self) -> None:
+        if not self._timer_ready:
+            await self.timer.register_callback(0, self._timer_alert, from_end=True)
+            self._timer_ready = True
+
+        dungeon = await self.instance.get_dungeon()
+        if not dungeon:
+            await self.timer.stop()
+            self.set_status(failing=False)
+            return
+        if dungeon.started:
+            if not self.timer.get_is_running():
+                time_left = self.watcher.config.max_dungeon_time_seconds - dungeon.elapsed
+                await self.timer.start(time_left)
+        else:
+            await self.timer.stop()
+            self.set_status(failing=False)
+
+    @override
+    async def on_alert(self):
+        ravenfall_message_service = self.global_context.get_service(
+            RavenfallChannelService
+        )
+        if not ravenfall_message_service:
+            return
+        await ravenfall_message_service.send_channel_message(
+            f"{self.watcher.config.ravenbot_prefix}dungeon stop",
+            self.watcher.config.channel_name,
+        )

@@ -6,6 +6,7 @@ import ravenpy
 from bot.integrations.commands import (
     ArgumentConversionError,
     BaseConverter,
+    Choice,
     CommandError,
 )
 from bot.services.ravenfall_channels import RavenfallChannelService
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
     from ravenpy import Item as RFItem
 
 
-class RFItemConverter(BaseConverter):
+class RavenfallItemConverter(BaseConverter):
     """Ravenfall item name converter."""
 
     title: str = "Item"
@@ -85,3 +86,27 @@ class RavenfallInstanceConverter(BaseConverter):
             msg = f"Ravenfall instance '{arg}' was not found."
             raise CommandError(msg)
         return instance
+
+
+class RavenfallSkillChoice(Choice):
+    def __init__(self, *, case_sensitive: bool = False):
+        definition = {
+            "Attack": ["atk", "att"],
+            "Defense": ["def"],
+            "Strength": ["str"],
+            "Health": ["hp"],
+            "Woodcutting": ["wood", "chop", "wdc", "chomp"],
+            "Mining": ["mine", "min"],
+            "Crafting": ["craft"],
+            "Cooking": ["cook", "ckn"],
+            "Farming": ["farm", "fm"],
+            "Slayer": ["slay"],
+            "Magic": [],
+            "Ranged": ["range"],
+            "Sailing": ["sail"],
+            "Healing": ["heal"],
+            "Gathering": ["gath"],
+            "Alchemy": ["brew", "alch"],
+            "CombatLevel": ["combat"],
+        }
+        super().__init__(definition, "Ravenfall skill", case_sensitive=case_sensitive)

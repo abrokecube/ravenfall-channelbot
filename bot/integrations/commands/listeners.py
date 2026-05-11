@@ -242,13 +242,9 @@ class CommandListener(GenericListener):
             if (
                 isinstance(converter, type) and issubclass(converter, BaseConverter)
             ) or isinstance(converter, BaseConverter):
-                raw_type_title = getattr(converter, "title", None)
-                if isinstance(raw_type_title, type):
-                    p.type_title = raw_type_title.__name__
-                else:
-                    p.type_title = raw_type_title.__class__.__name__
-                p.type_short_help = getattr(converter, "short_help", None)
-                p.type_help = getattr(converter, "help", None) or converter.__doc__
+                p.type_title = converter.title or converter.__class__.__name__
+                p.type_short_help = converter.short_help or None
+                p.type_help = converter.help or converter.__doc__
             elif converter in BUILTIN_TYPE_DOCS:
                 docs = BUILTIN_TYPE_DOCS[converter]
                 p.type_title = docs["title"]

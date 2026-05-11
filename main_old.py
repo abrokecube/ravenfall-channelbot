@@ -155,17 +155,17 @@ async def run():
     from bot.cogs.testing import TestingCog
 
     await event_manager.add_cog(TestingCog)
-    from bot.cogs.redeem import RedeemCog
+    from bot.cogs.redeem_old import RedeemCog
 
     await event_manager.add_cog(RedeemCog)
-    from bot.cogs.redeem_rf import RedeemRFCog
+    from bot.cogs.redeem_rf_old import RedeemRFCog
 
     await event_manager.add_cog(RedeemRFCog)
     rfwebops = os.getenv("WEBOPS_URL", "http://pc2-mobile:7102")
-    from bot.cogs.game import GameCog
+    from bot.cogs.game_old import GameCog
 
     await event_manager.add_cog(GameCog, rf_webops_url=rfwebops)
-    from bot.cogs.info import InfoCog
+    from bot.cogs.info_old import InfoCog
 
     await event_manager.add_cog(InfoCog)
     from bot.cogs.bot_old import BotStuffCog

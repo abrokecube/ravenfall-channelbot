@@ -526,6 +526,10 @@ class RaidCollector(RavenfallCollectorBase[models.Raid]):
         )
 
 
+class FetchError(Exception):
+    """Failed to fetch data."""
+
+
 class RavenfallInstance:
     """A Ravenfall instance."""
 
@@ -642,6 +646,17 @@ class RavenfallInstance:
     async def get_players(self) -> list[models.Player] | None:
         """Get the latest players."""
         return await self._players_collector.get_latest()
+
+    async def get_player(self, player_name: str) -> models.Player | None:
+        """Get the latest players."""
+        players = await self._players_collector.get_latest()
+        if not players:
+            raise FetchError
+        player_name = player_name.lower()
+        for p in players:
+            if p.name == player_name:
+                return p
+        return None
 
     async def get_village(self) -> models.Village | None:
         """Get the latest village."""

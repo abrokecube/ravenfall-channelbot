@@ -23,3 +23,7 @@ class RavenfallWatcherService(BaseService):
             msg = f"No watcher found for channel {channel_name}."
             raise ValueError(msg)
         return result
+
+    def get_all_watchers(self):
+        """Get a list of all watchers."""
+        return self.watcher_cog.watchers.copy()

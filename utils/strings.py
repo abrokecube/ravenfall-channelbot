@@ -1,0 +1,3 @@
+DIAMOND = "✦"
+EN_DASH = "–"
+MULTIPICATION_SIGN = "×"

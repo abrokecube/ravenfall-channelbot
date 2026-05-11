@@ -62,9 +62,11 @@ class Color(BaseConverter):
         cls,
         g_ctx: GlobalContext,
         event: CommandEvent,
-        arg: str,
+        arg: str | object,
     ) -> Any:
         """Convert a color name to a Color object."""
+        if not isinstance(arg, str):
+            raise TypeError("Invalid type.")
         name_lower = arg.lower()
         if name_lower not in cls.COLORS:
             msg = f"Unknown color: {arg}. Valid colors: {', '.join(cls.COLORS.keys())}"

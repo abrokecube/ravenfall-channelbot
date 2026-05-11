@@ -258,6 +258,32 @@ class PlayerStats(Struct):
     gathering: PlayerStat
     alchemy: PlayerStat
 
+    def get_stat(self, skill: str | Skills) -> PlayerStat:
+        """Get player stat from string."""
+        if isinstance(skill, Skills):
+            skill = skill.name.lower()
+        if skill not in {
+            "attack",
+            "defense",
+            "strength",
+            "health",
+            "woodcutting",
+            "fishing",
+            "mining",
+            "crafting",
+            "cooking",
+            "farming",
+            "slayer",
+            "magic",
+            "ranged",
+            "sailing",
+            "healing",
+            "gathering",
+            "alchemy",
+        }:
+            raise ValueError
+        return cast("PlayerStat", getattr(self, skill))
+
 
 class Player(Struct):
     """Player entity information.

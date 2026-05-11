@@ -25,6 +25,7 @@ class InstanceConfig(ConfigModel):
     max_memory_usage_gb: float | None = None
     ravenbot_prefix: str = "!"
     ravenbot_channel_id: str | None = None
+    max_dungeon_time_seconds: float = 900
 
 
 class WatcherConfig(ConfigModel):
