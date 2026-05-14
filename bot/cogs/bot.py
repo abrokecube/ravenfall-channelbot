@@ -12,6 +12,7 @@ from bot.integrations.commands.deco import (
 )
 from bot.integrations.commands.events import CommandEvent  # noqa: TC001
 from bot.integrations.commands.exceptions import CommandError
+from bot.services.backup import BackupService
 from bot.services.config_service import ConfigService
 
 if TYPE_CHECKING:
@@ -41,3 +42,15 @@ class BotStuffCog(Cog):
             raise CommandError(msg)
         await asyncio.to_thread(config.reload)
         await ctx.reply("Config reloaded!")
+
+    @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
+    @command()
+    async def run_backup(self, ctx: CommandEvent):
+        """Runs the backup service."""
+        backup_service = self.global_context.get_service(BackupService)
+        if backup_service is None:
+            msg = "Backup service not found"
+            raise CommandError(msg)
+        await ctx.reply("Running backup...")
+        await backup_service.run_backup()
+        await ctx.reply("Backup completed!")

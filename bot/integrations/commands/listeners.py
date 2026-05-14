@@ -69,7 +69,7 @@ class CommandListener(GenericListener):
         priority: int = 0,
     ):
         # prevent circular import :)
-        from bot.integrations.commands.dispatchers import CommandDispatcher  # noqa: I001, PLC0415
+        from bot.integrations.commands.dispatchers import CommandDispatcher
 
         super().__init__(
             func,
@@ -239,17 +239,17 @@ class CommandListener(GenericListener):
             )
 
             # Extract documentation from converter if available
-            if (
+            if converter in BUILTIN_TYPE_DOCS:
+                docs = BUILTIN_TYPE_DOCS[converter]
+                p.type_title = docs["title"]
+                p.type_short_help = docs["short_help"]
+                p.type_help = docs["help"]
+            elif (
                 isinstance(converter, type) and issubclass(converter, BaseConverter)
             ) or isinstance(converter, BaseConverter):
                 p.type_title = converter.title or converter.__class__.__name__
                 p.type_short_help = converter.short_help or None
                 p.type_help = converter.help or converter.__doc__
-            elif converter in BUILTIN_TYPE_DOCS:
-                docs = BUILTIN_TYPE_DOCS[converter]
-                p.type_title = docs["title"]
-                p.type_short_help = docs["short_help"]
-                p.type_help = docs["help"]
 
             self.parameters.append(p)
             self.parameters_map[param.name] = p
@@ -321,11 +321,13 @@ class CommandListener(GenericListener):
         if isinstance(conv_obj, BaseConverter) or issubclass(conv_obj, BaseConverter):
             try:
                 if isinstance(conv_obj, BaseConverter):
-                    result = conv_obj.convert(g_ctx, ctx, value)
+                    result = await conv_obj.convert(g_ctx, ctx, value)
                 else:
-                    result = conv_obj.cls_convert(g_ctx, ctx, value)
+                    result = await conv_obj.cls_convert(g_ctx, ctx, value)
             except ArgumentConversionError as e:
                 raise ArgumentConversionError(e.message, str(value), param) from None
+            except NotImplementedError:
+                raise
             except Exception as e:
                 msg = f"An error occurred while converting the argument: {e}"
                 raise ArgumentConversionError(
@@ -335,8 +337,6 @@ class CommandListener(GenericListener):
                     e,
                 ) from e
             else:
-                if asyncio.iscoroutine(result):
-                    return await result
                 return result
 
         if not isinstance(value, str):

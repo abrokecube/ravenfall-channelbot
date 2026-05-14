@@ -26,6 +26,7 @@ class InstanceConfig(ConfigModel):
     ravenbot_prefix: str = "!"
     ravenbot_channel_id: str | None = None
     max_dungeon_time_seconds: float = 900
+    max_dungeon_prepare_time_seconds: float = 30
 
 
 class WatcherConfig(ConfigModel):

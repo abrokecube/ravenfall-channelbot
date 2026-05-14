@@ -13,6 +13,8 @@ from bot.cogs.ravenfall_watcher.base_classes import BaseGroupCollector
 from bot.core.decorators import on_match
 from bot.integrations.ravenfall import (
     DungeonEndedEvent,
+    DungeonPreparedEvent,
+    DungeonSpawnedEvent,
     RaidEndedEvent,
     RaidStartedEvent,
     RavenBotMessageEvent,
@@ -107,6 +109,9 @@ class RavenfallWatcher(EventReceiverMixin):
         self._block_next_restart_countdown_message_until: float = 0
         self._restart_reason_announced: bool = False
         self._auto_restart_paused: bool = False
+
+        self._last_dungeon_spawn_time: float = 0
+        self._last_dungeon_prepare_duration: float = 0
 
     async def start(self):
         """Start the watcher, including setting up the restart timeline if configured."""
@@ -808,7 +813,8 @@ class RavenfallWatcher(EventReceiverMixin):
         __ = await self.ravenfall.ensure_middleman_connection(45)
 
     def _start_keep_middleman_connected_routine(self):
-        __ = self._keep_middleman_connected_routine.start()
+        with contextlib.suppress(RuntimeError):
+            __ = self._keep_middleman_connected_routine.start()
 
     def _stop_keep_middleman_connected_routine(self, *, force: bool = False):
         if not force and self.ravenfall_restart_lock.locked():
@@ -843,6 +849,39 @@ class RavenfallWatcher(EventReceiverMixin):
             return
         await self._refresh_auto_restart_timer()
 
+    @on_match(DungeonSpawnedEvent)
+    async def on_dungeon_spawned(
+        self,
+        _g_ctx: GlobalContext | None,
+        event: DungeonSpawnedEvent,
+        _match: object | None,
+    ):
+        """Runs when the dungeon boss is reached."""
+        if event.ravenfall != self.ravenfall:
+            return
+        self._last_dungeon_spawn_time = monotonic()
+
+    @on_match(DungeonPreparedEvent)
+    async def on_dungeon_prepared(
+        self,
+        _g_ctx: GlobalContext | None,
+        event: DungeonPreparedEvent,
+        _match: object | None,
+    ):
+        """Runs when the dungeon boss is reached."""
+        if event.ravenfall != self.ravenfall:
+            return
+        self._last_dungeon_prepare_duration = monotonic() - self._last_dungeon_spawn_time
+        if (
+            0
+            > self._last_dungeon_prepare_duration
+            > self.config.max_dungeon_prepare_time_seconds
+        ):
+            LOGGER.warning(
+                f"[{self.ravenfall.channel_name}] "
+                f"Dungeon prepare time exceeded: {self._last_dungeon_prepare_duration}s"
+            )
+
     @on_match(DungeonReachedBossEvent)
     async def on_reached_dungeon_boss(
         self,
@@ -866,6 +905,18 @@ class RavenfallWatcher(EventReceiverMixin):
         if event.ravenfall != self.ravenfall:
             return
         self._stop_keep_middleman_connected_routine()
+        if (
+            0
+            > self._last_dungeon_prepare_duration
+            > self.config.max_dungeon_prepare_time_seconds
+        ):
+            countdown_time = self.config.restart_unblock_min_seconds + 10
+            if self.config.restart_warning_times:
+                countdown_time = max(
+                    self.config.restart_warning_times[0],
+                    countdown_time,
+                )
+            await self.queue_restart(countdown_time, "Dungeon took too long to prepare")
 
     @on_match(RaidStartedEvent)
     async def on_raid_started(

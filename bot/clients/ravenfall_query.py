@@ -664,7 +664,7 @@ class Character:
         self.is_sailing: bool = data.sailing
 
         self.training: Skills | None = None
-        self.island: Islands | None = Islands(data.island) if data.island != "" else None
+        self.island: Islands | None = Islands[data.island] if data.island != "" else None
 
         self.rested_time: timedelta = timedelta(seconds=int(data.rested_time))
         self.target_item: ravenpy.CharacterItem | None = None

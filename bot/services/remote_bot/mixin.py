@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
 import inspect
+from collections.abc import Awaitable
 from inspect import Parameter
 from typing import TYPE_CHECKING, Any, cast
 
@@ -15,7 +15,8 @@ if TYPE_CHECKING:
     from bot.core.components import Cog
     from bot.services.remote_bot import RemoteBotInstance
 
-from bot.services.remote_bot import RemoteBotService
+    from .remote_bot_service import RemoteBotService  # noqa: TC004
+
 
 type RemoteMethod[T: Struct] = Callable[..., T]
 
@@ -184,6 +185,8 @@ class RemoteCallable[U: Struct, T: Callable[..., Awaitable[Struct]]]:
             msg = "RemoteCallable must be accessed through an instance"
             raise RuntimeError(msg)
 
+        from .remote_bot_service import RemoteBotService
+
         global_context = self.cog_instance.global_context
         remote_service = global_context.require_service(RemoteBotService)
 
@@ -223,6 +226,7 @@ class RemoteCallable[U: Struct, T: Callable[..., Awaitable[Struct]]]:
         """
         if self._registered or self.cog_instance is None:
             return
+        from .remote_bot_service import RemoteBotService
 
         global_context = self.cog_instance.global_context
         remote_service = global_context.require_service(RemoteBotService)

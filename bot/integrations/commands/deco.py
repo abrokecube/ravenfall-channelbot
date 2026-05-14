@@ -52,6 +52,7 @@ def command[T: Callable[..., object]](
             verifier=verifier,
             hidden=hidden,
             title=title,
+            aliases=aliases,
         ),
         "chat_message_metadata": ChatMessageMetadata(),
     }

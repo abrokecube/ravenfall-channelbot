@@ -28,8 +28,8 @@ from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.web_service import APIServer, WebService
 
 if TYPE_CHECKING:
-    from typing import ClassVar
     from collections.abc import Callable
+    from typing import ClassVar
 
     from bot.clients.prometheus import (
         MetricType,
@@ -353,7 +353,7 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
         text_data = await response.text()
         response.raise_for_status()
         response_data = msgspec.json.decode(
-            text_data, type=PrometheusResponse[VectorResult]
+            text_data, type=PrometheusResponse[VectorResult], strict=False
         )
         return response_data.data.result
 
@@ -425,6 +425,6 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
         text_data = await response.text()
         response.raise_for_status()
         response_data = msgspec.json.decode(
-            text_data, type=PrometheusResponse[MatrixResult]
+            text_data, type=PrometheusResponse[MatrixResult], strict=False
         )
         return response_data.data.result

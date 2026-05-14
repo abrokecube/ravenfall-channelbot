@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, override
 from dotenv import load_dotenv
 
 from bot.cogs.bot import BotStuffCog
-from bot.cogs.example import ExampleCog
 from bot.cogs.help import HelpCog
+from bot.cogs.info import InfoCog
 from bot.cogs.process_watchdog import ProcessWatchdogCog
 from bot.cogs.ravenfall_watcher import RavenfallWatcherCog
 from bot.cogs.testing import TestingCog
@@ -24,7 +24,10 @@ from bot.integrations.ravenfall.event_sources import RavenfallEventSource
 from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
 from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
+from bot.services.accounts import AccountService
+from bot.services.backup import BackupService
 from bot.services.config_service import ConfigModel, ConfigService
+from bot.services.currency import CurrencyService
 from bot.services.event_waiter import EventWaiterService
 from bot.services.pastebin_service import PastebinService
 from bot.services.prometheus_service import PrometheusService
@@ -184,8 +187,11 @@ async def run():
         # tasks.append(event_manager.add_cog(ExampleCog))
         tasks.append(event_manager.add_cog(ProcessWatchdogCog))
         tasks.append(event_manager.add_cog(BotStuffCog))
+        tasks.append(event_manager.add_cog(InfoCog))
 
         tasks.append(global_ctx.register_service(DatabaseService()))
+        tasks.append(global_ctx.register_service(AccountService()))
+        tasks.append(global_ctx.register_service(CurrencyService()))
         tasks.append(global_ctx.register_service(RemoteBotService()))
         tasks.append(global_ctx.register_service(config_service))
         tasks.append(global_ctx.register_service(WebService()))
@@ -193,6 +199,7 @@ async def run():
         tasks.append(global_ctx.register_service(RavenfallMultichatService()))
         tasks.append(global_ctx.register_service(GlobalMessengerService()))
         tasks.append(global_ctx.register_service(PastebinService()))
+        tasks.append(global_ctx.register_service(BackupService()))
         tasks.append(global_ctx.register_service(RavenfallChannelService(event_manager)))
 
         __ = await asyncio.gather(*tasks)

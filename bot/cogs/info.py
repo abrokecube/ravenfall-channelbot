@@ -73,9 +73,10 @@ class InfoCog(Cog, RemoteCallableMixin):
         town_info = TownInfos([])
         if not ravenfall_srv:
             return town_info
-        tasks = [x.get_village() for x in ravenfall_srv.get_all_ravenfall_instances()]
+        rf_instances = ravenfall_srv.get_all_ravenfall_instances()
+        tasks = [x.get_village() for x in rf_instances]
         town_villages = await asyncio.gather(*tasks, return_exceptions=True)
-        for t in town_villages:
+        for instance, t in zip(rf_instances, town_villages, strict=True):
             if not isinstance(t, Village):
                 continue
             if not t.boost:
@@ -84,7 +85,7 @@ class InfoCog(Cog, RemoteCallableMixin):
                 boost_str = ", ".join(
                     f"{x.skill.name}: {x.multiplier:%}" for x in t.boost
                 )
-            town_info.towns.append(TownInfo(t.name, boost_str))
+            town_info.towns.append(TownInfo(instance.channel_name, boost_str))
         return town_info
 
     @command()
@@ -502,9 +503,9 @@ class InfoCog(Cog, RemoteCallableMixin):
             out_msgs = strutils.strjoin("", out_msgs, " | Training time is estimated")
         await ctx.message.reply(out_msgs)
 
-    @parameter("skill", converter=RavenfallSkillChoice)
+    @parameter("skill", converter=RavenfallSkillChoice())
     @parameter(
-        "name_glob", aliases=["g", "f", "filter", "glob"], converter=Glob, default="*"
+        "name_glob", aliases=["g", "f", "filter", "glob"], converter=Glob(), default="*"
     )
     @parameter(
         "invert_glob",
@@ -532,8 +533,7 @@ class InfoCog(Cog, RemoteCallableMixin):
         skill = skill.lower()
         players = await instance.get_players()
         if not players:
-            await ctx.message.reply("Ravenfall seems to be offline!")
-            return
+            raise CommandError("Ravenfall seems to be offline!")
         if not invert_glob:
             players = list(filter(lambda x: name_glob.match(x.name), players))
         else:
@@ -578,7 +578,9 @@ class InfoCog(Cog, RemoteCallableMixin):
         converter=RavenfallInstanceConverter,
         default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
     )
-    @parameter("name_glob", aliases=["filter", "f", "glob"], converter=Glob, default="*")
+    @parameter(
+        "name_glob", aliases=["filter", "f", "glob"], converter=Glob(), default="*"
+    )
     @parameter(
         "invert_glob",
         aliases=["invert_filter", "if", "ig"],
@@ -714,7 +716,13 @@ class InfoCog(Cog, RemoteCallableMixin):
                 f"Ends in: {format_seconds(multiplier.time_left, TimeSize.LONG)} - "
                 f"Event: {multiplier.event_name}"
             )
-        out_str.append(f"Boosts: {village.boost}")
+        if village.boost:
+            out_str.append(
+                f"Boosts: "
+                f"{', '.join(f'{x.skill}: {x.multiplier:.4f}x' for x in village.boost)}"
+            )
+        else:
+            out_str.append("Boosts: No active boosts.")
         out_str.append(f"Current event: {await self._event_text(instance)}")
         out_str.append("")
 
@@ -769,7 +777,8 @@ class InfoCog(Cog, RemoteCallableMixin):
 
             not_earning = ""
             if (
-                (not char.is_resting)
+                char.user_name in char_exprates
+                and (not char.is_resting)
                 and (not any(y != 0 for _, y in char_exprates[char.user_name][-15:]))
                 and not training_skill_is_maxed
             ):
@@ -846,15 +855,20 @@ class InfoCog(Cog, RemoteCallableMixin):
                     else:
                         rest_time += "-"
 
-                series = char_exprates[char.user_name]
-                graph = braille_graphics.simple_line_graph(
-                    series,
-                    max_gap=30,
-                    width=26,
-                    fill_type=1,
-                    hard_min_val=1,
-                    monospace=True,
-                )
+                if char.user_name not in char_exprates:
+                    graph = " " * (26 - 10)
+                    exp_h = ""
+                else:
+                    series = char_exprates[char.user_name]
+                    graph = braille_graphics.simple_line_graph(
+                        series,
+                        max_gap=30,
+                        width=26,
+                        fill_type=1,
+                        hard_min_val=1,
+                        monospace=True,
+                    )
+                    exp_h = numerize(series[-1][1]) + " exp/h"
 
                 char_action = " "
                 if char_actions[char.user_name]:
@@ -868,7 +882,7 @@ class InfoCog(Cog, RemoteCallableMixin):
                         f"{where.ljust(7)}  "
                         f"{where_island.ljust(8)}  "
                         f"{rest_time.ljust(7)}  "
-                        f"{(numerize(series[-1][1]) + ' exp/h').rjust(13)} "
+                        f"{exp_h.rjust(13)} "
                         f"{graph} "
                         f"{what}  ",
                         ".",
@@ -878,7 +892,7 @@ class InfoCog(Cog, RemoteCallableMixin):
 
         has_required_actions = False
         for a in char_actions.values():
-            if a:
+            if a and a[1]:
                 has_required_actions = True
                 break
         if has_required_actions:
