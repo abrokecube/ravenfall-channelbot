@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 from typing import override
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from bot.core.components import BaseService
 from bot.db.session import get_async_session
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
+from bot.mixins.account_merge import AccountMergeMixin
 
 from .config import CurrencyConfig
 from .models import AccountBalance, TransactionHistory
@@ -15,7 +16,7 @@ from .models import AccountBalance, TransactionHistory
 LOGGER = logging.getLogger(__name__)
 
 
-class CurrencyService(BaseService, ConfigSubscriberMixin):
+class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
     """Service for managing user currency balances and transactions."""
 
     def __init__(self) -> None:
@@ -25,6 +26,12 @@ class CurrencyService(BaseService, ConfigSubscriberMixin):
     @override
     async def setup(self) -> None:
         self._config = self.subscribe_config(CurrencyConfig, "services.currency")
+
+        # Register for account merges
+        from bot.services.accounts.service import AccountService
+
+        account_service = self.global_context.require_service(AccountService)
+        self.inject_account_service(account_service)
 
     @override
     def on_config_changed(
@@ -207,3 +214,45 @@ class CurrencyService(BaseService, ConfigSubscriberMixin):
             for t in transactions:
                 session.expunge(t)
             return transactions
+
+    @override
+    async def on_account_merged(self, source_id: str, dest_id: str) -> None:
+        """Move balances and history from source to destination account."""
+        LOGGER.info("Moving currency data from %s to %s", source_id, dest_id)
+
+        async with get_async_session() as session:
+            # 1. Get source balance
+            source_bal_stmt = select(AccountBalance).where(
+                AccountBalance.account_id == source_id
+            )
+            source_bal_res = await session.execute(source_bal_stmt)
+            source_balance = source_bal_res.scalar_one_or_none()
+
+            if source_balance:
+                amount = source_balance.balance
+                if amount != 0:
+                    # Add to destination
+                    dest_bal_stmt = select(AccountBalance).where(
+                        AccountBalance.account_id == dest_id
+                    )
+                    dest_bal_res = await session.execute(dest_bal_stmt)
+                    dest_balance = dest_bal_res.scalar_one_or_none()
+
+                    if not dest_balance:
+                        dest_balance = AccountBalance(account_id=dest_id, balance=0)
+                        session.add(dest_balance)
+
+                    dest_balance.balance += amount
+
+                # Delete source balance record
+                await session.delete(source_balance)
+
+            # 2. Update transaction history
+            __ = await session.execute(
+                update(TransactionHistory)
+                .where(TransactionHistory.account_id == source_id)
+                .values(account_id=dest_id)
+            )
+
+            await session.commit()
+            LOGGER.info("Currency data migrated for %s -> %s", source_id, dest_id)

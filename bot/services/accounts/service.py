@@ -17,11 +17,23 @@ from .models import AccountLink
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from bot.mixins.account_merge import AccountMergeMixin
+
 LOGGER = logging.getLogger(__name__)
 
 
 class AccountService(BaseService):
     """Service for managing multi-platform account linking."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._merge_handlers: list[AccountMergeMixin] = []
+
+    def register_merge_handler(self, handler: AccountMergeMixin) -> None:
+        """Register a handler to be notified when accounts are merged."""
+        if handler not in self._merge_handlers:
+            self._merge_handlers.append(handler)
+            handler.inject_account_service(self)
 
     async def get_or_create_account(
         self, platform: str, platform_id: str, username: str
@@ -196,3 +208,80 @@ class AccountService(BaseService):
             )
             .values(is_primary=True)
         )
+
+    async def merge_accounts(self, source_id: str, dest_id: str) -> None:
+        """Merge one account into another.
+
+        This moves all platform links from the source account to the destination account,
+        notifies all registered merge handlers, and deletes the source account.
+
+        Args:
+            source_id: The ID of the account to merge (this account will be deleted).
+            dest_id: The ID of the account to merge into (this account will remain).
+        """
+        if source_id == dest_id:
+            return
+
+        LOGGER.info("Merging account %s into %s", source_id, dest_id)
+
+        # 1. Notify handlers first so they can move their data
+        for handler in self._merge_handlers:
+            await handler.on_account_merged(source_id, dest_id)
+
+        # 2. Move links and delete source account
+        async with get_async_session() as session:
+            # Check if destination exists
+            dest_result = await session.execute(
+                select(AccountModel).where(AccountModel.id == dest_id)
+            )
+            if not dest_result.scalar_one_or_none():
+                msg = f"Destination account {dest_id} does not exist"
+                raise ValueError(msg)
+
+            # Move all links from source to dest
+            # Note: We might have duplicate links if both accounts had the same platform linked.
+            # We'll resolve this by catching UniqueConstraint errors or cleaning up beforehand.
+
+            # For now, we update and handle conflicts.
+            links_result = await session.execute(
+                select(AccountLink).where(AccountLink.account_id == source_id)
+            )
+            links = links_result.scalars().all()
+
+            for link in links:
+                # Check for conflict in destination
+                conflict_stmt = select(AccountLink).where(
+                    AccountLink.account_id == dest_id,
+                    AccountLink.platform == link.platform,
+                    AccountLink.platform_id == link.platform_id,
+                )
+                conflict_res = await session.execute(conflict_stmt)
+                if conflict_res.scalar_one_or_none():
+                    # Link already exists in destination, just delete this one
+                    await session.delete(link)
+                else:
+                    link.account_id = dest_id
+
+            # Delete source account
+            # Cascades should handle AccountBalance if we set them up,
+            # but services usually handle their own.
+            source_result = await session.execute(
+                select(AccountModel).where(AccountModel.id == source_id)
+            )
+            source_account = source_result.scalar_one_or_none()
+            if source_account:
+                await session.delete(source_account)
+
+            await session.commit()
+            LOGGER.info("Successfully merged account %s into %s", source_id, dest_id)
+
+    async def delete_account(self, account_id: str) -> None:
+        """Delete an account and all its associated links."""
+        async with get_async_session() as session:
+            stmt = select(AccountModel).where(AccountModel.id == account_id)
+            result = await session.execute(stmt)
+            account = result.scalar_one_or_none()
+            if account:
+                await session.delete(account)
+                await session.commit()
+                LOGGER.info("Deleted account %s", account_id)
