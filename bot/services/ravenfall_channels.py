@@ -152,6 +152,13 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
                     )
                 )
 
+    async def get_channels(self, instance_name: str) -> list[RavenfallLinkedChannel]:
+        """Get the channels for a Ravenfall instance."""
+        if instance_name not in self.linked_channels:
+            msg = f"Instance {instance_name} not found."
+            raise ValueError(msg)
+        return self.linked_channels[instance_name]
+
     async def send_global_message(
         self,
         text: str,
@@ -177,6 +184,18 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
                 x in channel.categories for x in categories
             ):
                 __ = await messenger.send(text, channel.platform, channel.id)
+
+    async def get_primary_channel(self, instance_name: str) -> RavenfallLinkedChannel:
+        """Get the primary channel for a Ravenfall instance."""
+        if instance_name not in self.linked_channels:
+            msg = f"Instance {instance_name} not found."
+            raise ValueError(msg)
+        instance = self.linked_channels[instance_name]
+        for channel in instance:
+            if channel.is_primary:
+                return channel
+        msg = f"Instance {instance_name} has no primary channel."
+        raise ValueError(msg)
 
     async def send_channel_message(self, text: str, instance_name: str):
         """Send a message to the primary channel linked to a Ravenfall instance."""

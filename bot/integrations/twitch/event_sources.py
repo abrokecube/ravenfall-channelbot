@@ -258,6 +258,8 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         self.eventsubs: dict[str, TwitchEventSub] = {}
         self.connected_chats: dict[str, ConnectedChat] = {}
 
+        self.twitches: dict[str, Twitch] = {}
+
     async def _save_user_token(
         self,
         user_id: str,
@@ -454,14 +456,14 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
             msg = f"{user_id} is not a valid Twitch user id"
             raise ValueError(msg)
         t = await self._get_twitch_auth_instance(user_id, scopes=list(scopes))
-        self._twitch_service.twitches[user_id] = t
+        self.twitches[user_id] = t
         if user_id in self.eventsubs:
             await self.eventsubs[user_id].update_twitch(t)
         return t
 
     def is_user_authenticated(self, user_id: str) -> bool:
         """Check if a user id has been authenticated."""
-        return user_id in self._twitch_service.twitches
+        return user_id in self.twitches
 
     @override
     async def setup(self, event_manager: EventManager):
@@ -662,7 +664,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
             return
         channel_id = message.room.room_id
         channel_login = message.room.name
-        channel_twitch = self._twitch_service.twitches.get(channel_id or " ")
+        channel_twitch = self.twitches.get(channel_id or " ")
         if message.user.id == self.bot_user_id:
             settings = self.connected_chats[channel_id]
             if "moderator" in message.user.badges:  # pyright: ignore[reportUnknownMemberType]
@@ -705,7 +707,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
             raise ValueError(msg)
         if channel_id not in self.eventsubs:
             self.eventsubs[channel_id] = TwitchEventSub(
-                self, self._twitch_service.twitches[channel_id], channel_id
+                self, self.twitches[channel_id], channel_id
             )
         eventsub = self.eventsubs[channel_id]
         if isinstance(subscriptions, EventSubTopic):
@@ -729,7 +731,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         # if not channel_settings.id in self.eventsubs:
         #     self.eventsubs[channel_settings.id] = TwitchEventSub(
         #         self,
-        #         self._twitch_service.twitches[channel_settings.id],
+        #         self.twitches[channel_settings.id],
         #         channel_settings.id,
         #     )
         # eventsub = self.eventsubs[channel_settings.id]
@@ -824,7 +826,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         if not self.bot_twitch:
             return
         data = event.event
-        channel_twitch = self._twitch_service.twitches.get(data.broadcaster_user_id or "")
+        channel_twitch = self.twitches.get(data.broadcaster_user_id or "")
         if not channel_twitch:
             LOGGER.warning(
                 f"Received a message from {data.broadcaster_user_login}, "
@@ -869,7 +871,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         if not self.bot_twitch:
             return
         data = event.event
-        channel_twitch = self._twitch_service.twitches.get(data.broadcaster_user_id or "")
+        channel_twitch = self.twitches.get(data.broadcaster_user_id or "")
         if not channel_twitch:
             LOGGER.warning(
                 f"Received a message from {data.broadcaster_user_login}, "

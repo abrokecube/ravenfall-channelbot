@@ -1,19 +1,59 @@
 from __future__ import annotations
 
 import logging
+from typing import override
 
 from sqlalchemy import select
 
 from bot.core.components import BaseService
 from bot.db.session import get_async_session
+from bot.mixins.config_subscriber import ConfigSubscriberMixin
 
+from .config import CurrencyConfig
 from .models import AccountBalance, TransactionHistory
 
 LOGGER = logging.getLogger(__name__)
 
 
-class CurrencyService(BaseService):
+class CurrencyService(BaseService, ConfigSubscriberMixin):
     """Service for managing user currency balances and transactions."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._config: CurrencyConfig | None = None
+
+    @override
+    async def setup(self) -> None:
+        self._config = self.subscribe_config(CurrencyConfig, "services.currency")
+
+    @override
+    def on_config_changed(
+        self, table: str, config: object, changed_fields: set[str]
+    ) -> None:
+        if isinstance(config, CurrencyConfig):
+            self._config = config
+            LOGGER.info(
+                "Currency names updated: %s / %s (Table: %s, Changed: %s)",
+                config.name_singular,
+                config.name_plural,
+                table,
+                changed_fields,
+            )
+
+    def get_currency_name(self, amount: int) -> str:
+        """Get the singular or plural currency name based on the amount.
+
+        Args:
+            amount: The amount to check.
+
+        Returns:
+            The appropriate currency name.
+        """
+        if not self._config:
+            return "Coin" if abs(amount) == 1 else "Coins"
+        return (
+            self._config.name_singular if abs(amount) == 1 else self._config.name_plural
+        )
 
     async def get_balance(self, account_id: str) -> int:
         """Get the current balance for an account.

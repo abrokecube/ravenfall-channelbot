@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, override
 from dotenv import load_dotenv
 
 from bot.cogs.bot import BotStuffCog
+from bot.cogs.currency import CurrencyCog
 from bot.cogs.help import HelpCog
 from bot.cogs.info import InfoCog
 from bot.cogs.process_watchdog import ProcessWatchdogCog
@@ -188,6 +189,7 @@ async def run():
         tasks.append(event_manager.add_cog(ProcessWatchdogCog))
         tasks.append(event_manager.add_cog(BotStuffCog))
         tasks.append(event_manager.add_cog(InfoCog))
+        tasks.append(event_manager.add_cog(CurrencyCog))
 
         tasks.append(global_ctx.register_service(DatabaseService()))
         tasks.append(global_ctx.register_service(AccountService()))

@@ -16,8 +16,6 @@ from .consts import EVENT_SOURCE_TWITCH
 from .enums import MessageDeliveryMode, MessageRateMode
 
 if TYPE_CHECKING:
-    from twitchAPI.twitch import Twitch
-
     from bot.integrations.twitch.models import ConnectedChat
 
     from .event_sources import TwitchEventSource
@@ -40,7 +38,6 @@ class TwitchService(BaseMessageService):
     def __init__(self, twitch_event_source: TwitchEventSource) -> None:
         super().__init__(EVENT_SOURCE_TWITCH)
         self.event_source: TwitchEventSource = twitch_event_source
-        self.twitches: dict[str, Twitch] = {}
         self._channel_bucket: AsyncRateLimiter = AsyncRateLimiter(1, 1.05)
         self._standard_user_bucket: AsyncRateLimiter = AsyncRateLimiter(20, 30.05)
         self._upgraded_user_bucket: AsyncRateLimiter = AsyncRateLimiter(100, 30.05)
@@ -51,7 +48,7 @@ class TwitchService(BaseMessageService):
 
     def get_twitch(self, channel_id: str):
         """Get an authenticated Twitch instance."""
-        return self.twitches.get(channel_id)
+        return self.event_source.twitches.get(channel_id)
 
     @asynccontextmanager
     async def _chat_rate_limit(self, channel_id: str, settings: ConnectedChat):
@@ -182,6 +179,6 @@ class TwitchService(BaseMessageService):
 
     @override
     async def teardown(self):
-        for t in self.twitches.values():
+        for t in self.event_source.twitches.values():
             await t.close()
         return await super().teardown()

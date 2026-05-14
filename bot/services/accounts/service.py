@@ -54,8 +54,10 @@ class AccountService(BaseService):
                 if link.username != username:
                     link.username = username
                     await session.commit()
-                session.expunge(link.account)
-                return Account(self, link.account)
+                account = link.account
+                session.expunge(account)
+                session.expunge(link)
+                return Account(self, account)
 
             # 2. Not found, create new Account and Link
             account_id = str(uuid4())
@@ -143,6 +145,28 @@ class AccountService(BaseService):
             for link in links:
                 session.expunge(link)
             return links
+
+    async def find_link_by_username(
+        self, platform: str, username: str
+    ) -> AccountLink | None:
+        """Find an account link by platform and username.
+
+        Args:
+            platform: The platform name.
+            username: The username to search for.
+
+        Returns:
+            The AccountLink if found, else None.
+        """
+        async with get_async_session() as session:
+            stmt = select(AccountLink).where(
+                AccountLink.platform == platform, AccountLink.username == username
+            )
+            result = await session.execute(stmt)
+            link = result.scalar_one_or_none()
+            if link:
+                session.expunge(link)
+            return link
 
     async def set_primary_link(
         self, account_id: str, platform: str, platform_id: str
