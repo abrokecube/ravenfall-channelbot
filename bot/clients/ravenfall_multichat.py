@@ -217,6 +217,7 @@ class RavenfallMultichatClient:
         channel_id: str = "example_channel_id",
         channel_name: str = "example_channel",
         *,
+        output_to_channel_id: str | None = None,
         timeout_seconds: int = 3,
     ) -> None:
         """Send a command to the Ravenfall MultiChat server.
@@ -237,6 +238,9 @@ class RavenfallMultichatClient:
             "channel_id": channel_id,
             "channel_name": channel_name,
         }
+
+        if output_to_channel_id:
+            payload["output_to_channel_id"] = output_to_channel_id
 
         logger.debug(
             f"Sent command to multichat: "
