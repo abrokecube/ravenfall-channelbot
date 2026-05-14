@@ -54,7 +54,7 @@ class ErrorResponse(Struct, tag_field="status", tag="success"):
     error: str
 
 
-class SuccessResponse[T: Struct](Struct, tag_field="status", tag="success"):
+class SuccessResponse[T](Struct, tag_field="status", tag="success"):
     """Success response for remote bot calls."""
 
     data: T
@@ -335,7 +335,7 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
                 detail=str(e),
             ) from None
 
-    async def call_remote[T: Struct](
+    async def call_remote[T](
         self,
         remote_bot: RemoteBotInstance,
         cog_name: str,

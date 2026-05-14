@@ -18,9 +18,6 @@ class AccountBalance(Base):
     )
     balance: Mapped[int] = mapped_column(BigInteger, default=0, server_default=text("0"))
 
-    # Optional: link back to Account if needed
-    # account: Relationship["Account"] = relationship("Account", primaryjoin="AccountBalance.account_id == Account.id")
-
 
 class TransactionHistory(Base):
     """History of currency transactions for auditing."""

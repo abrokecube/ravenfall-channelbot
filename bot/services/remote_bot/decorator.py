@@ -1,18 +1,10 @@
-from ast import TypeVar
-import inspect
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, cast
-
-from msgspec import Struct
+from typing import Any
 
 from .mixin import RemoteCallable
-from .remote_bot_service import RemoteMethodAsync
-
-if TYPE_CHECKING:
-    from .mixin import RemoteMethod
 
 
-def remote_callable[T: Callable[..., Awaitable[Struct]], U: Struct](
+def remote_callable[T: Callable[..., Awaitable[object]], U](
     return_type: type[U],
     enc_hook: Callable[[Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
     dec_hook: Callable[[type, Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]

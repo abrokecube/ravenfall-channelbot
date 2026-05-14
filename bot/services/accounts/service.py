@@ -36,7 +36,12 @@ class AccountService(BaseService):
             handler.inject_account_service(self)
 
     async def get_or_create_account(
-        self, platform: str, platform_id: str, username: str
+        self,
+        platform: str,
+        platform_id: str,
+        username: str,
+        *,
+        overwrite_username: bool = False,
     ) -> Account:
         """Get or create an account by providing platform details.
 
@@ -44,6 +49,7 @@ class AccountService(BaseService):
             platform: The platform name (e.g., 'twitch').
             platform_id: The ID on that platform.
             username: The username on that platform.
+            overwrite_username: Whether to overwrite the username if it has changed.
 
         Returns:
             An Account wrapper object.
@@ -63,7 +69,7 @@ class AccountService(BaseService):
 
             if link:
                 # Update username if it changed
-                if link.username != username:
+                if overwrite_username and link.username != username:
                     link.username = username
                     await session.commit()
                 account = link.account

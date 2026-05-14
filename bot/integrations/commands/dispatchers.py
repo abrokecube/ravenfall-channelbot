@@ -200,6 +200,7 @@ class CommandDispatcher(BaseDispatcher):
                 invoked_with=content[: len(command_name)],
                 parameters_text=remaining_text,
                 parsed_args=CommandArgs(remaining_text),
+                platform=event.platform,
             )
         elif isinstance(event, CommandEvent):
             new_event = event

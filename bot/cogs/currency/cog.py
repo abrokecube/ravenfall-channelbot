@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
+
+from msgspec import Struct
 
 from bot.core.components import Cog
 from bot.integrations.chat_messages.deco import checks
@@ -9,38 +11,117 @@ from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.commands.checks import MinPermissionLevel
 from bot.integrations.commands.converters import RangeInt
 from bot.integrations.commands.deco import command, parameter
+from bot.integrations.commands.events import CommandEvent  # noqa: TC001
 from bot.integrations.commands.exceptions import CommandError
 from bot.services.accounts.service import AccountService
-from bot.services.currency.service import CurrencyService
+from bot.services.remote_bot import RemoteCallableMixin, remote_callable
+
+from .service import CurrencyService, RemoteBalance, RemoteHistory, RemoteHistoryItem
+
+
+class RemoteResult(Struct):
+    """Success status from a remote bot."""
+
+    success: bool
+
 
 if TYPE_CHECKING:
     from bot.core.components import EventManager
-    from bot.integrations.commands.events import CommandEvent
 
 LOGGER = logging.getLogger(__name__)
 
 
-class CurrencyCog(Cog):
-    """Cog for managing bot currency and user balances."""
+class CurrencyCog(Cog, RemoteCallableMixin):
+    """Cog for managing bot currency and user balances with remote bot support."""
 
     def __init__(self, event_manager: EventManager) -> None:
         super().__init__(event_manager)
 
-    @command(name="balance", aliases=["bal"])
-    async def get_balance(self, ctx: CommandEvent) -> None:
-        """Check your current balance."""
+    @override
+    async def setup(self) -> None:
+        """Register CurrencyService and set up handlers."""
+        service = CurrencyService()
+        await self.global_context.register_service(service)
+        await service.setup()
+        LOGGER.info("CurrencyCog and CurrencyService started")
+
+    # --- Remote Callables ---
+
+    @remote_callable(RemoteBalance)
+    async def get_remote_balance(self, platform: str, platform_id: str) -> RemoteBalance:
+        """Fetch balance for a user identified by platform ID."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        # Get or create account for the sender
+        # We need an account ID to talk to the currency service
         account = await account_service.get_or_create_account(
-            ctx.platform, ctx.message.author_id, ctx.message.author_name
+            platform, platform_id, f"RemoteUser_{platform_id}"
+        )
+        balance = await currency_service.get_balance(account.id)
+        return RemoteBalance(balance=balance)
+
+    @remote_callable(RemoteHistory)
+    async def get_remote_history(
+        self, platform: str, platform_id: str, limit: int = 5
+    ) -> RemoteHistory:
+        """Fetch transaction history for a user identified by platform ID."""
+        account_service = self.global_context.require_service(AccountService)
+        currency_service = self.global_context.require_service(CurrencyService)
+
+        account = await account_service.get_or_create_account(
+            platform, platform_id, f"RemoteUser_{platform_id}"
+        )
+        history = await currency_service.get_history(account.id, limit=limit)
+
+        items = [
+            RemoteHistoryItem(
+                amount=tx.amount, reason=tx.reason, timestamp=tx.timestamp.isoformat()
+            )
+            for tx in history
+        ]
+        return RemoteHistory(items=items)
+
+    @remote_callable(bool)
+    async def remote_remove_currency(
+        self, platform: str, platform_id: str, amount: int, reason: str
+    ) -> bool:
+        """Remove currency from a user identified by platform ID."""
+        account_service = self.global_context.require_service(AccountService)
+        currency_service = self.global_context.require_service(CurrencyService)
+
+        account = await account_service.get_or_create_account(
+            platform, platform_id, f"RemoteUser_{platform_id}"
+        )
+        return await currency_service.remove_currency(account.id, amount, reason)
+
+    # --- Chat Commands ---
+
+    @command(name="balance", aliases=["bal"])
+    async def get_balance(self, ctx: CommandEvent) -> None:
+        """Check your current balance (including remote bots)."""
+        account_service = self.global_context.require_service(AccountService)
+        currency_service = self.global_context.require_service(CurrencyService)
+
+        account = await account_service.get_or_create_account(
+            ctx.platform,
+            ctx.message.author_id,
+            ctx.message.author_login,
+            overwrite_username=True,
         )
 
-        balance = await currency_service.get_balance(account.id)
-        currency_name = currency_service.get_currency_name(balance)
+        combined = await currency_service.get_combined_balance(account.id)
+        currency_name = currency_service.get_currency_name(combined.total)
 
-        await ctx.reply(f"You currently have {balance} {currency_name}.")
+        if not combined.remote:
+            await ctx.reply(f"You currently have {combined.total} {currency_name}.")
+        else:
+            remote_str = ", ".join(
+                f"{bot}: {bal}" for bot, bal in combined.remote.items()
+            )
+            await ctx.reply(
+                f"You have {combined.total} {currency_name} total. "
+                f"(Local: {combined.local}, Remote: {remote_str})"
+            )
 
     @parameter("target_user", description="The user to pay")
     @parameter(
@@ -48,16 +129,17 @@ class CurrencyCog(Cog):
     )
     @command()
     async def pay(self, ctx: CommandEvent, target_user: str, amount: int) -> None:
-        """Transfer currency to another user."""
+        """Transfer currency to another user (supports remote draining)."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        # 1. Resolve sender
         sender_account = await account_service.get_or_create_account(
-            ctx.platform, ctx.message.author_id, ctx.message.author_name
+            ctx.platform,
+            ctx.message.author_id,
+            ctx.message.author_login,
+            overwrite_username=True,
         )
 
-        # 2. Resolve target (on the same platform for now)
         target_username = target_user.lstrip("@").lower()
         target_link = await account_service.find_link_by_username(
             ctx.platform, target_username
@@ -71,14 +153,15 @@ class CurrencyCog(Cog):
             msg = "You cannot pay yourself!"
             raise CommandError(msg)
 
-        # 3. Execute transfer
+        # Execute removal (which handles remote draining)
         success = await currency_service.remove_currency(
             sender_account.id, amount, f"Pay to {target_username}"
         )
         if not success:
-            msg = "Insufficient funds!"
+            msg = "Insufficient funds (including remote bots)!"
             raise CommandError(msg)
 
+        # Addition is always local to the bot where the command is run
         __ = await currency_service.add_currency(
             target_link.account_id, amount, f"Paid by {ctx.message.author_name}"
         )
@@ -88,28 +171,32 @@ class CurrencyCog(Cog):
 
     @command()
     async def history(self, ctx: CommandEvent) -> None:
-        """Show your last 5 transactions."""
+        """Show your last 5 transactions (merged from all bots)."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
         account = await account_service.get_or_create_account(
-            ctx.platform, ctx.message.author_id, ctx.message.author_name
+            ctx.platform,
+            ctx.message.author_id,
+            ctx.message.author_login,
+            overwrite_username=True,
         )
-        transactions = await currency_service.get_history(account.id, limit=5)
+        transactions = await currency_service.get_history_combined(account.id, limit=5)
 
         if not transactions:
             await ctx.reply("You have no transaction history yet.")
             return
 
-        lines = ["Your recent transactions:"]
+        lines = ["Your recent transactions (All Bots):"]
         for tx in transactions:
             currency_name = currency_service.get_currency_name(tx.amount)
             sign = "+" if tx.amount > 0 else ""
-            lines.append(f"{sign}{tx.amount} {currency_name} - {tx.reason}")
+            bot_tag = f"[{tx.bot_name}] " if tx.bot_name != "Local" else ""
+            lines.append(f"{bot_tag}{sign}{tx.amount} {currency_name} - {tx.reason}")
 
         await ctx.reply("\n".join(lines))
 
-    # Admin commands
+    # --- Admin Commands (Local Only) ---
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     @parameter("target_user", description="The target user")
     @parameter(
@@ -122,7 +209,7 @@ class CurrencyCog(Cog):
     async def givecurrency(
         self, ctx: CommandEvent, target_user: str, amount: int, reason: str
     ) -> None:
-        """Add currency to a user's account."""
+        """Add currency to a user's account locally."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
@@ -135,14 +222,11 @@ class CurrencyCog(Cog):
             msg = f"User '{target_user}' not found on {ctx.platform}."
             raise CommandError(msg)
 
-        success = await currency_service.add_currency(
+        __ = await currency_service.add_currency(
             target_link.account_id, amount, f"Admin: {reason}"
         )
-        if success:
-            c_name = currency_service.get_currency_name(amount)
-            await ctx.reply(f"Gave {amount} {c_name} to {target_user}.")
-        else:
-            await ctx.reply("Failed to add currency.")
+        c_name = currency_service.get_currency_name(amount)
+        await ctx.reply(f"Gave {amount} {c_name} to {target_user} locally.")
 
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     @parameter("target_user", description="The target user")
@@ -156,7 +240,7 @@ class CurrencyCog(Cog):
     async def takecurrency(
         self, ctx: CommandEvent, target_user: str, amount: int, reason: str
     ) -> None:
-        """Remove currency from a user's account."""
+        """Remove currency from a user's account locally."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
@@ -174,9 +258,9 @@ class CurrencyCog(Cog):
         )
         if success:
             c_name = currency_service.get_currency_name(amount)
-            await ctx.reply(f"Took {amount} {c_name} from {target_user}.")
+            await ctx.reply(f"Took {amount} {c_name} from {target_user} locally.")
         else:
-            await ctx.reply(f"{target_user} has insufficient funds.")
+            await ctx.reply(f"{target_user} has insufficient funds locally.")
 
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))
     @parameter("target_user", description="The target user")
@@ -188,7 +272,7 @@ class CurrencyCog(Cog):
     async def setcurrency(
         self, ctx: CommandEvent, target_user: str, amount: int, reason: str
     ) -> None:
-        """Set a user's currency balance."""
+        """Set a user's local currency balance."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
@@ -205,4 +289,4 @@ class CurrencyCog(Cog):
             target_link.account_id, amount, f"Admin: {reason}"
         )
         c_name = currency_service.get_currency_name(amount)
-        await ctx.reply(f"Set {target_user}'s balance to {amount} {c_name}.")
+        await ctx.reply(f"Set {target_user}'s local balance to {amount} {c_name}.")

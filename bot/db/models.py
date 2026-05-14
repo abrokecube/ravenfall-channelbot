@@ -1,31 +1,29 @@
-from . import Base
-from .db import engine
+import json
+import logging
+from collections.abc import Iterable
+from typing import Any
 
 from sqlalchemy import (
-    String,
-    Integer,
-    ForeignKey,
+    JSON,
     Boolean,
     DateTime,
     Float,
-    JSON,
-    text,
+    ForeignKey,
+    Integer,
+    String,
     inspect,
+    text,
 )
-from sqlalchemy.orm import relationship, mapped_column
-from sqlalchemy.ext.asyncio import AsyncConnection
-from sqlalchemy.orm import Mapped, Relationship
 from sqlalchemy.engine import Result
-from sqlalchemy.sql.schema import Column, ColumnDefault
 from sqlalchemy.engine.reflection import Inspector
-import json
-
-import logging
-
-from typing import Any
-from collections.abc import Iterable
+from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.orm import Mapped, Relationship, mapped_column, relationship
+from sqlalchemy.sql.schema import Column, ColumnDefault
 
 from bot.models import QueuedScroll
+
+from . import Base
+from .db import engine
 
 logger = logging.getLogger(__name__)
 

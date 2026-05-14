@@ -7,18 +7,14 @@ from collections.abc import Awaitable
 from inspect import Parameter
 from typing import TYPE_CHECKING, Any, cast
 
-from msgspec import Struct
-
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from bot.core.components import Cog
     from bot.services.remote_bot import RemoteBotInstance
 
-    from .remote_bot_service import RemoteBotService  # noqa: TC004
 
-
-type RemoteMethod[T: Struct] = Callable[..., T]
+type RemoteMethod[T: object] = Callable[..., T]
 
 
 class RemoteCallableMixin:
@@ -64,7 +60,7 @@ class RemoteCallableMixin:
         return None
 
 
-class RemoteCallable[U: Struct, T: Callable[..., Awaitable[Struct]]]:
+class RemoteCallable[U: object, T: Callable[..., Awaitable[object]]]:
     """Wrapper for remotely callable methods.
 
     Wraps a function to enable both local and remote execution.
