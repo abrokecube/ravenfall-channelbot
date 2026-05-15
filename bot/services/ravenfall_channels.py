@@ -7,12 +7,16 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, ClassVar, NamedTuple, override
 
 from pydantic import BaseModel, Field
+from sqlalchemy import Boolean, Integer, String, select
+from sqlalchemy.orm import Mapped, mapped_column  # noqa: TC002
 
+from bot.clients.ravenfall_middleman import Sender
 from bot.core.components import BaseService
 from bot.core.decorators import on_match
-from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent
+from bot.db import Base
+from bot.db.session import get_async_session
+from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent, UserRole
 from bot.integrations.twitch.consts import EVENT_SOURCE_TWITCH
-from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.mixins.event_receiver import EventReceiverMixin
 from bot.services.config_service import ConfigModel, ConfigService
 
@@ -21,8 +25,34 @@ if TYPE_CHECKING:
 
     from bot.core.components import EventManager, GlobalContext
     from bot.integrations.ravenfall import RavenfallInstance
+    from bot.services.accounts.service import AccountService
 
 LOGGER = logging.getLogger(__name__)
+
+
+class SenderData(Base):
+    """Database model for storing Ravenfall sender information."""
+
+    __tablename__: str = "ravenfall_senders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    channel_platform: Mapped[str] = mapped_column(String)
+    channel_platform_id: Mapped[str] = mapped_column(String)
+    user_id: Mapped[str] = mapped_column(String, nullable=True)  # Ravenfall User ID
+    character_id: Mapped[str] = mapped_column(String, nullable=True)  # Ravenfall Char ID
+    username: Mapped[str] = mapped_column(String)
+    display_name: Mapped[str] = mapped_column(String)
+    color: Mapped[str | None] = mapped_column(String, nullable=True)
+    platform: Mapped[str] = mapped_column(String)
+    platform_id: Mapped[str] = mapped_column(String)
+    is_broadcaster: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_moderator: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_subscriber: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_vip: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_game_administrator: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_game_moderator: Mapped[bool] = mapped_column(Boolean, default=False)
+    sub_tier: Mapped[int] = mapped_column(Integer, default=0)
+    identifier: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class RavenfallChannelsConfig(ConfigModel):
@@ -272,3 +302,218 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
             ):
                 tasks.append(callback(event, matching_instance))
         __ = await asyncio.gather(*tasks)
+
+    async def get_sender(self, event: MessageEvent) -> Sender:
+        """Convert a MessageEvent into a Ravenfall Sender object.
+
+        Args:
+            event: The MessageEvent to convert.
+
+        Returns:
+            A Sender object.
+
+        Raises:
+            ValueError: If the user has no connected Twitch account.
+        """
+        from bot.services.accounts.service import AccountService
+
+        account_service: AccountService = self.global_context.require_service(
+            AccountService
+        )
+
+        is_twitch = event.platform == EVENT_SOURCE_TWITCH
+
+        is_broadcaster = UserRole.ADMINISTRATOR in event.author_roles
+        is_moderator = UserRole.MODERATOR in event.author_roles or is_broadcaster
+        is_subscriber = False
+        is_vip = False
+        sub_tier = 0
+        color = None
+
+        if is_twitch:
+            from bot.integrations.twitch.events import (
+                TwitchEventSubMessageEvent,
+                TwitchIRCMessageEvent,
+            )
+
+            if isinstance(event, TwitchIRCMessageEvent):
+                badges = event.data.user.badges  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                is_broadcaster = "broadcaster" in badges
+                is_moderator = "moderator" in badges or is_broadcaster
+                is_subscriber = "subscriber" in badges or "founder" in badges
+                is_vip = "vip" in badges
+                color = event.data.user.color
+            elif isinstance(event, TwitchEventSubMessageEvent):
+                # badges is a list of Badge objects
+                badges_dict = {b.set_id: "1" for b in event.data.badges}
+                is_broadcaster = "broadcaster" in badges_dict
+                is_moderator = "moderator" in badges_dict or is_broadcaster
+                is_subscriber = "subscriber" in badges_dict or "founder" in badges_dict
+                is_vip = "vip" in badges_dict
+                color = event.data.color
+
+            async with get_async_session() as session:
+                # Find if already exists
+                stmt = select(SenderData).where(
+                    SenderData.channel_platform_id == event.room_id,
+                    SenderData.platform_id == event.author_id,
+                )
+                res = await session.execute(stmt)
+                sender_data: SenderData | None = res.scalar_one_or_none()
+
+                if not sender_data:
+                    sender_data = SenderData(
+                        channel_platform=event.platform,
+                        channel_platform_id=event.room_id,
+                        platform=event.platform,
+                        platform_id=event.author_id,
+                        username=event.author_login,
+                        display_name=event.author_name,
+                    )
+                    session.add(sender_data)
+
+                # Update details
+                sender_data.username = event.author_login
+                sender_data.display_name = event.author_name
+                sender_data.color = color
+                sender_data.is_broadcaster = is_broadcaster
+                sender_data.is_moderator = is_moderator
+                sender_data.is_subscriber = is_subscriber
+                sender_data.is_vip = is_vip
+                sender_data.sub_tier = sub_tier
+
+                await session.commit()
+                await session.refresh(sender_data)
+
+                return Sender(
+                    id=sender_data.platform_id,
+                    character_id=sender_data.character_id or "",
+                    username=sender_data.username,
+                    display_name=sender_data.display_name,
+                    color=sender_data.color,
+                    platform=sender_data.platform,
+                    platform_id=sender_data.platform_id,
+                    is_broadcaster=sender_data.is_broadcaster,
+                    is_moderator=sender_data.is_moderator,
+                    is_subscriber=sender_data.is_subscriber,
+                    is_vip=sender_data.is_vip,
+                    is_game_administrator=sender_data.is_game_administrator,
+                    is_game_moderator=sender_data.is_game_moderator,
+                    sub_tier=sender_data.sub_tier,
+                    identifier=sender_data.identifier,
+                )
+        else:
+            account = await account_service.get_or_create_account(
+                event.platform, event.author_id, event.author_login
+            )
+            links = await account_service.get_account_links(
+                account.id, EVENT_SOURCE_TWITCH
+            )
+            if not links:
+                msg = f"User {event.author_login} has no connected Twitch account."
+                raise ValueError(msg)
+
+            twitch_link = links[0]
+
+            async with get_async_session() as session:
+                stmt = select(SenderData).where(
+                    SenderData.channel_platform_id == event.room_id,
+                    SenderData.platform_id == twitch_link.platform_id,
+                )
+                res = await session.execute(stmt)
+                sender_data = res.scalar_one_or_none()
+
+                if sender_data:
+                    return Sender(
+                        id=sender_data.platform_id,
+                        character_id=sender_data.character_id or "",
+                        username=sender_data.username,
+                        display_name=sender_data.display_name,
+                        color=sender_data.color,
+                        platform=sender_data.platform,
+                        platform_id=sender_data.platform_id,
+                        is_broadcaster=sender_data.is_broadcaster,
+                        is_moderator=sender_data.is_moderator,
+                        is_subscriber=sender_data.is_subscriber,
+                        is_vip=sender_data.is_vip,
+                        is_game_administrator=sender_data.is_game_administrator,
+                        is_game_moderator=sender_data.is_game_moderator,
+                        sub_tier=sender_data.sub_tier,
+                        identifier=sender_data.identifier,
+                    )
+
+                return Sender(
+                    id=twitch_link.platform_id,
+                    character_id="",
+                    username=twitch_link.username,
+                    display_name=twitch_link.username,
+                    color=None,
+                    platform=EVENT_SOURCE_TWITCH,
+                    platform_id=twitch_link.platform_id,
+                    is_broadcaster=False,
+                    is_moderator=False,
+                    is_subscriber=False,
+                    is_vip=False,
+                    is_game_administrator=False,
+                    is_game_moderator=False,
+                    sub_tier=0,
+                    identifier=None,
+                )
+
+    async def get_sender_by_id(
+        self, channel_id: str, platform_id: str, username: str
+    ) -> Sender:
+        """Get or create a Sender by IDs.
+
+        Args:
+            channel_id: The room id.
+            platform_id: The user platform id.
+            username: The user login.
+
+        Returns:
+            A Sender object.
+        """
+        async with get_async_session() as session:
+            stmt = select(SenderData).where(
+                SenderData.channel_platform_id == channel_id,
+                SenderData.platform_id == platform_id,
+            )
+            res = await session.execute(stmt)
+            sender_data = res.scalar_one_or_none()
+
+            if sender_data:
+                return Sender(
+                    id=sender_data.platform_id,
+                    character_id=sender_data.character_id or "",
+                    username=sender_data.username,
+                    display_name=sender_data.display_name,
+                    color=sender_data.color,
+                    platform=sender_data.platform,
+                    platform_id=sender_data.platform_id,
+                    is_broadcaster=sender_data.is_broadcaster,
+                    is_moderator=sender_data.is_moderator,
+                    is_subscriber=sender_data.is_subscriber,
+                    is_vip=sender_data.is_vip,
+                    is_game_administrator=sender_data.is_game_administrator,
+                    is_game_moderator=sender_data.is_game_moderator,
+                    sub_tier=sender_data.sub_tier,
+                    identifier=sender_data.identifier,
+                )
+
+            return Sender(
+                id=platform_id,
+                character_id="",
+                username=username,
+                display_name=username,
+                color=None,
+                platform=EVENT_SOURCE_TWITCH,
+                platform_id=platform_id,
+                is_broadcaster=False,
+                is_moderator=False,
+                is_subscriber=False,
+                is_vip=False,
+                is_game_administrator=False,
+                is_game_moderator=False,
+                sub_tier=0,
+                identifier=None,
+            )

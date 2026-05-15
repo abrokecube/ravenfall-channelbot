@@ -84,29 +84,6 @@ class AutoRaidStatus(Base):
     )
 
 
-class SenderData(Base):
-    __tablename__: str = "sender_data"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    channel_platform: Mapped[str] = mapped_column(String)
-    channel_platform_id: Mapped[str] = mapped_column(String)
-    user_id: Mapped[str] = mapped_column(String)  # uuid
-    character_id: Mapped[str] = mapped_column(String)  # uuid
-    username: Mapped[str] = mapped_column(String)
-    display_name: Mapped[str] = mapped_column(String)
-    color: Mapped[str] = mapped_column(String, nullable=True)
-    platform: Mapped[str] = mapped_column(String)
-    platform_id: Mapped[str] = mapped_column(String)
-    is_broadcaster: Mapped[bool] = mapped_column(Boolean)
-    is_moderator: Mapped[bool] = mapped_column(Boolean)
-    is_subscriber: Mapped[bool] = mapped_column(Boolean)
-    is_vip: Mapped[bool] = mapped_column(Boolean)
-    is_game_administrator: Mapped[bool] = mapped_column(Boolean)
-    is_game_moderator: Mapped[bool] = mapped_column(Boolean)
-    sub_tier: Mapped[int] = mapped_column(Integer)
-    identifier: Mapped[str] = mapped_column(String)
-
-
 class UserCredits(Base):
     __tablename__: str = "user_credits"
 

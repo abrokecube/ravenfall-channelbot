@@ -6,6 +6,7 @@ from collections import deque
 from contextlib import asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Literal, override
+from uuid import uuid4
 
 from anyio import Path as AsyncPath
 from msgspec import convert
@@ -28,11 +29,12 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable
 
     from bot.core.components import EventManager
-    from bot.integrations.ravenfall.events import RavenfallEvent
     from ravenpy.ravenpy import RavenNest
 
+    from .events import RavenfallEvent
     from .matcher import Match
     from .models import RavenfallInstanceConfig
+    from .payloads import BaseRavenBotPayload
     from .types import RavenfallInstanceEventHook
 
 import logging
@@ -712,6 +714,21 @@ class RavenfallInstance:
         """Get middleman connection status for this Ravenfall instance."""
         middleman, conn_id = self._get_middleman()
         return await middleman.get_connection_status(conn_id)
+
+    async def send_to_ravenfall(
+        self, sender: rm.Sender, payload: BaseRavenBotPayload
+    ) -> str:
+        """Send a payload to Ravenfall."""
+        middleman, conn_id = self._get_middleman()
+        corr_id = str(uuid4())
+        message = rm.RavenBotMessage(
+            payload.identifier,
+            sender,
+            content=payload.get_content_json_string(),
+            correlation_id=corr_id,
+        )
+        await middleman.send_to_ravenfall(conn_id, message)
+        return corr_id
 
     # Ravenfall's "observed" endpoint does NOT work
     # async def _observed_loop(self):

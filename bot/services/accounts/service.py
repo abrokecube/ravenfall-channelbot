@@ -245,8 +245,10 @@ class AccountService(BaseService):
                 raise ValueError(msg)
 
             # Move all links from source to dest
-            # Note: We might have duplicate links if both accounts had the same platform linked.
-            # We'll resolve this by catching UniqueConstraint errors or cleaning up beforehand.
+            # Note: We might have duplicate links if both accounts had
+            # the same platform linked.
+            # We'll resolve this by catching UniqueConstraint errors
+            # or cleaning up beforehand.
 
             # For now, we update and handle conflicts.
             links_result = await session.execute(

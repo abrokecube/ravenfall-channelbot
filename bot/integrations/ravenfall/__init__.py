@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from . import payloads as payloads
 from .converters import RavenfallInstanceConverter as RavenfallInstanceConverter
 from .converters import RavenfallItemConverter as RavenfallItemConverter
 from .converters import RavenfallSkillChoice as RavenfallSkillChoice

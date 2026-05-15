@@ -51,7 +51,7 @@ class Sender(Struct):
 
 
 class RavenBotMessage(Struct):
-    """Represents a message sent to RavenBot."""
+    """Represents a message sent by RavenBot."""
 
     identifier: str = field(name="Identifier")
     sender: Sender = field(name="Sender")
@@ -316,7 +316,7 @@ class MiddlemanClient:
     async def send_to_ravenbot(
         self,
         connection_id: str,
-        message: RavenBotMessage,
+        message: RavenfallMessage,
     ) -> None:
         """Send RavenBot a message.
 
@@ -331,7 +331,7 @@ class MiddlemanClient:
     async def send_to_ravenfall(
         self,
         connection_id: str,
-        message: RavenfallMessage,
+        message: RavenBotMessage,
     ) -> None:
         """Send Ravenfall a message.
 
