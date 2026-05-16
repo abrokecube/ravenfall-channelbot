@@ -23,9 +23,9 @@ from bot.services.config_service import ConfigModel, ConfigService
 if TYPE_CHECKING:
     from collections.abc import Collection
 
+    from bot.cogs.accounts.service import AccountService
     from bot.core.components import EventManager, GlobalContext
     from bot.integrations.ravenfall import RavenfallInstance
-    from bot.services.accounts.service import AccountService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -315,7 +315,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         Raises:
             ValueError: If the user has no connected Twitch account.
         """
-        from bot.services.accounts.service import AccountService
+        from bot.cogs.accounts.service import AccountService
 
         account_service: AccountService = self.global_context.require_service(
             AccountService

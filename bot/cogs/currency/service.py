@@ -65,7 +65,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
 
     @override
     async def setup(self) -> None:
-        from bot.services.accounts.service import AccountService
+        from bot.cogs.accounts.service import AccountService
         from bot.services.config_service import ConfigService
 
         config_srv = await self.global_context.wait_for_service(ConfigService)
@@ -100,7 +100,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         Returns:
             A CombinedBalance object.
         """
-        from bot.services.accounts.service import AccountService
+        from bot.cogs.accounts.service import AccountService
         from bot.services.remote_bot import RemoteBotService
 
         local_balance = await self.get_balance(account_id)
@@ -235,7 +235,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
             # This is a bit problematic, but we already committed local change if any.
             return False
 
-        from bot.services.accounts.service import AccountService
+        from bot.cogs.accounts.service import AccountService
 
         account_service = self.global_context.require_service(AccountService)
         links = await account_service.get_account_links(account_id)
@@ -336,7 +336,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         if not remote_bot_service:
             return combined
 
-        from bot.services.accounts.service import AccountService
+        from bot.cogs.accounts.service import AccountService
 
         account_service = self.global_context.require_service(AccountService)
         links = await account_service.get_account_links(account_id)

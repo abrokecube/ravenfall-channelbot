@@ -8,6 +8,7 @@ from inspect import Parameter
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    import types
     from collections.abc import Callable
 
     from bot.core.components import Cog
@@ -84,7 +85,7 @@ class RemoteCallable[U: object, T: Callable[..., Awaitable[object]]]:
     def __init__(
         self,
         func: T,
-        return_type: type[U],
+        return_type: type[U] | types.UnionType,
         enc_hook: Callable[[Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
         dec_hook: Callable[[type, Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
     ) -> None:
@@ -98,7 +99,7 @@ class RemoteCallable[U: object, T: Callable[..., Awaitable[object]]]:
 
         """
         self.func: T = func
-        self.return_type: type[U] = return_type
+        self.return_type: type[U] | types.UnionType = return_type
         self.cog_instance: Cog | None = None
         self.enc_hook: Callable[[Any], Any] | None = enc_hook  # pyright: ignore[reportExplicitAny]
         self.dec_hook: Callable[[type, Any], Any] | None = dec_hook  # pyright: ignore[reportExplicitAny]

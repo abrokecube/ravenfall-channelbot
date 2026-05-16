@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from bot.services.accounts.service import AccountService
+    from bot.cogs.accounts.service import AccountService
 
 
 class AccountMergeMixin:

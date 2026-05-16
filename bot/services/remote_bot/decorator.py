@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .mixin import RemoteCallable
 
+if TYPE_CHECKING:
+    import types
+
 
 def remote_callable[T: Callable[..., Awaitable[object]], U](
-    return_type: type[U],
+    return_type: type[U] | types.UnionType,
     enc_hook: Callable[[Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
     dec_hook: Callable[[type, Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
 ) -> Callable[[T], RemoteCallable[U, T]]:
@@ -16,6 +21,7 @@ def remote_callable[T: Callable[..., Awaitable[object]], U](
     to another bot instance).
 
     Args:
+        return_type: The return type of the function (can be a type or union type)
         enc_hook: Optional encoder hook to override class-level hook
         dec_hook: Optional decoder hook to override class-level hook
 

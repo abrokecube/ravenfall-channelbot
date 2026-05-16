@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import types  # noqa: TC003
 from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, NamedTuple, cast, override
 
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
-type RemoteMethodAsync[T: Struct] = Callable[..., T | Awaitable[T]]
+type RemoteMethodAsync[T] = Callable[..., T | Awaitable[T]]
 
 DEFAULT_ENCODER = json.Encoder()
 
@@ -42,8 +43,8 @@ def dumps(x: Any) -> str:  # pyright: ignore[reportExplicitAny, reportAny]
 class RegisteredMethod(NamedTuple):
     """Data structure for a registered remote method."""
 
-    method: RemoteMethodAsync[Struct]
-    return_type: type[Struct]
+    method: RemoteMethodAsync[object]
+    return_type: type[object] | types.UnionType
     cog_instance: Cog
     struct: type[Struct]
 
@@ -164,7 +165,7 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
         cog_name: str,
         method_name: str,
         bound_method: RemoteMethodAsync[T],
-        return_type: type[T],
+        return_type: type[T] | types.UnionType,
         cog_instance: Cog,
     ) -> None:
         """Register a remotely callable method.
@@ -338,7 +339,7 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
         remote_bot: RemoteBotInstance,
         cog_name: str,
         method_name: str,
-        return_type: type[T],
+        return_type: type[T] | types.UnionType,
         kwargs: dict[str, Any] | None = None,  # pyright: ignore[reportExplicitAny]
         enc_hook: Callable[[Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]
         dec_hook: Callable[[type, Any], Any] | None = None,  # pyright: ignore[reportExplicitAny]

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, override
 
 from msgspec import Struct
 
+from bot.cogs.accounts.service import AccountService
 from bot.core.components import Cog
 from bot.integrations.chat_messages.deco import checks
 from bot.integrations.chat_messages.enums import UserRole
@@ -13,7 +14,6 @@ from bot.integrations.commands.converters import RangeInt
 from bot.integrations.commands.deco import command, parameter
 from bot.integrations.commands.events import CommandEvent  # noqa: TC001
 from bot.integrations.commands.exceptions import CommandError
-from bot.services.accounts.service import AccountService
 from bot.services.remote_bot import RemoteCallableMixin, remote_callable
 
 from .service import CurrencyService, RemoteBalance, RemoteHistory, RemoteHistoryItem

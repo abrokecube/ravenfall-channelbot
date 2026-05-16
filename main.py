@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, override
 
 from dotenv import load_dotenv
 
+from bot.cogs.accounts import AccountCog
 from bot.cogs.bot import BotStuffCog
 from bot.cogs.currency import CurrencyCog
 from bot.cogs.help import HelpCog
@@ -25,7 +26,6 @@ from bot.integrations.ravenfall.event_sources import RavenfallEventSource
 from bot.integrations.twitch.dispatchers import TwitchRedeemDispatcher
 from bot.integrations.twitch.enums import EventSubTopic, MessageReceiveMode
 from bot.integrations.twitch.event_sources import AuthScope, TwitchEventSource
-from bot.services.accounts import AccountService
 from bot.services.backup import BackupService
 from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.event_waiter import EventWaiterService
@@ -189,9 +189,9 @@ async def run():
         tasks.append(event_manager.add_cog(BotStuffCog))
         tasks.append(event_manager.add_cog(InfoCog))
         tasks.append(event_manager.add_cog(CurrencyCog))
+        tasks.append(event_manager.add_cog(AccountCog))
 
         tasks.append(global_ctx.register_service(DatabaseService()))
-        tasks.append(global_ctx.register_service(AccountService()))
         tasks.append(global_ctx.register_service(RemoteBotService()))
         tasks.append(global_ctx.register_service(config_service))
         tasks.append(global_ctx.register_service(WebService()))
