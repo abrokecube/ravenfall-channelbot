@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, override
 from bot.clients import ravenfall_middleman as rm
 from bot.core import EVENT_CATEGORY_GENERIC
 from bot.core.components import BaseEvent
+from bot.integrations.ravenfall.models import RavenfallFormattedMessage
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -53,8 +54,10 @@ class RavenfallMessageEvent(BaseMiddlemanMessage):
     """Message from Ravenfall."""
 
     data: rm.RavenfallStreamMessage | rm.RavenfallProcessorMessage
-    message: rm.RavenfallMessage
-    orig_message: rm.RavenfallMessage | rm.FrozenRavenfallMessage
+    message: rm.RavenfallMessage | RavenfallFormattedMessage
+    orig_message: (
+        rm.RavenfallMessage | rm.FrozenRavenfallMessage | RavenfallFormattedMessage
+    )
     message_match: Match | None
 
     @override

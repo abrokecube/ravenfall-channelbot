@@ -14,6 +14,7 @@ from utils.strutils import split_by_utf16_bytes
 
 from .consts import EVENT_SOURCE_TWITCH
 from .enums import MessageDeliveryMode, MessageRateMode
+from .twitch_channel import TwitchChannel
 
 if TYPE_CHECKING:
     from bot.integrations.twitch.models import ConnectedChat
@@ -46,9 +47,9 @@ class TwitchService(BaseMessageService):
             asyncio.Lock
         )
 
-    def get_twitch(self, channel_id: str):
+    def get_twitch_channel(self, channel_id: str):
         """Get an authenticated Twitch instance."""
-        return self.event_source.twitches.get(channel_id)
+        return self.event_source.twitch_channels.get(channel_id)
 
     @asynccontextmanager
     async def _chat_rate_limit(self, channel_id: str, settings: ConnectedChat):
@@ -87,11 +88,12 @@ class TwitchService(BaseMessageService):
     async def _send_http(
         self, channel_id: str, text: str, *, reply_id: str | None = None
     ) -> MessageSendResult:
-        twitch = self.get_twitch(channel_id)
+        twitch_channel = self.get_twitch_channel(channel_id)
         # twitch = self.event_source.bot_twitch
-        if not twitch:
+        if not twitch_channel:
             msg = f"Channel id {channel_id} has not been authorized"
             raise ValueError(msg)
+        twitch = twitch_channel.twitch
         settings = self.event_source.connected_chats[channel_id]
         async with self._chat_rate_limit(channel_id, settings):
             if (
@@ -177,8 +179,12 @@ class TwitchService(BaseMessageService):
 
         return MessageSendResult(is_sent=all(x.is_sent for x in results))
 
+    def get_users(
+        self, user_ids: list[str] | None = None, logins: list[str] | None = None
+    ):
+        """Gets information about one or more specified Twitch users."""
+        return self.event_source.get_users(user_ids, logins)
+
     @override
     async def teardown(self):
-        for t in self.event_source.twitches.values():
-            await t.close()
         return await super().teardown()

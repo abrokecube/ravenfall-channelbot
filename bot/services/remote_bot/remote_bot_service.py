@@ -6,7 +6,7 @@ import inspect
 import logging
 import types  # noqa: TC003
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Any, NamedTuple, cast, override
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, cast, override
 
 import aiohttp
 from fastapi import HTTPException
@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from bot.core.components import BaseService
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.mixins.fastapi_routes import FastAPIRoutesMixin, api_route
-from bot.services.config_service import ConfigService
+from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.web_service import APIServer
 
 if TYPE_CHECKING:
@@ -69,7 +69,15 @@ class RemoteCallRequestBody(Struct):
     kwargs: dict[str, Any] = {}  # pyright: ignore[reportExplicitAny]
 
 
-class RemoteBotConfig(BaseModel):
+class RemoteBotConfig(ConfigModel):
+    """Remote bot config."""
+
+    config_table_name: ClassVar[str | None] = "services.remote_bot"
+
+    instances: list[RemoteBotInstanceConfig] = Field(default_factory=list)
+
+
+class RemoteBotInstanceConfig(BaseModel):
     """Configuration for a remote bot instance.
 
     Attributes:
@@ -142,7 +150,15 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
         self.inject_config_service(config_service)
 
         try:
-            __ = self.subscribe_config(list[RemoteBotConfig], "services.remote_bots")
+            config = self.subscribe_config(RemoteBotConfig)
+            for bot_config in config.instances:
+                instance = RemoteBotInstance(
+                    name=bot_config.name,
+                    base_url=bot_config.base_url,
+                    api_key=bot_config.api_key,
+                )
+                self.remote_bots[instance.name] = instance
+
         except KeyError:
             LOGGER.debug("No remote_bots configuration found")
 
@@ -209,25 +225,17 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
     def on_config_changed(
         self, table: str, config: object, changed_fields: set[str]
     ) -> None:
-        """Handle configuration changes.
-
-        Args:
-            table: The config table name
-            config: The new configuration
-            changed_fields: Set of changed field names
-
-        """
-        if isinstance(config, list):
-            self.remote_bots.clear()
-            for bot_config in config:  # pyright: ignore[reportUnknownVariableType]
-                if isinstance(bot_config, RemoteBotConfig):
-                    instance = RemoteBotInstance(
-                        name=bot_config.name,
-                        base_url=bot_config.base_url,
-                        api_key=bot_config.api_key,
-                    )
-                    self.remote_bots[instance.name] = instance
-            LOGGER.info(f"Loaded {len(self.remote_bots)} remote bot configurations")
+        if not isinstance(config, RemoteBotConfig):
+            return
+        self.remote_bots.clear()
+        for bot_config in config.instances:
+            instance = RemoteBotInstance(
+                name=bot_config.name,
+                base_url=bot_config.base_url,
+                api_key=bot_config.api_key,
+            )
+            self.remote_bots[instance.name] = instance
+        LOGGER.info(f"Loaded {len(self.remote_bots)} remote bot configurations")
 
     def get_remote_bot(self, name: str) -> RemoteBotInstance:
         """Get a remote bot instance by name.

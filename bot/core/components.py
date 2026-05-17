@@ -313,6 +313,7 @@ class BaseEvent:
     platform: str = EVENT_SOURCE_ANY
     data: Any  # pyright: ignore[reportExplicitAny]
     timestamp: float = 0.0
+    process_concurrently: bool = True
 
     def __post_init__(self):
         self.timestamp = time.time()
@@ -497,7 +498,7 @@ class EventManager:
             loop = None
 
         if loop != self._loop:
-            asyncio.run_coroutine_threadsafe(
+            __ = asyncio.run_coroutine_threadsafe(
                 self._process_event_internal(event), self._loop
             )
             return
@@ -532,13 +533,20 @@ class EventManager:
 
         # Execute dispatchers concurrently
         # tasks: list[Awaitable[None]] = []
-        for dispatcher in matching_dispatchers:
-            fire_and_forget(
-                _log_on_invoke_error(
+        if event.process_concurrently:
+            for dispatcher in matching_dispatchers:
+                fire_and_forget(
+                    _log_on_invoke_error(
+                        dispatcher.dispatch(self.global_context, event),
+                        f"Exception while sending event to dispatcher: {dispatcher}",
+                    )
+                )
+        else:
+            for dispatcher in matching_dispatchers:
+                await _log_on_invoke_error(
                     dispatcher.dispatch(self.global_context, event),
                     f"Exception while sending event to dispatcher: {dispatcher}",
                 )
-            )
 
     async def teardown(self) -> None:
         """Stop and remove all loaded components."""
@@ -653,12 +661,20 @@ class BaseDispatcher:
         for priority in sorted(priority_groups.keys(), reverse=True):
             listeners_to_invoke = priority_groups[priority]
             # Execute listeners with the same priority concurrently
-            tasks: list[Awaitable[None]] = []
-            for listener, match_result in listeners_to_invoke:
-                tasks.append(
-                    self._invoke_listener(listener, global_context, event, match_result)
-                )
-            __ = await asyncio.gather(*tasks, return_exceptions=True)
+            if event.process_concurrently:
+                tasks: list[Awaitable[None]] = []
+                for listener, match_result in listeners_to_invoke:
+                    tasks.append(
+                        self._invoke_listener(
+                            listener, global_context, event, match_result
+                        )
+                    )
+                __ = await asyncio.gather(*tasks, return_exceptions=True)
+            else:
+                for listener, match_result in listeners_to_invoke:
+                    await self._invoke_listener(
+                        listener, global_context, event, match_result
+                    )
 
     async def on_invoke_error(
         self,

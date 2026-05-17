@@ -5,11 +5,11 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
-    Boolean,
     DateTime,
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     inspect,
     text,
@@ -119,7 +119,7 @@ class KeyValue(Base):
     __tablename__: str = "key_value"
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
-    value: Mapped[object] = mapped_column(JSON, nullable=True)
+    value: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class ChatMessage(Base):

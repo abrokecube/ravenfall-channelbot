@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, override
 from twitchAPI.type import TwitchResourceNotFound
 
 from bot.core import EVENT_CATEGORY_GENERIC
+from bot.core.components import BaseEvent
 from bot.integrations.chat_messages.events import MessageEvent
 from bot.integrations.chat_messages.models import ChatRoomCapabilities
-from utils.strutils import split_by_utf16_bytes
 
 from .consts import EVENT_SOURCE_TWITCH
 from .enums import TwitchCustomRewardRedemptionStatus
@@ -24,19 +24,29 @@ if TYPE_CHECKING:
     )
     from twitchAPI.twitch import Twitch
 
+    from bot.integrations.twitch import TwitchChannel
     from bot.integrations.twitch.services import TwitchService
 
 LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
-class TwitchIRCMessageEvent(MessageEvent):
-    """Twitch chat message event."""
+class TwitchEvent(BaseEvent):
+    """Base class for events from Twitch."""
 
     platform: str = EVENT_SOURCE_TWITCH
     bot_twitch: Twitch
-    channel_twitch: Twitch
+    channel_twitch: TwitchChannel
     twitch_service: TwitchService
+    channel_id: str
+    channel_login: str
+    channel_display_name: str | None
+
+
+@dataclass(kw_only=True)
+class TwitchIRCMessageEvent(MessageEvent, TwitchEvent):
+    """Twitch chat message event."""
+
     data: TwitchChatMessage
     room_capabilities: ChatRoomCapabilities = ChatRoomCapabilities(  # noqa: RUF009
         multiline=False, max_message_length=500
@@ -71,13 +81,9 @@ class TwitchIRCMessageEvent(MessageEvent):
 
 
 @dataclass(kw_only=True)
-class TwitchEventSubMessageEvent(MessageEvent):
+class TwitchEventSubMessageEvent(MessageEvent, TwitchEvent):
     """Twitch EventSub chat message event."""
 
-    platform: str = EVENT_SOURCE_TWITCH
-    bot_twitch: Twitch
-    channel_twitch: Twitch
-    twitch_service: TwitchService
     data: ChannelChatMessageData
     room_capabilities: ChatRoomCapabilities = ChatRoomCapabilities(  # noqa: RUF009
         multiline=False, max_message_length=500
@@ -133,7 +139,6 @@ class TwitchRedemptionEvent(TwitchIRCMessageEvent):
         if self.data.status == "unfulfilled":
             try:
                 _ = await self.channel_twitch.update_redemption_status(
-                    self.data.broadcaster_user_id,
                     self.data.reward.id,
                     self.data.id,
                     status,

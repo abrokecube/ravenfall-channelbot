@@ -75,7 +75,7 @@ class RavenfallMessage(Struct):
     identifier: str = field(name="Identifier")
     recipient: Recipient = field(name="Recipent")  # this typo is intentional
     format: str = field(name="Format")
-    args: list[str | int | float | dict[str, Any]] = field(name="Args")
+    args: list[object] = field(name="Args")
     tags: list[str] = field(name="Tags")
     category: str | None = field(name="Category")
     correlation_id: str | None = field(name="CorrelationId")
@@ -346,16 +346,25 @@ class MiddlemanClient:
     async def send_to_ravenfall_and_wait_for_response(
         self,
         connection_id: str,
-        message: SendAndWaitResult,
+        message: RavenBotMessage,
+        timeout: float = 30,
+        expected_count: int = 1,
     ) -> SendAndWaitResult:
         """Send Ravenfall a message and wait for a response.
 
         Args:
             connection_id: The connection ID to send the message to
             message: The message to send
+            timeout: Max time to wait for.
+            expected_count: Max number of messages to receive. (Receives 1 if set to 0)
 
         """
-        data = {"connectionId": connection_id, "data": json_encode.encode(message)}
+        data = {
+            "connectionId": connection_id,
+            "data": json_encode.encode(message),
+            "timeout": timeout,
+            "expectedCount": expected_count,
+        }
         return await self._post("/api/send-to-server-and-wait", SendAndWaitResult, data)
 
     async def ensure_connection(

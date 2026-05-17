@@ -1,16 +1,54 @@
+from datetime import datetime
+
+from msgspec import json
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from bot.models import QueuedScroll
+
 from .models import (
-    User,
     Channel,
     Character,
-    SenderData,
+    KeyValue,
+    User,
     UserCredits,
     UserCreditTransaction,
-    KeyValue,
 )
-from sqlalchemy import select
-from datetime import datetime
-from bot.models import Sender, QueuedScroll
+
+
+class KeyValueStore:
+    def __init__(self, namespace: str):
+        self._namespace: str = namespace
+
+    async def set(self, session: AsyncSession, key: str, value: object) -> None:
+        """Set a value."""
+        full_key = f"{self._namespace}.{key}"
+        string_value = json.encode(value)
+
+        result = await session.execute(select(KeyValue).where(KeyValue.key == full_key))
+        item = result.scalar_one_or_none()
+        if item is None:
+            item = KeyValue(key=key, value=string_value)
+            session.add(item)
+        else:
+            item.value = string_value
+
+    async def get[T](
+        self, session: AsyncSession, key: str, out_type: type[T], default: T | None = None
+    ) -> T | None:
+        """Get a value."""
+        full_key = f"{self._namespace}.{key}"
+
+        result = await session.execute(select(KeyValue).where(KeyValue.key == full_key))
+        item = result.scalar_one_or_none()
+        if item is None:
+            return default
+        return json.decode(item.value, type=out_type)
+
+
+def get_kv_store(namespace: str) -> KeyValueStore:
+    """Get kv store."""
+    return KeyValueStore(namespace)
 
 
 async def get_user(
@@ -35,33 +73,6 @@ async def get_user(
     if name:
         user_obj.name = name
     return user_obj
-
-
-async def get_key_value(
-    session: AsyncSession,
-    key: str,
-    default: object = None,
-) -> object:
-    result = await session.execute(select(KeyValue).where(KeyValue.key == key))
-    item = result.scalar_one_or_none()
-    if item is None:
-        return default
-    return item.value
-
-
-async def set_key_value(
-    session: AsyncSession,
-    key: str,
-    value: object,
-) -> KeyValue:
-    result = await session.execute(select(KeyValue).where(KeyValue.key == key))
-    item = result.scalar_one_or_none()
-    if item is None:
-        item = KeyValue(key=key, value=value)
-        session.add(item)
-    else:
-        item.value = value
-    return item
 
 
 async def get_channel(
@@ -108,61 +119,6 @@ async def get_character(
         user_obj.user.name = name  # update name if it was changed
 
     return user_obj
-
-
-async def get_sender_data(
-    session: AsyncSession, channel_id: int | str, user_name: str
-) -> SenderData | None:
-    if isinstance(channel_id, int):
-        channel_id = str(channel_id)
-    result = await session.execute(
-        select(SenderData).where(
-            SenderData.channel_platform_id == channel_id,
-            (SenderData.username == user_name) | (SenderData.display_name == user_name),
-        )
-    )
-    return result.scalar_one_or_none()
-
-
-async def get_formatted_sender_data(
-    session: AsyncSession, channel_id: int | str, user_name: str
-) -> Sender:
-    sender_data = await get_sender_data(session, channel_id, user_name)
-    if sender_data is not None:
-        return {
-            "Id": sender_data.user_id,
-            "CharacterId": sender_data.character_id,
-            "Username": sender_data.username,
-            "DisplayName": sender_data.display_name,
-            "Color": sender_data.color,
-            "Platform": sender_data.platform,
-            "PlatformId": sender_data.platform_id,
-            "IsBroadcaster": sender_data.is_broadcaster,
-            "IsModerator": sender_data.is_moderator,
-            "IsSubscriber": sender_data.is_subscriber,
-            "IsVip": sender_data.is_vip,
-            "IsGameAdministrator": sender_data.is_game_administrator,
-            "IsGameModerator": sender_data.is_game_moderator,
-            "SubTier": sender_data.sub_tier,
-            "Identifier": sender_data.identifier,
-        }
-    return {
-        "Id": "00000000-0000-0000-0000-000000000000",
-        "CharacterId": "00000000-0000-0000-0000-000000000000",
-        "Username": user_name,
-        "DisplayName": user_name,
-        "Color": "#7F7F7F",
-        "Platform": "twitch",
-        "PlatformId": None,
-        "IsBroadcaster": False,
-        "IsModerator": False,
-        "IsSubscriber": False,
-        "IsVip": False,
-        "IsGameAdministrator": False,
-        "IsGameModerator": False,
-        "SubTier": 0,
-        "Identifier": "1",
-    }
 
 
 async def record_character_and_user(
@@ -229,47 +185,6 @@ async def record_user(
     if display_name is not None:
         user.display_name = display_name
     return user
-
-
-async def record_sender_data(
-    session: AsyncSession,
-    channel_platform: str,
-    channel_platform_id: int | str,
-    sender_json: Sender,
-) -> SenderData:
-    if isinstance(channel_platform_id, int):
-        channel_platform_id = str(channel_platform_id)
-    username = sender_json.get("Username", "")
-    if not username:
-        sender_data = SenderData()
-        session.add(sender_data)
-    else:
-        result = await get_sender_data(session, channel_platform_id, username)
-        if result is None:
-            sender_data = SenderData()
-            session.add(sender_data)
-        else:
-            sender_data = result
-
-    sender_data.channel_platform = channel_platform
-    sender_data.channel_platform_id = channel_platform_id
-    sender_data.user_id = sender_json.get("Id")
-    sender_data.character_id = sender_json.get("CharacterId")
-    sender_data.username = username.lower()
-    sender_data.display_name = sender_json.get("DisplayName")
-    sender_data.color = sender_json.get("Color")
-    sender_data.platform = sender_json.get("Platform")
-    sender_data.platform_id = sender_json.get("PlatformId", "") or ""
-    sender_data.is_broadcaster = sender_json.get("IsBroadcaster")
-    sender_data.is_moderator = sender_json.get("IsModerator")
-    sender_data.is_subscriber = sender_json.get("IsSubscriber")
-    sender_data.is_vip = sender_json.get("IsVip")
-    sender_data.is_game_administrator = sender_json.get("IsGameAdministrator")
-    sender_data.is_game_moderator = sender_json.get("IsGameModerator")
-    sender_data.sub_tier = sender_json.get("SubTier")
-    sender_data.identifier = sender_json.get("Identifier")
-
-    return sender_data
 
 
 async def get_user_credits_raw(session: AsyncSession, user_id: int | str) -> UserCredits:

@@ -17,7 +17,6 @@ from bot.cogs.ravenfall_watcher import RavenfallWatcherCog
 from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
 from bot.db.models import update_schema
-from bot.db.service import DatabaseService
 from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent
 from bot.integrations.chat_messages.event_processors import filter_message_event_text
 from bot.integrations.commands import CommandDispatcher
@@ -191,7 +190,6 @@ async def run():
         tasks.append(event_manager.add_cog(CurrencyCog))
         tasks.append(event_manager.add_cog(AccountCog))
 
-        tasks.append(global_ctx.register_service(DatabaseService()))
         tasks.append(global_ctx.register_service(RemoteBotService()))
         tasks.append(global_ctx.register_service(config_service))
         tasks.append(global_ctx.register_service(WebService()))

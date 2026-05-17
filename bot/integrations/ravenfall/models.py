@@ -1,8 +1,11 @@
+from dataclasses import dataclass
+from string import Formatter
 from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
 from bot.clients import ravenfall_query as rq
+from bot.clients.ravenfall_middleman import Recipient
 from bot.services.config_service import ConfigModel
 
 from . import enums
@@ -61,3 +64,21 @@ class RavenfallConfig(ConfigModel):
     middleman_base_url: str | None = None
     ravenfall_message_definitions_path: str = "./data/definitions.yaml"
     instances: list[RavenfallInstanceConfig] = Field(default_factory=list)
+
+
+@dataclass
+class RavenfallFormattedMessage:
+    identifier: str | None
+    format: str
+    format_args: dict[str, object]
+    recipient: Recipient
+    correlation_id: str | None
+
+    def format_args_as_array(self) -> list[object]:
+        """Return format_args values in the order the keys appear in the format string."""
+        ordered_values: list[object] = []
+        for _, field_name, _, _ in Formatter().parse(self.format):
+            if not field_name:
+                continue
+            ordered_values.append(self.format_args[field_name])
+        return ordered_values

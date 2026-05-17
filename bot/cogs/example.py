@@ -30,7 +30,7 @@ from bot.integrations.commands.deco import (
 from bot.integrations.commands.events import CommandEvent
 from bot.integrations.commands.exceptions import ArgumentConversionError
 from bot.mixins.fastapi_routes import FastAPIRoutesMixin, api_route
-from bot.mixins.remote_callable import RemoteCallableMixin, remote_callable
+from bot.services.remote_bot import RemoteCallableMixin, remote_callable
 from bot.services.web_service import APIServer
 
 if TYPE_CHECKING:
@@ -378,8 +378,8 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
         await ctx.message.reply("buh (long cooldown)")
 
     # Remote callable demonstration
-    @remote_callable()
-    def get_example_data(self, value: int = 42) -> ExampleData:
+    @remote_callable(ExampleData)
+    async def get_example_data(self, value: int = 42) -> ExampleData:
         """Get example data that can be called locally or remotely.
 
         This method demonstrates the remote_callable decorator. It can be
@@ -410,7 +410,7 @@ class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
 
         """
         # Local call - no HTTP, no conversion
-        local_data = self.get_example_data(100)
+        local_data = await self.get_example_data(100)
         await ctx.message.reply(
             f"Local call: {local_data.message}, value={local_data.value}"
         )

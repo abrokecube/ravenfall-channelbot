@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Final, override
 
-from bot.integrations.commands import ArgumentConversionError, BaseConverter
+from bot.integrations.commands import ArgumentConversionError, BaseConverter, CommandError
+from bot.integrations.twitch import TwitchChannel, TwitchEvent
 
 if TYPE_CHECKING:
     from bot.core.components import GlobalContext
@@ -32,3 +33,43 @@ class TwitchUsername(BaseConverter):
         if not is_valid:
             raise ArgumentConversionError("Not a valid username.")
         return arg.lstrip("@").replace("\U000e0000", "").replace("|", "").replace("/", "")
+
+
+class TwitchInstanceConverter(BaseConverter):
+    title: str = "Twitch instance"
+    short_help: str = "The Twitch instance associated with this channel."
+    help: str = "The Twitch instance associated with this channel."
+    MATCH_MESSAGE_EVENT: Final[object] = "__match_msg_event"
+
+    @classmethod
+    @override
+    async def cls_convert(
+        cls, g_ctx: GlobalContext, event: CommandEvent, arg: str | object
+    ) -> TwitchChannel:
+        if not isinstance(arg, str):
+            msg = "Invalid input type."
+            raise TypeError(msg)
+        from .services import TwitchService
+
+        twitch_srv = g_ctx.get_service(TwitchService)
+        if not twitch_srv:
+            msg = "Twitch service has not been loaded. Try again later."
+            raise CommandError(msg)
+        if arg is cls.MATCH_MESSAGE_EVENT:
+            if not isinstance(event.message, TwitchEvent):
+                msg = "A Twitch channel must be specified."
+                raise CommandError(msg)
+            twitch = twitch_srv.get_twitch_channel(event.message.channel_id)
+            if not twitch:
+                msg = "A Twitch channel must be specified."
+                raise CommandError(msg)
+            return twitch
+        user = await anext(twitch_srv.get_users(logins=[arg]), None)
+        if not user:
+            msg = "The specified channel has not been authenticated with the bot."
+            raise CommandError(msg)
+        twitch = twitch_srv.get_twitch_channel(user.id)
+        if not twitch:
+            msg = "The specified channel has not been authenticated with the bot."
+            raise CommandError(msg)
+        return twitch

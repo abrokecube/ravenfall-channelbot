@@ -4,6 +4,7 @@ import asyncio
 import time
 from collections import deque
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Literal, override
 from uuid import uuid4
@@ -23,7 +24,7 @@ from . import enums, models
 from . import events as ev
 from .enums import DungeonStage
 from .matcher import RavenfallMatcher
-from .models import RavenfallConfig
+from .models import RavenfallConfig, RavenfallFormattedMessage
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -532,6 +533,25 @@ class FetchError(Exception):
     """Failed to fetch data."""
 
 
+@dataclass
+class MatchedResponse:
+    message: rm.RavenfallMessage
+    msg_match: Match | None
+
+
+@dataclass
+class SendAndWaitResult:
+    """Represents the result of a send-and-wait operation."""
+
+    success: bool
+    correlation_id: str
+    responses: list[rm.RavenfallMessage | RavenfallFormattedMessage]
+    complete: bool
+    count: int
+    expected_count: int
+    timeout: bool
+
+
 class RavenfallInstance:
     """A Ravenfall instance."""
 
@@ -729,6 +749,58 @@ class RavenfallInstance:
         )
         await middleman.send_to_ravenfall(conn_id, message)
         return corr_id
+
+    async def send_to_ravenfall_and_wait_for_response(
+        self,
+        sender: rm.Sender,
+        payload: BaseRavenBotPayload,
+        timeout: float = 30,
+        expected_count: int = 0,
+    ) -> SendAndWaitResult:
+        """Send a payload to Ravenfall and wait for a response.
+        Responses do not get sent to RavenBot.
+        """
+        middleman, connection_id = self._get_middleman()
+        corr_id = str(uuid4())
+        message = rm.RavenBotMessage(
+            payload.identifier,
+            sender,
+            content=payload.get_content_json_string(),
+            correlation_id=corr_id,
+        )
+        result = await middleman.send_to_ravenfall_and_wait_for_response(
+            connection_id, message, timeout, expected_count
+        )
+        responses: list[rm.RavenfallMessage | RavenfallFormattedMessage] = [
+            self.event_source._match_ravenfall_message(x) for x in result.responses
+        ]
+
+        return SendAndWaitResult(
+            result.success,
+            result.correlation_id,
+            responses,
+            result.complete,
+            result.count,
+            result.expected_count,
+            result.timeout,
+        )
+
+    async def forward_to_ravenbot(
+        self, message: rm.RavenfallMessage | RavenfallFormattedMessage
+    ):
+        """Forward a message to RavenBot."""
+        if isinstance(message, RavenfallFormattedMessage):
+            message = rm.RavenfallMessage(
+                "message",
+                message.recipient,
+                message.format,
+                message.format_args_as_array(),
+                [],
+                None,
+                message.correlation_id,
+            )
+        middleman, connection_id = self._get_middleman()
+        await middleman.send_to_ravenbot(connection_id, message)
 
     # Ravenfall's "observed" endpoint does NOT work
     # async def _observed_loop(self):
@@ -961,6 +1033,9 @@ class RavenfallEventSource(BaseEventSource):
             text = await f.read()
             self._matcher = RavenfallMatcher(definitions_text=text)
             await f.aclose()
+        else:
+            msg = f"Definitions file does not exist at {def_path}."
+            raise RuntimeError(msg)
 
         tasks: list[Awaitable[None]] = []
         tasks.extend([x.start() for x in self.ravenfall_instances])
@@ -992,6 +1067,23 @@ class RavenfallEventSource(BaseEventSource):
         self._marketplace_collector.stop()
         self._game_version_collector.stop()
 
+    def _match_ravenfall_message[T: rm.RavenfallMessage | rm.FrozenRavenfallMessage](
+        self, message: T
+    ) -> T | RavenfallFormattedMessage:
+        if message.identifier != "message":
+            return message
+        if self._matcher is None:
+            msg = "Matcher is not defined."
+            raise RuntimeError(msg)
+        msg_match = self._matcher.match_string(message.format, message.args)
+        return RavenfallFormattedMessage(
+            identifier=msg_match.identifier,
+            format=message.format,
+            format_args=msg_match._args,
+            recipient=message.recipient,
+            correlation_id=message.correlation_id,
+        )
+
     async def _ravenfall_message(self, message: rm.RavenfallStreamMessage):
         ravenfall = self.middleman_id_to_instance.get(message.connection_id)
         if not ravenfall:
@@ -1003,8 +1095,8 @@ class RavenfallEventSource(BaseEventSource):
             )
         event = ev.RavenfallMessageEvent(
             data=message,
-            message=message.message,
-            orig_message=message.message,
+            message=self._match_ravenfall_message(message.message),
+            orig_message=self._match_ravenfall_message(message.message),
             ravenfall=ravenfall,
             is_msg_from_api=message.is_api,
             message_source=ev.MessageOrigin.STREAM,
@@ -1037,14 +1129,18 @@ class RavenfallEventSource(BaseEventSource):
             )
         event = ev.RavenfallMessageEvent(
             data=message,
-            message=message.message,
-            orig_message=message.original_message,
+            message=self._match_ravenfall_message(message.message),
+            orig_message=self._match_ravenfall_message(message.original_message),
             ravenfall=ravenfall,
             is_msg_from_api=message.is_api,
             message_source=ev.MessageOrigin.PROCESSOR,
             message_match=msg_match,
+            process_concurrently=False,
         )
         await self.send_event(event)
+        if isinstance(event.message, RavenfallFormattedMessage):
+            message.message.format = event.message.format
+            message.message.args = event.message.format_args_as_array()
 
     async def _ravenbot_processor_message(self, message: rm.RavenBotProcessorMessage):
         ravenfall = self.middleman_id_to_instance.get(message.connection_id)

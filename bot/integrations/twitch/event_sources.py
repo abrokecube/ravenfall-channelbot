@@ -4,13 +4,13 @@ import asyncio
 import contextlib
 import functools
 import logging
-from typing import TYPE_CHECKING, Any, ClassVar, cast, overload, override
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, overload, override
 
 from bidict import bidict
+from cachetools import TTLCache
 from colorama import Back, Fore
 from pydantic import Field
 from sqlalchemy import select
-from twitchAPI import helper
 from twitchAPI.chat import Chat
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.oauth import UserAuthenticator
@@ -24,13 +24,13 @@ from twitchAPI.type import (
 )
 
 from bot.core.components import BaseEventSource
-from bot.db.service import DatabaseService
+from bot.db.session import get_async_session
 from bot.integrations.chat_messages.enums import UserRole
-from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailure
+from bot.integrations.twitch.exceptions import EventSubUnsubscriptionFailureError
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.services.config_service import ConfigModel, ConfigService
 
-from . import MessageRateMode, events
+from . import MessageRateMode, TwitchChannel, events
 from .enums import (
     TOPIC_REQUIRES_TARGET_CHANNEL,
     EventSubTopic,
@@ -80,10 +80,13 @@ class TwitchEventSub:
     """Manages EventSub subscriptions for a channel."""
 
     def __init__(
-        self, event_source: TwitchEventSource, twitch: Twitch, channel_id: str
+        self,
+        event_source: TwitchEventSource,
+        twitch_channel: TwitchChannel,
+        channel_id: str,
     ) -> None:
         self.event_source: TwitchEventSource = event_source
-        self.twitch: Twitch = twitch
+        self.twitch_channel: TwitchChannel = twitch_channel
         self.channel_id: str = channel_id
         self.eventsub_ws: EventSubWebsocket | None = None
         self.eventsub_subs: bidict[EventSubChannelTopic, str] = bidict()
@@ -104,7 +107,8 @@ class TwitchEventSub:
         """Subscribe to an eventsub subscription."""
         if not self.eventsub_ws:
             self.eventsub_ws = EventSubWebsocket(
-                self.twitch, revocation_handler=self._eventsub_revocation_handler
+                self.twitch_channel.twitch,
+                revocation_handler=self._eventsub_revocation_handler,
             )
             self.eventsub_ws.start()
         if topic not in TOPIC_REQUIRES_TARGET_CHANNEL:
@@ -184,7 +188,7 @@ class TwitchEventSub:
                         f"A matching subscription for "
                         f"{self.channel_id}:{topic}:{target_channel_id} was not found"
                     )
-                    raise EventSubUnsubscriptionFailure(msg)
+                    raise EventSubUnsubscriptionFailureError(msg)
                 ch_t = EventSubChannelTopic(target_channel_id, topic)
                 subscription_id = self.eventsub_subs[ch_t]
             else:
@@ -199,7 +203,7 @@ class TwitchEventSub:
         success = await self.eventsub_ws.unsubscribe_topic(subscription_id)
         if not success:
             msg = f"Failed to unsubscribe to {subscription_id}"
-            raise EventSubUnsubscriptionFailure(msg)
+            raise EventSubUnsubscriptionFailureError(msg)
         _topic = self.eventsub_subs.inverse.pop(subscription_id)
         if topic is not None:
             return subscription_id
@@ -211,18 +215,22 @@ class TwitchEventSub:
             return
         __ = self.eventsub_ws.unsubscribe_all()
 
-    async def update_twitch(self, twitch: Twitch):
+    async def update_twitch(self, twitch_channel: TwitchChannel):
         """Update current twitch instance with new authentication."""
         if not self.eventsub_ws:
             return
-        if self.twitch.get_user_auth_token() == twitch.get_user_auth_token():
+        if (
+            self.twitch_channel.twitch.get_user_auth_token()
+            == twitch_channel.twitch.get_user_auth_token()
+        ):
             return
         topics = list(self.eventsub_subs.keys())
         __ = self.eventsub_ws.stop()
         self.eventsub_subs.clear()
-        self.twitch = twitch
+        self.twitch_channel = twitch_channel
         self.eventsub_ws = EventSubWebsocket(
-            self.twitch, revocation_handler=self._eventsub_revocation_handler
+            self.twitch_channel.twitch,
+            revocation_handler=self._eventsub_revocation_handler,
         )
         self.eventsub_ws.start()
         for topic in topics:
@@ -232,6 +240,9 @@ class TwitchEventSub:
         """Stop the event source."""
         if self.eventsub_ws:
             await self.eventsub_ws.stop()
+
+
+_USER_CACHE_UNKNOWN_USER = -1
 
 
 class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
@@ -258,7 +269,10 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         self.eventsubs: dict[str, TwitchEventSub] = {}
         self.connected_chats: dict[str, ConnectedChat] = {}
 
-        self.twitches: dict[str, Twitch] = {}
+        self.twitch_channels: dict[str, TwitchChannel] = {}
+        self._user_cache: TTLCache[str, TwitchUser | Literal[-1]] = TTLCache[
+            str, TwitchUser | Literal[-1]
+        ](1024, 60 * 15)
 
     async def _save_user_token(
         self,
@@ -281,8 +295,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 len(refresh_token),
             )
 
-        db = self.global_context.require_service(DatabaseService)
-        async with db.get_session() as session:
+        async with get_async_session() as session:
             result = await session.execute(
                 select(TwitchAuth).where(TwitchAuth.user_id == user_id)
             )
@@ -334,7 +347,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         user_name: str | None = None,
         scopes: list[AuthScope] | None = None,
         twitch: Twitch | None = None,
-    ) -> Twitch:
+    ) -> TwitchChannel:
         if not self.bot_twitch:
             msg = "Event source has not been initialized"
             raise RuntimeError(msg)
@@ -342,11 +355,10 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
             user_id = str(user_id)
         if not scopes:
             scopes = []
-        db = self.global_context.require_service(DatabaseService)
 
         save_new_tokens = True
         access_token, refresh_token = None, None
-        async with db.get_session() as session:
+        async with get_async_session() as session:
             twitch_auth = await self._fetch_user_auth(user_id, session)
             if twitch_auth is not None:
                 access_token = twitch_auth.access_token
@@ -365,6 +377,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                     authenticate_app=False,
                     target_app_auth_scope=self.app_scopes,
                 )
+        twitch_channel = TwitchChannel(twitch, user_id, scopes)
 
         while True:
             if access_token is None or refresh_token is None:
@@ -389,7 +402,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                     continue
                 user: TwitchUser | None = None
                 if save_new_tokens or not user_name:
-                    user = await helper.first(twitch.get_users())
+                    user = await anext(twitch.get_users())
                     if user:
                         await self._save_user_token(
                             user.id, user.login, access_token, refresh_token
@@ -422,7 +435,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
 
             if user is not None:
                 if user.id == str(user_id):
-                    return twitch
+                    return twitch_channel
                 print_to_console(
                     f"{Fore.LIGHTRED_EX}Token does not match user, please try again"
                 )
@@ -430,7 +443,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 refresh_token = None
                 save_new_tokens = True
                 continue
-            return twitch
+            return twitch_channel
 
     async def _fetch_channel_settings(
         self, channel_id: str, session: AsyncSession
@@ -446,8 +459,12 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         return result
 
     async def authenticate_user(
-        self, user_id: str, scopes: Collection[AuthScope]
-    ) -> Twitch:
+        self,
+        user_id: str,
+        scopes: Collection[AuthScope],
+        *,
+        add_required_scopes: bool = False,
+    ) -> TwitchChannel:
         """Authenticate a user.
 
         If a matching token is not found in the database, it will ask for authentication.
@@ -455,19 +472,25 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         if not user_id or not user_id.isdigit():
             msg = f"{user_id} is not a valid Twitch user id"
             raise ValueError(msg)
+        if add_required_scopes:
+            scope_set = set(scopes)
+            required_scopes = {
+                AuthScope.CHANNEL_BOT,
+                AuthScope.MODERATION_READ,
+            }
+            scopes = scope_set.union(required_scopes)
         t = await self._get_twitch_auth_instance(user_id, scopes=list(scopes))
-        self.twitches[user_id] = t
+        self.twitch_channels[user_id] = t
         if user_id in self.eventsubs:
             await self.eventsubs[user_id].update_twitch(t)
         return t
 
     def is_user_authenticated(self, user_id: str) -> bool:
         """Check if a user id has been authenticated."""
-        return user_id in self.twitches
+        return user_id in self.twitch_channels
 
     @override
     async def setup(self, event_manager: EventManager):
-        __ = await self.global_context.wait_for_service(DatabaseService)
         config = await self.global_context.wait_for_service(ConfigService)
         self.inject_config_service(config)
 
@@ -481,12 +504,17 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         self.bot_twitch = await Twitch(
             self.app_id, self.app_secret, target_app_auth_scope=self.app_scopes
         )
-        self.bot_twitch = await self._get_twitch_auth_instance(
+        bot_channel = await self._get_twitch_auth_instance(
             self.bot_user_id, scopes=list(self.bot_user_scopes), twitch=self.bot_twitch
         )
-        self.bot_user = await helper.first(self.bot_twitch.get_users())
+        self.bot_twitch = bot_channel.twitch
+        self.bot_user = await anext(self.bot_twitch.get_users())
         if self.bot_user:
-            self.bot_eventsub = TwitchEventSub(self, self.bot_twitch, self.bot_user.id)
+            self.bot_eventsub = TwitchEventSub(
+                self,
+                TwitchChannel(self.bot_twitch, self.bot_user_id, self.app_scopes),
+                self.bot_user.id,
+            )
 
         self.twitch_chat = await Chat(self.bot_twitch)
         self.twitch_chat.start()
@@ -508,9 +536,48 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         tasks: list[Awaitable[None]] = []
         if self.bot_eventsub:
             tasks.append(self.bot_eventsub.stop())
-        tasks.extend([ev.stop() for ev in self.eventsubs.values()])
+        tasks.extend(x.twitch.close() for x in self.twitch_channels.values())
+        tasks.extend(ev.stop() for ev in self.eventsubs.values())
         tasks.append(self._twitch_service.teardown())
         __ = await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def get_users(
+        self, user_ids: list[str] | None = None, logins: list[str] | None = None
+    ):
+        """Gets information about one or more specified Twitch users."""
+        if not self.bot_twitch:
+            raise RuntimeError
+        if user_ids is not None and logins is not None:
+            msg = "Only either user_ids or logins can be specified, not both."
+            raise ValueError(msg)
+        if user_ids is None and logins is None:
+            msg = "user_ids or logins must be specified."
+            raise ValueError(msg)
+        main_list: list[str] = []
+        if user_ids:
+            main_list = user_ids
+        if logins:
+            main_list = logins
+        user_list: list[TwitchUser | None] = []
+        for item in main_list:
+            result = self._user_cache.get(item)
+            if result != _USER_CACHE_UNKNOWN_USER:
+                user_list.append(result)
+            if result is None:
+                self._user_cache[item] = _USER_CACHE_UNKNOWN_USER
+        fetch_indeces: list[int] = [x for x, y in enumerate(user_list) if y is None]
+        fetch_list: list[str] = [main_list[x] for x in fetch_indeces]
+        if user_ids:
+            user_ids = fetch_list
+        if logins:
+            logins = fetch_list
+        for item in user_list:
+            if item is not None:
+                yield item
+        async for u in self.bot_twitch.get_users(user_ids, logins):
+            yield u
+            self._user_cache[u.id] = u
+            self._user_cache[u.login] = u
 
     async def join_chat(
         self,
@@ -520,7 +587,6 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         mode: MessageReceiveMode | None = None,
     ) -> list[str]:
         """Connect to a channel's chat."""
-        db = self.global_context.require_service(DatabaseService)
         if (not self.twitch_chat) or (not self.bot_twitch):
             msg = "Twitch event source has not been initialized."
             raise RuntimeError(msg)
@@ -542,7 +608,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
             channel_list = channel_id
         failed: list[str] = []
         idx = 0
-        async with db.get_session() as session:
+        async with get_async_session() as session:
             async for user in self.bot_twitch.get_users(
                 logins=channel_name, user_ids=channel_id
             ):
@@ -664,7 +730,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
             return
         channel_id = message.room.room_id
         channel_login = message.room.name
-        channel_twitch = self.twitches.get(channel_id or " ")
+        channel_twitch = self.twitch_channels.get(channel_id or " ")
         if message.user.id == self.bot_user_id:
             settings = self.connected_chats[channel_id]
             if "moderator" in message.user.badges:  # pyright: ignore[reportUnknownMemberType]
@@ -689,6 +755,9 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 author_roles=self._get_user_roles(message.user, channel_id),
                 room_name=channel_login,
                 room_id=channel_id,
+                channel_id=channel_id,
+                channel_login=channel_login,
+                channel_display_name=None,
                 bot_user_id=self.bot_user.id,
                 bot_user_login=self.bot_user.login,
                 bot_user_name=self.bot_user.display_name,
@@ -707,7 +776,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
             raise ValueError(msg)
         if channel_id not in self.eventsubs:
             self.eventsubs[channel_id] = TwitchEventSub(
-                self, self.twitches[channel_id], channel_id
+                self, self.twitch_channels[channel_id], channel_id
             )
         eventsub = self.eventsubs[channel_id]
         if isinstance(subscriptions, EventSubTopic):
@@ -826,7 +895,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         if not self.bot_twitch:
             return
         data = event.event
-        channel_twitch = self.twitches.get(data.broadcaster_user_id or "")
+        channel_twitch = self.twitch_channels.get(data.broadcaster_user_id or "")
         if not channel_twitch:
             LOGGER.warning(
                 f"Received a message from {data.broadcaster_user_login}, "
@@ -852,8 +921,11 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 author_roles=self._get_user_roles_eventsub(
                     data.chatter_user_id, data.broadcaster_user_id, data.badges
                 ),
-                room_name=data.broadcaster_user_login,
                 room_id=data.broadcaster_user_id,
+                room_name=data.broadcaster_user_login,
+                channel_id=data.broadcaster_user_id,
+                channel_login=data.broadcaster_user_login,
+                channel_display_name=data.broadcaster_user_name,
                 bot_user_id=self.bot_user.id,
                 bot_user_login=self.bot_user.login,
                 bot_user_name=self.bot_user.display_name,
@@ -871,7 +943,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         if not self.bot_twitch:
             return
         data = event.event
-        channel_twitch = self.twitches.get(data.broadcaster_user_id or "")
+        channel_twitch = self.twitch_channels.get(data.broadcaster_user_id or "")
         if not channel_twitch:
             LOGGER.warning(
                 f"Received a message from {data.broadcaster_user_login}, "
@@ -892,6 +964,9 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 ),
                 room_name=data.broadcaster_user_login,
                 room_id=data.broadcaster_user_id,
+                channel_id=data.broadcaster_user_id,
+                channel_login=data.broadcaster_user_login,
+                channel_display_name=data.broadcaster_user_name,
                 bot_user_id=self.bot_user.id,
                 bot_user_login=self.bot_user.login,
                 bot_user_name=self.bot_user.display_name,
