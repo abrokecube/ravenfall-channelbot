@@ -66,6 +66,11 @@ class RavenfallConfig(ConfigModel):
     instances: list[RavenfallInstanceConfig] = Field(default_factory=list)
 
 
+class _SafeDict(dict[str, object]):
+    def __missing__(self, key: object):
+        return "{" + str(key) + "}"
+
+
 @dataclass
 class RavenfallFormattedMessage:
     identifier: str | None
@@ -82,3 +87,11 @@ class RavenfallFormattedMessage:
                 continue
             ordered_values.append(self.format_args[field_name])
         return ordered_values
+
+    def format_message(self) -> str:
+        """Return the formatted string using the format template and format_args.
+
+        If a format argument is missing, leave the placeholder intact (for example
+        `{name}`) instead of raising an error.
+        """
+        return Formatter().vformat(self.format, (), _SafeDict(self.format_args))

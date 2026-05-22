@@ -7,6 +7,7 @@ from msgspec import Struct
 
 from bot.cogs.accounts.service import AccountService
 from bot.core.components import Cog
+from bot.db.session import get_async_session
 from bot.integrations.chat_messages.deco import checks
 from bot.integrations.chat_messages.enums import UserRole
 from bot.integrations.commands.checks import MinPermissionLevel
@@ -54,10 +55,15 @@ class CurrencyCog(Cog, RemoteCallableMixin):
         currency_service = self.global_context.require_service(CurrencyService)
 
         # We need an account ID to talk to the currency service
-        account = await account_service.get_or_create_account(
-            platform, platform_id, f"RemoteUser_{platform_id}"
-        )
-        balance = await currency_service.get_balance(account.id)
+        async with get_async_session() as db_session:
+            account = await account_service.get_or_create_account(
+                db_session,
+                platform,
+                platform_id,
+                f"RemoteUser_{platform_id}",
+                None,
+            )
+            balance = await currency_service.get_balance(account.id, db_session)
         return RemoteBalance(balance=balance)
 
     @remote_callable(RemoteHistory)
@@ -68,10 +74,17 @@ class CurrencyCog(Cog, RemoteCallableMixin):
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        account = await account_service.get_or_create_account(
-            platform, platform_id, f"RemoteUser_{platform_id}"
-        )
-        history = await currency_service.get_history(account.id, limit=limit)
+        async with get_async_session() as db_session:
+            account = await account_service.get_or_create_account(
+                db_session,
+                platform,
+                platform_id,
+                f"RemoteUser_{platform_id}",
+                None,
+            )
+            history = await currency_service.get_history(
+                account.id, db_session, limit=limit
+            )
 
         items = [
             RemoteHistoryItem(
@@ -83,33 +96,53 @@ class CurrencyCog(Cog, RemoteCallableMixin):
 
     @remote_callable(bool)
     async def remote_remove_currency(
-        self, platform: str, platform_id: str, amount: int, reason: str
+        self,
+        platform: str,
+        platform_id: str,
+        amount: int,
+        reason: str,
+        *,
+        record_transaction: bool = True,
     ) -> bool:
         """Remove currency from a user identified by platform ID."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        account = await account_service.get_or_create_account(
-            platform, platform_id, f"RemoteUser_{platform_id}"
-        )
-        return await currency_service.remove_currency(account.id, amount, reason)
+        async with get_async_session() as db_session:
+            account = await account_service.get_or_create_account(
+                db_session,
+                platform,
+                platform_id,
+                f"RemoteUser_{platform_id}",
+                None,
+            )
+            return await currency_service.remove_currency(
+                account.id,
+                amount,
+                reason,
+                db_session,
+                record_transaction=record_transaction,
+            )
 
     # --- Chat Commands ---
 
-    @command(name="balance", aliases=["bal"])
+    @command(name="credits balance", aliases=["credits bal", "cb"])
     async def get_balance(self, ctx: CommandEvent) -> None:
         """Check your current balance (including remote bots)."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        account = await account_service.get_or_create_account(
-            ctx.platform,
-            ctx.message.author_id,
-            ctx.message.author_login,
-            overwrite_username=True,
-        )
+        async with get_async_session() as db_session:
+            account = await account_service.get_or_create_account(
+                db_session,
+                ctx.platform,
+                ctx.message.author_id,
+                ctx.message.author_login,
+                ctx.message.author_name,
+                overwrite_username=True,
+            )
 
-        combined = await currency_service.get_combined_balance(account.id)
+            combined = await currency_service.get_combined_balance(account.id, db_session)
         currency_name = currency_service.get_currency_name(combined.total)
 
         if not combined.remote:
@@ -127,23 +160,26 @@ class CurrencyCog(Cog, RemoteCallableMixin):
     @parameter(
         "amount", converter=RangeInt(min_=1, max_=None), description="Amount to pay"
     )
-    @command()
+    @command("credits send", aliases=["credits s", "cs"])
     async def pay(self, ctx: CommandEvent, target_user: str, amount: int) -> None:
-        """Transfer currency to another user (supports remote draining)."""
+        """Transfer currency to another user."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        sender_account = await account_service.get_or_create_account(
-            ctx.platform,
-            ctx.message.author_id,
-            ctx.message.author_login,
-            overwrite_username=True,
-        )
+        async with get_async_session() as db_session:
+            sender_account = await account_service.get_or_create_account(
+                db_session,
+                ctx.platform,
+                ctx.message.author_id,
+                ctx.message.author_login,
+                ctx.message.author_name,
+                overwrite_username=True,
+            )
 
-        target_username = target_user.lstrip("@").lower()
-        target_link = await account_service.find_link_by_username(
-            ctx.platform, target_username
-        )
+            target_username = target_user.lstrip("@").lower()
+            target_link = await account_service.find_link_by_username(
+                db_session, ctx.platform, target_username
+            )
 
         if not target_link:
             msg = f"User '{target_user}' has not used the bot on {ctx.platform} yet."
@@ -154,34 +190,42 @@ class CurrencyCog(Cog, RemoteCallableMixin):
             raise CommandError(msg)
 
         # Execute removal (which handles remote draining)
-        success = await currency_service.remove_currency(
-            sender_account.id, amount, f"Pay to {target_username}"
-        )
-        if not success:
-            msg = "Insufficient funds (including remote bots)!"
-            raise CommandError(msg)
+        async with get_async_session() as db_session:
+            success = await currency_service.remove_currency(
+                sender_account.id, amount, f"Pay to {target_username}", db_session
+            )
+            if not success:
+                msg = "Insufficient funds!"
+                raise CommandError(msg)
 
-        # Addition is always local to the bot where the command is run
-        __ = await currency_service.add_currency(
-            target_link.account_id, amount, f"Paid by {ctx.message.author_name}"
-        )
+            __ = await currency_service.add_currency(
+                target_link.account_id,
+                amount,
+                f"Paid by {ctx.message.author_name}",
+                db_session,
+            )
 
         currency_name = currency_service.get_currency_name(amount)
         await ctx.reply(f"Paid {amount} {currency_name} to {target_user}!")
 
-    @command()
+    @command("credits history", aliases=["credits hist", "ch"])
     async def history(self, ctx: CommandEvent) -> None:
         """Show your last 5 transactions (merged from all bots)."""
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        account = await account_service.get_or_create_account(
-            ctx.platform,
-            ctx.message.author_id,
-            ctx.message.author_login,
-            overwrite_username=True,
-        )
-        transactions = await currency_service.get_history_combined(account.id, limit=5)
+        async with get_async_session() as db_session:
+            account = await account_service.get_or_create_account(
+                db_session,
+                ctx.platform,
+                ctx.message.author_id,
+                ctx.message.author_login,
+                ctx.message.author_name,
+                overwrite_username=True,
+            )
+            transactions = await currency_service.get_history_combined(
+                account.id, db_session, limit=5
+            )
 
         if not transactions:
             await ctx.reply("You have no transaction history yet.")
@@ -214,17 +258,18 @@ class CurrencyCog(Cog, RemoteCallableMixin):
         currency_service = self.global_context.require_service(CurrencyService)
 
         target_username = target_user.lstrip("@").lower()
-        target_link = await account_service.find_link_by_username(
-            ctx.platform, target_username
-        )
+        async with get_async_session() as db_session:
+            target_link = await account_service.find_link_by_username(
+                db_session, ctx.platform, target_username
+            )
 
-        if not target_link:
-            msg = f"User '{target_user}' not found on {ctx.platform}."
-            raise CommandError(msg)
+            if not target_link:
+                msg = f"User '{target_user}' not found on {ctx.platform}."
+                raise CommandError(msg)
 
-        __ = await currency_service.add_currency(
-            target_link.account_id, amount, f"Admin: {reason}"
-        )
+            __ = await currency_service.add_currency(
+                target_link.account_id, amount, f"Admin: {reason}", db_session
+            )
         c_name = currency_service.get_currency_name(amount)
         await ctx.reply(f"Gave {amount} {c_name} to {target_user} locally.")
 
@@ -244,18 +289,19 @@ class CurrencyCog(Cog, RemoteCallableMixin):
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        target_username = target_user.lstrip("@").lower()
-        target_link = await account_service.find_link_by_username(
-            ctx.platform, target_username
-        )
+        async with get_async_session() as db_session:
+            target_username = target_user.lstrip("@").lower()
+            target_link = await account_service.find_link_by_username(
+                db_session, ctx.platform, target_username
+            )
 
-        if not target_link:
-            msg = f"User '{target_user}' not found on {ctx.platform}."
-            raise CommandError(msg)
+            if not target_link:
+                msg = f"User '{target_user}' not found on {ctx.platform}."
+                raise CommandError(msg)
 
-        success = await currency_service.remove_currency(
-            target_link.account_id, amount, f"Admin: {reason}"
-        )
+            success = await currency_service.remove_currency(
+                target_link.account_id, amount, f"Admin: {reason}", db_session
+            )
         if success:
             c_name = currency_service.get_currency_name(amount)
             await ctx.reply(f"Took {amount} {c_name} from {target_user} locally.")
@@ -276,17 +322,18 @@ class CurrencyCog(Cog, RemoteCallableMixin):
         account_service = self.global_context.require_service(AccountService)
         currency_service = self.global_context.require_service(CurrencyService)
 
-        target_username = target_user.lstrip("@").lower()
-        target_link = await account_service.find_link_by_username(
-            ctx.platform, target_username
-        )
+        async with get_async_session() as db_session:
+            target_username = target_user.lstrip("@").lower()
+            target_link = await account_service.find_link_by_username(
+                db_session, ctx.platform, target_username
+            )
 
-        if not target_link:
-            msg = f"User '{target_user}' not found on {ctx.platform}."
-            raise CommandError(msg)
+            if not target_link:
+                msg = f"User '{target_user}' not found on {ctx.platform}."
+                raise CommandError(msg)
 
-        await currency_service.set_currency(
-            target_link.account_id, amount, f"Admin: {reason}"
-        )
+            await currency_service.set_currency(
+                target_link.account_id, amount, f"Admin: {reason}", db_session
+            )
         c_name = currency_service.get_currency_name(amount)
         await ctx.reply(f"Set {target_user}'s local balance to {amount} {c_name}.")

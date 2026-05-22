@@ -58,7 +58,7 @@ def meta_filter_decorator[T: Callable[..., Any]](
 
 def lambda_filter_decorator[T: Callable[..., Any], E: BaseEvent](
     event_types: list[type[E]],
-    match_fn: Callable[[E], bool],
+    match_fn: Callable[[E], object | bool],
     listener_cls: type[LambdaListener] = LambdaListener,
     dispatcher_type: type[BaseDispatcher] = BaseDispatcher,
 ) -> Callable[[T], T]:

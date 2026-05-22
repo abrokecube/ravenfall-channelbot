@@ -109,6 +109,7 @@ class ExampleData(Struct):
 class ExampleCog(Cog, RemoteCallableMixin, FastAPIRoutesMixin):
     """Example cog showcasing new command features."""
 
+    @override
     async def setup(self) -> None:
         """Set up the cog and register FastAPI routes."""
         await self.register_fastapi_routes()

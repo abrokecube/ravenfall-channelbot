@@ -567,14 +567,34 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 self._user_cache[item] = _USER_CACHE_UNKNOWN_USER
         fetch_indeces: list[int] = [x for x, y in enumerate(user_list) if y is None]
         fetch_list: list[str] = [main_list[x] for x in fetch_indeces]
+        if not fetch_list:
+            for item in user_list:
+                if item is not None:
+                    yield item
+            return
+
         if user_ids:
             user_ids = fetch_list
         if logins:
             logins = fetch_list
+
         for item in user_list:
             if item is not None:
                 yield item
-        async for u in self.bot_twitch.get_users(user_ids, logins):
+
+        async def _fetch_user_chunks():
+            if not self.bot_twitch:
+                return
+            for i in range(0, len(fetch_list), 100):
+                chunk = fetch_list[i : i + 100]
+                async for u in self.bot_twitch.get_users(
+                    user_ids=chunk if user_ids is not None else None,
+                    logins=chunk if logins is not None else None,
+                ):
+                    yield u
+                await asyncio.sleep(1)  # safety sleep
+
+        async for u in _fetch_user_chunks():
             yield u
             self._user_cache[u.id] = u
             self._user_cache[u.login] = u

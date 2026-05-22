@@ -35,6 +35,7 @@ class AccountLink(Base):
     platform: Mapped[str] = mapped_column(String)
     platform_id: Mapped[str] = mapped_column(String)
     username: Mapped[str] = mapped_column(String)
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
 
     account: Relationship[Account] = relationship("Account", back_populates="links")

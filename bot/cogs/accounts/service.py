@@ -8,7 +8,6 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from bot.core.components import BaseService
-from bot.db.session import get_async_session
 from bot.services.config_service import ConfigService
 from bot.services.remote_bot import RemoteBotService
 
@@ -46,11 +45,12 @@ class AccountService(BaseService):
             handler.inject_account_service(self)
 
     async def _fetch_from_central(
-        self, platform: str, platform_id: str
+        self, session: AsyncSession, platform: str, platform_id: str
     ) -> AccountLink | None:
         """Fetch account link from central bot.
 
         Args:
+            session: Database session.
             platform: The platform name.
             platform_id: The platform ID.
 
@@ -69,9 +69,7 @@ class AccountService(BaseService):
             if not remote_bot_service:
                 return None
 
-            central_bot = remote_bot_service.get_remote_bot(
-                self._config.central_bot_id
-            )
+            central_bot = remote_bot_service.get_remote_bot(self._config.central_bot_id)
             from bot.cogs.accounts.cog import AccountLinkStruct
 
             result = await remote_bot_service.call_remote(
@@ -82,42 +80,38 @@ class AccountService(BaseService):
                 {"platform": platform, "platform_id": platform_id},
             )
 
-            if result is None:
-                return None
-
             # Convert AccountLinkStruct back to AccountLink
-            async with get_async_session() as session:
-                # Check if account exists locally
-                account_result = await session.execute(
-                    select(AccountModel).where(AccountModel.id == result.account_id)
-                )
-                account = account_result.scalar_one_or_none()
+            # Check if account exists locally
+            account_result = await session.execute(
+                select(AccountModel).where(AccountModel.id == result.account_id)
+            )
+            account = account_result.scalar_one_or_none()
 
-                if not account:
-                    # Create account locally
-                    account = AccountModel(id=result.account_id)
-                    session.add(account)
-                    await session.commit()
-                    await session.refresh(account)
-
-                # Create link locally
-                link = AccountLink(
-                    account_id=result.account_id,
-                    platform=result.platform,
-                    platform_id=result.platform_id,
-                    username=result.username,
-                    is_primary=result.is_primary,
-                )
-                session.add(link)
+            if not account:
+                # Create account locally
+                account = AccountModel(id=result.account_id)
+                session.add(account)
                 await session.commit()
-                await session.refresh(link)
-                session.expunge(link)
-                return link
+                await session.refresh(account)
 
+            # Create link locally
+            link = AccountLink(
+                account_id=result.account_id,
+                platform=result.platform,
+                platform_id=result.platform_id,
+                username=result.username,
+                is_primary=result.is_primary,
+            )
+            session.add(link)
+            await session.commit()
+            await session.refresh(link)
+            session.expunge(link)
         except (ConnectionError, KeyError, RuntimeError):
             # Central bot unreachable or not configured, fall back to local
             LOGGER.debug("Central bot unreachable, using local data")
             return None
+        else:
+            return link
 
     async def _push_to_central(self, account_id: str, links: list[AccountLink]) -> None:
         """Push account links to central bot.
@@ -147,6 +141,7 @@ class AccountService(BaseService):
                     platform=link.platform,
                     platform_id=link.platform_id,
                     username=link.username,
+                    display_name=link.display_name,
                     is_primary=link.is_primary,
                 )
                 for link in links
@@ -165,221 +160,280 @@ class AccountService(BaseService):
 
     async def get_or_create_account(
         self,
+        session: AsyncSession,
         platform: str,
         platform_id: str,
         username: str,
+        display_name: str | None,
         *,
         overwrite_username: bool = False,
     ) -> Account:
         """Get or create an account by providing platform details.
 
         Args:
+            session: Database session.
             platform: The platform name (e.g., 'twitch').
             platform_id: The ID on that platform.
             username: The username on that platform.
+            display_name: The display name on that platform.
             overwrite_username: Whether to overwrite the username if it has changed.
 
         Returns:
             An Account wrapper object.
         """
-        async with get_async_session() as session:
-            # 1. Try to find existing link locally
-            stmt = (
-                select(AccountLink)
-                .options(selectinload(AccountLink.account))
-                .where(
-                    AccountLink.platform == platform,
-                    AccountLink.platform_id == platform_id,
+        # 1. Try to find existing link locally
+        stmt = (
+            select(AccountLink)
+            .options(selectinload(AccountLink.account))
+            .where(
+                AccountLink.platform == platform,
+                AccountLink.platform_id == platform_id,
+            )
+        )
+        result = await session.execute(stmt)
+        link = result.scalar_one_or_none()
+
+        if link:
+            # Update username if it changed
+            if overwrite_username and link.username != username:
+                link.username = username
+                if display_name:
+                    link.display_name = display_name
+                await session.commit()
+            account = link.account
+            session.expunge(account)
+            session.expunge(link)
+
+            # Sync with central if enabled
+            if self._config and self._config.sync_enabled:
+                links = await self.get_account_links(session, account.id)
+                await self._push_to_central(account.id, links)
+
+            return Account(self, account)
+
+        # 2. Not found locally, try central if sync enabled
+        if self._config and self._config.sync_enabled:
+            central_link = await self._fetch_from_central(session, platform, platform_id)
+            if central_link:
+                # Central found, save to local and return
+                account = await session.execute(
+                    select(AccountModel).where(AccountModel.id == central_link.account_id)
                 )
-            )
-            result = await session.execute(stmt)
-            link = result.scalar_one_or_none()
+                account_model = account.scalar_one_or_none()
+                if account_model:
+                    session.expunge(account_model)
+                    return Account(self, account_model)
 
-            if link:
-                # Update username if it changed
-                if overwrite_username and link.username != username:
-                    link.username = username
-                    await session.commit()
-                account = link.account
-                session.expunge(account)
-                session.expunge(link)
+        # 3. Not found anywhere, create new Account and Link
+        account_id = str(uuid4())
+        account_model = AccountModel(id=account_id)
+        session.add(account_model)
 
-                # Sync with central if enabled
-                if self._config and self._config.sync_enabled:
-                    links = await self.get_account_links(account.id)
-                    await self._push_to_central(account.id, links)
+        new_link = AccountLink(
+            account_id=account_id,
+            platform=platform,
+            platform_id=platform_id,
+            username=username,
+            display_name=display_name,
+            is_primary=True,
+        )
+        session.add(new_link)
 
-                return Account(self, account)
+        await session.commit()
+        # Refresh to get the fully loaded model and then expunge
+        await session.refresh(account_model)
+        session.expunge(account_model)
 
-            # 2. Not found locally, try central if sync enabled
-            if self._config and self._config.sync_enabled:
-                central_link = await self._fetch_from_central(platform, platform_id)
-                if central_link:
-                    # Central found, save to local and return
-                    account = await session.execute(
-                        select(AccountModel).where(
-                            AccountModel.id == central_link.account_id
-                        )
-                    )
-                    account_model = account.scalar_one_or_none()
-                    if account_model:
-                        session.expunge(account_model)
-                        return Account(self, account_model)
+        # Push to central if sync enabled
+        if self._config and self._config.sync_enabled:
+            await self._push_to_central(account_id, [new_link])
 
-            # 3. Not found anywhere, create new Account and Link
-            account_id = str(uuid4())
-            account_model = AccountModel(id=account_id)
-            session.add(account_model)
-
-            new_link = AccountLink(
-                account_id=account_id,
-                platform=platform,
-                platform_id=platform_id,
-                username=username,
-                is_primary=True,
-            )
-            session.add(new_link)
-
-            await session.commit()
-            # Refresh to get the fully loaded model and then expunge
-            await session.refresh(account_model)
-            session.expunge(account_model)
-
-            # Push to central if sync enabled
-            if self._config and self._config.sync_enabled:
-                await self._push_to_central(account_id, [new_link])
-
-            return Account(self, account_model)
+        return Account(self, account_model)
 
     async def link_account(
         self,
+        session: AsyncSession,
         account_id: str,
         platform: str,
         platform_id: str,
         username: str,
+        display_name: str | None,
         *,
         is_primary: bool = False,
     ) -> None:
         """Internal method to link a platform to an existing account."""
-        async with get_async_session() as session:
-            # Check if this platform/id is already linked elsewhere
-            check_stmt = select(AccountLink).where(
-                AccountLink.platform == platform, AccountLink.platform_id == platform_id
+        # Check if this platform/id is already linked elsewhere
+        check_stmt = select(AccountLink).where(
+            AccountLink.platform == platform, AccountLink.platform_id == platform_id
+        )
+        existing_result = await session.execute(check_stmt)
+        existing_link = existing_result.scalar_one_or_none()
+
+        if existing_link:
+            if existing_link.account_id == account_id:
+                # Already linked to this account, just update
+                existing_link.username = username
+                existing_link.display_name = display_name
+                if is_primary:
+                    await self._set_primary_in_session(
+                        session, account_id, platform, platform_id
+                    )
+                await session.commit()
+
+                # Sync with central if enabled
+                if self._config and self._config.sync_enabled:
+                    links = await self.get_account_links(session, account_id)
+                    await self._push_to_central(account_id, links)
+
+                return
+            # Linked to another account - for now, we'll raise an error
+            # In the future, this could trigger a merge
+            msg = (
+                f"{platform}:{platform_id} is already linked to another account "
+                f"({existing_link.account_id})"
             )
-            existing_result = await session.execute(check_stmt)
-            existing_link = existing_result.scalar_one_or_none()
+            raise ValueError(msg)
 
-            if existing_link:
-                if existing_link.account_id == account_id:
-                    # Already linked to this account, just update
-                    existing_link.username = username
-                    if is_primary:
-                        await self._set_primary_in_session(
-                            session, account_id, platform, platform_id
-                        )
-                    await session.commit()
+        # Create new link
+        new_link = AccountLink(
+            account_id=account_id,
+            platform=platform,
+            platform_id=platform_id,
+            username=username,
+            display_name=display_name,
+            is_primary=is_primary,
+        )
+        session.add(new_link)
 
-                    # Sync with central if enabled
-                    if self._config and self._config.sync_enabled:
-                        links = await self.get_account_links(account_id)
-                        await self._push_to_central(account_id, links)
+        if is_primary:
+            await self._set_primary_in_session(session, account_id, platform, platform_id)
 
-                    return
-                # Linked to another account - for now, we'll raise an error
-                # In the future, this could trigger a merge
-                msg = (
-                    f"{platform}:{platform_id} is already linked to another account "
-                    f"({existing_link.account_id})"
-                )
-                raise ValueError(msg)
+        await session.commit()
 
-            # Create new link
-            new_link = AccountLink(
-                account_id=account_id,
-                platform=platform,
-                platform_id=platform_id,
-                username=username,
-                is_primary=is_primary,
-            )
-            session.add(new_link)
-
-            if is_primary:
-                await self._set_primary_in_session(
-                    session, account_id, platform, platform_id
-                )
-
-            await session.commit()
-
-            # Sync with central if enabled
-            if self._config and self._config.sync_enabled:
-                links = await self.get_account_links(account_id)
-                await self._push_to_central(account_id, links)
+        # Sync with central if enabled
+        if self._config and self._config.sync_enabled:
+            links = await self.get_account_links(session, account_id)
+            await self._push_to_central(account_id, links)
 
     async def get_account_links(
-        self, account_id: str, platform: str | None = None
+        self, session: AsyncSession, account_id: str, platform: str | None = None
     ) -> list[AccountLink]:
-        """Internal method to get links for an account."""
-        async with get_async_session() as session:
-            stmt = select(AccountLink).where(AccountLink.account_id == account_id)
-            if platform:
-                stmt = stmt.where(AccountLink.platform == platform)
-            result = await session.execute(stmt)
-            links = list(result.scalars().all())
-            for link in links:
-                session.expunge(link)
-            return links
+        """Get links for an account."""
+        stmt = select(AccountLink).where(AccountLink.account_id == account_id)
+        if platform:
+            stmt = stmt.where(AccountLink.platform == platform)
+        result = await session.execute(stmt)
+        links = list(result.scalars().all())
+        for link in links:
+            session.expunge(link)
+        return links
+
+    async def get_primary_account_link_for_platform(
+        self, session: AsyncSession, account_id: str, platform: str
+    ):
+        """Get the primary link of a platform for an account."""
+        links = await self.get_account_links(session, account_id, platform)
+        for li in links:
+            if li.is_primary:
+                return li
+        return None
 
     async def find_link_by_username(
-        self, platform: str, username: str
+        self,
+        session: AsyncSession,
+        platform: str,
+        username: str,
+        *,
+        case_sensitive: bool = False,
     ) -> AccountLink | None:
         """Find an account link by platform and username.
 
         Args:
+            session: Database session.
             platform: The platform name.
             username: The username to search for.
+            case_sensitive: Whether the search should be case-sensitive.
 
         Returns:
             The AccountLink if found, else None.
         """
-        async with get_async_session() as session:
+        if case_sensitive:
             stmt = select(AccountLink).where(
                 AccountLink.platform == platform, AccountLink.username == username
             )
-            result = await session.execute(stmt)
-            link = result.scalar_one_or_none()
-            if link:
-                session.expunge(link)
-            return link
+        else:
+            stmt = select(AccountLink).where(
+                AccountLink.platform == platform, AccountLink.username.ilike(username)
+            )
+        result = await session.execute(stmt)
+        link = result.scalar_one_or_none()
+        if link:
+            session.expunge(link)
+        return link
+
+    async def find_link_by_display_name(
+        self,
+        session: AsyncSession,
+        platform: str,
+        display_name: str,
+        *,
+        case_sensitive: bool = False,
+    ) -> AccountLink | None:
+        """Find an account link by platform and display name.
+
+        Args:
+            session: Database session.
+            platform: The platform name.
+            display_name: The display name to search for.
+            case_sensitive: Whether the search should be case-sensitive.
+
+        Returns:
+            The AccountLink if found, else None.
+        """
+        if case_sensitive:
+            stmt = select(AccountLink).where(
+                AccountLink.platform == platform,
+                AccountLink.display_name == display_name,
+            )
+        else:
+            stmt = select(AccountLink).where(
+                AccountLink.platform == platform,
+                AccountLink.display_name.ilike(display_name),
+            )
+        result = await session.execute(stmt)
+        link = result.scalar_one_or_none()
+        if link:
+            session.expunge(link)
+        return link
 
     async def find_link_by_platform_id(
-        self, platform: str, platform_id: str
+        self, session: AsyncSession, platform: str, platform_id: str
     ) -> AccountLink | None:
         """Find an account link by platform and platform ID.
 
         Args:
+            session: Database session.
             platform: The platform name.
             platform_id: The platform ID to search for.
 
         Returns:
             The AccountLink if found, else None.
         """
-        async with get_async_session() as session:
-            stmt = select(AccountLink).where(
-                AccountLink.platform == platform, AccountLink.platform_id == platform_id
-            )
-            result = await session.execute(stmt)
-            link = result.scalar_one_or_none()
-            if link:
-                session.expunge(link)
-            return link
+        stmt = select(AccountLink).where(
+            AccountLink.platform == platform, AccountLink.platform_id == platform_id
+        )
+        result = await session.execute(stmt)
+        link = result.scalar_one_or_none()
+        if link:
+            session.expunge(link)
+        return link
 
     async def set_primary_link(
-        self, account_id: str, platform: str, platform_id: str
+        self, session: AsyncSession, account_id: str, platform: str, platform_id: str
     ) -> None:
         """Internal method to set a primary link."""
-        async with get_async_session() as session:
-            await self._set_primary_in_session(session, account_id, platform, platform_id)
-            await session.commit()
+        await self._set_primary_in_session(session, account_id, platform, platform_id)
+        await session.commit()
 
     async def _set_primary_in_session(
         self, session: AsyncSession, account_id: str, platform: str, platform_id: str
@@ -402,13 +456,16 @@ class AccountService(BaseService):
             .values(is_primary=True)
         )
 
-    async def merge_accounts(self, source_id: str, dest_id: str) -> None:
+    async def merge_accounts(
+        self, session: AsyncSession, source_id: str, dest_id: str
+    ) -> None:
         """Merge one account into another.
 
         This moves all platform links from the source account to the destination account,
         notifies all registered merge handlers, and deletes the source account.
 
         Args:
+            session: Database session.
             source_id: The ID of the account to merge (this account will be deleted).
             dest_id: The ID of the account to merge into (this account will remain).
         """
@@ -422,61 +479,59 @@ class AccountService(BaseService):
             await handler.on_account_merged(source_id, dest_id)
 
         # 2. Move links and delete source account
-        async with get_async_session() as session:
-            # Check if destination exists
-            dest_result = await session.execute(
-                select(AccountModel).where(AccountModel.id == dest_id)
+        # Check if destination exists
+        dest_result = await session.execute(
+            select(AccountModel).where(AccountModel.id == dest_id)
+        )
+        if not dest_result.scalar_one_or_none():
+            msg = f"Destination account {dest_id} does not exist"
+            raise ValueError(msg)
+
+        # Move all links from source to dest
+        # Note: We might have duplicate links if both accounts had
+        # the same platform linked.
+        # We'll resolve this by catching UniqueConstraint errors
+        # or cleaning up beforehand.
+
+        # For now, we update and handle conflicts.
+        links_result = await session.execute(
+            select(AccountLink).where(AccountLink.account_id == source_id)
+        )
+        links = links_result.scalars().all()
+
+        for link in links:
+            # Check for conflict in destination
+            conflict_stmt = select(AccountLink).where(
+                AccountLink.account_id == dest_id,
+                AccountLink.platform == link.platform,
+                AccountLink.platform_id == link.platform_id,
             )
-            if not dest_result.scalar_one_or_none():
-                msg = f"Destination account {dest_id} does not exist"
-                raise ValueError(msg)
+            conflict_res = await session.execute(conflict_stmt)
+            if conflict_res.scalar_one_or_none():
+                # Link already exists in destination, just delete this one
+                await session.delete(link)
+            else:
+                link.account_id = dest_id
 
-            # Move all links from source to dest
-            # Note: We might have duplicate links if both accounts had
-            # the same platform linked.
-            # We'll resolve this by catching UniqueConstraint errors
-            # or cleaning up beforehand.
+        # Delete source account
+        # Cascades should handle AccountBalance if we set them up,
+        # but services usually handle their own.
+        source_result = await session.execute(
+            select(AccountModel).where(AccountModel.id == source_id)
+        )
+        source_account = source_result.scalar_one_or_none()
+        if source_account:
+            await session.delete(source_account)
 
-            # For now, we update and handle conflicts.
-            links_result = await session.execute(
-                select(AccountLink).where(AccountLink.account_id == source_id)
-            )
-            links = links_result.scalars().all()
+        await session.commit()
+        LOGGER.info("Successfully merged account %s into %s", source_id, dest_id)
 
-            for link in links:
-                # Check for conflict in destination
-                conflict_stmt = select(AccountLink).where(
-                    AccountLink.account_id == dest_id,
-                    AccountLink.platform == link.platform,
-                    AccountLink.platform_id == link.platform_id,
-                )
-                conflict_res = await session.execute(conflict_stmt)
-                if conflict_res.scalar_one_or_none():
-                    # Link already exists in destination, just delete this one
-                    await session.delete(link)
-                else:
-                    link.account_id = dest_id
-
-            # Delete source account
-            # Cascades should handle AccountBalance if we set them up,
-            # but services usually handle their own.
-            source_result = await session.execute(
-                select(AccountModel).where(AccountModel.id == source_id)
-            )
-            source_account = source_result.scalar_one_or_none()
-            if source_account:
-                await session.delete(source_account)
-
-            await session.commit()
-            LOGGER.info("Successfully merged account %s into %s", source_id, dest_id)
-
-    async def delete_account(self, account_id: str) -> None:
+    async def delete_account(self, session: AsyncSession, account_id: str) -> None:
         """Delete an account and all its associated links."""
-        async with get_async_session() as session:
-            stmt = select(AccountModel).where(AccountModel.id == account_id)
-            result = await session.execute(stmt)
-            account = result.scalar_one_or_none()
-            if account:
-                await session.delete(account)
-                await session.commit()
-                LOGGER.info("Deleted account %s", account_id)
+        stmt = select(AccountModel).where(AccountModel.id == account_id)
+        result = await session.execute(stmt)
+        account = result.scalar_one_or_none()
+        if account:
+            await session.delete(account)
+            await session.commit()
+            LOGGER.info("Deleted account %s", account_id)

@@ -67,7 +67,6 @@ class CharCoins(Struct):
 
     twitch_id: str
     user_name: str
-    char_index: int
     coins: int
 
 
@@ -81,12 +80,16 @@ class CharItem(Struct):
 
 
 class CharItems(Struct):
-    """Character items collection."""
+    """Character items collection.
+
+    items_dict: mapping of item id to CharItem
+    """
 
     twitch_id: str
     user_name: str
     char_index: int
     items: list[CharItem]
+    items_dict: dict[str, CharItem] = field(default_factory=dict)
 
 
 class ScrollCounts(Struct):
@@ -118,10 +121,6 @@ class RavenfallTimeoutError(Exception):
 
 class RavenfallConnectionError(Exception):
     """Custom connection exception for Ravenfall API requests."""
-
-
-class QueryException(Exception):
-    """Exception raised for query-related errors."""
 
 
 class ServerError(Exception):
@@ -333,7 +332,7 @@ class RavenfallMultichatClient:
 
     async def get_char_items(
         self, channel_id: str, *, timeout_seconds: int = 3
-    ) -> CharItems:
+    ) -> list[CharItems]:
         """Fetch character items from the server.
 
         Args:
@@ -341,18 +340,21 @@ class RavenfallMultichatClient:
             timeout_seconds: Timeout in seconds for the request
 
         Returns:
-            CharItems: The info containing character items
+            list[CharItems]: The info containing character items
 
         """
-        return await self._get(
+        result = await self._get(
             f"get_char_items/{channel_id}",
-            CharItems,
+            list[CharItems],
             timeout_seconds=timeout_seconds,
         )
+        for user in result:
+            user.items_dict = {x.id: x for x in user.items}
+        return result
 
     async def get_char_coins(
         self, channel_id: str, *, timeout_seconds: int = 3
-    ) -> CharCoins:
+    ) -> list[CharCoins]:
         """Fetch character coins from the server.
 
         Args:
@@ -360,12 +362,12 @@ class RavenfallMultichatClient:
             timeout_seconds: Timeout in seconds for the request
 
         Returns:
-            CharCoins: The info containing character coins
+            list[CharCoins]: The info containing character coins
 
         """
         return await self._get(
             f"get_char_coins/{channel_id}",
-            CharCoins,
+            list[CharCoins],
             timeout_seconds=timeout_seconds,
         )
 

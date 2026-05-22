@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, override
 from msgspec import Struct
 
 from bot.core.components import Cog
+from bot.db.session import get_async_session
 from bot.services.config_service import ConfigService
 from bot.services.remote_bot import RemoteCallableMixin, remote_callable
 
@@ -25,6 +26,7 @@ class AccountLinkStruct(Struct):
     platform: str
     platform_id: str
     username: str
+    display_name: str | None
     is_primary: bool
 
 
@@ -69,7 +71,10 @@ class AccountCog(Cog, RemoteCallableMixin):
             AccountLinkStruct if found, else None.
         """
         account_service = self.global_context.require_service(AccountService)
-        link = await account_service.find_link_by_platform_id(platform, platform_id)
+        async with get_async_session() as session:
+            link = await account_service.find_link_by_platform_id(
+                session, platform, platform_id
+            )
 
         if link is None:
             return None
@@ -79,6 +84,7 @@ class AccountCog(Cog, RemoteCallableMixin):
             platform=link.platform,
             platform_id=link.platform_id,
             username=link.username,
+            display_name=link.display_name,
             is_primary=link.is_primary,
         )
 
@@ -97,17 +103,20 @@ class AccountCog(Cog, RemoteCallableMixin):
         """
         account_service = self.global_context.require_service(AccountService)
 
-        for link_struct in links:
-            try:
-                await account_service.link_account(
-                    account_id=account_id,
-                    platform=link_struct.platform,
-                    platform_id=link_struct.platform_id,
-                    username=link_struct.username,
-                    is_primary=link_struct.is_primary,
-                )
-            except ValueError:
-                # Link already exists or conflicts - skip
-                continue
+        async with get_async_session() as session:
+            for link_struct in links:
+                try:
+                    await account_service.link_account(
+                        session,
+                        account_id=account_id,
+                        platform=link_struct.platform,
+                        platform_id=link_struct.platform_id,
+                        username=link_struct.username,
+                        display_name=link_struct.display_name,
+                        is_primary=link_struct.is_primary,
+                    )
+                except ValueError:
+                    # Link already exists or conflicts - skip
+                    continue
 
         return SuccessStruct(success=True)

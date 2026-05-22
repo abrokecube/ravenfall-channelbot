@@ -244,10 +244,12 @@ async def _fetch_raw_item_data(rf: RavenNest):
                 1, math.floor(math.floor(item_a["level"] / 10) / 5)
             )
         for key, name in item_stat_names:
+            # pyrefly: ignore [bad-typed-dict-key]
             value = cast("int", item[key])
             if value > 0:
                 item_a["stats"].append({"stat": name, "level": value})
         for key, name in item_requirement_names:
+            # pyrefly: ignore [bad-typed-dict-key]
             value = cast("int", item[key])
             if value > 0:
                 item_a["equip_requirements"].append({"skill": name, "level": value})
@@ -664,6 +666,7 @@ class CharacterEquipment:
                 ItemTypes.TwoHandedSpear,
             }
         ):
+            # pyrefly: ignore [bad-assignment]
             self.shield.active = False
 
     def __iter__(self) -> Iterator[CharacterItem]:

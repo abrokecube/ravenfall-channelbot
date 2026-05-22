@@ -336,7 +336,7 @@ class EventManager:
     def __init__(self, global_context: GlobalContext) -> None:
         """Initialize the event manager with context and empty registries."""
         self.event_sources: list[BaseEventSource] = []
-        self.event_processors: dict[type[BaseEvent], list[EventProcessor[...]]] = (
+        self.event_processors: dict[type[BaseEvent], list[EventProcessor[Any]]] = (
             defaultdict(list)
         )
         self.dispatchers: dict[type[BaseDispatcher], BaseDispatcher] = {

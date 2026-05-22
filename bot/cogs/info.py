@@ -43,7 +43,7 @@ from ravenpy.enums import Skills
 from utils import braille_graphics, strutils, utils
 from utils.bytes_to_human_readable import bytes_to_human_readable
 from utils.format_time import TimeSize, format_seconds, format_timedelta, seconds_to_dhms
-from utils.strings import DIAMOND, EN_DASH, MULTIPICATION_SIGN
+from utils.strings import DIAMOND, EN_DASH, MULT_SIGN
 
 if TYPE_CHECKING:
     from bot.clients.ravenfall_query import Player
@@ -421,8 +421,7 @@ class InfoCog(Cog, RemoteCallableMixin):
         target_item = ""
         if char.target_item and what and not char.in_onsen:
             target_item = (
-                f"{char.target_item.amount}{MULTIPICATION_SIGN} "
-                f"{char.target_item.item.name}"
+                f"{char.target_item.amount}{MULT_SIGN} {char.target_item.item.name}"
             )
 
         where_island = ""

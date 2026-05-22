@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import override
+from typing import TYPE_CHECKING, override
 
 from msgspec import Struct
 from sqlalchemy import select, update
@@ -15,6 +15,9 @@ from bot.services.remote_bot import RemoteBotService
 
 from .config import CurrencyConfig
 from .models import AccountBalance, TransactionHistory
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +64,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
 
     def __init__(self) -> None:
         super().__init__()
-        self._config: CurrencyConfig | None = None
+        self.config: CurrencyConfig | None = None
 
     @override
     async def setup(self) -> None:
@@ -69,7 +72,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         from bot.services.config_service import ConfigService
 
         config_srv = await self.global_context.wait_for_service(ConfigService)
-        self._config = config_srv.get_table(CurrencyConfig, "services.currency")
+        self.config = config_srv.get_table(CurrencyConfig, "services.currency")
 
         account_service = await self.global_context.wait_for_service(AccountService)
         self.inject_config_service(config_srv)
@@ -80,34 +83,27 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         self, table: str, config: object, changed_fields: set[str]
     ) -> None:
         if isinstance(config, CurrencyConfig):
-            self._config = config
+            self.config = config
             LOGGER.info("Currency configuration updated")
 
     def get_currency_name(self, amount: int) -> str:
         """Get the singular or plural name of the currency based on amount."""
-        if not self._config:
+        if not self.config:
             return "Coins"
-        return (
-            self._config.name_singular if abs(amount) == 1 else self._config.name_plural
-        )
+        return self.config.name_singular if abs(amount) == 1 else self.config.name_plural
 
-    async def get_combined_balance(self, account_id: str) -> CombinedBalance:
-        """Get balance across this bot and all remote bots.
-
-        Args:
-            account_id: The global account ID for this bot.
-
-        Returns:
-            A CombinedBalance object.
-        """
+    async def get_combined_balance(
+        self, account_id: str, db_session: AsyncSession
+    ) -> CombinedBalance:
+        """Get balance across this bot and all remote bots."""
         from bot.cogs.accounts.service import AccountService
         from bot.services.remote_bot import RemoteBotService
 
-        local_balance = await self.get_balance(account_id)
+        local_balance = await self.get_balance(account_id, db_session)
         remote_balances: dict[str, int] = {}
         total = local_balance
 
-        if not self._config or not self._config.remote_enabled:
+        if not self.config or not self.config.remote_enabled:
             return CombinedBalance(total=total, local=local_balance, remote={})
 
         remote_bot_service = self.global_context.get_service(RemoteBotService)
@@ -115,7 +111,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
             return CombinedBalance(total=total, local=local_balance, remote={})
 
         account_service = self.global_context.require_service(AccountService)
-        links = await account_service.get_account_links(account_id)
+        links = await account_service.get_account_links(db_session, account_id)
 
         if not links:
             return CombinedBalance(total=total, local=local_balance, remote={})
@@ -147,34 +143,40 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
 
         return CombinedBalance(total=total, local=local_balance, remote=remote_balances)
 
-    async def get_balance(self, account_id: str) -> int:
+    async def get_balance(self, account_id: str, db_session: AsyncSession) -> int:
         """Get the local balance for an account."""
-        async with get_async_session() as session:
-            stmt = select(AccountBalance.balance).where(
-                AccountBalance.account_id == account_id
-            )
-            result = await session.execute(stmt)
-            return result.scalar_one_or_none() or 0
+        stmt = select(AccountBalance.balance).where(
+            AccountBalance.account_id == account_id
+        )
+        result = await db_session.execute(stmt)
+        return result.scalar_one_or_none() or 0
 
-    async def add_currency(self, account_id: str, amount: int, reason: str) -> bool:
+    async def add_currency(
+        self,
+        account_id: str,
+        amount: int,
+        reason: str,
+        db_session: AsyncSession,
+        *,
+        record_transaction: bool = True,
+    ) -> bool:
         """Add currency to an account locally."""
         if amount <= 0:
             return False
 
-        async with get_async_session() as session:
-            stmt = select(AccountBalance).where(AccountBalance.account_id == account_id)
-            result = await session.execute(stmt)
-            balance_row = result.scalar_one_or_none()
+        stmt = select(AccountBalance).where(AccountBalance.account_id == account_id)
+        result = await db_session.execute(stmt)
+        balance_row = result.scalar_one_or_none()
 
-            previous_balance = 0
-            if balance_row:
-                previous_balance = balance_row.balance
-                balance_row.balance += amount
-            else:
-                balance_row = AccountBalance(account_id=account_id, balance=amount)
-                session.add(balance_row)
+        previous_balance = 0
+        if balance_row:
+            previous_balance = balance_row.balance
+            balance_row.balance += amount
+        else:
+            balance_row = AccountBalance(account_id=account_id, balance=amount)
+            db_session.add(balance_row)
 
-            # Record transaction
+        if record_transaction:
             transaction = TransactionHistory(
                 account_id=account_id,
                 amount=amount,
@@ -182,26 +184,33 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
                 new_balance=previous_balance + amount,
                 reason=reason,
             )
-            session.add(transaction)
+            db_session.add(transaction)
 
-            await session.commit()
-            return True
+        return True
 
-    async def remove_currency(self, account_id: str, amount: int, reason: str) -> bool:
+    async def remove_currency(
+        self,
+        account_id: str,
+        amount: int,
+        reason: str,
+        db_session: AsyncSession,
+        *,
+        record_transaction: bool = True,
+    ) -> bool:
         """Remove currency from an account, optionally using remote funds."""
         if amount <= 0:
             return False
 
         # 1. Try local first
-        async with get_async_session() as session:
-            stmt = select(AccountBalance).where(AccountBalance.account_id == account_id)
-            result = await session.execute(stmt)
-            balance_row = result.scalar_one_or_none()
+        stmt = select(AccountBalance).where(AccountBalance.account_id == account_id)
+        result = await db_session.execute(stmt)
+        balance_row = result.scalar_one_or_none()
 
-            if balance_row and balance_row.balance >= amount:
-                previous_balance = balance_row.balance
-                balance_row.balance -= amount
+        if balance_row and balance_row.balance >= amount:
+            previous_balance = balance_row.balance
+            balance_row.balance -= amount
 
+            if record_transaction:
                 transaction = TransactionHistory(
                     account_id=account_id,
                     amount=-amount,
@@ -209,22 +218,26 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
                     new_balance=previous_balance - amount,
                     reason=reason,
                 )
-                session.add(transaction)
-                await session.commit()
-                return True
+                db_session.add(transaction)
+
+            return True
 
         # 2. If not enough locally and remote is enabled, try to use remote funds
-        if not self._config or not self._config.remote_enabled:
+        if not self.config or not self.config.remote_enabled:
             return False
 
         # Calculate how much more we need
-        local_balance = await self.get_balance(account_id)
+        local_balance = await self.get_balance(account_id, db_session)
         remaining_to_remove = amount
 
         # Drain local first if it has anything
         if local_balance > 0:
             await self.set_currency(
-                account_id, 0, f"{reason} (Drained for larger payment)"
+                account_id,
+                0,
+                f"{reason} (Drained for larger payment)",
+                db_session,
+                record_transaction=record_transaction,
             )
             remaining_to_remove -= local_balance
 
@@ -238,7 +251,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         from bot.cogs.accounts.service import AccountService
 
         account_service = self.global_context.require_service(AccountService)
-        links = await account_service.get_account_links(account_id)
+        links = await account_service.get_account_links(db_session, account_id)
         if not links:
             return False
 
@@ -278,6 +291,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
                             "platform_id": primary_link.platform_id,
                             "amount": amount_to_take,
                             "reason": f"{reason} (via remote call)",
+                            "record_transaction": record_transaction,
                         },
                     )
                     if remote_res.success:
@@ -287,22 +301,29 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
 
         return remaining_to_remove <= 0
 
-    async def set_currency(self, account_id: str, amount: int, reason: str) -> None:
+    async def set_currency(
+        self,
+        account_id: str,
+        amount: int,
+        reason: str,
+        db_session: AsyncSession,
+        *,
+        record_transaction: bool = True,
+    ) -> None:
         """Set the local currency balance for an account."""
-        async with get_async_session() as session:
-            stmt = select(AccountBalance).where(AccountBalance.account_id == account_id)
-            result = await session.execute(stmt)
-            balance_row = result.scalar_one_or_none()
+        stmt = select(AccountBalance).where(AccountBalance.account_id == account_id)
+        result = await db_session.execute(stmt)
+        balance_row = result.scalar_one_or_none()
 
-            previous_balance = 0
-            if balance_row:
-                previous_balance = balance_row.balance
-                balance_row.balance = amount
-            else:
-                balance_row = AccountBalance(account_id=account_id, balance=amount)
-                session.add(balance_row)
+        previous_balance = 0
+        if balance_row:
+            previous_balance = balance_row.balance
+            balance_row.balance = amount
+        else:
+            balance_row = AccountBalance(account_id=account_id, balance=amount)
+            db_session.add(balance_row)
 
-            # Record transaction
+        if record_transaction:
             transaction = TransactionHistory(
                 account_id=account_id,
                 amount=amount - previous_balance,
@@ -310,15 +331,13 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
                 new_balance=amount,
                 reason=reason,
             )
-            session.add(transaction)
-
-            await session.commit()
+            db_session.add(transaction)
 
     async def get_history_combined(
-        self, account_id: str, limit: int = 10
+        self, account_id: str, db_session: AsyncSession, limit: int = 10
     ) -> list[CombinedHistoryItem]:
         """Get transaction history merged from all bots."""
-        local_history = await self.get_history(account_id, limit)
+        local_history = await self.get_history(account_id, db_session, limit)
         combined: list[CombinedHistoryItem] = [
             CombinedHistoryItem(
                 amount=tx.amount,
@@ -329,7 +348,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
             for tx in local_history
         ]
 
-        if not self._config or not self._config.remote_enabled:
+        if not self.config or not self.config.remote_enabled:
             return combined
 
         remote_bot_service = self.global_context.get_service(RemoteBotService)
@@ -339,7 +358,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         from bot.cogs.accounts.service import AccountService
 
         account_service = self.global_context.require_service(AccountService)
-        links = await account_service.get_account_links(account_id)
+        links = await account_service.get_account_links(db_session, account_id)
         if not links:
             return combined
 
@@ -375,21 +394,20 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         return combined[:limit]
 
     async def get_history(
-        self, account_id: str, limit: int = 10
+        self, account_id: str, db_session: AsyncSession, limit: int = 10
     ) -> list[TransactionHistory]:
         """Get the local transaction history for an account."""
-        async with get_async_session() as session:
-            stmt = (
-                select(TransactionHistory)
-                .where(TransactionHistory.account_id == account_id)
-                .order_by(TransactionHistory.timestamp.desc())
-                .limit(limit)
-            )
-            result = await session.execute(stmt)
-            transactions = list(result.scalars().all())
-            for t in transactions:
-                session.expunge(t)
-            return transactions
+        stmt = (
+            select(TransactionHistory)
+            .where(TransactionHistory.account_id == account_id)
+            .order_by(TransactionHistory.timestamp.desc())
+            .limit(limit)
+        )
+        result = await db_session.execute(stmt)
+        transactions = list(result.scalars().all())
+        for t in transactions:
+            db_session.expunge(t)
+        return transactions
 
     @override
     async def on_account_merged(self, source_id: str, dest_id: str) -> None:
@@ -430,5 +448,4 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
                 .values(account_id=dest_id)
             )
 
-            await session.commit()
             LOGGER.info("Currency data migrated for %s -> %s", source_id, dest_id)
