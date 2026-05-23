@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Never, cast, override
 from uuid import uuid4
 
 from . import EVENT_CATEGORY_GENERIC, EVENT_SOURCE_ANY, exceptions
-from .exceptions import ListenerError
+from .exceptions import ListenerError, MissingServiceError
 
 # import sys
 # import importlib
@@ -172,7 +172,7 @@ class GlobalContext:
     async def wait_for_service[T: BaseService](
         self,
         service_type: type[T],
-        max_wait: float | None = 30,
+        max_wait: float | None = 15,
     ) -> T:
         """Wait for a service to become available, with optional timeout.
 
@@ -203,7 +203,11 @@ class GlobalContext:
             if max_wait is None:
                 instance = await waiter
             else:
-                instance = await asyncio.wait_for(waiter, max_wait)
+                try:
+                    instance = await asyncio.wait_for(waiter, max_wait)
+                except TimeoutError:
+                    msg = f"Required service '{service_type.__name__}' is missing."
+                    raise MissingServiceError(msg) from None
             return instance
         finally:
             waiters = self._service_waiters.get(service_type)

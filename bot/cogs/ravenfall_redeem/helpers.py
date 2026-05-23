@@ -7,8 +7,6 @@ import re
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from bot.cogs.accounts.service import AccountService
 from bot.db.session import get_async_session
 from bot.integrations.ravenfall import RavenfallMessageEvent, payloads
@@ -23,6 +21,8 @@ from . import exceptions
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from bot.clients.ravenfall_middleman import Sender
     from bot.core.components import BaseEvent, GlobalContext
@@ -158,19 +158,19 @@ async def get_all_item_count(channel_id: str, g_ctx: GlobalContext) -> dict[str,
     multichat_srv = g_ctx.require_service(RavenfallMultichatService)
     multichat_client = multichat_srv.get_client()
     char_items = await multichat_client.get_char_items(channel_id)
-    total_items: dict[str, int] = {}
+    total_items: dict[str, int] = defaultdict[str, int](int)
     for user in char_items:
         for user_item in user.items:
             if user_item.equipped:
                 continue
-            item = ravenpy.get_item(user_item.id)
-            if item is None:
-                continue
-            if item.name in total_items:
-                total_items[item.name] += user_item.amount
-            else:
-                total_items[item.name] = user_item.amount
-    return total_items
+            total_items[user_item.id] += user_item.amount
+    final_items: dict[str, int] = {}
+    for item, amount in total_items.items():
+        matched_item = ravenpy.get_item(item)
+        if not matched_item:
+            continue
+        final_items[matched_item.name] = amount
+    return final_items
 
 
 channel_item_gift_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -201,6 +201,8 @@ async def send_items(
     item_name: str,
     amount: int,
     g_ctx: GlobalContext,
+    *,
+    skip_warmup: bool = False,
 ):
     """Send coins to `target_user_name` by aggregating coins from other characters.
 
@@ -259,7 +261,7 @@ async def send_items(
         if total_items < amount:
             raise exceptions.OutOfItemsError("Not enough stock")
         items_remaining = amount
-        one_send_successful = False
+        one_send_successful = skip_warmup
 
         for sender_name, sender_id, sender_amount, sender_index in char_items:
             if items_remaining <= 0:

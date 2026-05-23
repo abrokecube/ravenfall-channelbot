@@ -870,7 +870,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
                 )
                 session.add(char_data_db)
 
-    async def get_character_datas_by_char_id(
+    async def get_character_data_by_char_id(
         self, char_ids: list[str], session: AsyncSession
     ) -> list[CharacterData]:
         """Get CharacterData objects for a list of character IDs.
@@ -930,7 +930,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
 
         return [existing_dict[cid] for cid in char_ids if cid in existing_dict]
 
-    async def get_character_datas_by_twitch_id(
+    async def get_character_data_by_twitch_id(
         self, twitch_ids: list[str], session: AsyncSession
     ) -> list[CharacterData]:
         """Get CharacterData objects for a list of character IDs.

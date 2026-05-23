@@ -1447,10 +1447,7 @@ def get_item(item: str | Item | itemdefs.Items):
     """Get an item by name, ID, or Item instance."""
     if isinstance(item, Item):
         return item
-    _number_of_dashes_in_a_uuid = 4
-    if item.count("-") == _number_of_dashes_in_a_uuid:
-        return _items_id_data.get(item)
-    return _items_name_data.get(item)
+    return _items_name_data.get(item) or _items_id_data.get(item)
 
 
 def get_all_items():

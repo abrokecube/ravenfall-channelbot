@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, override
 from bot.cogs.ravenfall_watcher.base_classes import RavenfallWatcherGroupCollector
 from bot.core.components import Cog
 from bot.integrations.chat_messages import UserRole, checks
+from bot.integrations.chat_messages.utils import min_permission_level
 from bot.integrations.commands import (
     CommandError,
     CommandEvent,  # noqa: TC001
@@ -171,12 +172,23 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             raise CommandError(msg)
         return result
 
+    def _check_permission(
+        self,
+        ctx: CommandEvent,
+        instance: RavenfallInstance,
+        min_role: UserRole = UserRole.BOT_ADMINISTRATOR,
+    ):
+        if instance.channel_id != ctx.message.room_id and not min_permission_level(
+            ctx.message, min_role
+        ):
+            msg = "You do not have permission to specify an instance."
+            raise CommandError(msg)
+
     @parameter(
         "instance",
         converter=RavenfallInstanceConverter,
         default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
     )
-    # @checks(MinPermissionLevel(UserRole.MODERATOR))
     @command("rfrestart status")
     async def rfrestartstatus(self, ctx: CommandEvent, *, instance: RavenfallInstance):
         """Get the auto-restart status of Ravenfall."""
@@ -226,6 +238,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         instance: RavenfallInstance,
     ):
         """Queue a restart of Ravenfall."""
+        self._check_permission(ctx, instance)
         watcher = self._get_watcher_or_error(instance)
         if force:
             await watcher.restart_ravenfall(reason=reason)
@@ -254,6 +267,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         instance: RavenfallInstance,
     ):
         """Cancel an active restart task."""
+        self._check_permission(ctx, instance)
         watcher = self._get_watcher_or_error(instance)
         try:
             await watcher.cancel_restart()
@@ -279,6 +293,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         instance: RavenfallInstance,
     ):
         """Postpone a restart task."""
+        self._check_permission(ctx, instance)
         watcher = self._get_watcher_or_error(instance)
         try:
             await watcher.postpone_restart(seconds)
@@ -302,6 +317,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         instance: RavenfallInstance,
     ):
         """Stop auto-restarts from occurring."""
+        self._check_permission(ctx, instance)
         watcher = self._get_watcher_or_error(instance)
         if watcher.ravenfall_restart_lock.locked():
             raise CommandError("Ravenfall is currently restarting.")
@@ -324,6 +340,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         instance: RavenfallInstance,
     ):
         """Resume auto-restarts."""
+        self._check_permission(ctx, instance)
         watcher = self._get_watcher_or_error(instance)
         if not watcher.get_restarts_are_paused():
             raise CommandError("Auto-restarts are already active.")
@@ -344,6 +361,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         instance: RavenfallInstance,
     ):
         """Restart the instance's associated RavenBot."""
+        self._check_permission(ctx, instance)
         watcher = self._get_watcher_or_error(instance)
         if watcher.ravenbot_restart_lock.locked():
             await ctx.reply("A restart is already underway.")
@@ -361,6 +379,7 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
         self, ctx: CommandEvent, *, instance: RavenfallInstance
     ):
         """Check the connection status of the middleman."""
+        self._check_permission(ctx, instance)
         watcher = self._get_watcher_or_error(instance)
         if not watcher.ravenfall.get_is_linked_to_middleman():
             raise CommandError("Ravenfall is not linked to a middleman.")

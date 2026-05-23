@@ -328,6 +328,18 @@ class AccountService(BaseService):
             session.expunge(link)
         return links
 
+    async def get_account_by_id(
+        self, session: AsyncSession, account_id: str
+    ) -> Account | None:
+        """Fetch an account by its ID."""
+        stmt = select(AccountModel).where(AccountModel.id == account_id)
+        result = await session.execute(stmt)
+        account = result.scalar_one_or_none()
+        if account:
+            session.expunge(account)
+            return Account(self, account)
+        return None
+
     async def get_primary_account_link_for_platform(
         self, session: AsyncSession, account_id: str, platform: str
     ):

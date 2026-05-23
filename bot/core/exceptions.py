@@ -31,3 +31,7 @@ class ListenerOnCooldownError(ListenerError):
         self.retry_after: float = retry_after
         self.cooldown: Cooldown = cooldown
         super().__init__(f"Listener is on cooldown. Try again in {retry_after:.2f}s")
+
+
+class MissingServiceError(Exception):
+    """A required service is missing."""

@@ -24,11 +24,14 @@ from bot.core.components import (
 from bot.core.enums import BucketType
 from bot.db import Base
 from bot.db.session import get_async_session
+from bot.integrations.chat_messages import UserRole, checks
+from bot.integrations.chat_messages.utils import min_permission_level
 from bot.integrations.commands import (
     ArgumentConversionError,
     BaseConverter,
     CommandError,
     CommandEvent,
+    MinPermissionLevel,
     command,
     parameter,
 )
@@ -43,13 +46,16 @@ from bot.integrations.twitch import (
 )
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.services.config_service import ConfigModel, ConfigService
+from bot.services.pastebin_service import PastebinService
 from bot.services.ravenfall_channels import RavenfallChannelService
 from ravenpy import ravenpy
+from ravenpy.enums import ItemCategory
 from utils.routines import routine
 from utils.strings import MULT_SIGN
 from utils.strutils import pl2, strjoin
 
 from . import exceptions, helpers
+from . import items as bot_items
 from .items import BaseItem, ItemContext
 
 if TYPE_CHECKING:
@@ -152,6 +158,7 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
         self.item_prices: dict[str, int] = {}
         self.lurk_cd: Cooldown = Cooldown(1, 10, [BucketType.CHANNEL])
         self.config: RFRedeemConfig = RFRedeemConfig()
+        self.shop_items: list[BaseItem] = []
 
     @override
     async def setup(self) -> None:
@@ -163,8 +170,38 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
 
         __ = await self.global_context.wait_for_service(RavenfallService)
 
-        shop_items: list[ravenpy.Item | BaseItem] = []
+        shop_items: list[ravenpy.Item | BaseItem] = [
+            bot_items.ArmorSet("Bronze"),
+            bot_items.ArmorSet("Iron"),
+            bot_items.ArmorSet("Steel"),
+            bot_items.ArmorSet("Black"),
+            bot_items.ArmorSet("Mithril"),
+            bot_items.ArmorSet("Adamantite"),
+            bot_items.ArmorSet("Rune"),
+            bot_items.ArmorSet("Dragon"),
+            bot_items.ArmorSet("Abraxas"),
+            bot_items.ArmorSet("Phantom"),
+            bot_items.ArmorSet("Lionsbane"),
+            bot_items.ArmorSet("Ether"),
+            bot_items.ArmorSet("Ancient"),
+            bot_items.ArmorSet("Atlarus"),
+            bot_items.ArmorSet("Elder Bronze"),
+            bot_items.ArmorSet("Elder Iron"),
+            bot_items.ArmorSet("Elder Steel"),
+            bot_items.ArmorSet("Elder Mithril"),
+            bot_items.ArmorSet("Elder Adamantite"),
+            bot_items.ArmorSet("Elder Rune"),
+            bot_items.ArmorSet("Elder Dragon"),
+            bot_items.ArmorSet("Elder Abraxas"),
+            bot_items.ArmorSet("Elder Phantom"),
+            bot_items.ArmorSet("Elder Lionsbane"),
+            bot_items.ArmorSet("Elder Ether"),
+            bot_items.ArmorSet("Elder Ancient"),
+            bot_items.ArmorSet("Elder Atlarus"),
+        ]
+        shop_items.extend(self.shop_items)
         shop_items.extend(ravenpy.get_all_items())
+        item_converter.set_items(shop_items)
 
     @override
     async def teardown(self) -> None:
@@ -186,8 +223,26 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
         adapter = TypeAdapter(dict[str, int])
         self.item_prices = adapter.validate_python(json.loads(text))
 
-    def _create_item_context(self):
-        return ItemContext(self.item_prices)
+    async def _create_item_context(
+        self,
+        username: str = "",
+        platform: str = "",
+        rf_instance: RavenfallInstance | None = None,
+    ):
+        item_stock: dict[str, int] = {}
+        if rf_instance:
+            item_stock = await helpers.get_all_item_count(
+                rf_instance.channel_id, self.global_context
+            )
+
+        return ItemContext(
+            self.item_prices,
+            item_stock,
+            username,
+            platform,
+            rf_instance,
+            self.global_context,
+        )
 
     @routine(delta=timedelta(seconds=15), wait_remainder=True)
     async def idle_points(self):
@@ -214,7 +269,7 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
                         UserCreditIdleEarn.char_id.in_(char_ids)
                     )
                 )
-                character_data = await rf_channel_srv.get_character_datas_by_char_id(
+                character_data = await rf_channel_srv.get_character_data_by_char_id(
                     char_ids, session
                 )
                 character_data_dict = {x.char_id: x for x in character_data}
@@ -374,7 +429,7 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
                 return
             price = self.item_prices.get(item.name, 0)
         else:
-            price = await item.get_value(self._create_item_context())
+            price = await item.get_value(await self._create_item_context())
         if price == 0:
             await ctx.reply(f"{item.name} is not redeemable.")
             return
@@ -426,7 +481,7 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
                 break
         else:
             async with get_async_session() as session:
-                char_data = await ravenfall_ch_srv.get_character_datas_by_twitch_id(
+                char_data = await ravenfall_ch_srv.get_character_data_by_twitch_id(
                     [twitch_link.platform_id], session
                 )
             char_ids = {x.char_id: x for x in char_data}
@@ -445,7 +500,7 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
                 return
             price = self.item_prices.get(item.name, 0)
         else:
-            price = await item.get_value(self._create_item_context())
+            price = await item.get_value(await self._create_item_context())
         if price == 0:
             await ctx.reply(f"{item.name} is not redeemable.")
             return
@@ -474,7 +529,7 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
                     self.global_context,
                 )
             else:
-                await item.purchase(self._create_item_context(), count)
+                await item.purchase(await self._create_item_context(), count)
         except exceptions.OutOfItemsError as e:
             LOGGER.error(f"Error in item redeem: {e}")
             await ctx.message.send(
@@ -519,5 +574,299 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
             await ctx.message.send(
                 "❌ An unknown error occurred. Please try again later. "
                 "Your credits were not deducted."
+            )
+            return
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=item_converter)
+    @command("credits stock", aliases=["cs", "stock"])
+    async def credits_stock(
+        self,
+        ctx: CommandEvent,
+        item: ravenpy.Item | BaseItem,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Check an item's stock."""
+        warning = ""
+        if isinstance(item, ravenpy.Item):
+            if item.soulbound:
+                warning = " (This item cannot be redeemed.)"
+            _, count = await helpers.get_item_count(
+                instance.channel_id, item.name, self.global_context
+            )
+        else:
+            count = await item.get_stock(
+                await self._create_item_context(rf_instance=instance)
+            )
+        await ctx.message.reply(
+            f"There {pl2(count, 'is', 'are')} currently "
+            f"{count:,}{MULT_SIGN} {item.name}{pl2(count, '', '(s)')} in stock.{warning}"
+        )
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=item_converter)
+    @command("credits stock coins", aliases=["cs coins", "stock coins"])
+    async def credits_stock_coins(
+        self,
+        ctx: CommandEvent,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Get current coin stock."""
+        count = await helpers.get_coins_count(instance.channel_id, self.global_context)
+        await ctx.message.reply(
+            f"There {pl2(count, 'is', 'are')} currently "
+            f"{count:,} {pl2(count, 'coin', 'coins')} in stock."
+        )
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=item_converter)
+    @command("credits stock all", aliases=["cs all", "stock all"])
+    async def credits_stock_all(
+        self,
+        ctx: CommandEvent,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Get a catalog of available items."""
+        paste_srv = self.global_context.require_service(PastebinService)
+        item_ctx = await self._create_item_context(rf_instance=instance)
+        rf_item_counts = item_ctx.item_stock
+        coin_count = await helpers.get_coins_count(
+            instance.channel_id, self.global_context
+        )
+
+        out_str = [
+            "Stock list for channel: " + instance.channel_name,
+            "",
+            f"Coins: {coin_count:,}",
+            "",
+        ]
+        categories: dict[str, list[str]] = {
+            "Featured": [],
+            "Raw Materials": [],
+            "Materials": [],
+            "Armor": [],
+            "Weapons": [],
+            "Accessories": [],
+            "Pets": [],
+            "Food": [],
+            "Potions": [],
+            "Cosmetics": [],
+            "Scrolls": [],
+            "Other": [],
+        }
+
+        item_cols = 35
+        count_cols = 7
+        price_cols = 6
+
+        item_counts_list = [
+            (x.name, await x.get_stock(item_ctx), await x.get_value(item_ctx))
+            for x in self.shop_items
+        ]
+        item_counts_list = sorted(item_counts_list, key=lambda x: x[0])
+        item_counts_list = sorted(item_counts_list, key=lambda x: x[1] > 0, reverse=True)
+        for item_name, count, price in item_counts_list:
+            item_str = (
+                f"{item_name.ljust(item_cols)} "
+                f"{str(count).rjust(count_cols)} "
+                f"{str(price).rjust(price_cols)}c"
+            )
+            item_str = helpers.fill_whitespace(item_str, ".")
+            item_str = f"  {item_str}"
+            categories["Featured"].append(item_str)
+
+        item_counts_list = [
+            (x, rf_item_counts.get(x.name, 0), self.item_prices.get(x.name, 0))
+            for x in ravenpy.get_all_items()
+        ]
+        item_counts_list = sorted(item_counts_list, key=lambda x: x[0].name)
+        item_counts_list = sorted(
+            item_counts_list,
+            key=lambda x: getattr(x[0].material, "value", 0),
+        )
+        item_counts_list = sorted(item_counts_list, key=lambda x: x[1] > 0, reverse=True)
+        for item, count, price in item_counts_list:
+            warning = ""
+            if item.soulbound:
+                warning = " (Cannot be redeemed.)"
+            item_str = (
+                f"{item.name.ljust(item_cols)} "
+                f"{str(count).rjust(count_cols)} "
+                f"{str(price).rjust(price_cols)}c"
+            )
+            item_str = helpers.fill_whitespace(item_str, ".")
+            item_str = f"  {item_str}{warning}"
+            if item.category == ItemCategory.Resource and len(item.used_in) > 0:
+                if not item.craft_ingredients:
+                    categories["Raw Materials"].append(item_str)
+                else:
+                    categories["Materials"].append(item_str)
+            else:
+                match item.category:
+                    case ItemCategory.Armor:
+                        categories["Armor"].append(item_str)
+                    case ItemCategory.Weapon:
+                        categories["Weapons"].append(item_str)
+                    case ItemCategory.Ring | ItemCategory.Amulet:
+                        categories["Accessories"].append(item_str)
+                    case ItemCategory.Pet:
+                        categories["Pets"].append(item_str)
+                    case ItemCategory.Food:
+                        categories["Food"].append(item_str)
+                    case ItemCategory.Potion:
+                        categories["Potions"].append(item_str)
+                    case ItemCategory.Cosmetic | ItemCategory.Skin:
+                        categories["Cosmetics"].append(item_str)
+                    case ItemCategory.Scroll:
+                        categories["Scrolls"].append(item_str)
+                    case _:
+                        categories["Other"].append(item_str)
+        for category_name, items in categories.items():
+            if not items:
+                continue
+            out_str.append(f"{category_name} --- -- -- - -")
+            out_str.extend(items)
+            out_str.append("")
+        result = await paste_srv.upload_text("\n".join(out_str))
+        await ctx.reply(f"Stock list: {result.url}")
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=item_converter)
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    @command("giftto")
+    async def gift_to(
+        self,
+        ctx: CommandEvent,
+        recipient: str,
+        item: ravenpy.Item | BaseItem,
+        count: int,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Gift an item to a user."""
+        if instance.channel_id != ctx.message.room_id and not min_permission_level(
+            ctx.message, UserRole.BOT_ADMINISTRATOR
+        ):
+            msg = "You do not have permission to specify an instance."
+            raise CommandError(msg)
+        account_srv = self.global_context.require_service(AccountService)
+        ravenfall_ch_srv = self.global_context.require_service(RavenfallChannelService)
+
+        async with get_async_session() as session:
+            platform_link = await account_srv.find_link_by_username(
+                session, ctx.message.platform, recipient
+            ) or await account_srv.find_link_by_display_name(
+                session, ctx.message.platform, recipient
+            )
+            if not platform_link:
+                msg = "User has not used the bot."
+                raise CommandError(msg)
+
+            account = await account_srv.get_account_by_id(
+                session, platform_link.account_id
+            )
+            if not account:
+                msg = "Failed to get user account."
+                raise CommandError(msg)
+
+            twitch_link = await account.get_primary(session, EVENT_SOURCE_TWITCH)
+        if not twitch_link:
+            msg = "User has no connected Twitch account."
+            raise CommandError(msg)
+
+        player_username: str | None = None
+        instance_players = await instance.get_players()
+        if instance_players is None:
+            msg = "Ravenfall is offline."
+            raise CommandError(msg)
+        for p in instance_players:
+            if p.name.lower() == twitch_link.username.lower():
+                player_username = twitch_link.username
+                break
+        else:
+            async with get_async_session() as session:
+                char_data = await ravenfall_ch_srv.get_character_data_by_twitch_id(
+                    [twitch_link.platform_id], session
+                )
+            char_ids = {x.char_id: x for x in char_data}
+            for p in instance_players:
+                if p.id in char_ids:
+                    player_username = char_ids[p.id].twitch_username
+                    break
+        if not player_username:
+            msg = "User is not currently not in this Ravenfall town."
+            raise CommandError(msg)
+
+        if isinstance(item, ravenpy.Item) and item.soulbound:
+            await ctx.reply(f"{item.name} is soulbound and cannot be gifted.")
+            return
+
+        await ctx.message.reply(
+            f"Sending {twitch_link.display_name or twitch_link.username} "
+            f"{count}{MULT_SIGN} {item.name}{pl2(count, '', '(s)')}..."
+        )
+        try:
+            if isinstance(item, ravenpy.Item):
+                await helpers.send_items(
+                    player_username,
+                    EVENT_SOURCE_TWITCH,
+                    instance,
+                    item.name,
+                    count,
+                    self.global_context,
+                )
+            else:
+                await item.purchase(await self._create_item_context(), count)
+        except exceptions.OutOfItemsError as e:
+            LOGGER.error(f"Error in item redeem: {e}")
+            await ctx.message.send(
+                f"There are not enough {item.name}{pl2(count, '', '(s)')} in stock. "
+            )
+            return
+        except exceptions.PartialSendError as e:
+            await ctx.message.send(
+                f"There were not enough {count:,}{MULT_SIGN} "
+                f"{item.name}{pl2(count, '', '(s)')} in stock. "
+                f"The user received {e.items_sent:,}{MULT_SIGN} "
+                f"{item.name}{pl2(e.items_sent, '', '(s)')}. "
+            )
+            return
+        except exceptions.RecipientNotFoundError as e:
+            LOGGER.error(f"Error in command: {e}")
+            await asyncio.sleep(0.5)
+            await ctx.message.send("❌ Error: User is not in the game.")
+            return
+        except (
+            exceptions.CouldNotSendMessageError,
+            exceptions.CouldNotSendItemsError,
+            TimeoutError,
+            exceptions.ItemNotFoundError,
+        ) as e:
+            LOGGER.error(f"Error in command: {e}")
+            await ctx.message.send(f"❌ Error: {e}.")
+            return
+        except Exception:
+            LOGGER.exception("Unknown error occurred in command")
+            await ctx.message.send(
+                "❌ An unknown error occurred. Please try again later. "
             )
             return

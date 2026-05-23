@@ -13,6 +13,7 @@ from bot.cogs.currency import CurrencyCog
 from bot.cogs.help import HelpCog
 from bot.cogs.info import InfoCog
 from bot.cogs.process_watchdog import ProcessWatchdogCog
+from bot.cogs.ravenfall_redeem.cog import RFRedeemCog
 from bot.cogs.ravenfall_watcher import RavenfallWatcherCog
 from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
@@ -189,6 +190,7 @@ async def run():
         tasks.append(event_manager.add_cog(InfoCog))
         tasks.append(event_manager.add_cog(CurrencyCog))
         tasks.append(event_manager.add_cog(AccountCog))
+        tasks.append(event_manager.add_cog(RFRedeemCog))
 
         tasks.append(global_ctx.register_service(RemoteBotService()))
         tasks.append(global_ctx.register_service(config_service))
