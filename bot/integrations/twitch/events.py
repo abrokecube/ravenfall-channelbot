@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, override
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from twitchAPI.type import TwitchResourceNotFound
 
 from bot.core import EVENT_CATEGORY_GENERIC
@@ -129,6 +130,7 @@ class TwitchRedemptionEvent(TwitchIRCMessageEvent):
     redeem_name: str
     redeem_id: str
     redeem_cost: int
+    internal_keys: tuple[str, ...]
 
     async def update_status(self, status: TwitchCustomRewardRedemptionStatus):
         """Update the status of the redemption.
@@ -185,3 +187,7 @@ class TwitchRedemptionEvent(TwitchIRCMessageEvent):
             reply_id=None,
             **kwargs,
         )
+
+    async def save_internal_key(self, key: str, db_session: AsyncSession):
+        """Save an internal key for this reward."""
+        await self.channel_twitch.set_custom_reward_key(key, self.id, db_session)

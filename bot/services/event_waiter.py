@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, override
 
 from bot.core.components import BaseEvent, BaseService
 
@@ -21,7 +21,7 @@ LOGGER = logging.getLogger(__name__)
 class EventWaiterRequest[T: BaseEvent]:
     """Represents a request to wait for a specific event."""
 
-    predicate: Callable[[BaseEvent], bool]
+    predicate: Callable[[T], bool]
     future: asyncio.Future[T]
     timeout: float | None = None
     event_type: type[T] | None = None
@@ -56,7 +56,7 @@ class EventWaiterService(BaseService):
         self,
         event_type: type[T] | None = None,
         *,
-        predicate: Callable[[BaseEvent], bool] | None = None,
+        predicate: Callable[[T], bool] | None = None,
         timeout: float | None = None,
         seconds_before: float | None = None,
     ) -> T:
@@ -88,7 +88,7 @@ class EventWaiterService(BaseService):
         loop = asyncio.get_running_loop()
         future = loop.create_future()
 
-        def effective_predicate(event: BaseEvent) -> bool:
+        def effective_predicate(event: T) -> bool:
             if event_type is not None and not isinstance(event, event_type):
                 return False
             if predicate is not None:
@@ -299,7 +299,7 @@ class EventWaiterService(BaseService):
         self,
         seconds_before: float,
         event_type: type[T] | None = None,
-        predicate: Callable[[BaseEvent], bool] | None = None,
+        predicate: Callable[[T], bool] | None = None,
     ) -> T | None:
         """Check history buffer for events within the specified time window.
 
@@ -318,7 +318,7 @@ class EventWaiterService(BaseService):
                 return False
             if predicate is not None:
                 try:
-                    return predicate(event)
+                    return predicate(cast("T", event))
                 except Exception:
                     LOGGER.exception("Error in event waiter predicate: %s", predicate)
                     return False
@@ -329,6 +329,8 @@ class EventWaiterService(BaseService):
             for event_timestamp, event in reversed(self._event_history):
                 if event_timestamp < cutoff_time:
                     break
+                if event_type is not None and not isinstance(event, event_type):
+                    continue
                 try:
                     if effective_predicate(event):
                         return event  # pyright: ignore[reportReturnType]

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NamedTuple, TypedDict, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict, cast, final
 
-from sqlalchemy import Integer, String, select
+from sqlalchemy import Index, Integer, String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, mapped_column  # noqa: TC002
 
 from bot.db import Base
@@ -42,6 +42,20 @@ class TwitchChannelSettings(Base):
         String, default=MessageReceiveMode.IRC
     )
     message_rate: Mapped[str] = mapped_column(String, default=MessageRateMode.STANDARD)
+
+
+class TwitchCustomReward(Base):
+    __tablename__: str = "twitch_custom_rewards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reward_id: Mapped[str] = mapped_column(String, index=True)
+    key: Mapped[str] = mapped_column(String)
+    channel_id: Mapped[str] = mapped_column(String)
+
+    __table_args__: Any = (  # pyright: ignore[reportAny, reportExplicitAny]
+        UniqueConstraint("channel_id", "key"),
+        Index("ix_twitch_custom_rewards_channel_reward", "channel_id", "reward_id"),
+    )
 
 
 class EventSubChannelTopic(NamedTuple):

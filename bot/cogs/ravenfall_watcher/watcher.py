@@ -7,7 +7,7 @@ from collections.abc import Collection
 from datetime import timedelta
 from functools import partial
 from time import monotonic
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from bot.cogs.ravenfall_watcher.base_classes import BaseGroupCollector
 from bot.core.decorators import on_match
@@ -67,6 +67,23 @@ class PausedError(Exception):
 
 class NoRestartTaskError(Exception):
     """There is no active restart task."""
+
+
+class RestartTaskData(NamedTuple):
+    """Data about the current restart task."""
+
+    is_scheduled: bool
+    """Whether a restart is currently scheduled."""
+    seconds_remaining: float | None
+    """Seconds until restart, or None if no restart is scheduled."""
+    reason: str
+    """The reason for the restart."""
+    is_announced: bool
+    """Whether the restart reason has been announced to chat."""
+    is_auto_restart_paused: bool
+    """Whether automatic restarts are currently paused."""
+    is_restart_in_progress: bool
+    """Whether a restart operation is currently executing."""
 
 
 class RavenfallWatcher(EventReceiverMixin):
@@ -190,7 +207,7 @@ class RavenfallWatcher(EventReceiverMixin):
             )
 
         if self.ravenfall.is_online:
-            await self.on_online()
+            await self._on_online()
         else:
             await self.restart_ravenfall()
 
@@ -354,6 +371,29 @@ class RavenfallWatcher(EventReceiverMixin):
     def get_restarts_are_paused(self):
         """Auto-restarts are paused."""
         return self._auto_restart_paused
+
+    def get_restart_task_info(self) -> RestartTaskData:
+        """Get data about the current restart task.
+
+        Returns:
+            RestartTaskData: Information about the current restart task,
+                including whether it's scheduled, time remaining, reason,
+                and whether the restart has been announced.
+        """
+        is_scheduled = self.restart_timeline.get_is_playing()
+        seconds_remaining: float | None = None
+
+        if is_scheduled:
+            seconds_remaining = -self.restart_timeline.get_current_time()
+
+        return RestartTaskData(
+            is_scheduled=is_scheduled,
+            seconds_remaining=seconds_remaining,
+            reason=self.restart_reason,
+            is_announced=self._restart_reason_announced,
+            is_auto_restart_paused=self._auto_restart_paused,
+            is_restart_in_progress=self.ravenfall_restart_lock.locked(),
+        )
 
     async def _block_restart(self):
         LOGGER.info(f"[{self.ravenfall.channel_name}] Blocking restart timeline")
@@ -822,7 +862,7 @@ class RavenfallWatcher(EventReceiverMixin):
         self._keep_middleman_connected_routine.stop()
 
     @on_match(RavenfallOfflineEvent)
-    async def on_offline(
+    async def _on_offline(
         self, _g_ctx: GlobalContext, event: RavenfallOfflineEvent, _match: object
     ):
         """Runs when Ravenfall goes offline."""
@@ -836,7 +876,7 @@ class RavenfallWatcher(EventReceiverMixin):
             await self.queue_restart(1, "Ravenfall is offline")
 
     @on_match(RavenfallOnlineEvent)
-    async def on_online(
+    async def _on_online(
         self,
         _g_ctx: GlobalContext | None = None,
         event: RavenfallOnlineEvent | None = None,
@@ -850,7 +890,7 @@ class RavenfallWatcher(EventReceiverMixin):
         await self._refresh_auto_restart_timer()
 
     @on_match(DungeonSpawnedEvent)
-    async def on_dungeon_spawned(
+    async def _on_dungeon_spawned(
         self,
         _g_ctx: GlobalContext | None,
         event: DungeonSpawnedEvent,
@@ -862,7 +902,7 @@ class RavenfallWatcher(EventReceiverMixin):
         self._last_dungeon_spawn_time = monotonic()
 
     @on_match(DungeonPreparedEvent)
-    async def on_dungeon_prepared(
+    async def _on_dungeon_prepared(
         self,
         _g_ctx: GlobalContext | None,
         event: DungeonPreparedEvent,
@@ -883,7 +923,7 @@ class RavenfallWatcher(EventReceiverMixin):
             )
 
     @on_match(DungeonReachedBossEvent)
-    async def on_reached_dungeon_boss(
+    async def _on_reached_dungeon_boss(
         self,
         _g_ctx: GlobalContext | None,
         event: DungeonReachedBossEvent,
@@ -895,7 +935,7 @@ class RavenfallWatcher(EventReceiverMixin):
         self._start_keep_middleman_connected_routine()
 
     @on_match(DungeonEndedEvent)
-    async def on_dungeon_ended(
+    async def _on_dungeon_ended(
         self,
         _g_ctx: GlobalContext | None,
         event: DungeonEndedEvent,
@@ -919,7 +959,7 @@ class RavenfallWatcher(EventReceiverMixin):
             await self.queue_restart(countdown_time, "Dungeon took too long to prepare")
 
     @on_match(RaidStartedEvent)
-    async def on_raid_started(
+    async def _on_raid_started(
         self,
         _g_ctx: GlobalContext,
         event: RaidStartedEvent,
@@ -931,7 +971,7 @@ class RavenfallWatcher(EventReceiverMixin):
         self._start_keep_middleman_connected_routine()
 
     @on_match(RaidEndedEvent)
-    async def on_raid_ended(
+    async def _on_raid_ended(
         self,
         _g_ctx: GlobalContext | None,
         event: RaidEndedEvent,

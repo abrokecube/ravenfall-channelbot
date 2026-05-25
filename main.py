@@ -17,6 +17,7 @@ from bot.cogs.ravenfall_redeem.cog import RFRedeemCog
 from bot.cogs.ravenfall_watcher import RavenfallWatcherCog
 from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
+from bot.db.db import enable_wal_mode
 from bot.db.models import update_schema
 from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent
 from bot.integrations.chat_messages.event_processors import filter_message_event_text
@@ -153,6 +154,7 @@ async def run():
     loop.set_exception_handler(handle_loop_exception)
 
     logger.info("Checking db")
+    await enable_wal_mode()
     await update_schema()
 
     global_ctx = GlobalContext()

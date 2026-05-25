@@ -37,7 +37,13 @@ from .enums import (
     MessageDeliveryMode,
     MessageReceiveMode,
 )
-from .models import ConnectedChat, EventSubChannelTopic, TwitchAuth, TwitchChannelSettings
+from .models import (
+    ConnectedChat,
+    EventSubChannelTopic,
+    TwitchAuth,
+    TwitchChannelSettings,
+    TwitchCustomReward,
+)
 from .services import TwitchService
 
 if TYPE_CHECKING:
@@ -970,6 +976,14 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 "but the bot has no authentication stored for this channel."
             )
             return
+        async with get_async_session() as session:
+            result = await session.execute(
+                select(TwitchCustomReward.key).where(
+                    TwitchCustomReward.channel_id == data.broadcaster_user_id,
+                    TwitchCustomReward.reward_id == data.reward.id,
+                )
+            )
+            internal_keys = tuple(result.scalars().all())
         await self.send_event(
             events.TwitchRedemptionEvent(
                 data=data,
@@ -996,5 +1010,6 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 redeem_name=data.reward.title,
                 redeem_id=data.reward.id,
                 redeem_cost=data.reward.cost,
+                internal_keys=internal_keys,
             )
         )

@@ -366,9 +366,15 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
             return
         await ctx.fulfill()
 
-    @on_twitch_redeem(
-        lambda e: re.match(r"^[Rr]eceive (?P<amount>[0-9,]+) coins?$", e.redeem_name)
-    )
+    @staticmethod
+    def _redeem_coins_matcher(ev: TwitchRedemptionEvent):
+        for key in ev.internal_keys:
+            re_match = re.match(r"^coins.(?P<amount>[0-9]+)$", key)
+            if re_match:
+                return re_match
+        return None
+
+    @on_twitch_redeem(_redeem_coins_matcher)
     async def redeem_coins(self, ctx: TwitchRedemptionEvent, result: re.Match[str]):
         """Handle redeeming coins via Twitch redeem."""
         coins_str: str = result.group("amount").replace(",", "")
@@ -396,7 +402,7 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
             await ctx.send(f"You have been given {amount:,} item credits.")
         await ctx.fulfill()
 
-    @on_twitch_redeem(lambda e: "lurking" in e.redeem_name.lower())
+    @on_twitch_redeem(lambda e: "lurking" in e.internal_keys)
     async def lurking(self, ctx: TwitchRedemptionEvent, _result: object):
         """Handle redeem for lurking."""
         if await self.lurk_cd.get_retry_after(ctx) <= 0:
@@ -409,9 +415,15 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
             transaction_text="Lurking",
         )
 
-    @on_twitch_redeem(
-        lambda e: re.match(r"^[Gg]et (?P<amount>[0-9,]+) item credits?$", e.redeem_name)
-    )
+    @staticmethod
+    def _redeem_credits_matcher(ev: TwitchRedemptionEvent):
+        for key in ev.internal_keys:
+            re_match = re.match(r"^item_credits.(?P<amount>[0-9]+)$", key)
+            if re_match:
+                return re_match
+        return None
+
+    @on_twitch_redeem(_redeem_credits_matcher)
     async def redeem_credits(self, ctx: TwitchRedemptionEvent, result: re.Match[str]):
         """Handle redeeming item credits via Twitch redeem."""
         credits_str: str = result.group("amount").replace(",", "")

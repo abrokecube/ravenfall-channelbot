@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 from collections.abc import Iterable
@@ -36,53 +38,6 @@ class User(Base):
     name: Mapped[str] = mapped_column(String)
     display_name: Mapped[str] = mapped_column(String)
 
-    characters: Relationship[list["Character"]] = relationship(
-        "Character", back_populates="user"
-    )
-
-
-class Channel(Base):
-    __tablename__: str = "channels"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String)
-    idle_earn_rate: Mapped[int] = mapped_column(Integer, default=5)
-    idle_earn_interval: Mapped[int] = mapped_column(
-        Integer, default=5 * 60
-    )  # add credits every 5 minutes
-    prefix: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=["!"])
-    scroll_queue: Mapped[list[QueuedScroll]] = mapped_column(
-        JSON, nullable=False, default=[]
-    )
-
-
-class Character(Base):
-    __tablename__: str = "characters"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-
-    twitch_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.twitch_id"))
-    training: Mapped[str] = mapped_column(String, default="None")
-    user: Relationship["User"] = relationship("User", back_populates="characters")
-
-    auto_raid_status: Relationship["AutoRaidStatus"] = relationship(
-        "AutoRaidStatus", back_populates="char", uselist=False
-    )
-    user_credit_idle_earn: Relationship["UserCreditIdleEarn"] = relationship(
-        "UserCreditIdleEarn", back_populates="char", uselist=False
-    )
-
-
-class AutoRaidStatus(Base):
-    __tablename__: str = "auto_raid_status"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    char_id: Mapped[str] = mapped_column(String, ForeignKey("characters.id"), unique=True)
-    auto_raid_count: Mapped[int] = mapped_column(Integer, default=-1)
-    char: Relationship["Character"] = relationship(
-        "Character", back_populates="auto_raid_status"
-    )
-
 
 class UserCredits(Base):
     __tablename__: str = "user_credits"
@@ -90,19 +45,6 @@ class UserCredits(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer)
     credits: Mapped[int] = mapped_column(Integer, default=0)
-
-
-class UserCreditIdleEarn(Base):
-    __tablename__: str = "user_credit_idle_earn"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    char_id: Mapped[str] = mapped_column(String, ForeignKey("characters.id"), unique=True)
-    total_time: Mapped[float] = mapped_column(Float, default=0)  # in seconds
-    last_seen_timestamp: Mapped[DateTime] = mapped_column(DateTime)
-
-    char: Relationship["Character"] = relationship(
-        "Character", back_populates="user_credit_idle_earn"
-    )
 
 
 class UserCreditTransaction(Base):
@@ -120,24 +62,6 @@ class KeyValue(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[bytes] = mapped_column(LargeBinary)
-
-
-class ChatMessage(Base):
-    __tablename__: str = "chat_messages"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    room_name: Mapped[str] = mapped_column(String, nullable=False)
-    user_name: Mapped[str] = mapped_column(String, nullable=False)
-    content: Mapped[str] = mapped_column(String, nullable=False)
-    timestamp: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    reply_to_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("chat_messages.id"), nullable=True
-    )
-    user_id: Mapped[str] = mapped_column(String, nullable=True)
-
-    reply_to: Relationship["ChatMessage"] = relationship(
-        "ChatMessage", remote_side=[id], backref="replies"
-    )
 
 
 type ColumnMap = dict[str, Column[Any]]

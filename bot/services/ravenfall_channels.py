@@ -206,7 +206,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
 
         await self.fill_missing_character_data()
 
-    async def get_channels(self, instance_name: str) -> list[RavenfallLinkedChannel]:
+    def get_channels(self, instance_name: str) -> list[RavenfallLinkedChannel]:
         """Get the channels for a Ravenfall instance."""
         if instance_name not in self.linked_channels:
             msg = f"Instance {instance_name} not found."

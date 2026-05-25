@@ -3,8 +3,12 @@ from __future__ import annotations
 from collections.abc import Collection
 from typing import TYPE_CHECKING
 
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope, SortOrder
+
+from bot.integrations.twitch.models import TwitchCustomReward
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -404,6 +408,8 @@ class TwitchChannel:
         max_per_stream: int | None = None,
         max_per_user_per_stream: int | None = None,
         global_cooldown_seconds: int | None = None,
+        internal_key: str | None = None,
+        db_session: AsyncSession | None = None,
         *,
         is_enabled: bool = True,
         is_user_input_required: bool = False,
@@ -413,7 +419,7 @@ class TwitchChannel:
         should_redemptions_skip_request_queue: bool = False,
     ):
         """Creates a Custom Reward on a channel."""
-        return await self.twitch.create_custom_reward(
+        result = await self.twitch.create_custom_reward(
             self.channel_id,
             title,
             cost,
@@ -429,18 +435,78 @@ class TwitchChannel:
             global_cooldown_seconds,
             should_redemptions_skip_request_queue,
         )
+        if not db_session:
+            if internal_key:
+                msg = "db_session must be specified to save reward internal key."
+                raise ValueError(msg)
+            return result
+        if internal_key is not None:
+            await self.set_custom_reward_key(internal_key, result.id, db_session)
+        return result
 
-    async def delete_custom_reward(self, reward_id: str):
+    async def set_custom_reward_key(
+        self, internal_key: str, reward_id: str, db_session: AsyncSession
+    ):
+        """Set internal key of a custom reward."""
+        db_result = await db_session.execute(
+            select(TwitchCustomReward).where(
+                TwitchCustomReward.key == internal_key,
+                TwitchCustomReward.channel_id == self.channel_id,
+            )
+        )
+        reward_item = db_result.scalar_one_or_none()
+        if not reward_item:
+            reward_item = TwitchCustomReward(
+                reward_id=reward_id,
+                key=internal_key,
+                channel_id=self.channel_id,
+            )
+            db_session.add(reward_item)
+        else:
+            reward_item.reward_id = reward_id
+
+    async def delete_custom_reward(self, reward_id: str, db_session: AsyncSession):
         """Deletes a Custom Reward on a channel."""
         await self.twitch.delete_custom_reward(self.channel_id, reward_id)
+        __ = await db_session.execute(
+            delete(TwitchCustomReward).where(TwitchCustomReward.reward_id == reward_id)
+        )
 
-    async def get_custom_reward(
+    async def get_custom_reward_ids(
+        self, internal_keys: str | list[str], db_session: AsyncSession
+    ):
+        """Get custom reward ids by their saved keys."""
+        if isinstance(internal_keys, str):
+            internal_keys = [internal_keys]
+        result = await db_session.execute(
+            select(TwitchCustomReward.reward_id).where(
+                TwitchCustomReward.channel_id == self.channel_id,
+                TwitchCustomReward.key.in_(internal_keys),
+            )
+        )
+        return tuple(result.scalars().all())
+
+    async def get_custom_rewards(
         self,
         reward_id: str | list[str] | None = None,
+        internal_key: str | list[str] | None = None,
+        db_session: AsyncSession | None = None,
         *,
         only_manageable_rewards: bool = False,
     ):
         """Returns a list of Custom Reward objects for the channel."""
+        if not db_session and internal_key:
+            msg = "db_session must be specified to get saved internal keys."
+            raise ValueError(msg)
+        if db_session and internal_key:
+            if reward_id is None:
+                reward_id = []
+            elif isinstance(reward_id, str):
+                reward_id = [reward_id]
+            else:
+                reward_id = reward_id.copy()
+            reward_id.extend(await self.get_custom_reward_ids(internal_key, db_session))
+
         return await self.twitch.get_custom_reward(
             self.channel_id, reward_id, only_manageable_rewards
         )
@@ -470,13 +536,13 @@ class TwitchChannel:
         max_per_user_per_stream: int | None = None,
         global_cooldown_seconds: int | None = None,
         *,
-        is_enabled: bool = True,
-        is_user_input_required: bool = False,
-        is_max_per_stream_enabled: bool = False,
-        is_max_per_user_per_stream_enabled: bool = False,
-        is_global_cooldown_enabled: bool = False,
-        is_paused: bool = False,
-        should_redemptions_skip_request_queue: bool = False,
+        is_enabled: bool | None = None,
+        is_user_input_required: bool | None = None,
+        is_max_per_stream_enabled: bool | None = None,
+        is_max_per_user_per_stream_enabled: bool | None = None,
+        is_global_cooldown_enabled: bool | None = None,
+        is_paused: bool | None = None,
+        should_redemptions_skip_request_queue: bool | None = None,
     ):
         """Updates a Custom Reward created on a channel."""
         return await self.twitch.update_custom_reward(
