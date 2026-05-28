@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 
 from ..process_watchdog_client import ProcessWatcherClient
 
@@ -228,7 +229,9 @@ class BotStuffCog(Cog):
     async def restart_ravenhelper_redeem(self, ctx: TwitchRedemptionEvent, result: bool):
         for watcher in self.watchers:
             try:
+                await ctx.send("Please wait...")
                 await watcher.restart_process("ravenhelper")
+                await asyncio.sleep(10)
                 await ctx.send("Restarted RavenHelperBot")
                 break
             except ClientError:
@@ -240,8 +243,9 @@ class BotStuffCog(Cog):
     async def restart_ravenhelper_command(self, ctx: CommandEvent):
         for watcher in self.watchers:
             try:
-                await ctx.message.reply("Please wait...")
+                await ctx.message.send("Please wait...")
                 await watcher.restart_process("ravenhelper")
+                await asyncio.sleep(10)
                 await ctx.message.reply("Restarted RavenHelperBot")
                 break
             except ClientError:

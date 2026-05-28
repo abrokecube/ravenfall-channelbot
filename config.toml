@@ -1,0 +1,83 @@
+[bot]
+log_level = "debug"
+command_prefix = ">"
+owner_twitch_id = "756734432"
+
+[cogs.watchdog]
+watcher_urls = ["http://127.0.0.1:8110", "http://pc2-mobile:8110"]
+
+[integrations.twitch]
+bot_user_id = "1272804762"
+bot_admin_uids = ["756734432"]
+
+[services.web.public]
+host = "0.0.0.0"
+port = 4053
+
+[services.web.private]
+host = "127.0.0.1"
+port = 4054
+
+[services.prometheus]
+enabled = true
+collector_timeout_s = 10
+metrics_server = "private"
+default_query_server = "main"
+
+[services.prometheus.servers]
+main = "http://prometheus.pc3-server"
+
+[services.ravenfall_multichat]
+url = "http://pc3-server:7200"
+
+[services.pastebin]
+provider = "borkedbin"
+
+[services.backup]
+remote_name = "ultra"
+remote_root = "borked_backups_test"
+registered_items = [{ "input_path" = "./data.db", "output_subpath" = "/" }]
+
+[services.currency]
+name_singular = "Item credit"
+name_plural = "Item credits"
+
+[integrations.process_manager]
+sandboxie_user_folder = "C:\\Sandbox\\borkedcube"
+sandboxie_start_exe_path = "C:\\PROGRAM FILES\\SANDBOXIE-PLUS\\Start.exe"
+
+[cogs.ravenfall_watcher]
+ravenfall_folder = "C:\\Users\\borkedcube\\sof ware\\Ravenfall"
+ravenbot_folder = "C:\\Users\\borkedcube\\sof ware\\RavenBot"
+
+[[services.ravenfall_channels.instances]]
+twitch_login = "cubedhelperbot"
+# channels = [{ "platform" = "twitch", "id" = "756734432" }]
+channels = []
+
+[integrations.ravenfall]
+middleman_base_url = "http://127.0.0.1:7101/"
+ravenfall_message_definitions_path = "./data/definitions.yaml"
+
+# [[integrations.ravenfall.instances]]
+# twitch_id = "756734432"
+# twitch_login = "abrokecube"
+# query_server_base_url = "http://pc3-server/rf_query/1/"
+# middleman_connection_id = ""
+
+[[integrations.ravenfall.instances]]
+twitch_id = "1312439833"
+twitch_login = "cubedhelperbot"
+query_server_base_url = "http://127.0.0.1:8888/ravenfall/"
+middleman_connection_id = "rf_abrokecube"
+
+[[cogs.ravenfall_watcher.instances]]
+channel_name = "cubedhelperbot"
+sandboxie_box_name = "box_02"
+start_command = "start /affinity 0x3 ./Ravenfall.exe -single-instance -batchmode -nographics"
+# start_command = "start /affinity 0x6 /low ./Ravenfall.exe -force-d3d11 -single-instance"
+auto_restart_period_seconds = 600
+restart_warning_times = [60, 20]
+
+[[cogs.ravenfall_redeem.instances]]
+channel_name = "cubedhelperbot"
