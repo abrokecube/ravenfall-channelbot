@@ -4,12 +4,12 @@ from ..process_watchdog_client import ProcessWatcherClient
 
 from ..commands.cog import Cog
 from ..commands.decorators import (
-    command, parameter, checks
+    command, on_twitch_redeem, parameter, checks
 )
 from ..commands.checks import MinPermissionLevel
 from ..commands.converters import RFChannelConverter
 from ..commands.enums import UserRole
-from ..commands.events import CommandEvent
+from ..commands.events import CommandEvent, TwitchRedemptionEvent
 from ..commands.exceptions import (
     CommandError
 )
@@ -223,3 +223,29 @@ class BotStuffCog(Cog):
         if had_errored:
             raise CommandError("One or more watchdogs failed to reload")
         await ctx.message.reply("Okay")
+
+    @on_twitch_redeem(lambda e: e.redeem_name == "Restart RavenHelperBot")
+    async def restart_ravenhelper_redeem(self, ctx: TwitchRedemptionEvent, result: bool):
+        for watcher in self.watchers:
+            try:
+                await watcher.restart_process("ravenhelper")
+                await ctx.send("Restarted RavenHelperBot")
+                break
+            except ClientError:
+                continue
+        else:
+            raise CommandError("Failed to restart process")
+        
+    @command(name="restart ravenhelper")
+    async def restart_ravenhelper_command(self, ctx: CommandEvent):
+        for watcher in self.watchers:
+            try:
+                await ctx.message.reply("Please wait...")
+                await watcher.restart_process("ravenhelper")
+                await ctx.message.reply("Restarted RavenHelperBot")
+                break
+            except ClientError:
+                continue
+        else:
+            raise CommandError("Failed to restart process")
+        
