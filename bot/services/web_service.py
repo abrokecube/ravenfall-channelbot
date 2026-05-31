@@ -135,7 +135,7 @@ class WebService(BaseService, ConfigSubscriberMixin):
             LOGGER.info("Started %s server on %s:%d", server, config.host, config.port)
 
     @override
-    def on_config_changed(
+    async def on_config_changed(
         self, table: str, config: object, changed_fields: set[str]
     ) -> None:
         LOGGER.warning(

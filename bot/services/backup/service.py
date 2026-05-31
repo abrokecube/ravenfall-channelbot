@@ -34,7 +34,7 @@ class BackupService(BaseService, ConfigSubscriberMixin):
         self._start_backup_loop()
 
     @override
-    def on_config_changed(
+    async def on_config_changed(
         self,
         table: str,
         config: object,

@@ -43,7 +43,7 @@ def _get_chat_msg_metadata(
     return command_metadata
 
 
-def on_message(match_fn: Callable[[MessageEvent], bool]):
+def on_message(match_fn: Callable[[MessageEvent], object]):
     """Decorator for registering a function as a message event listener with a filter."""
     return lambda_filter_decorator(
         [MessageEvent], match_fn, dispatcher_type=BaseDispatcher

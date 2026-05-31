@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import os
 import sys
@@ -241,7 +242,7 @@ class ConfigService(BaseService):
                 if field in raw:
                     raw[field] = value
 
-    def reload(self) -> None:
+    async def reload(self) -> None:
         """Re-read the TOML file and notify subscribers of changes.
 
         For each subscription, the new model is validated and compared
@@ -252,6 +253,7 @@ class ConfigService(BaseService):
         LOGGER.info("Reloading config from '%s'", self._path)
         self._load_toml()
 
+        tasks = []
         for subscriber, entries in self._subscribers.items():
             for table, entry in entries.items():
                 try:
@@ -273,13 +275,25 @@ class ConfigService(BaseService):
                         table,
                         changed,
                     )
-                    try:
-                        subscriber.on_config_changed(table, new_value, changed)
-                    except Exception:
-                        LOGGER.exception(
-                            "Error in on_config_changed for %s",
-                            type(subscriber).__name__,
-                        )
+
+                    async def notify(
+                        sub: ConfigSubscriberMixin = subscriber,
+                        tbl: str = table,
+                        val: Any = new_value,
+                        diff: set[str] = changed,
+                    ) -> None:
+                        try:
+                            await sub.on_config_changed(tbl, val, diff)
+                        except Exception:
+                            LOGGER.exception(
+                                "Error in on_config_changed for %s",
+                                type(sub).__name__,
+                            )
+
+                    tasks.append(notify())
+
+        if tasks:
+            __ = await asyncio.gather(*tasks)
 
     # ------------------------------------------------------------------
     # Subscription management (called by ConfigSubscriberMixin)

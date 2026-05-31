@@ -79,7 +79,7 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         self.inject_account_service(account_service)
 
     @override
-    def on_config_changed(
+    async def on_config_changed(
         self, table: str, config: object, changed_fields: set[str]
     ) -> None:
         if isinstance(config, CurrencyConfig):

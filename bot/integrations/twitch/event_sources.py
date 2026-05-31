@@ -528,7 +528,9 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
         await self.global_context.register_service(self._twitch_service)
 
     @override
-    def on_config_changed(self, table: str, config: object, changed_fields: set[str]):
+    async def on_config_changed(
+        self, table: str, config: object, changed_fields: set[str]
+    ):
         if not isinstance(config, TwitchConfig):
             return
         self.bot_admin_uids = config.bot_admin_uids

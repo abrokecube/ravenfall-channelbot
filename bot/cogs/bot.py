@@ -40,7 +40,7 @@ class BotStuffCog(Cog):
         if config is None:
             msg = "Config service not found"
             raise CommandError(msg)
-        await asyncio.to_thread(config.reload)
+        await config.reload()
         await ctx.reply("Config reloaded!")
 
     @checks(MinPermissionLevel(UserRole.BOT_ADMINISTRATOR))

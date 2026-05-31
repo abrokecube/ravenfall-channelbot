@@ -93,7 +93,7 @@ class ProcessManagerService(BaseService, ConfigSubscriberMixin):
         self._process_config(config)
 
     @override
-    def on_config_changed(
+    async def on_config_changed(
         self, table: str, config: object, changed_fields: set[str]
     ) -> None:
         if not isinstance(config, ProcessServiceConfig):

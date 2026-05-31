@@ -222,7 +222,7 @@ class RemoteBotService(BaseService, ConfigSubscriberMixin, FastAPIRoutesMixin):
         LOGGER.debug(f"Registered remote method: {cog_name}.{method_name}")
 
     @override
-    def on_config_changed(
+    async def on_config_changed(
         self, table: str, config: object, changed_fields: set[str]
     ) -> None:
         if not isinstance(config, RemoteBotConfig):

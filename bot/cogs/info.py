@@ -20,7 +20,7 @@ from bot.cogs.ravenfall_watcher import RavenfallWatcherService
 from bot.core.components import Cog
 from bot.core.decorators import cooldown
 from bot.core.enums import BucketType
-from bot.integrations.commands import (  # noqa: TC001
+from bot.integrations.commands import (
     Choice,
     CommandError,
     CommandEvent,
@@ -30,7 +30,7 @@ from bot.integrations.commands import (  # noqa: TC001
 )
 from bot.integrations.process_manager import ProcessManagerService
 from bot.integrations.ravenfall import (
-    RavenfallInstance,  # noqa: TC001
+    RavenfallInstance,
     RavenfallInstanceConverter,
     RavenfallService,
     RavenfallSkillChoice,

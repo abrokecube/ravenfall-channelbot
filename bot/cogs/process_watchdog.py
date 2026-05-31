@@ -46,7 +46,7 @@ class ProcessWatchdogCog(Cog, ConfigSubscriberMixin):
         self.watchers = [ProcessWatcherClient(base_url=x) for x in config.watcher_urls]
 
     @override
-    def on_config_changed(
+    async def on_config_changed(
         self, table: str, config: object, changed_fields: set[str]
     ) -> None:
         if not isinstance(config, WatchdogCogSettings):

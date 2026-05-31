@@ -173,7 +173,9 @@ class PrometheusService(BaseService, ConfigSubscriberMixin):
             await self._http_client.close()
 
     @override
-    def on_config_changed(self, table: str, config: object, changed_fields: set[str]):
+    async def on_config_changed(
+        self, table: str, config: object, changed_fields: set[str]
+    ):
         """Handle configuration changes."""
         if table == "services.prometheus" and isinstance(config, PrometheusServiceConfig):
             self._config = config

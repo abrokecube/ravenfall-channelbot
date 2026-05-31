@@ -11,7 +11,7 @@ from bot.integrations.chat_messages import UserRole, checks
 from bot.integrations.chat_messages.utils import min_permission_level
 from bot.integrations.commands import (
     CommandError,
-    CommandEvent,  # noqa: TC001
+    CommandEvent,
     MinPermissionLevel,
     RangeFloat,
     command,
@@ -19,7 +19,7 @@ from bot.integrations.commands import (
 )
 from bot.integrations.process_manager import ProcessManagerService
 from bot.integrations.ravenfall import (
-    RavenfallInstance,  # noqa: TC001
+    RavenfallInstance,
     RavenfallInstanceConverter,
     RavenfallService,
 )

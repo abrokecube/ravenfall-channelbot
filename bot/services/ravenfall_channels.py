@@ -25,6 +25,7 @@ from bot.integrations.twitch.consts import EVENT_SOURCE_TWITCH
 from bot.integrations.twitch.services import TwitchService
 from bot.mixins.event_receiver import EventReceiverMixin
 from bot.services.config_service import ConfigModel, ConfigService
+from bot.services.ravenfall_multichat import RavenfallMultichatService
 import ravenpy
 
 if TYPE_CHECKING:
@@ -1004,3 +1005,43 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         return [
             c for cid in twitch_ids if cid in existing_dict for c in existing_dict[cid]
         ]
+
+    async def send_multichat_command(
+        self, text: str, instance_name: str, *, admin: bool = False
+    ):
+        """Send a command to ravenfall-multichat as the instance twitch user."""
+        if instance_name not in self.linked_channels:
+            msg = "Not a registered instance."
+            raise ValueError(msg)
+        multichat_srv = self.global_context.require_service(RavenfallMultichatService)
+        ravenfall_srv = self.global_context.require_service(RavenfallService)
+        instance = self.linked_channels[instance_name]
+        instance_r = ravenfall_srv.get_ravenfall_instance(channel_name=instance_name)
+        if not instance_r:
+            msg = "No matching ravenfall instance"
+            raise ValueError(msg)
+        multichat = multichat_srv.get_client()
+        output_channel_id = instance_r.channel_id
+        for channel in instance:
+            if channel.platform != EVENT_SOURCE_TWITCH:
+                continue
+            if channel.is_primary:
+                output_channel_id = channel.id
+        if not admin:
+            await multichat.send_multichat_command(
+                text,
+                instance_r.channel_id,
+                instance_r.channel_name,
+                instance_r.channel_id,
+                instance_r.channel_name,
+                output_to_channel_id=output_channel_id,
+            )
+        else:
+            await multichat.send_multichat_command(
+                text,
+                "0",
+                "",
+                instance_r.channel_id,
+                instance_r.channel_name,
+                output_to_channel_id=output_channel_id,
+            )

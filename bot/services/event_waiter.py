@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 from bot.core.components import BaseEvent, BaseService
 
@@ -28,11 +28,11 @@ class EventWaiterRequest[T: BaseEvent]:
 
 
 @dataclass
-class EventTypePredicate:
+class EventTypePredicate[T: BaseEvent]:
     """Defines an event type matcher for wait_for_multiple."""
 
-    event_type: type[BaseEvent]
-    predicate: Callable[[BaseEvent], bool] | None = None
+    event_type: type[T]
+    predicate: Callable[[T], bool] | None = None
     seconds_before: float | None = None
 
 
@@ -128,7 +128,7 @@ class EventWaiterService(BaseService):
 
     async def wait_for_multiple(
         self,
-        event_type_predicates: list[EventTypePredicate],
+        event_type_predicates: list[EventTypePredicate[Any]],
         *,
         timeout: float | None = None,
         seconds_before: float | None = None,

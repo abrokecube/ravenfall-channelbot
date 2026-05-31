@@ -64,7 +64,7 @@ class ConfigSubscriberMixin:
         svc = self._require_config_service()
         svc._unsubscribe(self, model, table)
 
-    def on_config_changed(
+    async def on_config_changed(
         self,
         table: str,  # pyright: ignore[reportUnusedParameter]
         config: object,  # pyright: ignore[reportUnusedParameter]
