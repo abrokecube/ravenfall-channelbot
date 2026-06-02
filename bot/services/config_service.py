@@ -9,9 +9,9 @@ import os
 import sys
 import tomllib
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Any, ClassVar, Unpack, cast, get_args, get_origin
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from bot.core.components import BaseService
 

@@ -72,10 +72,10 @@ class CurrencyService(BaseService, ConfigSubscriberMixin, AccountMergeMixin):
         from bot.services.config_service import ConfigService
 
         config_srv = await self.global_context.wait_for_service(ConfigService)
-        self.config = config_srv.get_table(CurrencyConfig, "services.currency")
+        self.inject_config_service(config_srv)
+        self.config = self.subscribe_config(CurrencyConfig)
 
         account_service = await self.global_context.wait_for_service(AccountService)
-        self.inject_config_service(config_srv)
         self.inject_account_service(account_service)
 
     @override

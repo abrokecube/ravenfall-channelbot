@@ -318,7 +318,7 @@ class RavenfallMultichatClient:
             timeout_seconds=timeout_seconds,
         )
 
-    async def get_char_info(self, *, timeout_seconds: int = 3) -> CharInfo:
+    async def get_char_info(self, *, timeout_seconds: int = 3) -> list[CharInfo]:
         """Fetch character information from the server.
 
         Args:
@@ -328,7 +328,9 @@ class RavenfallMultichatClient:
             CharInfo: The info containing character information
 
         """
-        return await self._get("get_char_data", CharInfo, timeout_seconds=timeout_seconds)
+        return await self._get(
+            "get_char_data", list[CharInfo], timeout_seconds=timeout_seconds
+        )
 
     async def get_char_items(
         self, channel_id: str, *, timeout_seconds: int = 3

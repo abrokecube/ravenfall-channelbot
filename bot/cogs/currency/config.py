@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import ClassVar
+
+from pydantic import Field
+
+from bot.services.config_service import ConfigModel
 
 
-class CurrencyConfig(BaseModel):
+class CurrencyConfig(ConfigModel):
     """Configuration for the currency system."""
+
+    config_table_name: ClassVar[str | None] = "services.currency"
 
     name_singular: str = Field(
         default="Coin", description="Singular name of the currency"

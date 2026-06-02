@@ -10,13 +10,14 @@ from dotenv import load_dotenv
 from bot.cogs.accounts import AccountCog
 from bot.cogs.bot import BotStuffCog
 from bot.cogs.currency import CurrencyCog
-from bot.cogs.ravenfall import RavenfallCog
 from bot.cogs.help import HelpCog
 from bot.cogs.info import InfoCog
 from bot.cogs.process_watchdog import ProcessWatchdogCog
+from bot.cogs.ravenfall import RavenfallCog
 from bot.cogs.ravenfall_redeem.cog import RFRedeemCog
 from bot.cogs.ravenfall_scroll_queue import RFScrollQueueCog
 from bot.cogs.ravenfall_watcher import RavenfallWatcherCog
+from bot.cogs.ravenfall_webops import RavenfallWebOpsCog
 from bot.cogs.testing import TestingCog
 from bot.core.components import EventManager, GlobalContext
 from bot.db.db import enable_wal_mode
@@ -197,6 +198,7 @@ async def run():
         tasks.append(event_manager.add_cog(RFRedeemCog))
         tasks.append(event_manager.add_cog(RFScrollQueueCog))
         tasks.append(event_manager.add_cog(RavenfallCog))
+        tasks.append(event_manager.add_cog(RavenfallWebOpsCog))
 
         tasks.append(global_ctx.register_service(RemoteBotService()))
         tasks.append(global_ctx.register_service(config_service))
