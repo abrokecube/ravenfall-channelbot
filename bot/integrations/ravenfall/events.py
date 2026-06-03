@@ -213,3 +213,19 @@ class ObservedPlayerChangedEvent(RavenfallEvent):
 
     player: rq.Player | None
     data: rq.Player | None
+
+
+@dataclass(kw_only=True)
+class PlayerJoinedEvent(RavenfallEvent):
+    """A player has joined."""
+
+    player: rq.Player
+    data: rq.Player
+
+
+@dataclass(kw_only=True)
+class PlayerLeftEvent(RavenfallEvent):
+    """A player has left."""
+
+    player: rq.Player
+    data: rq.Player

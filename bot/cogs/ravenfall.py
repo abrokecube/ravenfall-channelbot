@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import re
@@ -9,11 +10,15 @@ from typing import TYPE_CHECKING
 from bot.cogs.ravenfall_scroll_queue import RavenfallScrollQueueService
 from bot.cogs.ravenfall_watcher import RavenfallWatcherService
 from bot.core.components import Cog
-from bot.integrations.chat_messages import MessageEvent, on_message
+from bot.db.session import get_async_session
+from bot.integrations.chat_messages import MessageEvent, UserRole, on_message
+from bot.integrations.chat_messages.deco import checks
+from bot.integrations.chat_messages.utils import min_permission_level
 from bot.integrations.commands import (
     CommandError,
     CommandEvent,
     CommandService,
+    MinPermissionLevel,
     command,
     parameter,
 )
@@ -23,6 +28,7 @@ from bot.integrations.ravenfall import (
     RavenfallInstanceConverter,
     RavenfallService,
 )
+from bot.integrations.ravenfall.payloads import Sail, Train
 from bot.services.ravenfall_channels import RavenfallChannelService
 from bot.services.ravenfall_multichat import RavenfallMultichatService
 from utils.format_time import TimeSize, format_seconds
@@ -30,6 +36,7 @@ from utils.strutils import pl, pl2
 
 if TYPE_CHECKING:
     from bot.clients.ravenfall_multichat import RavenfallMultichatClient
+    from bot.clients.ravenfall_query import Player
 
 LOGGER = logging.getLogger(__name__)
 
@@ -271,3 +278,78 @@ class RavenfallCog(Cog):
         """Alias for channelscrolls command."""
         command_srv = self.global_context.require_service(CommandService)
         __ = await command_srv.execute(f"channelscrolls{result.group('args')}", ctx)
+
+    def _check_permission(
+        self,
+        ctx: CommandEvent,
+        instance: RavenfallInstance,
+        min_role: UserRole = UserRole.BOT_ADMINISTRATOR,
+    ):
+        if instance.channel_id != ctx.message.room_id and not min_permission_level(
+            ctx.message, min_role
+        ):
+            msg = "You do not have permission to specify an instance."
+            raise CommandError(msg)
+
+    @parameter(
+        "instance",
+        converter=RavenfallInstanceConverter,
+        default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
+    )
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    @command()
+    async def healbump(
+        self,
+        ctx: CommandEvent,
+        username: str,
+        *,
+        instance: RavenfallInstance,
+    ):
+        """Fix a player who is not earning exp.
+        Executes commands on the player's behalf.
+        """
+        self._check_permission(ctx, instance)
+        channel_srv = self.g_ctx.require_service(RavenfallChannelService)
+        players = await instance.get_players()
+        if players is None:
+            raise CommandError("Could not fetch players")
+        async with get_async_session() as session:
+            char_data = await channel_srv.get_character_data_from_username(
+                username, ctx.platform, session
+            )
+            sender = await channel_srv.get_sender_from_username(
+                instance.channel_id, username, ctx.platform, session
+            )
+        if not sender:
+            raise CommandError("Could not find user's ravenfall character.")
+        char = None
+
+        def find_char(players: list[Player]):
+            if char_data:
+                for p in players:
+                    if p.id == char_data.char_id:
+                        return p
+            else:
+                for p in players:
+                    if p.name == sender.username:
+                        return p
+            return None
+
+        char = find_char(players)
+
+        if not char:
+            raise CommandError("User not found.")
+        __ = await instance.send_to_ravenfall(sender, Sail())
+        __ = await instance.send_to_ravenfall(sender, Train(char.training))
+        while True:
+            await asyncio.sleep(0.5)
+            players = await instance.get_players()
+            if not players:
+                continue
+            char_new = find_char(players)
+            if not char_new:
+                raise CommandError("Player may have left.")
+            if not char_new.sailing:
+                break
+        if char_new.island != char.island:
+            __ = await instance.send_to_ravenfall(sender, Sail(char.island))

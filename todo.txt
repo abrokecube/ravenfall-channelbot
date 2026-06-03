@@ -1,1 +1,6 @@
 - Add help for types and checks in the help command
+- implement cross channel comms for global ravenbot messages
+- implement ravenfall command parser to enable cross platform ravenfalling
+- write new cog for ravenfall chat alerts
+- sail messages grouping
+- dungeon loot pastebin links

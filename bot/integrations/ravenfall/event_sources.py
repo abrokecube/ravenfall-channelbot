@@ -24,7 +24,7 @@ from . import enums, models
 from . import events as ev
 from .enums import DungeonStage
 from .matcher import RavenfallMatcher
-from .models import RavenfallConfig, RavenfallFormattedMessage
+from .models import Player, RavenfallConfig, RavenfallFormattedMessage
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -285,6 +285,7 @@ class PlayersCollector(RavenfallCollectorBase[list[models.Player]]):
         )
         if new_players is None or new_players == RETURNED_NONE:
             return
+        self.set_data(new_players)
 
         t = time.monotonic()
         self.player_count_history.append((t, len(new_players)))
@@ -307,7 +308,34 @@ class PlayersCollector(RavenfallCollectorBase[list[models.Player]]):
                 LOGGER.info(f"Ravenfall ({self.ravenfall.channel_name}) is ready.")
                 await self.ravenfall._set_is_ready()
 
-        self.set_data(new_players)
+        old_players = self.get_data()
+        if old_players is None:
+            return
+
+        old_char_dict = {x.id: x for x in old_players}
+        new_char_dict = {x.id: x for x in new_players}
+        joined_chars: list[Player] = [
+            old_char_dict[x] for x in new_char_dict.keys() if x not in old_char_dict
+        ]
+        left_chars: list[Player] = [
+            new_char_dict[x] for x in old_char_dict.keys() if x not in new_char_dict
+        ]
+        __ = asyncio.gather(
+            *(
+                self.ravenfall._event_hook(
+                    ev.PlayerLeftEvent(ravenfall=self.ravenfall, player=x, data=x)
+                )
+                for x in left_chars
+            ),
+        )
+        __ = asyncio.gather(
+            *(
+                self.ravenfall._event_hook(
+                    ev.PlayerJoinedEvent(ravenfall=self.ravenfall, player=x, data=x)
+                )
+                for x in joined_chars
+            ),
+        )
 
 
 class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
@@ -371,6 +399,8 @@ class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
             #     ),
             # )
 
+        self.set_data(new_dungeon)
+
         # if new_stage != old_stage and new_stage != (old_stage + 1) % len(DungeonStage):
         stages_match = new_stage != old_stage
         if stages_match and (old_stage + 1) % len(DungeonStage):
@@ -421,7 +451,6 @@ class DungeonCollector(RavenfallCollectorBase[models.Dungeon]):
             self.max_boss_hp = TimestampedValue(t, 0)
 
         self.stage = new_stage
-        self.set_data(new_dungeon)
 
     async def _send_dungeon_spawned_event(
         self,
@@ -484,8 +513,8 @@ class RaidCollector(RavenfallCollectorBase[models.Raid]):
             return
 
         old_raid = self.get_data()
+        self.set_data(new_raid)
         if not old_raid:
-            self.set_data(new_raid)
             return
 
         if not old_raid.started and new_raid.started:
@@ -513,8 +542,6 @@ class RaidCollector(RavenfallCollectorBase[models.Raid]):
                 new_raid,
                 enums.RaidStartReason.UNKNOWN,
             )
-
-        self.set_data(new_raid)
 
     async def _send_raid_started_event(
         self, data: models.Raid, reason: enums.RaidStartReason

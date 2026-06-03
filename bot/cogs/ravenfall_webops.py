@@ -16,7 +16,11 @@ from bot.integrations.commands import (
     command,
     parameter,
 )
-from bot.integrations.ravenfall import RavenfallInstance, RavenfallInstanceConverter
+from bot.integrations.ravenfall import (
+    RavenfallInstance,
+    RavenfallInstanceConverter,
+    RavenfallService,
+)
 from bot.mixins.config_subscriber import ConfigSubscriberMixin
 from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.pastebin_service import PastebinService
@@ -66,6 +70,11 @@ class RavenfallWebOpsCog(Cog, ConfigSubscriberMixin):
             msg = "You do not have permission to specify an instance."
             raise CommandError(msg)
 
+    def _check_online(self):
+        ravenfall_srv = self.g_ctx.require_service(RavenfallService)
+        if not ravenfall_srv.ravennest_is_online.is_set():
+            raise CommandError("RavenNest is offline.")
+
     @parameter(
         "instance",
         converter=RavenfallInstanceConverter,
@@ -95,6 +104,7 @@ class RavenfallWebOpsCog(Cog, ConfigSubscriberMixin):
     ):
         """Restocks scrolls in the loyalty shop."""
         self._check_permission(ctx, instance)
+        self._check_online()
 
         if self.lock.locked():
             raise CommandError(
@@ -172,6 +182,7 @@ class RavenfallWebOpsCog(Cog, ConfigSubscriberMixin):
         """
         pastebin_srv = self.global_context.require_service(PastebinService)
         self._check_permission(ctx, instance)
+        self._check_online()
 
         if self.lock.locked():
             raise CommandError(

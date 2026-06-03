@@ -33,7 +33,9 @@ setup_logging()
 class Sender(Struct):
     """Represents the sender information in a RavenBot message."""
 
+    # default to 00000000-0000-0000-0000-000000000000
     id: str = field(name="Id")
+    # default to 00000000-0000-0000-0000-000000000000
     character_id: str = field(name="CharacterId")
     username: str = field(name="Username")
     display_name: str = field(name="DisplayName")

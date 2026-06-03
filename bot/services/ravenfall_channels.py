@@ -9,28 +9,29 @@ from typing import TYPE_CHECKING, ClassVar, NamedTuple, override
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, Integer, String, select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
-from twitchAPI.object.api import TwitchUser  # noqa: TC002
 
+import ravenpy
 from bot.clients.ravenfall_middleman import Sender
-from bot.clients.ravenfall_query import Player
 from bot.core.components import BaseService
 from bot.core.decorators import on_match
 from bot.db import Base
 from bot.db.session import get_async_session
-from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent, UserRole
-from bot.integrations.ravenfall import RavenfallService
+from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent
+from bot.integrations.ravenfall import RavenBotMessageEvent, RavenfallService
+from bot.integrations.ravenfall.events import PlayerJoinedEvent
 from bot.integrations.twitch.consts import EVENT_SOURCE_TWITCH
 from bot.integrations.twitch.services import TwitchService
 from bot.mixins.event_receiver import EventReceiverMixin
 from bot.services.config_service import ConfigModel, ConfigService
 from bot.services.ravenfall_multichat import RavenfallMultichatService
-import ravenpy
 
 if TYPE_CHECKING:
     from collections.abc import Collection
 
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from bot.clients.ravenfall_query import Player
     from bot.cogs.accounts.service import AccountService
     from bot.core.components import EventManager, GlobalContext
     from bot.integrations.ravenfall import RavenfallInstance
@@ -103,6 +104,7 @@ class RavenfallLinkedChannel(BaseModel):
     categories: set[str] = set()
     exclude_categories: set[str] = set()
     is_primary: bool = False
+    uses_ravenbot: bool = False
 
 
 class TupleOfAllTime(NamedTuple):
@@ -331,6 +333,71 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
             tasks.append(self._get_sender_data_from_twitch_msg_event(event))
         __ = await asyncio.gather(*tasks)
 
+    @on_match(PlayerJoinedEvent)
+    async def _on_player_joined(
+        self, _g_ctx: GlobalContext, event: PlayerJoinedEvent, _match: object
+    ):
+        __ = self.refresh_char_data(event.player.id)
+
+    @on_match(RavenBotMessageEvent)
+    async def _on_ravenbot_message(
+        self, _g_ctx: GlobalContext, event: RavenBotMessageEvent, _match: object
+    ):
+        if event.is_msg_from_api:
+            return
+        if event.orig_message.identifier != "message":
+            return
+        sender = event.orig_message.sender
+        if not sender.platform:
+            return
+
+        async with get_async_session() as session:
+            stmt = select(SenderData).where(
+                SenderData.channel_platform_id == event.ravenfall.channel_id,
+                SenderData.platform_id == sender.platform_id,
+            )
+            res = await session.execute(stmt)
+            sender_data = res.scalar_one_or_none()
+            if not sender_data:
+                sender_data = SenderData(
+                    channel_platform=EVENT_SOURCE_TWITCH,
+                    channel_platform_id=event.ravenfall.channel_id,
+                    user_id=sender.id,
+                    character_id=sender.character_id,
+                    username=sender.username,
+                    display_name=sender.display_name,
+                    color=sender.color,
+                    platform=sender.platform,
+                    platform_id=sender.platform_id,
+                    is_broadcaster=sender.is_broadcaster,
+                    is_moderator=sender.is_moderator,
+                    is_subscriber=sender.is_subscriber,
+                    is_vip=sender.is_vip,
+                    is_game_administrator=sender.is_game_administrator,
+                    is_game_moderator=sender.is_game_moderator,
+                    sub_tier=sender.sub_tier,
+                    identifier=sender.identifier,
+                )
+                session.add(sender_data)
+            else:
+                sender_data.channel_platform = EVENT_SOURCE_TWITCH
+                sender_data.channel_platform_id = event.ravenfall.channel_id
+                sender_data.user_id = sender.id
+                sender_data.character_id = sender.character_id
+                sender_data.username = sender.username
+                sender_data.display_name = sender.display_name
+                sender_data.color = sender.color
+                sender_data.platform = sender.platform
+                sender_data.platform_id = sender.platform_id
+                sender_data.is_broadcaster = sender.is_broadcaster
+                sender_data.is_moderator = sender.is_moderator
+                sender_data.is_subscriber = sender.is_subscriber
+                sender_data.is_vip = sender.is_vip
+                sender_data.is_game_administrator = sender.is_game_administrator
+                sender_data.is_game_moderator = sender.is_game_moderator
+                sender_data.sub_tier = sender.sub_tier
+                sender_data.identifier = sender.identifier
+
     async def _get_sender_data_from_twitch_msg_event(
         self, event: MessageEvent
     ) -> SenderData | None:
@@ -425,8 +492,9 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
                 raise ValueError("Sender data not found for Twitch message event")
 
             return Sender(
-                id=sender_data.platform_id,
-                character_id=sender_data.character_id or "",
+                id=sender_data.user_id or "00000000-0000-0000-0000-000000000000",
+                character_id=sender_data.character_id
+                or "00000000-0000-0000-0000-000000000000",
                 username=sender_data.username,
                 display_name=sender_data.display_name,
                 color=sender_data.color,
@@ -472,8 +540,9 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
 
             if sender_data:
                 return Sender(
-                    id=sender_data.platform_id,
-                    character_id=sender_data.character_id or "",
+                    id=sender_data.user_id or "00000000-0000-0000-0000-000000000000",
+                    character_id=sender_data.character_id
+                    or "00000000-0000-0000-0000-000000000000",
                     username=sender_data.username,
                     display_name=sender_data.display_name,
                     color=sender_data.color,
@@ -490,8 +559,8 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
                 )
 
             return Sender(
-                id=twitch_link.platform_id,
-                character_id="",
+                id="00000000-0000-0000-0000-000000000000",
+                character_id="00000000-0000-0000-0000-000000000000",
                 username=twitch_link.username,
                 display_name=twitch_link.display_name or twitch_link.username,
                 color=None,
@@ -633,8 +702,9 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
             return None
 
         return Sender(
-            id=sender_data.platform_id,
-            character_id=sender_data.character_id or "",
+            id=sender_data.user_id or "00000000-0000-0000-0000-000000000000",
+            character_id=sender_data.character_id
+            or "00000000-0000-0000-0000-000000000000",
             username=sender_data.username,
             display_name=sender_data.display_name,
             color=sender_data.color,
@@ -679,8 +749,9 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
             return None
 
         return Sender(
-            id=sender_data.platform_id,
-            character_id=sender_data.character_id or "",
+            id=sender_data.user_id or "00000000-0000-0000-0000-000000000000",
+            character_id=sender_data.character_id
+            or "00000000-0000-0000-0000-000000000000",
             username=sender_data.username,
             display_name=sender_data.display_name,
             color=sender_data.color,
@@ -701,6 +772,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         channel_id: str,
         username: str,
         platform: str,
+        session: AsyncSession,
         *,
         case_sensitive: bool = False,
         search_display_names: bool = False,
@@ -711,13 +783,6 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         searches the "twitch" platform. Utilizes the AccountService for finding
         user links to Twitch. If the platform is not "twitch" and it fails to
         find a matching Sender, returns None.
-
-        Args:
-            channel_id: The room id.
-            username: The username to search for.
-            platform: The platform to search on first.
-            case_sensitive: Whether the username search should be case sensitive.
-            search_display_names: Whether to also search display names.
 
         Returns:
             A Sender object if found, None otherwise.
@@ -736,25 +801,24 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
             AccountService
         )
 
-        async with get_async_session() as session:
-            link = await account_service.find_link_by_username(
+        link = await account_service.find_link_by_username(
+            session, platform, username, case_sensitive=case_sensitive
+        )
+
+        if not link and search_display_names:
+            link = await account_service.find_link_by_display_name(
                 session, platform, username, case_sensitive=case_sensitive
             )
 
-            if not link and search_display_names:
-                link = await account_service.find_link_by_display_name(
-                    session, platform, username, case_sensitive=case_sensitive
+        if link:
+            twitch_links = await account_service.get_account_links(
+                session, link.account_id, EVENT_SOURCE_TWITCH
+            )
+            if twitch_links:
+                twitch_link = twitch_links[0]
+                return await self.get_sender_by_twitch_id(
+                    channel_id, twitch_link.platform_id
                 )
-
-            if link:
-                twitch_links = await account_service.get_account_links(
-                    session, link.account_id, EVENT_SOURCE_TWITCH
-                )
-                if twitch_links:
-                    twitch_link = twitch_links[0]
-                    return await self.get_sender_by_twitch_id(
-                        channel_id, twitch_link.platform_id
-                    )
 
         if platform != EVENT_SOURCE_TWITCH:
             return await self.get_sender_from_twitch_username(
@@ -1005,6 +1069,57 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         return [
             c for cid in twitch_ids if cid in existing_dict for c in existing_dict[cid]
         ]
+
+    async def get_character_data_from_username(
+        self,
+        username: str,
+        platform: str,
+        session: AsyncSession,
+        *,
+        case_sensitive: bool = False,
+        search_display_names: bool = False,
+    ):
+        """Get character data by username."""
+        from bot.cogs.accounts.service import AccountService
+
+        account_service: AccountService = self.global_context.require_service(
+            AccountService
+        )
+
+        link = await account_service.find_link_by_username(
+            session, platform, username, case_sensitive=case_sensitive
+        )
+
+        if not link and search_display_names:
+            link = await account_service.find_link_by_display_name(
+                session, platform, username, case_sensitive=case_sensitive
+            )
+
+        if link:
+            if link.platform != EVENT_SOURCE_TWITCH:
+                twitch_links = await account_service.get_account_links(
+                    session, link.account_id, EVENT_SOURCE_TWITCH
+                )
+            else:
+                twitch_links = [link]
+            if twitch_links:
+                user_name = twitch_links[0].username
+            else:
+                user_name = username
+        else:
+            user_name = username
+
+        if not case_sensitive:
+            stmt = select(CharacterData).where(CharacterData.twitch_username == user_name)
+        else:
+            stmt = select(CharacterData).where(
+                CharacterData.twitch_username.ilike(username)
+            )
+        res = await session.execute(stmt)
+        char_data = res.scalar_one_or_none()
+        if char_data:
+            return char_data
+        return None
 
     async def send_multichat_command(
         self, text: str, instance_name: str, *, admin: bool = False
