@@ -4,4 +4,8 @@
 - write new cog for ravenfall chat alerts
 - sail messages grouping
 - dungeon loot pastebin links
-- add ravenbot cpu usage check 
+- add ravenbot cpu usage check
+- RavenfallStatusMessagesCog: implement village_boost / village_boost_no_boost message handling
+  The old implementation listened for these RavenfallMessageEvent identifiers and
+  forwarded the formatted boost/exp-progress text to chat. Still deciding on
+  the right approach (send_global_message vs send_channel_message, category scheme). 

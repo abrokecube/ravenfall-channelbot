@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Any, override
 from bot.clients import ravenfall_middleman as rm
 from bot.core import EVENT_CATEGORY_GENERIC
 from bot.core.components import BaseEvent
-from bot.integrations.ravenfall.models import RavenfallFormattedMessage
 
 if TYPE_CHECKING:
     from collections.abc import Collection
 
     from bot.clients import ravenfall_query as rq
     from bot.integrations.ravenfall.event_sources import RavenfallInstance
+    from bot.integrations.ravenfall.models import RavenfallFormattedMessage
 
     from . import enums
     from .matcher import Match
@@ -205,6 +205,21 @@ class RavenfallReadyEvent(RavenfallEvent):
     """Ravenfall has finished the startup process."""
 
     data: None = None
+
+
+@dataclass(kw_only=True)
+class TownLevelUpEvent(RavenfallEvent):
+    """A town has leveled up."""
+
+    data: rq.Village
+
+
+@dataclass(kw_only=True)
+class MultiplierChangedEvent(RavenfallEvent):
+    """The EXP multiplier has changed."""
+
+    data: rq.GameMultiplier
+    change_type: enums.MultiplierChangeType
 
 
 @dataclass(kw_only=True)

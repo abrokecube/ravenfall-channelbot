@@ -241,7 +241,13 @@ class VillageCollector(RavenfallCollectorBase[models.Village]):
         if new_village is None or new_village == RETURNED_NONE:
             return
 
+        old_village = self.get_data()
         self.set_data(new_village)
+
+        if old_village and new_village.level > old_village.level:
+            await self.ravenfall._event_hook(
+                ev.TownLevelUpEvent(ravenfall=self.ravenfall, data=new_village)
+            )
 
 
 class MultiplierCollector(RavenfallCollectorBase[models.GameMultiplier]):
@@ -263,7 +269,26 @@ class MultiplierCollector(RavenfallCollectorBase[models.GameMultiplier]):
         if new_mult is None or new_mult == RETURNED_NONE:
             return
 
+        old_mult = self.get_data()
         self.set_data(new_mult)
+
+        if old_mult:
+            if new_mult.multiplier > old_mult.multiplier:
+                await self.ravenfall._event_hook(
+                    ev.MultiplierChangedEvent(
+                        ravenfall=self.ravenfall,
+                        data=new_mult,
+                        change_type=enums.MultiplierChangeType.INCREASED,
+                    )
+                )
+            elif new_mult.multiplier <= 1 and old_mult.multiplier > 1:
+                await self.ravenfall._event_hook(
+                    ev.MultiplierChangedEvent(
+                        ravenfall=self.ravenfall,
+                        data=new_mult,
+                        change_type=enums.MultiplierChangeType.EXPIRED,
+                    )
+                )
 
 
 class PlayersCollector(RavenfallCollectorBase[list[models.Player]]):

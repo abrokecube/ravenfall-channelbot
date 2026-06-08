@@ -54,6 +54,13 @@ class DungeonEndReason(Enum):
     # CANCELLED = auto()
 
 
+class MultiplierChangeType(Enum):
+    """Multiplier change type."""
+
+    INCREASED = auto()
+    EXPIRED = auto()
+
+
 class DungeonStage(IntEnum):
     """Dungeon stage."""
 

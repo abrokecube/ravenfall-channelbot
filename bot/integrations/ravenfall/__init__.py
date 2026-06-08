@@ -9,6 +9,7 @@ from .enums import DungeonStage as DungeonStage
 from .enums import DungeonStartReason as DungeonStartReason
 from .enums import RaidEndReason as RaidEndReason
 from .enums import RaidStartReason as RaidStartReason
+from .enums import MultiplierChangeType as MultiplierChangeType
 from .enums import RFChannelEvent as RFChannelEvent
 from .enums import RFChannelSubEvent as RFChannelSubEvent
 from .event_sources import RavenfallInstance as RavenfallInstance
@@ -23,8 +24,10 @@ from .events import ObservedPlayerChangedEvent as ObservedPlayerChangedEvent
 from .events import RaidEndedEvent as RaidEndedEvent
 from .events import RaidStartedEvent as RaidStartedEvent
 from .events import RavenBotMessageEvent as RavenBotMessageEvent
+from .events import MultiplierChangedEvent as MultiplierChangedEvent
 from .events import RavenfallEvent as RavenfallEvent
 from .events import RavenfallMessageEvent as RavenfallMessageEvent
+from .events import TownLevelUpEvent as TownLevelUpEvent
 from .events import RavenfallOfflineEvent as RavenfallOfflineEvent
 from .events import RavenfallOnlineEvent as RavenfallOnlineEvent
 from .events import RavenfallReadyEvent as RavenfallReadyEvent
