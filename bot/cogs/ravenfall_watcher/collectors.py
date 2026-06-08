@@ -294,6 +294,60 @@ class RamUsageCheck(BaseGroupCollector[RavenfallInstance]):
         )
 
 
+class RavenBotCpuCheck(RavenfallWatcherGroupCollector[RavenfallInstance]):
+    """Checks if RavenBot's CPU usage is too high."""
+
+    def __init__(
+        self,
+        instances: list[RavenfallInstance],
+        process_manager_service: ProcessManagerService,
+        watcher_cog: RavenfallWatcherCog,
+        instance_watchers: list[RavenfallWatcher],
+        *,
+        loop_interval: float = 60,
+        fail_duration: float = 120,
+    ) -> None:
+        super().__init__(
+            instances,
+            loop_interval=loop_interval,
+            fail_duration=fail_duration,
+        )
+        self.process_manager_service: ProcessManagerService = process_manager_service
+        self.watchers: list[RavenfallWatcher] = instance_watchers
+        self.watcher_cog: RavenfallWatcherCog = watcher_cog
+
+    @override
+    async def process(self) -> None:
+        tasks = [
+            self.process_manager_service.get_process_statistics(
+                "RavenBot", i.config.sandboxie_box_name
+            )
+            for i in self.watchers
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for instance, result, watcher in zip(self.instances, results, self.watchers, strict=True):
+            if isinstance(result, BaseException):
+                LOGGER.exception(
+                    f"Error getting RavenBot process statistics "
+                    f"for {instance.channel_name}"
+                )
+                self.set_status(instance, failing=False)
+                continue
+            threshold = (
+                watcher.config.max_ravenbot_cpu_percent
+                or self.watcher_cog.config.default_max_ravenbot_cpu_percent
+            )
+            if result.cpu_usage_percent > threshold:
+                self.set_status(
+                    instance,
+                    failing=True,
+                    reason=f"RavenBot CPU: {result.cpu_usage_percent:.1f}%",
+                )
+            else:
+                self.set_status(instance, failing=False)
+
+
 class DesyncCheck(BaseGroupCollector[RavenfallInstance]):
     """Checks if an instance is desynced."""
 

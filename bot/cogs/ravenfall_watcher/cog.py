@@ -110,6 +110,9 @@ class RavenfallWatcherCog(Cog, ConfigSubscriberMixin):
             collectors.RamUsageCheck(
                 ravenfall_instances, process_manager_service, self, self.watchers
             ),
+            collectors.RavenBotCpuCheck(
+                ravenfall_instances, process_manager_service, self, self.watchers
+            ),
             collectors.RavenfallFrozenCheck(ravenfall_instances, self.global_context),
         ]
         self.non_alerting_collectors = [

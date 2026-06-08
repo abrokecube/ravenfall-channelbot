@@ -23,6 +23,7 @@ class InstanceConfig(ConfigModel):
     restart_timeout_seconds: float = 120
     message_on_restart_timeout: str = "@abrokecube"
     max_memory_usage_gb: float | None = None
+    max_ravenbot_cpu_percent: float | None = None
     ravenbot_prefix: str = "!"
     ravenbot_channel_id: str | None = None
     max_dungeon_time_seconds: float = 900
@@ -42,6 +43,7 @@ class WatcherConfig(ConfigModel):
     max_total_memory_use_gb: float | None = None
     default_max_instance_memory_usage_gb: float = 6.0
     memory_kill_min_threshold_gb: float = 2.0
+    default_max_ravenbot_cpu_percent: float = 80.0
     commands_to_watch: set[str] = {
         "coins",
         "count",

@@ -235,10 +235,16 @@ class RavenfallWatcher(EventReceiverMixin):
         for c in self.collectors:
             c.set_alert_callback(partial(self._collector_alerting, c))
         for c in self.group_collectors:
-            c.set_alert_callback(
-                self.ravenfall,
-                partial(self._collector_alerting, c),
-            )
+            if isinstance(c, collectors.RavenBotCpuCheck):
+                c.set_alert_callback(
+                    self.ravenfall,
+                    partial(self._on_ravenbot_cpu_alert, c),
+                )
+            else:
+                c.set_alert_callback(
+                    self.ravenfall,
+                    partial(self._collector_alerting, c),
+                )
 
     def _unhook_collectors(self):
         for c in self.collectors:
@@ -267,6 +273,10 @@ class RavenfallWatcher(EventReceiverMixin):
             alert_reason = collector.get_alert_reason(self.ravenfall)
 
         await self.queue_restart(countdown_time, alert_reason or "")
+
+    async def _on_ravenbot_cpu_alert(self, _collector):
+        """Restart RavenBot when CPU usage is too high."""
+        await self.restart_ravenbot()
 
     async def _auto_restart_callback(self):
         if self._auto_restart_paused:
