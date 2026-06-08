@@ -34,7 +34,7 @@ from utils.format_time import TimeSize, format_seconds
 from utils.routines import routine
 
 from . import collectors
-from .base_classes import BaseCollector
+from .base_classes import BaseCollector, RestartTarget
 from .timeline import SeekMode, Timeline
 from .timer import Timer
 
@@ -235,16 +235,10 @@ class RavenfallWatcher(EventReceiverMixin):
         for c in self.collectors:
             c.set_alert_callback(partial(self._collector_alerting, c))
         for c in self.group_collectors:
-            if isinstance(c, collectors.RavenBotCpuCheck):
-                c.set_alert_callback(
-                    self.ravenfall,
-                    partial(self._on_ravenbot_cpu_alert, c),
-                )
-            else:
-                c.set_alert_callback(
-                    self.ravenfall,
-                    partial(self._collector_alerting, c),
-                )
+            c.set_alert_callback(
+                self.ravenfall,
+                partial(self._collector_alerting, c),
+            )
 
     def _unhook_collectors(self):
         for c in self.collectors:
@@ -259,6 +253,11 @@ class RavenfallWatcher(EventReceiverMixin):
     ):
         if self._auto_restart_paused:
             return
+
+        if collector.restart_target is RestartTarget.RAVENBOT:
+            await self.restart_ravenbot()
+            return
+
         countdown_time = self.config.restart_unblock_min_seconds + 10
         if self.config.restart_warning_times:
             countdown_time = max(
@@ -273,10 +272,6 @@ class RavenfallWatcher(EventReceiverMixin):
             alert_reason = collector.get_alert_reason(self.ravenfall)
 
         await self.queue_restart(countdown_time, alert_reason or "")
-
-    async def _on_ravenbot_cpu_alert(self, _collector):
-        """Restart RavenBot when CPU usage is too high."""
-        await self.restart_ravenbot()
 
     async def _auto_restart_callback(self):
         if self._auto_restart_paused:

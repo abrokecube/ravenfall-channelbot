@@ -15,6 +15,7 @@ from .base_classes import (
     BaseCollector,
     BaseGroupCollector,
     RavenfallWatcherGroupCollector,
+    RestartTarget,
 )
 from .timer import Timer
 
@@ -297,6 +298,8 @@ class RamUsageCheck(BaseGroupCollector[RavenfallInstance]):
 class RavenBotCpuCheck(RavenfallWatcherGroupCollector[RavenfallInstance]):
     """Checks if RavenBot's CPU usage is too high."""
 
+    restart_target: RestartTarget = RestartTarget.RAVENBOT
+
     def __init__(
         self,
         instances: list[RavenfallInstance],
@@ -326,7 +329,9 @@ class RavenBotCpuCheck(RavenfallWatcherGroupCollector[RavenfallInstance]):
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for instance, result, watcher in zip(self.instances, results, self.watchers, strict=True):
+        for instance, result, watcher in zip(
+            self.instances, results, self.watchers, strict=True
+        ):
             if isinstance(result, BaseException):
                 LOGGER.exception(
                     f"Error getting RavenBot process statistics "

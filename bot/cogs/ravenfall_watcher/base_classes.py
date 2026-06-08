@@ -4,6 +4,7 @@ import asyncio
 import functools
 import logging
 import time
+from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,6 +13,13 @@ if TYPE_CHECKING:
     from bot.cogs.ravenfall_watcher import RavenfallWatcherService
 
 logger = logging.getLogger(__name__)
+
+
+class RestartTarget(Enum):
+    """What process to restart when this collector alerts."""
+
+    RAVENFALL = "ravenfall"
+    RAVENBOT = "ravenbot"
 
 
 class Alert:
@@ -142,6 +150,8 @@ class BaseCollector[T]:
     This class manages a periodic processing loop that can be started and stopped,
     with built-in alerting when the process fails for a specified duration.
     """
+
+    restart_target: RestartTarget = RestartTarget.RAVENFALL
 
     def __init__(
         self,
@@ -312,6 +322,8 @@ class BaseGroupCollector[T]:
     This class manages a periodic processing loop for a collection of instances,
     with independent alert tracking and callbacks for each instance.
     """
+
+    restart_target: RestartTarget = RestartTarget.RAVENFALL
 
     def __init__(
         self,
