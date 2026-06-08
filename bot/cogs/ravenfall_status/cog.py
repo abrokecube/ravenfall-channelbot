@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections import defaultdict
 from datetime import timedelta
@@ -39,6 +40,7 @@ class RavenfallStatusConfig(ConfigModel):
     enable_island_arrivals: bool = True
     enable_event_notifications: bool = True
     enable_loot_messages: bool = True
+    enable_loot_summary: bool = True
 
 
 class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
@@ -49,6 +51,8 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
         self.config: RavenfallStatusConfig = RavenfallStatusConfig()
         self._island_arrivals: dict[tuple[str, str], list[str]] = defaultdict(list)
         self._island_last_arrival_time: dict[tuple[str, str], float] = {}
+        self._loot_summary_items: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        self._loot_summary_last_time: dict[str, float] = {}
 
     @override
     async def setup(self) -> None:
@@ -56,10 +60,12 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
         self.inject_config_service(config_srv)
         self.config = self.subscribe_config(RavenfallStatusConfig)
         __ = self._island_arrival_routine.start()
+        __ = self._loot_summary_routine.start()
 
     @override
     async def teardown(self) -> None:
         self._island_arrival_routine.stop()
+        self._loot_summary_routine.stop()
 
     @override
     async def on_config_changed(
@@ -187,6 +193,37 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
     @on_match(
         RavenfallMessageEvent,
         lambda e: (
+            e.message_match is not None
+            and e.message_match.identifier == "loot_summary"
+        ),
+    )
+    async def _on_loot_summary(
+        self, _g_ctx: GlobalContext, event: RavenfallMessageEvent, _match: object
+    ):
+        if not self.config.enable_loot_summary:
+            return
+        event.block()
+        text = event.orig_message.format
+        channel_name = event.ravenfall.channel_name
+        for sentence in text.split(". "):
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            parts = sentence.split(" was found by ")
+            if len(parts) != 2:
+                continue
+            item = parts[0].strip()
+            players_str = parts[1].strip()
+            for player in re.split(r" and |, ", players_str):
+                player = player.strip()
+                if player:
+                    self._loot_summary_items[channel_name].append((player, item))
+        self._loot_summary_last_time[channel_name] = time.monotonic()
+
+    @priority(10)
+    @on_match(
+        RavenfallMessageEvent,
+        lambda e: (
             e.message_match is not None and e.message_match.identifier == "ferry_arrived"
         ),
     )
@@ -230,3 +267,31 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
                 )
                 self._island_arrivals[key] = []
                 self._island_last_arrival_time[key] = 0
+
+    @routine(delta=timedelta(seconds=0.5), max_attempts=99999)
+    async def _loot_summary_routine(self):
+        t = time.monotonic()
+        for channel_name, last_time in list(self._loot_summary_last_time.items()):
+            if last_time <= 0 or t - last_time < 0.25:
+                continue
+            items = self._loot_summary_items[channel_name]
+            if not items:
+                self._loot_summary_last_time[channel_name] = 0
+                continue
+            items.sort(key=lambda x: x[0].lower())
+            lines = [f"{p} - {i}" for p, i in items]
+            header = (
+                f"Loot summary for {channel_name}"
+                f" ({time.strftime('%d %B %Y %H:%M:%S UTC', time.gmtime())})"
+            )
+            paste_srv = self.global_context.require_service(PastebinService)
+            pasted = await paste_srv.upload_text(f"{header}\n\n" + "\n".join(lines))
+            url = pasted.url or "unknown"
+            channel_srv = self.global_context.require_service(RavenfallChannelService)
+            await channel_srv.send_global_message(
+                f"Loot summary: {url}",
+                "ravenfall.status.loot_summary",
+                channel_name,
+            )
+            self._loot_summary_items[channel_name] = []
+            self._loot_summary_last_time[channel_name] = 0
