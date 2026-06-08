@@ -14,12 +14,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 import ravenpy
 from bot.clients.ravenfall_middleman import Sender
 from bot.core.components import BaseService
-from bot.core.decorators import on_match
+from bot.core.decorators import on_match, priority
 from bot.db import Base
 from bot.db.session import get_async_session
 from bot.integrations.chat_messages import GlobalMessengerService, MessageEvent
-from bot.integrations.ravenfall import RavenBotMessageEvent, RavenfallService
+from bot.integrations.ravenfall import (
+    RavenBotMessageEvent,
+    RavenfallMessageEvent,
+    RavenfallService,
+)
 from bot.integrations.ravenfall.events import PlayerJoinedEvent
+from bot.integrations.ravenfall.models import RavenfallFormattedMessage
 from bot.integrations.twitch.consts import EVENT_SOURCE_TWITCH
 from bot.integrations.twitch.services import TwitchService
 from bot.mixins.event_receiver import EventReceiverMixin
@@ -191,6 +196,11 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
                         is_primary=not has_primary,
                     )
                 )
+        for channels in self.linked_channels.values():
+            for channel in channels:
+                if channel.uses_ravenbot:
+                    channel.exclude_categories.add("ravenfall.global")
+
         self.inject_event_manager(self.event_manager)
 
         for twitch_login, channels in self.linked_channels.items():
@@ -332,6 +342,23 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         if event.platform == EVENT_SOURCE_TWITCH:
             tasks.append(self._get_sender_data_from_twitch_msg_event(event))
         __ = await asyncio.gather(*tasks)
+
+    @priority(-9999)
+    @on_match(RavenfallMessageEvent)
+    async def _on_ravenfall_global_message(
+        self, _g_ctx: GlobalContext, event: RavenfallMessageEvent, _match: object
+    ):
+        msg = event.message
+        if not isinstance(msg, RavenfallFormattedMessage):
+            return
+        if not msg.recipient or msg.recipient.platform != "system":
+            return
+        text = msg.format_message()
+        if not text.strip():
+            return
+        identifier = msg.identifier or "unknown"
+        category = f"ravenfall.global.{identifier}"
+        await self.send_global_message(text, category, event.ravenfall.channel_name)
 
     @on_match(PlayerJoinedEvent)
     async def _on_player_joined(
