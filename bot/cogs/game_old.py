@@ -23,9 +23,9 @@ from ..commands.exceptions import CommandError
 # from ..command_utils import HasRole, RangeInt
 # from ..command_exceptions import CommandError
 
-from ..ravenfallchannel import RFChannel
-from ..ravenfallmanager import RFChannelManager
-from ..ravenfallrestarttask import RestartReason
+from ..ravenfallchannel_old import RFChannel
+from ..ravenfallmanager_old import RFChannelManager
+from ..ravenfallrestarttask_old import RestartReason
 
 from utils.format_time import format_seconds, TimeSize
 from utils.strutils import pl, pl2
@@ -35,8 +35,8 @@ from ravenpy.ravenpy import Item
 from ravenpy import ravenpy
 from ravenpy.itemdefs import Items
 from utils.utils import upload_to_bin
-from ..models import RFChannelEvent, GameMultiplier
-from ..message_templates import RavenBotTemplates
+from ..models_old import RFChannelEvent, GameMultiplier
+from ..message_templates_old import RavenBotTemplates
 from ..ravenfall_middleman import send_to_server
 import logging
 

@@ -2,7 +2,7 @@ import json
 from typing import Any
 from uuid import UUID, uuid4
 
-from .models import RavenBotMessage, RavenfallMessage, Recipient, Sender
+from .models_old import RavenBotMessage, RavenfallMessage, Recipient, Sender
 
 
 class SenderBuilder:

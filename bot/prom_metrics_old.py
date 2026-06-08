@@ -1,4 +1,4 @@
-from bot.ravenfallmanager import RFChannelManager
+from bot.ravenfallmanager_old import RFChannelManager
 
 
 from enum import Enum
@@ -13,32 +13,41 @@ class UndefinedMetric(Exception):
     def __init__(self):
         super().__init__("bruh")
 
+
 class AlreadyExists(Exception):
     def __init__(self):
         super().__init__("bruh")
 
+
 class MetricType(Enum):
     COUNTER = 0
     GAUGE = 1
+
 
 class MetricDefinition(NamedTuple):
     name: str
     description: str
     metric_type: MetricType
 
+
 class MetricEntry(NamedTuple):
     name: str
     labels: str
 
-ababab = str.maketrans({
-    '"': '\\"',
-    '\\': '\\\\',
-    '\b': '\\b',
-    '\f': '\\f',
-    '\n': '\\n',
-    '\r': '\\r',
-    '\t': '\\t',
-})
+
+ababab = str.maketrans(
+    {
+        '"': '\\"',
+        "\\": "\\\\",
+        "\b": "\\b",
+        "\f": "\\f",
+        "\n": "\\n",
+        "\r": "\\r",
+        "\t": "\\t",
+    }
+)
+
+
 def to_label(obj: object) -> str:
     if isinstance(obj, bool):
         return "true" if obj else "false"
@@ -47,24 +56,33 @@ def to_label(obj: object) -> str:
     else:
         return str(obj)
 
+
 class Metrics:
     def __init__(self):
         self.definitions: dict[str, MetricDefinition] = {}
         self.metrics: dict[MetricEntry, float] = {}
-        
+
     def add_value(self, metric_name: str, value: float | int | bool, **labels: str):
-        b = ','.join([f'{x}=\"{to_label(y)}\"' for x, y in labels.items()])
-                      
+        b = ",".join([f'{x}="{to_label(y)}"' for x, y in labels.items()])
+
         a = MetricEntry(metric_name, b)
         if isinstance(value, bool):
             self.metrics[a] = 1 if value else 0
         self.metrics[a] = float(value)
-    
-    def add_def(self, metric_name: str, description: str, type: MetricType=MetricType.GAUGE, *, value: float | int | bool | None = None, **labels: str):
+
+    def add_def(
+        self,
+        metric_name: str,
+        description: str,
+        type: MetricType = MetricType.GAUGE,
+        *,
+        value: float | int | bool | None = None,
+        **labels: str,
+    ):
         self.definitions[metric_name] = MetricDefinition(metric_name, description, type)
         if value is not None:
             self.add_value(metric_name, value, **labels)
-    
+
     def get_text(self):
         metrics: list[MetricEntry] = list(self.metrics.keys())
         defs = set(self.definitions.keys())
@@ -72,28 +90,31 @@ class Metrics:
         for m in metrics:
             if m.name in defs:
                 metric_def = self.definitions[m.name]
-                out_text.extend([
-                    f"# HELP {m.name} {metric_def.description}",
-                    f"# TYPE {m.name} {metric_def.metric_type.name.lower()}",
-                ])
+                out_text.extend(
+                    [
+                        f"# HELP {m.name} {metric_def.description}",
+                        f"# TYPE {m.name} {metric_def.metric_type.name.lower()}",
+                    ]
+                )
                 defs.remove(m.name)
             value = self.metrics[m]
             labels = m.labels
             if labels:
                 labels = "{%s}" % labels
-            out_text.append(
-                f"{m.name}{labels} {value}"
-            )
+            out_text.append(f"{m.name}{labels} {value}")
         return "\n".join(out_text)
+
 
 from typing import TYPE_CHECKING
 from collections.abc import Coroutine
+
 if TYPE_CHECKING:
-    from .ravenfallmanager import RFChannelManager
+    from .ravenfallmanager_old import RFChannelManager
 import psutil
 import os
 import asyncio
 from utils.runshell import runshell
+
 
 class MetricsManager:
     def __init__(self, rf_manager: RFChannelManager):
@@ -101,45 +122,56 @@ class MetricsManager:
 
     async def desync_info(self, m: Metrics):
         desync_info = await self.rf_manager.get_desync_info()
-        m.add_def("rf_ext_desync_seconds", "Estimated desync time in seconds", MetricType.GAUGE)
+        m.add_def(
+            "rf_ext_desync_seconds", "Estimated desync time in seconds", MetricType.GAUGE
+        )
         for channel_name, desync in desync_info.items():
             m.add_value("rf_ext_desync_seconds", desync, channel=channel_name)
-            
+
     async def total_item_count(self, m: Metrics):
         total_item_count = await self.rf_manager.get_total_item_count()
-        m.add_def("rf_ext_total_item_count", "Total item count in each channel", MetricType.GAUGE)
+        m.add_def(
+            "rf_ext_total_item_count",
+            "Total item count in each channel",
+            MetricType.GAUGE,
+        )
         for channel_name, count in total_item_count.items():
             m.add_value("rf_ext_total_item_count", count, channel=channel_name)
-            
+
     async def char_data(self, m: Metrics):
         chars = await get_char_info()
-        if chars['status'] != 200:
-            LOGGER.error(f"Failed to fetch character data: {chars.get('error', 'Unknown error')}")
-            return
-        m.add_def("rf_ext_char_total_item_count", "Character's total item count", MetricType.GAUGE)
-        for char_data in chars['data']:
-            m.add_value(
-                "rf_ext_char_total_item_count", char_data['total_item_count'], 
-                channel=char_data['channel_name'],
-                username=char_data['user_name'],
-                id=char_data['id'],
+        if chars["status"] != 200:
+            LOGGER.error(
+                f"Failed to fetch character data: {chars.get('error', 'Unknown error')}"
             )
-            
+            return
+        m.add_def(
+            "rf_ext_char_total_item_count",
+            "Character's total item count",
+            MetricType.GAUGE,
+        )
+        for char_data in chars["data"]:
+            m.add_value(
+                "rf_ext_char_total_item_count",
+                char_data["total_item_count"],
+                channel=char_data["channel_name"],
+                username=char_data["user_name"],
+                id=char_data["id"],
+            )
+
     async def ravenfall_pids(self, m: Metrics):
         ravenfall_pids = []
-        for proc in psutil.process_iter(['pid', 'name']):
+        for proc in psutil.process_iter(["pid", "name"]):
             try:
                 # Check if the process name matches (case-insensitive)
-                if "ravenfall" in proc.info['name'].lower():
-                    ravenfall_pids.append(proc.info['pid'])
+                if "ravenfall" in proc.info["name"].lower():
+                    ravenfall_pids.append(proc.info["pid"])
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
-                
+
         tasks: list[Coroutine[Any, Any, Any]] = []
         for ch in self.rf_manager.channels:
-            shellcmd = (
-                f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
-            )
+            shellcmd = f'"{os.getenv("SANDBOXIE_START_PATH")}" /box:{ch.sandboxie_box} /silent /listpids'
             tasks.append(runshell(shellcmd))
         responses: list[str | None] = await asyncio.gather(*tasks)
         pid_lists: list[list[str]] = []
@@ -151,13 +183,22 @@ class MetricsManager:
 
         box_pids: dict[str, list[int]] = {}
         for i in range(len(self.rf_manager.channels)):
-            box_pids[self.rf_manager.channels[i].channel_name] = [int(pid) for pid in pid_lists[i]]
+            box_pids[self.rf_manager.channels[i].channel_name] = [
+                int(pid) for pid in pid_lists[i]
+            ]
 
-        m.add_def("rf_ext_ravenfall_info", "Information about ravenfall", MetricType.GAUGE)
+        m.add_def(
+            "rf_ext_ravenfall_info", "Information about ravenfall", MetricType.GAUGE
+        )
         for ch in self.rf_manager.channels:
             for pid in box_pids[ch.channel_name]:
                 if pid in ravenfall_pids:
-                    m.add_value("rf_ext_ravenfall_info", 1, channel=ch.channel_name, process_id=str(pid))
+                    m.add_value(
+                        "rf_ext_ravenfall_info",
+                        1,
+                        channel=ch.channel_name,
+                        process_id=str(pid),
+                    )
 
     async def get_metrics(self) -> str:
         m = Metrics()
@@ -165,9 +206,7 @@ class MetricsManager:
             self.desync_info(m),
             self.total_item_count(m),
             self.ravenfall_pids(m),
-            self.char_data(m)
+            self.char_data(m),
         ]
         _ = await asyncio.gather(*tasks, return_exceptions=True)
         return m.get_text()
-
-        

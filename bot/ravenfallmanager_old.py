@@ -1,11 +1,22 @@
 from typing import TYPE_CHECKING, cast, override, Any
 from collections.abc import Collection, Coroutine
-from .ravenfallchannel import RFChannel
-from .models import RFChannelEvent, Channel, RavenBotMessage, RavenfallMessage
+from .ravenfallchannel_old import RFChannel
+from .models_old import RFChannelEvent, Channel, RavenBotMessage, RavenfallMessage
 from .ravenfall_query import GameMultiplier
-from .multichat_command import send_multichat_command, get_desync_info, get_total_item_count
+from .multichat_command import (
+    send_multichat_command,
+    get_desync_info,
+    get_total_item_count,
+)
 from . import ravenfall_middleman
-from .messageprocessor import MessageCallback, MessageProcessor, MessageMetadata, ClientInfo, BlockResponse
+from .messageprocessor import (
+    MessageCallback,
+    MessageProcessor,
+    MessageMetadata,
+    ClientInfo,
+    BlockResponse,
+)
+
 if TYPE_CHECKING:
     from twitchAPI.chat import ChatMessage
 from ravenpy import ExpMult
@@ -15,7 +26,7 @@ import logging
 from utils.routines import routine
 from datetime import timedelta, datetime, timezone
 import time
-from .ravenfallrestarttask import RestartReason
+from .ravenfallrestarttask_old import RestartReason
 from .prometheus import get_prometheus_instant
 from utils.alert_monitor import BatchAlertMonitor
 from utils.runshell import runshell
@@ -26,13 +37,14 @@ import os
 
 logger = logging.getLogger(__name__)
 
+
 class RFChannelManager:
     def __init__(self, config: Collection[Channel], global_context: GlobalContext):
         self.config: Collection[Channel] = config
         self.global_context: GlobalContext = global_context
         from ravenpy import RavenNest
         from twitchAPI.chat import Chat
-        
+
         self.rfapi: RavenNest = global_context.require_service(RavenNest)
         self.chat: Chat = global_context.require_service(Chat)
         self.channels: list[RFChannel] = []
@@ -51,17 +63,16 @@ class RFChannelManager:
         self.load_channels()
 
         self.global_resync_lock: asyncio.Lock = asyncio.Lock()
-        self.item_alert_monitor: 'ItemAlertMonitor | None' = None
-        self.ram_usage_alert_monitor: 'RAMUsageAlertMonitor | None' = None
-
+        self.item_alert_monitor: "ItemAlertMonitor | None" = None
+        self.ram_usage_alert_monitor: "RAMUsageAlertMonitor | None" = None
 
     def load_channels(self):
         for channel in self.config:
             self.channels.append(RFChannel(channel, self))
         for channel in self.channels:
             self.channel_id_to_channel[channel.channel_id] = channel
-            self.channel_name_to_channel[channel.channel_name] = channel    
-        
+            self.channel_name_to_channel[channel.channel_name] = channel
+
     async def start(self):
         for channel in self.channels:
             await channel.start()
@@ -76,11 +87,17 @@ class RFChannelManager:
                 port=int(msg_processor_port),
             )
             self.rf_message_processor.start()
-            self.rf_message_processor.add_message_callback(cast(MessageCallback, self.handle_processor_message))
+            self.rf_message_processor.add_message_callback(
+                cast(MessageCallback, self.handle_processor_message)
+            )
             self.rf_message_processor.add_connection_callback(self.on_processor_connect)
-            self.rf_message_processor.add_disconnection_callback(self.on_processor_disconnect)
+            self.rf_message_processor.add_disconnection_callback(
+                self.on_processor_disconnect
+            )
         else:
-            logger.info("RF_MIDDLEMAN_PROCESSOR_HOST or RF_MIDDLEMAN_PROCESSOR_PORT not set, not starting message processor")
+            logger.info(
+                "RF_MIDDLEMAN_PROCESSOR_HOST or RF_MIDDLEMAN_PROCESSOR_PORT not set, not starting message processor"
+            )
         self.item_alert_monitor = ItemAlertMonitor(self)
         self.ram_usage_alert_monitor = RAMUsageAlertMonitor(self)
         await self.item_alert_monitor.start()
@@ -103,23 +120,38 @@ class RFChannelManager:
             if message.room and channel.channel_id == message.room.room_id:
                 await channel.event_twitch_message(message)
 
-    async def handle_processor_message(self, message: RavenBotMessage | RavenfallMessage, metadata: MessageMetadata, _: ClientInfo) -> RavenfallMessage | RavenBotMessage | BlockResponse:
+    async def handle_processor_message(
+        self,
+        message: RavenBotMessage | RavenfallMessage,
+        metadata: MessageMetadata,
+        _: ClientInfo,
+    ) -> RavenfallMessage | RavenBotMessage | BlockResponse:
         out_message = message.copy()
         for channel in self.channels:
             if metadata.connection_id == channel.middleman_connection_id:
                 if not metadata.is_api:
                     if metadata.source.lower() == "client":
-                        __ = asyncio.create_task(channel.event_ravenbot_message(cast(RavenBotMessage, message)))
+                        __ = asyncio.create_task(
+                            channel.event_ravenbot_message(cast(RavenBotMessage, message))
+                        )
                     elif metadata.source.lower() == "server":
-                        __ = asyncio.create_task(channel.event_ravenfall_message(cast(RavenfallMessage, message)))
+                        __ = asyncio.create_task(
+                            channel.event_ravenfall_message(
+                                cast(RavenfallMessage, message)
+                            )
+                        )
                     elif metadata.source.lower() in ("api-client", "api-server"):
                         pass
                     else:
                         logger.error(f"Unknown source: {metadata.source}")
                 if metadata.source.lower() == "client":
-                    out_message = await channel.process_ravenbot_message(cast(RavenBotMessage, message.copy()), metadata) 
+                    out_message = await channel.process_ravenbot_message(
+                        cast(RavenBotMessage, message.copy()), metadata
+                    )
                 elif metadata.source.lower() == "server":
-                    out_message = await channel.process_ravenfall_message(cast(RavenfallMessage, message.copy()), metadata) 
+                    out_message = await channel.process_ravenfall_message(
+                        cast(RavenfallMessage, message.copy()), metadata
+                    )
                 elif metadata.source.lower() in ("api-client", "api-server"):
                     pass
                 else:
@@ -138,7 +170,7 @@ class RFChannelManager:
         serverconf, err = await ravenfall_middleman.get_config()
         if not err:
             if serverconf:
-                self.middleman_power_saving = not serverconf['disableTimeout']
+                self.middleman_power_saving = not serverconf["disableTimeout"]
             else:
                 self.middleman_power_saving = False
 
@@ -147,7 +179,9 @@ class RFChannelManager:
         if self.middleman_processor_server_client_count <= 0:
             self.middleman_enabled = False
 
-    def get_channel(self, *, channel_id: str | None = None, channel_name: str | None = None) -> RFChannel | None:
+    def get_channel(
+        self, *, channel_id: str | None = None, channel_name: str | None = None
+    ) -> RFChannel | None:
         if channel_id:
             if channel_id in self.channel_id_to_channel:
                 return self.channel_id_to_channel[channel_id]
@@ -164,9 +198,13 @@ class RFChannelManager:
         multiplier: ExpMult | None = None
         attempts = 3
         while attempts > 0:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as session:
                 try:
-                    async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False) as response:
+                    async with session.get(
+                        f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False
+                    ) as response:
                         data: GameMultiplier = cast(GameMultiplier, await response.json())
                         if data:
                             is_online = True
@@ -179,7 +217,7 @@ class RFChannelManager:
                     logger.error(f"Can't connect to Ravenfall API: {e}")
             attempts -= 1
         self.ravennest_is_online = is_online
-        
+
         if self.ravennest_is_online != old_online:
             if self.ravennest_is_online:
                 msg = "🟢 RavenNest is online!"
@@ -199,29 +237,46 @@ class RFChannelManager:
                 continue
             if channel.monitoring_paused:
                 continue
-            if channel.multiplier and channel.multiplier['multiplier'] != self.global_multiplier:
-                logger.debug(f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}")
+            if (
+                channel.multiplier
+                and channel.multiplier["multiplier"] != self.global_multiplier
+            ):
+                logger.debug(
+                    f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}"
+                )
                 if channel.restart_task and channel.restart_task.get_time_left() > 120:
-                    __ = channel.queue_restart(90, label="Town is desynced; multiplier is not updating", reason=RestartReason.MULTIPLIER_DESYNC)
+                    __ = channel.queue_restart(
+                        90,
+                        label="Town is desynced; multiplier is not updating",
+                        reason=RestartReason.MULTIPLIER_DESYNC,
+                    )
                 try:
                     r = await send_multichat_command(
                         text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
                         user_id=channel.channel_id,
                         user_name=channel.channel_name,
                         channel_id=channel.channel_id,
-                        channel_name=channel.channel_name
+                        channel_name=channel.channel_name,
                     )
                 except Exception as e:
-                    await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
-                    logger.warning(f"Failed to send multiplier command to {channel.channel_name}: {e}")
-    
+                    await channel.send_chat_message(
+                        f"?say {channel.ravenbot_prefixes[0]}multiplier"
+                    )
+                    logger.warning(
+                        f"Failed to send multiplier command to {channel.channel_name}: {e}"
+                    )
+
     @alru_cache(ttl=10)
     async def check_update_endpoint(self):
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=5)
+        ) as session:
             try:
-                async with session.get(f"https://www.ravenfall.stream/api/version/check", ssl=False) as response:
+                async with session.get(
+                    f"https://www.ravenfall.stream/api/version/check", ssl=False
+                ) as response:
                     __ = await response.text()
-                    if response.status == 200:  
+                    if response.status == 200:
                         return True
                     return False
             except Exception:
@@ -234,13 +289,13 @@ class RFChannelManager:
         except Exception as e:
             logger.error(f"Failed to fetch desync info: {e}")
             return {}
-        if time.time() - data['data']['last_updated'] > 300:
+        if time.time() - data["data"]["last_updated"] > 300:
             return ch_desyncs
 
         for channel_id in self.channel_id_to_channel.keys():
-            if channel_id in data['data']['towns']:
+            if channel_id in data["data"]["towns"]:
                 channel_name = self.channel_id_to_channel[channel_id].channel_name
-                ch_desyncs[channel_name] = data['data']['towns'][channel_id]
+                ch_desyncs[channel_name] = data["data"]["towns"][channel_id]
         return ch_desyncs
 
     async def get_total_item_count(self) -> dict[str, float]:
@@ -252,15 +307,15 @@ class RFChannelManager:
             return {}
 
         for channel_id in self.channel_id_to_channel.keys():
-            if channel_id in data['data']['towns']:
+            if channel_id in data["data"]["towns"]:
                 channel_name = self.channel_id_to_channel[channel_id].channel_name
-                total_item_data[channel_name] = data['data']['towns'][channel_id]
+                total_item_data[channel_name] = data["data"]["towns"][channel_id]
         return total_item_data
 
     @routine(delta=timedelta(seconds=60), max_attempts=99999)
     async def resync_routine(self):
         data = await self.get_desync_info()
-        
+
         async def resync_task(channel: RFChannel):
             async with self.global_resync_lock:
                 try:
@@ -269,14 +324,16 @@ class RFChannelManager:
                         user_id=channel.channel_id,
                         user_name=channel.channel_name,
                         channel_id=channel.channel_id,
-                        channel_name=channel.channel_name
+                        channel_name=channel.channel_name,
                     )
                 except Exception as e:
                     await channel.send_chat_message("?resync")
-                    logger.warning(f"Failed to send resync command to {channel.channel_name}: {e}")
+                    logger.warning(
+                        f"Failed to send resync command to {channel.channel_name}: {e}"
+                    )
                 await asyncio.sleep(60)
-                
-        tasks: list[Coroutine[Any, Any, None]] = []                
+
+        tasks: list[Coroutine[Any, Any, None]] = []
         for channel_name, desync in data.items():
             if not self.ravennest_is_online:
                 continue
@@ -294,7 +351,7 @@ class RFChannelManager:
             tasks.append(resync_task(channel))
         if tasks:
             __ = await asyncio.gather(*tasks)
-    
+
     @routine(delta=timedelta(hours=3), wait_first=True, max_attempts=99999)
     async def update_boosts_routine(self):
         for channel in self.channels:
@@ -308,66 +365,84 @@ class RFChannelManager:
                     break
             await asyncio.sleep(120)
 
+
 class ItemAlertMonitor(BatchAlertMonitor):
     def __init__(self, rfmanager: RFChannelManager):
-        super().__init__(interval=30, timeout=3*60, alert_interval=60*60, name='ItemAlertMonitor')
+        super().__init__(
+            interval=30, timeout=3 * 60, alert_interval=60 * 60, name="ItemAlertMonitor"
+        )
         self.rfmanager: RFChannelManager = rfmanager
         self.last_counts: dict[str, float] = {}
-        
+
     @override
     async def check_condition(self) -> dict[str, bool | str | tuple[bool, str]]:
         items = await self.rfmanager.get_total_item_count()
         alerts: dict[str, bool | str | tuple[bool, str]] = {}
         for channel_name, item_count in items.items():
-            last_count = self.last_counts.get(channel_name, item_count-1)
-            logger.debug(f"[ItemAlertMonitor] {channel_name} items: {item_count} (last: {last_count})")
+            last_count = self.last_counts.get(channel_name, item_count - 1)
+            logger.debug(
+                f"[ItemAlertMonitor] {channel_name} items: {item_count} (last: {last_count})"
+            )
             self.last_counts[channel_name] = item_count
-            is_alerting = (item_count == last_count)
+            is_alerting = item_count == last_count
             if is_alerting and self.rfmanager.ravennest_is_online:
                 alerts[channel_name] = "No item gain"
             else:
                 alerts[channel_name] = True
         return alerts
-    
+
     @override
     async def trigger_alert(self, name: str, reason: str):
         if reason == "No item gain":
             channel = self.rfmanager.get_channel(channel_name=name)
             if channel and not channel.monitoring_paused:
-                __ = channel.queue_restart(90, label="Town is desynced; items stopped getting rewarded", reason=RestartReason.ITEM_DESYNC)
-    
+                __ = channel.queue_restart(
+                    90,
+                    label="Town is desynced; items stopped getting rewarded",
+                    reason=RestartReason.ITEM_DESYNC,
+                )
+
     @override
     async def resolve_alert(self, name: str):
         pass
 
+
 class RAMUsageAlertMonitor(BatchAlertMonitor):
     def __init__(self, rfmanager: RFChannelManager):
-        super().__init__(interval=60, timeout=10*60, alert_interval=60*60, name='RAMUsageAlertMonitor')
+        super().__init__(
+            interval=60,
+            timeout=10 * 60,
+            alert_interval=60 * 60,
+            name="RAMUsageAlertMonitor",
+        )
         self.rfmanager: RFChannelManager = rfmanager
 
     @override
     async def check_condition(self) -> dict[str, bool | str | tuple[bool, str]]:
-        working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
+        working_set = await get_prometheus_instant(
+            "windows_process_working_set_private_bytes{process='Ravenfall'}"
+        )
         if not working_set:
             return {}
         tasks = []
         for ch in self.rfmanager.channels:
-            shellcmd: str = (
-                f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
-            )
+            shellcmd: str = f'"{os.getenv("SANDBOXIE_START_PATH")}" /box:{ch.sandboxie_box} /silent /listpids'
             tasks.append(runshell(shellcmd))
         responses: list[tuple[int | None, str]] = await asyncio.gather(*tasks)
         pid_lists = [x.splitlines() for code, x in responses if x]
         box_pids: dict[str, list[str]] = {}
         for i in range(len(self.rfmanager.channels)):
-            box_pids[self.rfmanager.channels[i].channel_name] = pid_lists[i] if i < len(pid_lists) else []
+            box_pids[self.rfmanager.channels[i].channel_name] = (
+                pid_lists[i] if i < len(pid_lists) else []
+            )
         processes: dict[str, float] = {}
         total_bytes = 0
         for metric in working_set:
-            m = metric['metric']
-            pid = m.get('process_id') # type: ignore
-            if not pid: continue
-            bytes_usage = int(metric['value'][1])
+            m = metric["metric"]
+            pid = m.get("process_id")  # type: ignore
+            if not pid:
+                continue
+            bytes_usage = int(metric["value"][1])
             total_bytes += bytes_usage
             processes[pid] = bytes_usage
         processes_named: dict[str, float] = {}
@@ -377,12 +452,22 @@ class RAMUsageAlertMonitor(BatchAlertMonitor):
                     processes_named[name] = processes[pid]
                     break
         alerts: dict[str, bool | str | tuple[bool, str]] = {}
-        maximum_total_ravenfall_bytes = int(os.getenv("MAX_RAVENFALL_TOTAL_MIB", "10240")) * 1024 * 1024
-        maximum_single_ravenfall_bytes = int(os.getenv("MAX_RAVENFALL_MIB", "5120")) * 1024 * 1024
+        maximum_total_ravenfall_bytes = (
+            int(os.getenv("MAX_RAVENFALL_TOTAL_MIB", "10240")) * 1024 * 1024
+        )
+        maximum_single_ravenfall_bytes = (
+            int(os.getenv("MAX_RAVENFALL_MIB", "5120")) * 1024 * 1024
+        )
         over_bytes = max(0, total_bytes - maximum_total_ravenfall_bytes)
-        logger.debug(f"[RAMUsageAlertMonitor] Total usage: {total_bytes / 1024 / 1024} MiB ({over_bytes / 1024 / 1024} MiB over)")
-        for name, bytes_used in sorted(processes_named.items(), key=lambda x: x[1], reverse=True):
-            logger.debug(f"[RAMUsageAlertMonitor] {name} usage: {bytes_used / 1024 / 1024} MiB")
+        logger.debug(
+            f"[RAMUsageAlertMonitor] Total usage: {total_bytes / 1024 / 1024} MiB ({over_bytes / 1024 / 1024} MiB over)"
+        )
+        for name, bytes_used in sorted(
+            processes_named.items(), key=lambda x: x[1], reverse=True
+        ):
+            logger.debug(
+                f"[RAMUsageAlertMonitor] {name} usage: {bytes_used / 1024 / 1024} MiB"
+            )
             if over_bytes > 0:
                 alerts[name] = "Over maximum total RAM usage"
                 over_bytes -= bytes_used
@@ -391,13 +476,17 @@ class RAMUsageAlertMonitor(BatchAlertMonitor):
             else:
                 alerts[name] = True
         return alerts
-    
+
     @override
     async def trigger_alert(self, name: str, reason: str):
         if reason:
             channel = self.rfmanager.get_channel(channel_name=name)
             if channel and not channel.monitoring_paused:
-                __ = channel.queue_restart(90, label="Town is using too much memory", reason=RestartReason.MEMORY_USE)
+                __ = channel.queue_restart(
+                    90,
+                    label="Town is using too much memory",
+                    reason=RestartReason.MEMORY_USE,
+                )
 
     @override
     async def resolve_alert(self, name: str):

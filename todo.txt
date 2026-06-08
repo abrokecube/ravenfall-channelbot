@@ -4,3 +4,4 @@
 - write new cog for ravenfall chat alerts
 - sail messages grouping
 - dungeon loot pastebin links
+- add ravenbot cpu usage check 

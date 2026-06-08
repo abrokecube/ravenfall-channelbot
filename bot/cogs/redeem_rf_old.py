@@ -4,7 +4,7 @@ Helpers for sending items/coins to players and Twitch redemption handlers
 integrated with Ravenfall.
 """
 
-from bot.ravenfallchannel import RFChannel
+from bot.ravenfallchannel_old import RFChannel
 
 from ..commands.cog import Cog
 from ..commands.events import CommandEvent, TwitchRedemptionEvent
@@ -21,23 +21,23 @@ from ..commands.converters import (
 )
 from ..commands.exceptions import CommandError
 
-from ..ravenfallmanager import RFChannelManager
+from ..ravenfallmanager_old import RFChannelManager
 from twitchAPI.twitch import Twitch
 from ..ravenfall_middleman import (
     send_to_server_and_wait_response,
     send_to_client,
     send_to_server,
 )
-from ..ravenfallloc import pl
-from ..exceptions import OutOfStockError
-from ..models import ScrollType, RFChannelEvent
+from ..ravenfallloc_old import pl
+from ..exceptions_old import OutOfStockError
+from ..models_old import ScrollType, RFChannelEvent
 from bot.multichat_command import (
     get_char_coins,
     get_char_items,
     track_item_use,
     track_coin_use,
 )
-from bot.message_templates import RavenBotTemplates
+from bot.message_templates_old import RavenBotTemplates
 from bot.core.services import DatabaseService
 from bot.messageprocessor import RavenfallMessage
 import logging
@@ -51,11 +51,11 @@ import random
 import json
 from twitchAPI.helper import first
 from utils.utils import upload_to_bin
-from bot.ravenfallrestarttask import RestartReason
+from bot.ravenfallrestarttask_old import RestartReason
 import re
 from utils.routines import routine
 from datetime import timedelta, datetime, timezone
-from bot.models import Player
+from bot.models_old import Player
 from database.models import UserCreditIdleEarn, Character, Channel
 from sqlalchemy import select
 

@@ -18,11 +18,11 @@ from bot.core.event_manager import EventManager
 from bot.core.dispatchers import CommandDispatcher, TwitchRedeemDispatcher
 from bot.core.events import MessageEvent
 
-from bot.models import *
-from bot.ravenfallmanager import RFChannelManager
+from bot.models_old import *
+from bot.ravenfallmanager_old import RFChannelManager
 from database.models import update_schema
 from utils.logging_fomatter import setup_logging
-from bot.server import SomeEndpoints
+from bot.server_old import SomeEndpoints
 
 with open("pid", "w") as f:
     _ = f.write(str(os.getpid()))

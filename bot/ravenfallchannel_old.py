@@ -11,34 +11,44 @@ from ravenpy import RavenNest, experience_for_level
 
 from datetime import timedelta, timezone
 
-from .models import (
-    RavenBotMessage, RavenfallMessage, RFChannelEvent, RFChannelSubEvent,
-    ScrollType, QueuedScrollDC, QueuedScroll, Sender
+from .models_old import (
+    RavenBotMessage,
+    RavenfallMessage,
+    RFChannelEvent,
+    RFChannelSubEvent,
+    ScrollType,
+    QueuedScrollDC,
+    QueuedScroll,
+    Sender,
 )
-from .messagewaiter import MessageWaiter, RavenBotMessageWaiter, RavenfallMessageWaiter
+from .messagewaiter_old import (
+    MessageWaiter,
+    RavenBotMessageWaiter,
+    RavenfallMessageWaiter,
+)
 from .ravenfall_middleman import send_to_client, send_to_server_and_wait_response
-from .ravenfallrestarttask import RFRestartTask, RestartReason, WARNING_MSG_TIMES
+from .ravenfallrestarttask_old import RFRestartTask, RestartReason, WARNING_MSG_TIMES
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command, get_scroll_counts
 from .messageprocessor import MessageMetadata, BlockResponse
-from .ravenfallloc import RavenfallLocalization
-from .message_templates import RavenBotTemplates
-from .message_builders import SenderBuilder
-from .exceptions import OutOfStockError
+from .ravenfallloc_old import RavenfallLocalization
+from .message_templates_old import RavenBotTemplates
+from .message_builders_old import SenderBuilder
+from .exceptions_old import OutOfStockError
 from .commands.events import TwitchRedemptionEvent
 from .commands.enums import TwitchCustomRewardRedemptionStatus
 from .commands.event_sources import TwitchUtils
 from .ravenfall_query import RavenfallClient, Raid, Dungeon, GameMultiplier, Village
 from . import ravenfall_query
 from bot import ravenfall_middleman
-from bot.models import Channel
+from bot.models_old import Channel
 from database.session import get_async_session
 from database.models import AutoRaidStatus, Character, User
 import database.utils as db_utils
 from sqlalchemy import select
 
 if TYPE_CHECKING:
-    from .ravenfallmanager import RFChannelManager
+    from .ravenfallmanager_old import RFChannelManager
 
 from utils.routines import routine
 from utils.format_time import format_seconds, TimeSize
@@ -63,20 +73,45 @@ MAX_DUNGEON_LENGTH = 15 * 60
 
 # Command timeout values in seconds for monitored commands
 COMMAND_TIMEOUTS = {
-    'coins': 5, 'count': 5, 'damage': 5, 'dmg': 5, 'dps': 5, 'effects': 5, 'ferry': 5, 'items': 5,
-    'multiplier': 5, 'online': 5, 'res': 5, 'resources': 5, 'rested': 5, 'status': 5, 'stats': 5,
-    'town': 5, 'townres': 5, 'training': 5, 'value': 5, 'version': 5, 'village': 5, 'villagers': 5, 'where': 5,
-    
-    'consume': 15, 'disenchant': 20, 'drink': 15, 'eat': 15, 'enchant': 20,
-    'gift': 15, 'join': 60, 'leave': 10, 'scrolls': 15,
+    "coins": 5,
+    "count": 5,
+    "damage": 5,
+    "dmg": 5,
+    "dps": 5,
+    "effects": 5,
+    "ferry": 5,
+    "items": 5,
+    "multiplier": 5,
+    "online": 5,
+    "res": 5,
+    "resources": 5,
+    "rested": 5,
+    "status": 5,
+    "stats": 5,
+    "town": 5,
+    "townres": 5,
+    "training": 5,
+    "value": 5,
+    "version": 5,
+    "village": 5,
+    "villagers": 5,
+    "where": 5,
+    "consume": 15,
+    "disenchant": 20,
+    "drink": 15,
+    "eat": 15,
+    "enchant": 20,
+    "gift": 15,
+    "join": 60,
+    "leave": 10,
+    "scrolls": 15,
 }
-
 
 
 class RFChannel:
     """
     Represents a Ravenfall channel with its configuration and state.
-    
+
     Args:
         config: Dictionary containing channel configuration with the following keys:
             - channel_id (str): Unique channel identifier
@@ -91,7 +126,7 @@ class RFChannel:
             - sandboxie_box (str, optional): Sandboxie box name. Defaults to ''
             - ravenfall_start_script (str, optional): Path to Ravenfall start script. Defaults to ''
     """
-    
+
     def __init__(
         self,
         config: Channel,
@@ -102,24 +137,30 @@ class RFChannel:
         self.manager: RFChannelManager = manager
 
         # Required fields
-        self.channel_id: str = str(config['channel_id'])
-        self.channel_name: str = config['channel_name'].lower()
-        self.rf_query_url: str = config['rf_query_url'].rstrip('/')
-        
+        self.channel_id: str = str(config["channel_id"])
+        self.channel_name: str = config["channel_name"].lower()
+        self.rf_query_url: str = config["rf_query_url"].rstrip("/")
+
         # Optional fields with defaults
-        self.ravenbot_prefixes: tuple[str, ...] = tuple(config.get('ravenbot_prefix', ('!',)))
-        self.custom_town_msg: str = config.get('custom_town_msg', '')
-        self.welcome_message: str = config.get('welcome_message', '')
-        self.auto_restart: bool = bool(config.get('auto_restart', False))
-        self.event_notifications: bool = bool(config.get('event_notifications', False))
-        self.restart_period: int = int(config.get('restart_period', 3600))
-        self.sandboxie_box: str = config.get('sandboxie_box', '')
-        self.ravenfall_start_script: str = config.get('ravenfall_start_script', '')
-        self.middleman_connection_id: str = config.get('middleman_connection_id', '')
-        self.ravenfall_loc_strings_path: str | None = config.get('ravenfall_loc_strings_path', None)
-        self.auto_restore_raids: bool = config.get('auto_restore_raids', False)
-        self.restart_timeout: int = int(config.get('restart_timeout', 120))
-        self.town_level_notifications: bool = bool(config.get('town_level_notifications', True))
+        self.ravenbot_prefixes: tuple[str, ...] = tuple(
+            config.get("ravenbot_prefix", ("!",))
+        )
+        self.custom_town_msg: str = config.get("custom_town_msg", "")
+        self.welcome_message: str = config.get("welcome_message", "")
+        self.auto_restart: bool = bool(config.get("auto_restart", False))
+        self.event_notifications: bool = bool(config.get("event_notifications", False))
+        self.restart_period: int = int(config.get("restart_period", 3600))
+        self.sandboxie_box: str = config.get("sandboxie_box", "")
+        self.ravenfall_start_script: str = config.get("ravenfall_start_script", "")
+        self.middleman_connection_id: str = config.get("middleman_connection_id", "")
+        self.ravenfall_loc_strings_path: str | None = config.get(
+            "ravenfall_loc_strings_path", None
+        )
+        self.auto_restore_raids: bool = config.get("auto_restore_raids", False)
+        self.restart_timeout: int = int(config.get("restart_timeout", 120))
+        self.town_level_notifications: bool = bool(
+            config.get("town_level_notifications", True)
+        )
 
         if isinstance(self.ravenbot_prefixes, str):
             self.ravenbot_prefixes = (self.ravenbot_prefixes,)
@@ -138,8 +179,10 @@ class RFChannel:
         self.twitch_message_waiter: MessageWaiter = MessageWaiter()
         self.ravenbot_waiter: RavenBotMessageWaiter = RavenBotMessageWaiter()
         self.ravenfall_waiter: RavenfallMessageWaiter = RavenfallMessageWaiter()
-        
-        self.rfloc: RavenfallLocalization = RavenfallLocalization('data/definitions.yaml', self.ravenfall_loc_strings_path)
+
+        self.rfloc: RavenfallLocalization = RavenfallLocalization(
+            "data/definitions.yaml", self.ravenfall_loc_strings_path
+        )
 
         self.rf_api: RavenfallClient = RavenfallClient(self.rf_query_url)
 
@@ -152,60 +195,77 @@ class RFChannel:
         self.monitoring_paused = False
 
         self.restart_task: RFRestartTask | None = None
-        
+
         # Monitoring state
-        self.monitoring_paused: bool = config.get('pause_monitoring', False)
+        self.monitoring_paused: bool = config.get("pause_monitoring", False)
         self.is_monitoring: bool = False  # Whether we're currently monitoring a command
-        self.current_monitor: dict[str, Any] | None = None  # Current monitor info if monitoring
-        self.ravenbot_restart_attempts: dict[str, int] = {'count': 0, 'last_attempt': 0}  # Track restart attempts
+        self.current_monitor: dict[str, Any] | None = (
+            None  # Current monitor info if monitoring
+        )
+        self.ravenbot_restart_attempts: dict[str, int] = {
+            "count": 0,
+            "last_attempt": 0,
+        }  # Track restart attempts
         self.ravenfall_restart_attempts: int = 0
-        self.restart_future: asyncio.Future[bool] | None = None  # Current restart future if any
+        self.restart_future: asyncio.Future[bool] | None = (
+            None  # Current restart future if any
+        )
 
         self.cooldowns: Cooldown = Cooldown()
 
-        self.middleman_connection_status: ravenfall_middleman.ConnectionStatus = ravenfall_middleman.ConnectionStatus()
-        
-        self.island_arrivals: dict[str, list[str]] = defaultdict(list)  # island name -> list of names
-        self.island_last_arrival_time: dict[str, float] = defaultdict(lambda: 0)  # island name -> last arrival timestamp
-        
+        self.middleman_connection_status: ravenfall_middleman.ConnectionStatus = (
+            ravenfall_middleman.ConnectionStatus()
+        )
+
+        self.island_arrivals: dict[str, list[str]] = defaultdict(
+            list
+        )  # island name -> list of names
+        self.island_last_arrival_time: dict[str, float] = defaultdict(
+            lambda: 0
+        )  # island name -> last arrival timestamp
+
         self.scroll_queue: deque[QueuedScrollDC] = deque()
 
         self.update_events_routine_first_iteration: bool = True
         self.last_event_routine_fetch_success: float = time.monotonic()
-        
+
     async def save_scroll_queue(self):
         encoded: list[QueuedScroll] = []
         for item in self.scroll_queue:
-            encoded.append({
-                "scroll": item.scroll,
-                "reward_id": item.reward_id,
-                "reward_redemption_id": item.reward_redemption_id,
-                "user_id": item.user_id,
-                "credits_spent": item.credits_spent
-            })
+            encoded.append(
+                {
+                    "scroll": item.scroll,
+                    "reward_id": item.reward_id,
+                    "reward_redemption_id": item.reward_redemption_id,
+                    "user_id": item.user_id,
+                    "credits_spent": item.credits_spent,
+                }
+            )
         async with get_async_session() as session:
             await db_utils.update_scroll_queue(session, self.channel_id, encoded)
-    
+
     async def load_scroll_queue(self):
         encoded = []
         async with get_async_session() as session:
             encoded = await db_utils.get_scroll_queue(session, self.channel_id) or []
         decoded: list[QueuedScrollDC] = []
         for item in encoded:
-            decoded.append(QueuedScrollDC(
-                scroll=ScrollType(item['scroll']),
-                reward_id=item['reward_id'],
-                reward_redemption_id=item['reward_redemption_id'],
-                user_id=item['user_id'],
-                credits_spent=item['credits_spent']
-            ))
+            decoded.append(
+                QueuedScrollDC(
+                    scroll=ScrollType(item["scroll"]),
+                    reward_id=item["reward_id"],
+                    reward_redemption_id=item["reward_redemption_id"],
+                    user_id=item["user_id"],
+                    credits_spent=item["credits_spent"],
+                )
+            )
         self.scroll_queue = deque(decoded)
-        
+
     async def start(self):
         if self.monitoring_paused:
             return
-        
-        await self.load_scroll_queue()        
+
+        await self.load_scroll_queue()
 
         __ = await self.chat.join_room(self.channel_name)
         __ = self.update_mult_routine.start()
@@ -229,7 +289,9 @@ class RFChannel:
         self.island_arrival_grouping_routine.cancel()
         self.scroll_queue_routine.cancel()
 
-    async def send_chat_message(self, message: str, ignore_error: bool = False, reply_id: str | None = None):
+    async def send_chat_message(
+        self, message: str, ignore_error: bool = False, reply_id: str | None = None
+    ):
         try:
             await self.chat.send_message(self.channel_name, message, reply_id=reply_id)
             await self.monitor_ravenfall_command(content=message)
@@ -237,16 +299,24 @@ class RFChannel:
             if not ignore_error:
                 raise e
             else:
-                logger.warning(f"Failed to send chat message for {self.channel_name}: {e}")
-    
-    async def send_announcement(self, message: str, color: str | None = None, ignore_error: bool = True):
+                logger.warning(
+                    f"Failed to send chat message for {self.channel_name}: {e}"
+                )
+
+    async def send_announcement(
+        self, message: str, color: str | None = None, ignore_error: bool = True
+    ):
         try:
-            await self.chat.twitch.send_chat_announcement(self.channel_id, os.getenv("BOT_USER_ID", ""), message, color)
+            await self.chat.twitch.send_chat_announcement(
+                self.channel_id, os.getenv("BOT_USER_ID", ""), message, color
+            )
         except Exception as e:
             if not ignore_error:
                 raise e
             else:
-                logger.warning(f"Failed to send announcement for {self.channel_name}: {e}")
+                logger.warning(
+                    f"Failed to send announcement for {self.channel_name}: {e}"
+                )
 
     async def send_message_as_ravenbot(self, text: str, cid: str):
         message: RavenfallMessage = {
@@ -257,12 +327,12 @@ class RFChannel:
                 "CharacterId": "00000000-0000-0000-0000-000000000000",
                 "Platform": "twitch",
                 "PlatformId": "",
-                "PlatformUserName": ""
+                "PlatformUserName": "",
             },
             "Format": text,
             "Args": [],
             "Tags": [],
-            "Category": ""
+            "Category": "",
         }
         __ = await send_to_client(self.middleman_connection_id, json.dumps(message))
 
@@ -289,24 +359,28 @@ class RFChannel:
                     username=arguments[0] if arguments else message.user.name,
                 ).build(),
                 message.id,
-                timeout=3
+                timeout=3,
             )
-            if (not response.get('timeout', False)) and "responses" in response:
-                __ = await send_to_client(self.middleman_connection_id, json.dumps(response['responses'][0]))
+            if (not response.get("timeout", False)) and "responses" in response:
+                __ = await send_to_client(
+                    self.middleman_connection_id, json.dumps(response["responses"][0])
+                )
             else:
-                is_inspecting_other = len(arguments) > 0 and arguments[0].lower() != message.user.name.lower()
+                is_inspecting_other = (
+                    len(arguments) > 0
+                    and arguments[0].lower() != message.user.name.lower()
+                )
                 if not is_inspecting_other:
                     await self.send_chat_message(
                         "You are not currently playing. Use !join to start playing!",
-                        reply_id=message.id
+                        reply_id=message.id,
                     )
                 else:
                     await self.send_chat_message(
                         "The user you are trying to inspect is not currently playing.",
-                        reply_id=message.id
+                        reply_id=message.id,
                     )
 
-    
     async def event_ravenbot_message(self, message: RavenBotMessage):
         await self.ravenbot_waiter.process_message(message)
 
@@ -314,112 +388,150 @@ class RFChannel:
         await self.ravenfall_waiter.process_message(message)
 
     # Messages from ravenbot
-    async def process_ravenbot_message(self, message: RavenBotMessage, _: MessageMetadata) -> RavenBotMessage | BlockResponse:
-        platform_id = message['Sender']['PlatformId']
+    async def process_ravenbot_message(
+        self, message: RavenBotMessage, _: MessageMetadata
+    ) -> RavenBotMessage | BlockResponse:
+        platform_id = message["Sender"]["PlatformId"]
         if not platform_id:
-            if message['Identifier'] in ('observe', 'travel'):
-                message['Sender'] = await self.get_sender_data(message['Sender']['Username'].lower())
-                if message['Sender']['PlatformId'] is not None:
-                    logger.info(f"Replaced sender data for {message['Sender']['Username']}")
+            if message["Identifier"] in ("observe", "travel"):
+                message["Sender"] = await self.get_sender_data(
+                    message["Sender"]["Username"].lower()
+                )
+                if message["Sender"]["PlatformId"] is not None:
+                    logger.info(
+                        f"Replaced sender data for {message['Sender']['Username']}"
+                    )
             return message
 
         # sometimes "server-request" is the platform ID
         if not platform_id.isdigit():
             return message
 
-        __ = asyncio.create_task(self.record_user(
-            int(platform_id),
-            message['Sender']['Username'],
-            message['Sender']['Color'],
-            message['Sender']['DisplayName']
-        ))
-        __ = asyncio.create_task(self.record_sender_data(message['Sender']))
+        __ = asyncio.create_task(
+            self.record_user(
+                int(platform_id),
+                message["Sender"]["Username"],
+                message["Sender"]["Color"],
+                message["Sender"]["DisplayName"],
+            )
+        )
+        __ = asyncio.create_task(self.record_sender_data(message["Sender"]))
 
-        if message['Identifier'] == 'task':
-            __ = asyncio.create_task(self.fetch_training(message['Sender']['Username'], wait_first=True))
-        elif message['Identifier'] == 'leave':
-            await self.fetch_training(message['Sender']['Username'])
-        elif message['Identifier'] == 'inspect':
-            return {'block': True}
-            
+        if message["Identifier"] == "task":
+            __ = asyncio.create_task(
+                self.fetch_training(message["Sender"]["Username"], wait_first=True)
+            )
+        elif message["Identifier"] == "leave":
+            await self.fetch_training(message["Sender"]["Username"])
+        elif message["Identifier"] == "inspect":
+            return {"block": True}
+
         return message
 
     # Messages from ravenfall
-    async def process_ravenfall_message(self, message: RavenfallMessage, _: MessageMetadata) -> RavenfallMessage | BlockResponse:
+    async def process_ravenfall_message(
+        self, message: RavenfallMessage, _: MessageMetadata
+    ) -> RavenfallMessage | BlockResponse:
         # Make sure session data messages and other things are not processed
-        if message['Identifier'] != 'message':
+        if message["Identifier"] != "message":
             return message
-        match = self.rfloc.identify_string(message['Format'])
+        match = self.rfloc.identify_string(message["Format"])
         key = ""
         if match is not None:
             key = match.key
-        message_args = message['Args']
+        message_args = message["Args"]
         additional_args: dict[str, Any] = {}
-        if message['Recipent']['Platform'].lower() == 'system':
+        if message["Recipent"]["Platform"].lower() == "system":
             if key in (
-                "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count", "dungeon_countdown",
-                "raid_start", "raid_auto_joined", "raid_auto_joined_count", 
-                "multiplier_ends", "multiplier_ended"):
-                return {'block': True}
-        if message['Recipent']['Platform'].lower() == 'twitch':
-            __ = asyncio.create_task(self.record_character(
-                str(message['Recipent']['CharacterId']),
-                message['Recipent']['PlatformUserName'],
-                message['Recipent']['PlatformId'],
-            ))
-            __ = asyncio.create_task(self.process_auto_raid_sessionless(message.copy(), key))
+                "dungeon_spawned",
+                "dungeon_auto_joined",
+                "dungeon_auto_joined_count",
+                "dungeon_countdown",
+                "raid_start",
+                "raid_auto_joined",
+                "raid_auto_joined_count",
+                "multiplier_ends",
+                "multiplier_ended",
+            ):
+                return {"block": True}
+        if message["Recipent"]["Platform"].lower() == "twitch":
+            __ = asyncio.create_task(
+                self.record_character(
+                    str(message["Recipent"]["CharacterId"]),
+                    message["Recipent"]["PlatformUserName"],
+                    message["Recipent"]["PlatformId"],
+                )
+            )
+            __ = asyncio.create_task(
+                self.process_auto_raid_sessionless(message.copy(), key)
+            )
             if key == "join_welcome":
-            #     # Auto raid is already handled in process_auto_raid_sessionless
-            #     asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
-                __ = asyncio.create_task(self.fetch_training(message['Recipent']['PlatformUserName'], wait_first=True))
+                #     # Auto raid is already handled in process_auto_raid_sessionless
+                #     asyncio.create_task(self.restore_sailor(message['Recipent']['PlatformUserName']))
+                __ = asyncio.create_task(
+                    self.fetch_training(
+                        message["Recipent"]["PlatformUserName"], wait_first=True
+                    )
+                )
             elif key in ("village_boost", "village_boost_no_boost"):
                 town_level, exp_left = message_args[0], message_args[1]
-                level_exp = experience_for_level(int(town_level)+1)
-                additional_args['requiredExp'] = level_exp
-                additional_args['currentExp'] = (level_exp - int(exp_left))
-                additional_args['levelPercent'] = f"{(level_exp - int(exp_left)) / level_exp:.2%}"
+                level_exp = experience_for_level(int(town_level) + 1)
+                additional_args["requiredExp"] = level_exp
+                additional_args["currentExp"] = level_exp - int(exp_left)
+                additional_args["levelPercent"] = (
+                    f"{(level_exp - int(exp_left)) / level_exp:.2%}"
+                )
             elif key == "ferry_arrived":
-                user = message['Recipent']['PlatformUserName']
+                user = message["Recipent"]["PlatformUserName"]
                 destination = message_args[0]
                 t = time.monotonic()
                 if isinstance(destination, str):
                     self.island_arrivals[destination].append(user)
                     self.island_last_arrival_time[destination] = t
-                return {'block': True}
+                return {"block": True}
             elif key == "loot":
-                loots = [x.strip() for x in message['Format'].split(". ")]
+                loots = [x.strip() for x in message["Format"].split(". ")]
                 if len(loots) > 3:
                     paste_out: list[str] = []
-                    paste_out.append(f"Loot gained by {message['Recipent']['PlatformUserName']} ({datetime.now(timezone.utc).strftime('%d %B %Y %H:%M:%S UTC')})")
+                    paste_out.append(
+                        f"Loot gained by {message['Recipent']['PlatformUserName']} ({datetime.now(timezone.utc).strftime('%d %B %Y %H:%M:%S UTC')})"
+                    )
                     paste_out.append("")
                     paste_out.extend(loots)
-                    paste_url = await utils.upload_to_bin('\n'.join(paste_out))
-                    await self.send_chat_message(f"{', '.join(loots[:3])} ✦ More: {paste_url}", reply_id=str(message['CorrelationId']))
+                    paste_url = await utils.upload_to_bin("\n".join(paste_out))
+                    await self.send_chat_message(
+                        f"{', '.join(loots[:3])} ✦ More: {paste_url}",
+                        reply_id=str(message["CorrelationId"]),
+                    )
                 else:
-                    await self.send_chat_message(f"{', '.join(loots)}", reply_id=str(message['CorrelationId']))
-                return {'block': True}
+                    await self.send_chat_message(
+                        f"{', '.join(loots)}", reply_id=str(message["CorrelationId"])
+                    )
+                return {"block": True}
         if self.ravenfall_loc_strings_path:
-            trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
+            trans_str = self.rfloc.translate_string(
+                message["Format"], message["Args"], match, additional_args
+            ).strip()
             if len(trans_str) == 0:
-                return {'block': True}
+                return {"block": True}
             max_length = 500
-            recipient_name = message['Recipent']['PlatformUserName']
+            recipient_name = message["Recipent"]["PlatformUserName"]
             max_length -= len(recipient_name) + 2
             trans_strs = strutils.split_by_utf16_bytes(trans_str, max_length)
             if len(trans_strs) > 1:
                 __ = asyncio.create_task(self.send_split_msgs(message, trans_strs))
-                return {'block': True}
-            message['Format'] = trans_strs[0]
-            message['Args'] = []
+                return {"block": True}
+            message["Format"] = trans_strs[0]
+            message["Args"] = []
         return message
-    
+
     async def record_character(
-        self, 
-        char_id: str, 
-        username: str, 
-        twitch_id: int | str, 
+        self,
+        char_id: str,
+        username: str,
+        twitch_id: int | str,
         name_tag_color: str | None = None,
-        display_name: str | None = None
+        display_name: str | None = None,
     ):
         async with get_async_session() as session:
             if name_tag_color and len(name_tag_color) != 7:
@@ -430,22 +542,27 @@ class RFChannel:
                 twitch_id=twitch_id,
                 user_name=username,
                 name_tag_color=name_tag_color,
-                display_name=display_name
+                display_name=display_name,
             )
 
-
-    async def build_sender_from_character_id(self, char_id: str, session: AsyncSession | None = None, default_username: str | None = None) -> Sender | None:
+    async def build_sender_from_character_id(
+        self,
+        char_id: str,
+        session: AsyncSession | None = None,
+        default_username: str | None = None,
+    ) -> Sender | None:
         """
         Build a Sender dictionary from a character ID by looking up user and character data.
-        
+
         Args:
             char_id: The character ID to look up
             session: Optional database session to use. If not provided, a new session will be created.
             default_username: Default username to use if not found in the database
-            
+
         Returns:
             Dictionary suitable for SenderBuilder or None if character not found
         """
+
         async def _build_sender(session: AsyncSession):
             result = await session.execute(
                 select(Character, User)
@@ -453,39 +570,41 @@ class RFChannel:
                 .join(User, Character.twitch_id == User.twitch_id, isouter=True)
             )
             row: Row[tuple[Character, User]] | None = result.one_or_none()
-            
+
             if not row:
                 if default_username:
                     return SenderBuilder(
                         username=default_username,
                         display_name=default_username,
-                        platform_id=""
+                        platform_id="",
                     ).build()
                 return None
-                
+
             character, user = row.tuple()
-            username = default_username or character.id  # Fallback to character ID if no default provided
+            username = (
+                default_username or character.id
+            )  # Fallback to character ID if no default provided
             display_name = user.display_name if user else username
-            
+
             return SenderBuilder(
                 username=username,
                 display_name=display_name,
                 platform_id=str(character.twitch_id) if character.twitch_id else "",
                 color=user.name_tag_color if user else None,
             ).build()
-            
+
         if session is not None:
             return await _build_sender(session)
-            
+
         async with get_async_session() as session:
             return await _build_sender(session)
 
     async def record_user(
-        self, 
-        twitch_id: int, 
-        user_name: str, 
+        self,
+        twitch_id: int,
+        user_name: str,
         name_tag_color: str,
-        display_name: str | None = None
+        display_name: str | None = None,
     ):
         async with get_async_session() as session:
             __ = await db_utils.record_user(
@@ -493,24 +612,28 @@ class RFChannel:
                 user_name=user_name,
                 name_tag_color=name_tag_color,
                 twitch_id=twitch_id,
-                display_name=display_name
+                display_name=display_name,
             )
 
     async def record_sender_data(self, sender_json: Sender):
         async with get_async_session() as session:
-            __ = await db_utils.record_sender_data(session, "twitch", self.channel_id, sender_json)
+            __ = await db_utils.record_sender_data(
+                session, "twitch", self.channel_id, sender_json
+            )
 
     async def get_sender_data(self, user_name: str):
         async with get_async_session() as session:
-            return await db_utils.get_formatted_sender_data(session, self.channel_id, user_name)
+            return await db_utils.get_formatted_sender_data(
+                session, self.channel_id, user_name
+            )
 
     async def send_split_msgs(self, message: RavenfallMessage, msgs: list[str]):
         for msg in msgs:
-            message['Format'] = msg
-            message['Args'] = []
+            message["Format"] = msg
+            message["Args"] = []
             __ = await send_to_client(self.middleman_connection_id, json.dumps(message))
             await asyncio.sleep(0.1)
-    
+
     async def monitor_ravenfall_command(
         self,
         *,
@@ -526,31 +649,46 @@ class RFChannel:
         if not prefix:
             return
 
-        parts = content[len(prefix):].strip().split(maxsplit=1)
+        parts = content[len(prefix) :].strip().split(maxsplit=1)
         if not parts:  # If there's no command after prefix
             return
-            
+
         command = parts[0].lower()
         timeout = COMMAND_TIMEOUTS.get(command)
         is_monitored_command = timeout is not None
         if not is_monitored_command:
             return
-        if self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE and self.dungeon is not None:
+        if (
+            self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE
+            and self.dungeon is not None
+        ):
             await asyncio.sleep(0.5)
             if (message is not None) and self.dungeon.enemies < 48:
-                await message.reply(f"(Loading) Game is busy preparing a new dungeon... ({self.dungeon.enemies}/49) (Use !event to check progress)")
+                await message.reply(
+                    f"(Loading) Game is busy preparing a new dungeon... ({self.dungeon.enemies}/49) (Use !event to check progress)"
+                )
         else:
             if message is None:
                 resend_text = content
             else:
-                resend_text = message.text if message.user.id == os.getenv("BOT_USER_ID") else None
-            self.monitor_ravenbot_response(command, timeout=timeout, resend_text=resend_text)
-                        
-    async def wait_for_ravenbot_command(self, command: str, timeout: float = 10.0) -> RavenBotMessage | None:
+                resend_text = (
+                    message.text if message.user.id == os.getenv("BOT_USER_ID") else None
+                )
+            self.monitor_ravenbot_response(
+                command, timeout=timeout, resend_text=resend_text
+            )
+
+    async def wait_for_ravenbot_command(
+        self, command: str, timeout: float = 10.0
+    ) -> RavenBotMessage | None:
         return await self.ravenbot_waiter.wait_for_command(command, timeout=timeout)
-        
-    async def wait_for_ravenfall_format(self, format_str: str, timeout: float = 10.0) -> RavenfallMessage | None:
-        return await self.ravenfall_waiter.wait_for_format_match(format_str, timeout=timeout)
+
+    async def wait_for_ravenfall_format(
+        self, format_str: str, timeout: float = 10.0
+    ) -> RavenfallMessage | None:
+        return await self.ravenfall_waiter.wait_for_format_match(
+            format_str, timeout=timeout
+        )
 
     def _ravenbot_is_muted(self):
         if not self.manager.middleman_enabled:
@@ -586,7 +724,7 @@ class RFChannel:
         elif multiplier.multiplier < self.current_mult and multiplier.multiplier == 1:
             msg = self.rfloc.s("The exp multiplier has expired.")
             await self.send_chat_message(msg)
-        
+
         self.current_mult = multiplier.multiplier
 
     @routine(delta=timedelta(seconds=1), wait_first=True, max_attempts=99999)
@@ -619,7 +757,7 @@ class RFChannel:
             dungeon_name = "DUNGEON"
             if dungeon.name:
                 dungeon_name = f"DUNGEON: {dungeon.name}"
-                
+
             if not dungeon.started:
                 self.max_dungeon_hp = dungeon.boss.health
                 time_starting = format_seconds(dungeon.seconds_until_start)
@@ -646,7 +784,7 @@ class RFChannel:
                 event_text = (
                     f"{dungeon_name} – "
                     f"Boss HP: {dungeon.boss.health:,}/{boss_max_hp:,} "
-                    f"({dungeon.boss.health/boss_max_hp:.1%}) – "
+                    f"({dungeon.boss.health / boss_max_hp:.1%}) – "
                     f"Enemies: {dungeon.enemies_alive:,}/{dungeon.enemies:,} – "
                     f"Players: {dungeon.players_alive:,}/{dungeon.players:,} – "
                     f"Elapsed time: {format_seconds(dungeon.elapsed)} – "
@@ -661,7 +799,7 @@ class RFChannel:
             event_text = (
                 "RAID – "
                 f"Boss HP: {raid.boss.health:,}/{raid.boss.max_health:,} "
-                f"({raid.boss.health/raid.boss.max_health:.1%}) – "
+                f"({raid.boss.health / raid.boss.max_health:.1%}) – "
                 f"Players: {raid.players:,} – "
                 f"Time left: {format_seconds(raid.time_left)}"
             )
@@ -671,13 +809,19 @@ class RFChannel:
         self.event = event
         self.sub_event = sub_event
         if not self.update_events_routine_first_iteration:
-            __ = asyncio.create_task(self.game_event_notification(sub_event, old_sub_event))
-            __ = asyncio.create_task(self.game_event_muted_ravenbot_notification(sub_event, old_sub_event))
+            __ = asyncio.create_task(
+                self.game_event_notification(sub_event, old_sub_event)
+            )
+            __ = asyncio.create_task(
+                self.game_event_muted_ravenbot_notification(sub_event, old_sub_event)
+            )
         __ = asyncio.create_task(self.game_event_wake_ravenbot(sub_event))
-        __ = asyncio.create_task(self.game_event_fetch_auto_raids(old_sub_event, sub_event))
-        
+        __ = asyncio.create_task(
+            self.game_event_fetch_auto_raids(old_sub_event, sub_event)
+        )
+
         self.update_events_routine_first_iteration = False
-    
+
     @routine(delta=timedelta(seconds=46), max_attempts=99999)
     async def town_level_notification_routine(self):
         if not self.town_level_notifications:
@@ -693,7 +837,7 @@ class RFChannel:
 
         if village.level == self.town_level:
             return
-        
+
         old_town_level = self.town_level
         self.town_level = village.level
 
@@ -704,20 +848,25 @@ class RFChannel:
             __ = await self.update_boost()
             await asyncio.sleep(10)
 
-        await self.send_chat_message(
-            f"🎉 Town level is now {self.town_level}!"
-        )
-        
-    async def game_event_notification(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
+        await self.send_chat_message(f"🎉 Town level is now {self.town_level}!")
+
+    async def game_event_notification(
+        self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent
+    ):
         if self.event_notifications:
-            if old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID and self.raid:
+            if (
+                old_sub_event != RFChannelSubEvent.RAID
+                and sub_event == RFChannelSubEvent.RAID
+                and self.raid
+            ):
                 await asyncio.sleep(2)
-                msg = (
-                    f"RAID – "
-                    f"Boss HP: {self.raid.boss.health:,} "
-                )
+                msg = f"RAID – Boss HP: {self.raid.boss.health:,} "
                 await self.send_chat_message(msg)
-            elif old_sub_event != RFChannelSubEvent.DUNGEON_STARTED and sub_event == RFChannelSubEvent.DUNGEON_STARTED and self.dungeon:
+            elif (
+                old_sub_event != RFChannelSubEvent.DUNGEON_STARTED
+                and sub_event == RFChannelSubEvent.DUNGEON_STARTED
+                and self.dungeon
+            ):
                 await asyncio.sleep(2)
                 msg = (
                     f"DUNGEON – "
@@ -727,8 +876,14 @@ class RFChannel:
                 )
                 await self.send_chat_message(msg)
 
-    async def game_event_muted_ravenbot_notification(self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent):
-        if old_sub_event != RFChannelSubEvent.DUNGEON_READY and sub_event == RFChannelSubEvent.DUNGEON_READY and self.dungeon:
+    async def game_event_muted_ravenbot_notification(
+        self, sub_event: RFChannelSubEvent, old_sub_event: RFChannelSubEvent
+    ):
+        if (
+            old_sub_event != RFChannelSubEvent.DUNGEON_READY
+            and sub_event == RFChannelSubEvent.DUNGEON_READY
+            and self.dungeon
+        ):
             await asyncio.sleep(2)
             players = self.dungeon.players
             dungeon_name = self.dungeon.name
@@ -737,29 +892,52 @@ class RFChannel:
             if players == 0:
                 await self.send_chat_message(f"{dungeon_name} is available!")
             else:
-                await self.send_chat_message(f"{dungeon_name} is available! {strutils.pl2(players, 'player has', 'players have')} joined.")
-        elif old_sub_event != RFChannelSubEvent.RAID and sub_event == RFChannelSubEvent.RAID and self.raid:
+                await self.send_chat_message(
+                    f"{dungeon_name} is available! {strutils.pl2(players, 'player has', 'players have')} joined."
+                )
+        elif (
+            old_sub_event != RFChannelSubEvent.RAID
+            and sub_event == RFChannelSubEvent.RAID
+            and self.raid
+        ):
             await asyncio.sleep(2)
             players = self.raid.players
             if self.event_notifications:
                 if players > 0:
-                    await self.send_chat_message(f"{strutils.pl2(players, 'player has', 'players have')} joined the raid.")
+                    await self.send_chat_message(
+                        f"{strutils.pl2(players, 'player has', 'players have')} joined the raid."
+                    )
             else:
                 if players == 0:
-                    await self.send_chat_message(f"A level {self.raid.boss.combat_level} raid is available!")
+                    await self.send_chat_message(
+                        f"A level {self.raid.boss.combat_level} raid is available!"
+                    )
                 else:
-                    await self.send_chat_message(f"A level {self.raid.boss.combat_level} raid is available! {strutils.pl2(players, 'player has', 'players have')} joined.")
+                    await self.send_chat_message(
+                        f"A level {self.raid.boss.combat_level} raid is available! {strutils.pl2(players, 'player has', 'players have')} joined."
+                    )
 
     async def game_event_wake_ravenbot(self, sub_event: RFChannelSubEvent):
         if self.manager.middleman_power_saving and self.manager.middleman_connected:
             if sub_event == RFChannelSubEvent.DUNGEON_BOSS:
-                __ = await ravenfall_middleman.ensure_connected(self.middleman_connection_id, 60)
-            if sub_event == RFChannelSubEvent.RAID and self.raid and self.raid.players > 0:
-                __ = await ravenfall_middleman.ensure_connected(self.middleman_connection_id, 60)
+                __ = await ravenfall_middleman.ensure_connected(
+                    self.middleman_connection_id, 60
+                )
+            if (
+                sub_event == RFChannelSubEvent.RAID
+                and self.raid
+                and self.raid.players > 0
+            ):
+                __ = await ravenfall_middleman.ensure_connected(
+                    self.middleman_connection_id, 60
+                )
 
     @routine(delta=timedelta(seconds=30), wait_first=True, max_attempts=99999)
     async def dungeon_killswitch_routine(self):
-        if not self.sub_event in (RFChannelSubEvent.DUNGEON_STARTED, RFChannelSubEvent.DUNGEON_BOSS):
+        if not self.sub_event in (
+            RFChannelSubEvent.DUNGEON_STARTED,
+            RFChannelSubEvent.DUNGEON_BOSS,
+        ):
             return
         if not self.dungeon:
             return
@@ -768,7 +946,9 @@ class RFChannel:
 
     @routine(delta=timedelta(hours=5), wait_first=True, max_attempts=99999)
     async def backup_state_data_routine(self, instant: bool = True):
-        while self.channel_restart_lock.locked() or self.channel_post_restart_lock.locked():
+        while (
+            self.channel_restart_lock.locked() or self.channel_post_restart_lock.locked()
+        ):
             await asyncio.sleep(5)
         locked_global_resync = False
         if self.manager.ravennest_is_online:
@@ -782,7 +962,7 @@ class RFChannel:
                         user_id=self.channel_id,
                         user_name=self.channel_name,
                         channel_id=self.channel_id,
-                        channel_name=self.channel_name
+                        channel_name=self.channel_name,
                     )
                 except:
                     await self.send_chat_message("?resync")
@@ -794,7 +974,7 @@ class RFChannel:
         try:
             __ = await backup_file_with_date_async(
                 f"{os.getenv('RAVENFALL_SANDBOXED_FOLDER', '').replace('{box}', self.sandboxie_box).rstrip('\\/')}\\state-data.json",
-                int(os.getenv('STATE_DATA_BACKUP_RETENTION_COUNT', '100'))
+                int(os.getenv("STATE_DATA_BACKUP_RETENTION_COUNT", "100")),
             )
             logger.info(f"Backed up state data for {self.channel_name}")
         except Exception as e:
@@ -808,7 +988,9 @@ class RFChannel:
     async def update_middleman_connection_status_routine(self):
         conn_status = None
         if self.manager.middleman_connected:
-            conn_status, __ = await ravenfall_middleman.get_connection_status(self.middleman_connection_id)
+            conn_status, __ = await ravenfall_middleman.get_connection_status(
+                self.middleman_connection_id
+            )
         if conn_status is None:
             if self.manager.middleman_enabled:
                 self.middleman_connection_status = ravenfall_middleman.ConnectionStatus(
@@ -826,10 +1008,7 @@ class RFChannel:
         self.middleman_connection_status = conn_status
 
     async def first_time_joiner(self, msg: ChatMessage):
-        cd = self.cooldowns.scoped(
-            "first_time_joiner",
-            CooldownBucket(rate=1, per=10)
-        )
+        cd = self.cooldowns.scoped("first_time_joiner", CooldownBucket(rate=1, per=10))
         if cd.is_rate_limited():
             return
         await asyncio.sleep(3)
@@ -839,15 +1018,17 @@ class RFChannel:
         except Exception as e:
             logger.error(f"Failed to get town boost for {self.channel_name}: {e}")
             return
-        welcome_msg = self.welcome_message.format_map({
-            "townSkillLower": boost[0].skill.name.lower(),
-            "townSkill": boost[0].skill.name,
-            "userName": msg.user.name,
-            "userDisplayName": msg.user.display_name
-        })
+        welcome_msg = self.welcome_message.format_map(
+            {
+                "townSkillLower": boost[0].skill.name.lower(),
+                "townSkill": boost[0].skill.name,
+                "userName": msg.user.name,
+                "userDisplayName": msg.user.display_name,
+            }
+        )
         await self.send_chat_message(welcome_msg)
         __ = cd.update_rate_limit()
-        
+
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def scroll_queue_routine(self):
         if self.update_events_routine_first_iteration:
@@ -860,7 +1041,11 @@ class RFChannel:
             async with self.channel_post_restart_lock:
                 pass
             return
-        if self.restart_task and (not self.restart_task.finished()) and (self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5):
+        if (
+            self.restart_task
+            and (not self.restart_task.finished())
+            and (self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5)
+        ):
             return
         if self.event != RFChannelEvent.NONE:
             return
@@ -868,27 +1053,31 @@ class RFChannel:
             return
         scrolls = await get_scroll_counts(self.channel_id)
         stock = 0
-        name = ''
-        command = ''
+        name = ""
+        command = ""
         expected_event = RFChannelEvent.NONE
         next_scroll = self.scroll_queue[0]
         if next_scroll.scroll == ScrollType.RAID:
-            stock = scrolls['data']['channel']['Raid Scroll']
-            name = 'raid'
-            command = '?rs'
+            stock = scrolls["data"]["channel"]["Raid Scroll"]
+            name = "raid"
+            command = "?rs"
             expected_event = RFChannelEvent.RAID
         elif next_scroll.scroll == ScrollType.DUNGEON:
-            stock = scrolls['data']['channel']['Dungeon Scroll']
-            name = 'dungeon'
-            command = '?ds'
+            stock = scrolls["data"]["channel"]["Dungeon Scroll"]
+            name = "dungeon"
+            command = "?ds"
             expected_event = RFChannelEvent.DUNGEON
         else:
             return
         if stock <= 0:
             logging.info(f"Out of {name} scrolls! Skipping queue entry...")
             return
-        await send_multichat_command(command, "0", self.channel_name, self.channel_id, self.channel_name)
-        twitch = self.manager.global_context.require_service(TwitchUtils).twitches.get(self.channel_id, None)
+        await send_multichat_command(
+            command, "0", self.channel_name, self.channel_id, self.channel_name
+        )
+        twitch = self.manager.global_context.require_service(TwitchUtils).twitches.get(
+            self.channel_id, None
+        )
         if twitch is None:
             logger.warning(f"Twitch client not found for channel {self.channel_name}")
             return
@@ -902,56 +1091,72 @@ class RFChannel:
                         self.channel_id,
                         next_scroll.reward_id,
                         next_scroll.reward_redemption_id,
-                        TwitchCustomRewardRedemptionStatus.FULFILLED  # pyright: ignore[reportArgumentType]
+                        TwitchCustomRewardRedemptionStatus.FULFILLED,  # pyright: ignore[reportArgumentType]
                     )
                 return
         logger.warning(f"Scroll queue: Expected event {expected_event} did not occur")
-    
+
     def get_seconds_until_restart(self):
         if not (self.restart_task and (not self.restart_task.finished())):
             return 999999
         return self.restart_task.get_time_left()
-    
+
     def is_restarting(self):
         return self.channel_restart_lock.locked()
-        
+
     def get_scroll_queue_length(self):
         return len(self.scroll_queue)
-    
-    def get_scroll_count_in_queue(self, scroll: Literal['dungeon', 'raid']):
+
+    def get_scroll_count_in_queue(self, scroll: Literal["dungeon", "raid"]):
         scroll_id = ScrollType.NONE
-        if scroll == 'dungeon':
+        if scroll == "dungeon":
             scroll_id = ScrollType.DUNGEON
-        elif scroll == 'raid':
+        elif scroll == "raid":
             scroll_id = ScrollType.RAID
         count = 0
         for item in self.scroll_queue:
             if item.scroll == scroll_id:
                 count += 1
         return count
-    
-    async def add_scroll_to_queue(self, scroll: Literal['dungeon', 'raid'], redeem_ctx: TwitchRedemptionEvent | None = None, user_id: str | None = None, credits_spent: int = 0):
+
+    async def add_scroll_to_queue(
+        self,
+        scroll: Literal["dungeon", "raid"],
+        redeem_ctx: TwitchRedemptionEvent | None = None,
+        user_id: str | None = None,
+        credits_spent: int = 0,
+    ):
         scrolls = await get_scroll_counts(self.channel_id)
         stock = 0
         scroll_id = ScrollType.NONE
-        if scroll == 'dungeon':
-            stock = scrolls['data']['channel']['Dungeon Scroll']
+        if scroll == "dungeon":
+            stock = scrolls["data"]["channel"]["Dungeon Scroll"]
             scroll_id = ScrollType.DUNGEON
-        elif scroll == 'raid':
-            stock = scrolls['data']['channel']['Raid Scroll']
+        elif scroll == "raid":
+            stock = scrolls["data"]["channel"]["Raid Scroll"]
             scroll_id = ScrollType.RAID
         amount_in_queue = self.get_scroll_count_in_queue(scroll)
         if amount_in_queue >= stock:
-            raise OutOfStockError(amount_in_queue, stock, f"Out of {scroll.capitalize()} scrolls!")
+            raise OutOfStockError(
+                amount_in_queue, stock, f"Out of {scroll.capitalize()} scrolls!"
+            )
         if redeem_ctx:
-            queue_obj = QueuedScrollDC(scroll_id, redeem_ctx.data.reward.id, redeem_ctx.data.id, user_id, credits_spent)
+            queue_obj = QueuedScrollDC(
+                scroll_id,
+                redeem_ctx.data.reward.id,
+                redeem_ctx.data.id,
+                user_id,
+                credits_spent,
+            )
         else:
             queue_obj = QueuedScrollDC(scroll_id, None, None, user_id, credits_spent)
         self.scroll_queue.append(queue_obj)
         await self.save_scroll_queue()
-        
+
     async def remove_scrolls_from_queue(self, start_pos: int):
-        twitch = self.manager.global_context.require_service(TwitchUtils).twitches.get(self.channel_id, None)
+        twitch = self.manager.global_context.require_service(TwitchUtils).twitches.get(
+            self.channel_id, None
+        )
         while len(self.scroll_queue) > start_pos:
             item = self.scroll_queue.pop()
             try:
@@ -960,16 +1165,17 @@ class RFChannel:
                         self.channel_id,
                         item.reward_id,
                         item.reward_redemption_id,
-                        TwitchCustomRewardRedemptionStatus.CANCELED  # pyright: ignore[reportArgumentType]
+                        TwitchCustomRewardRedemptionStatus.CANCELED,  # pyright: ignore[reportArgumentType]
                     )
             except Exception:
                 logger.warning(f"Failed to cancel scroll redemption for {item}")
             if item.credits_spent != 0 and item.user_id:
                 async with get_async_session() as session:
-                    __ = await db_utils.add_credits(session, item.user_id, item.credits_spent, "Scroll refund")
+                    __ = await db_utils.add_credits(
+                        session, item.user_id, item.credits_spent, "Scroll refund"
+                    )
         await self.save_scroll_queue()
 
-        
     # --- [ AUTO RESTART ] ---------------------------------------
 
     @routine(delta=timedelta(seconds=20), max_attempts=99999)
@@ -983,7 +1189,11 @@ class RFChannel:
             uptime = game_session.seconds_since_start
         if uptime is None:
             logger.warning(f"{self.channel_name} seems to be offline...")
-            __ = self.queue_restart(2, label="Ravenfall may have crashed...", reason=RestartReason.UNRESPONSIVE)
+            __ = self.queue_restart(
+                2,
+                label="Ravenfall may have crashed...",
+                reason=RestartReason.UNRESPONSIVE,
+            )
             return
 
         if not self.auto_restart:
@@ -992,9 +1202,14 @@ class RFChannel:
             return
         if self.restart_task and not self.restart_task.finished():
             return
-        period = max(20*60,self.restart_period)
+        period = max(20 * 60, self.restart_period)
         seconds_to_restart = max(60, period - uptime)
-        __ = self.queue_restart(seconds_to_restart, label="Scheduled restart", reason=RestartReason.AUTO, overwrite_same_reason=True)
+        __ = self.queue_restart(
+            seconds_to_restart,
+            label="Scheduled restart",
+            reason=RestartReason.AUTO,
+            overwrite_same_reason=True,
+        )
 
     async def _ravenfall_pre_restart(self):
         try:
@@ -1008,27 +1223,27 @@ class RFChannel:
                 user_id=self.channel_id,
                 user_name=self.channel_name,
                 channel_id=self.channel_id,
-                channel_name=self.channel_name
+                channel_name=self.channel_name,
             )
         except:
             logger.warning("Failed to send ?randleave command")
             await self.send_chat_message("?randleave")
 
     async def _restart_ravenfall(
-        self, 
-        run_pre_restart: bool = True, 
+        self,
+        run_pre_restart: bool = True,
         run_post_restart: bool = True,
         silent: bool = False,
-        *, 
+        *,
         reset_attempts: bool = True,
-        restart_task: RFRestartTask | None = None
+        restart_task: RFRestartTask | None = None,
     ) -> bool:
         if reset_attempts:
             self.ravenfall_restart_attempts = 0
         self.ravenfall_restart_attempts += 1
         if run_pre_restart:
             await self._ravenfall_pre_restart()
-            
+
         __ = await self.channel_restart_lock.acquire()
         if not silent and self.global_restart_lock.locked():
             await self.send_chat_message("Waiting for other restarts to finish...")
@@ -1040,12 +1255,14 @@ class RFChannel:
                 msg += f" Reason: {restart_task.label}"
             await self.send_chat_message(msg)
         code, text = await restart_process(
-            self.sandboxie_box, 
-            "Ravenfall.exe", 
-            f"cd {os.getenv('RAVENFALL_FOLDER')} & {self.ravenfall_start_script}"
+            self.sandboxie_box,
+            "Ravenfall.exe",
+            f"cd {os.getenv('RAVENFALL_FOLDER')} & {self.ravenfall_start_script}",
         )
         if code != 0:
-            logger.error(f"Failed to restart Ravenfall for {self.channel_name}: code {code}, text {text}")
+            logger.error(
+                f"Failed to restart Ravenfall for {self.channel_name}: code {code}, text {text}"
+            )
             if not silent:
                 await self.send_chat_message("Failed to restart Ravenfall!")
             self.channel_restart_lock.release()
@@ -1056,11 +1273,15 @@ class RFChannel:
         start_time = time.time()
         auth_timeout = self.restart_timeout
         authenticated = False
-        
+
         while time.time() - start_time < auth_timeout:
             try:
                 session = await self.rf_api.get_session(timeout=1)
-            except (ravenfall_query.TimeoutError, ravenfall_query.ConnectionError, ravenfall_query.QueryException):
+            except (
+                ravenfall_query.TimeoutError,
+                ravenfall_query.ConnectionError,
+                ravenfall_query.QueryException,
+            ):
                 await asyncio.sleep(1)
                 continue
             if session.authenticated:
@@ -1077,10 +1298,14 @@ class RFChannel:
             else:
                 await self.send_chat_message(f"Restart failed, retrying in 20 seconds")
                 await asyncio.sleep(20)
-            return await self._restart_ravenfall(False, run_post_restart, silent, reset_attempts=False)
+            return await self._restart_ravenfall(
+                False, run_post_restart, silent, reset_attempts=False
+            )
 
         if self.manager.middleman_power_saving and self.manager.middleman_connected:
-            __ = await ravenfall_middleman.force_reconnect(self.middleman_connection_id, 60)
+            __ = await ravenfall_middleman.force_reconnect(
+                self.middleman_connection_id, 60
+            )
         logger.info(f"Restarted Ravenfall for {self.channel_name}")
 
         if run_post_restart:
@@ -1103,10 +1328,14 @@ class RFChannel:
         start_time = time.time()
         while True:
             if time.time() - start_time > self.restart_timeout:
-                logger.warning(f"Timed out waiting for players to join after restart in {self.channel_name}")
-                await self.send_chat_message(f"Players did not join back @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')}")
+                logger.warning(
+                    f"Timed out waiting for players to join after restart in {self.channel_name}"
+                )
+                await self.send_chat_message(
+                    f"Players did not join back @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')}"
+                )
                 return
-                
+
             await asyncio.sleep(1)
             try:
                 session = await self.rf_api.get_session(timeout=5)
@@ -1134,7 +1363,7 @@ class RFChannel:
                 user_id=self.channel_id,
                 user_name=self.channel_name,
                 channel_id=self.channel_id,
-                channel_name=self.channel_name
+                channel_name=self.channel_name,
             )
         except:
             await self.send_chat_message("?undorandleave")
@@ -1144,10 +1373,14 @@ class RFChannel:
 
     async def restart_ravenbot(self):
         __ = await restart_process(
-            self.sandboxie_box, "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
+            self.sandboxie_box,
+            "RavenBot.exe",
+            f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe",
         )
 
-    async def _monitor_ravenbot_response_task(self, command: str, timeout: float = 5, resend_text: str | None = None):
+    async def _monitor_ravenbot_response_task(
+        self, command: str, timeout: float = 5, resend_text: str | None = None
+    ):
         """
         Monitor for RavenBot's response to a command.
         If no response, restart RavenBot up to MAX_RETRIES times.
@@ -1155,14 +1388,13 @@ class RFChannel:
         """
         if self.monitoring_paused or self.is_monitoring:
             return
-            
+
         self.is_monitoring = True
-        self.current_monitor = {
-            'command': command,
-            'start_time': time.time()
-        }
-        logger.debug(f"Monitoring for response to command: {command} in {self.channel_name}")
-        
+        self.current_monitor = {"command": command, "start_time": time.time()}
+        logger.debug(
+            f"Monitoring for response to command: {command} in {self.channel_name}"
+        )
+
         while self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
             await asyncio.sleep(5)
 
@@ -1171,29 +1403,30 @@ class RFChannel:
             response = await self.twitch_message_waiter.wait_for_message(
                 check=lambda m: m.user.id == os.getenv("RAVENBOT_USER_ID"),
                 timeout=timeout,
-                max_age=1  
+                max_age=1,
             )
         else:
             response = await self.ravenbot_waiter.wait_for_message(
-                timeout=timeout,
-                max_age=1,
-                check=lambda m: True
+                timeout=timeout, max_age=1, check=lambda m: True
             )
-        
+
         asked_to_retry = False
         if response is None:
             # No response, handle retry or restart
             current_time = time.time()
-            
+
             # Reset counter if last attempt was long ago
-            if current_time - self.ravenbot_restart_attempts['last_attempt'] > RETRY_WINDOW:
-                self.ravenbot_restart_attempts['count'] = 0
-            
-            self.ravenbot_restart_attempts['count'] += 1
-            self.ravenbot_restart_attempts['last_attempt'] = int(current_time)
-            attempts = self.ravenbot_restart_attempts['count']
+            if (
+                current_time - self.ravenbot_restart_attempts["last_attempt"]
+                > RETRY_WINDOW
+            ):
+                self.ravenbot_restart_attempts["count"] = 0
+
+            self.ravenbot_restart_attempts["count"] += 1
+            self.ravenbot_restart_attempts["last_attempt"] = int(current_time)
+            attempts = self.ravenbot_restart_attempts["count"]
             attempts_remaining = MAX_RETRIES - attempts
-            
+
             resp_retry = "Hmm , let me restart RavenBot..."
             resp_retry_2 = "Hmm , let me restart RavenBot again.."
             resp_user_retry = "Okay , try again"
@@ -1208,7 +1441,7 @@ class RFChannel:
                 resp_user_retry_2 = resend_text
                 resp_restart_ravenfall = "Hmm ........."
                 resp_giveup = f"I give up @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')} dinkDonk"
-            
+
             if attempts_remaining > 0:
                 if attempts == 1:
                     await self.send_chat_message(resp_retry)
@@ -1218,14 +1451,14 @@ class RFChannel:
                 await self.restart_ravenbot()
                 await asyncio.sleep(3)
                 asked_to_retry = True
-                
+
                 await self.send_chat_message(resp_user_retry)
             elif attempts_remaining == 0:
                 await self.send_chat_message(resp_restart_ravenfall)
                 restart_task = self.queue_restart(
                     time_to_restart=10,  # Start restart in 10 seconds
                     label="Ravenfall is not responding",
-                    reason=RestartReason.UNRESPONSIVE
+                    reason=RestartReason.UNRESPONSIVE,
                 )
                 if restart_task:
                     await restart_task.wait()
@@ -1234,19 +1467,35 @@ class RFChannel:
             else:
                 await self.send_chat_message(resp_giveup)
         else:
-            logger.debug(f"Received a response to command: {command} in {self.channel_name}")
+            logger.debug(
+                f"Received a response to command: {command} in {self.channel_name}"
+            )
 
         self.is_monitoring = False
         self.current_monitor = None
         if asked_to_retry and resend_text:
             self.monitor_ravenbot_response(command, timeout, resend_text)
 
-    def monitor_ravenbot_response(self, command: str, timeout: float = 10.0, resend_text: str | None = None):
-        __ = asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))
+    def monitor_ravenbot_response(
+        self, command: str, timeout: float = 10.0, resend_text: str | None = None
+    ):
+        __ = asyncio.create_task(
+            self._monitor_ravenbot_response_task(command, timeout, resend_text)
+        )
 
-    def queue_restart(self, time_to_restart: float | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None, overwrite_same_reason: bool = False):
+    def queue_restart(
+        self,
+        time_to_restart: float | None = None,
+        mute_countdown: bool = False,
+        label: str = "",
+        reason: RestartReason | None = None,
+        overwrite_same_reason: bool = False,
+    ):
         if self.monitoring_paused and reason != RestartReason.USER:
-            logger.error(f"Not queuing restart for {self.channel_name} because monitoring is paused.", exc_info=True)
+            logger.error(
+                f"Not queuing restart for {self.channel_name} because monitoring is paused.",
+                exc_info=True,
+            )
             return
         allow_overwrite = True
         if self.restart_task:
@@ -1258,15 +1507,19 @@ class RFChannel:
             return
         if self.restart_task:
             self.restart_task.cancel()
-        self.restart_task = RFRestartTask(self, self.manager, time_to_restart, mute_countdown, label, reason)
+        self.restart_task = RFRestartTask(
+            self, self.manager, time_to_restart, mute_countdown, label, reason
+        )
         self.restart_task.start()
-        logger.info(f"Restart task queued for {self.channel_name} with label {label} in {format_seconds(self.restart_task.time_to_restart, TimeSize.SMALL, 2, False)}.")
+        logger.info(
+            f"Restart task queued for {self.channel_name} with label {label} in {format_seconds(self.restart_task.time_to_restart, TimeSize.SMALL, 2, False)}."
+        )
         return self.restart_task
 
     def postpone_restart(self, seconds: int):
         if self.restart_task:
             self.restart_task.postpone(seconds)
-    
+
     def cancel_restart(self):
         if self.restart_task is None:
             return False
@@ -1277,7 +1530,7 @@ class RFChannel:
         if self.channel_post_restart_lock.locked():
             self.channel_post_restart_lock.release()
         return True
-    
+
     @routine(delta=timedelta(seconds=0.5), max_attempts=99999)
     async def island_arrival_grouping_routine(self):
         t = time.monotonic()
@@ -1285,16 +1538,24 @@ class RFChannel:
             if timestamp > 0 and t - timestamp >= 0.25:
                 players = self.island_arrivals[island]
                 if len(players) > 1:
-                    player_names = strutils.strjoin(', ', *[f'@{a}' for a in players], before_end=' and ')
-                    await self.send_chat_message(f"{player_names} have arrived at {island}.")
+                    player_names = strutils.strjoin(
+                        ", ", *[f"@{a}" for a in players], before_end=" and "
+                    )
+                    await self.send_chat_message(
+                        f"{player_names} have arrived at {island}."
+                    )
                 elif len(players) == 1:
-                    await self.send_chat_message(f"@{players[0]} has arrived at {island}.")
+                    await self.send_chat_message(
+                        f"@{players[0]} has arrived at {island}."
+                    )
                 self.island_arrivals[island] = []
                 self.island_last_arrival_time[island] = 0
 
     # --- [ AUTO RAID ] ---------------------------------------
 
-    async def game_event_fetch_auto_raids(self, old_sub_event: RFChannelSubEvent, sub_event: RFChannelSubEvent):
+    async def game_event_fetch_auto_raids(
+        self, old_sub_event: RFChannelSubEvent, sub_event: RFChannelSubEvent
+    ):
         if old_sub_event != sub_event and sub_event == RFChannelSubEvent.RAID:
             await asyncio.sleep(2)
             await self.fetch_auto_raids()
@@ -1302,14 +1563,18 @@ class RFChannel:
     async def process_auto_raid_sessionless(self, message: RavenfallMessage, key: str):
         async with get_async_session() as session:
             await self.process_auto_raid(session, message, key)
-    
-    async def process_auto_raid(self, session: AsyncSession, message: RavenfallMessage, key: str):
-        char_id = message['Recipent']['CharacterId']
-        twitch_name = message['Recipent']['PlatformUserName']
-        twitch_id = message['Recipent']['PlatformId']
+
+    async def process_auto_raid(
+        self, session: AsyncSession, message: RavenfallMessage, key: str
+    ):
+        char_id = message["Recipent"]["CharacterId"]
+        twitch_name = message["Recipent"]["PlatformUserName"]
+        twitch_id = message["Recipent"]["PlatformId"]
         match key:
             case "auto_raid_activate_count":
-                await self.add_auto_raid(session, char_id, twitch_id, twitch_name, int(message['Args'][0]))
+                await self.add_auto_raid(
+                    session, char_id, twitch_id, twitch_name, int(message["Args"][0])
+                )
             case "auto_raid_activate":
                 await self.add_auto_raid(session, char_id, twitch_id, twitch_name)
             case "auto_raid_activate_cost":
@@ -1323,23 +1588,29 @@ class RFChannel:
                     await self.restore_auto_raid(session, char_id, twitch_name)
             case _:
                 pass
-    
-    async def add_auto_raid(self, session: AsyncSession, char_id: str, twitch_id: str, username: str, count: int = 2147483647):
-        _char = await db_utils.get_character(session, char_id, twitch_id=twitch_id, name=username)
+
+    async def add_auto_raid(
+        self,
+        session: AsyncSession,
+        char_id: str,
+        twitch_id: str,
+        username: str,
+        count: int = 2147483647,
+    ):
+        _char = await db_utils.get_character(
+            session, char_id, twitch_id=twitch_id, name=username
+        )
         result = await session.execute(
             select(AutoRaidStatus).where(AutoRaidStatus.char_id == char_id)
         )
         auto_raid_obj = result.scalar_one_or_none()
         if auto_raid_obj is None:
-            auto_raid_obj = AutoRaidStatus(
-                char_id=char_id,
-                auto_raid_count=count
-            )
+            auto_raid_obj = AutoRaidStatus(char_id=char_id, auto_raid_count=count)
             session.add(auto_raid_obj)
         else:
             auto_raid_obj.auto_raid_count = count
         logging.debug(f"Added auto raid for {username} with count {count}")
-    
+
     async def remove_auto_raid(self, session: AsyncSession, char_id: str):
         result = await session.execute(
             select(AutoRaidStatus).where(AutoRaidStatus.char_id == char_id)
@@ -1360,102 +1631,108 @@ class RFChannel:
             return
         chars = await self.rf_api.get_players()
         char_id_to_player = {char.id: char for char in chars}
-        
+
         async with get_async_session() as session:
             result = await session.execute(
-                select(AutoRaidStatus)
-                .where(
+                select(AutoRaidStatus).where(
                     AutoRaidStatus.char_id.in_(char_id_to_player.keys()),
-                    AutoRaidStatus.auto_raid_count != 2147483647
+                    AutoRaidStatus.auto_raid_count != 2147483647,
                 )
             )
             auto_raids = result.scalars().all()
-            
+
             for auto_raid in auto_raids:
                 char_data = char_id_to_player.get(auto_raid.char_id)
                 if not char_data:
                     continue
-                    
+
                 sender = await self.build_sender_from_character_id(
                     char_id=auto_raid.char_id,
                     session=session,
-                    default_username=char_data.name
+                    default_username=char_data.name,
                 )
-                
+
                 if not sender:
                     continue
-                    
+
                 msg = RavenBotTemplates.auto_raid_status(sender).build()
-                response: SendAndWaitResult = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
-                if response['success'] and response['responses']:
-                    match = self.rfloc.identify_string(response['responses'][0]['Format'])
-                    await self.process_auto_raid(session, response['responses'][0], match.key)
-    
+                response: SendAndWaitResult = await send_to_server_and_wait_response(
+                    self.middleman_connection_id, msg
+                )
+                if response["success"] and response["responses"]:
+                    match = self.rfloc.identify_string(response["responses"][0]["Format"])
+                    await self.process_auto_raid(
+                        session, response["responses"][0], match.key
+                    )
+
     async def restore_auto_raids(self):
         if not self.manager.middleman_connected:
             return
-            
+
         chars: list[Player] = await self.get_query("select * from players")
-        char_id_to_player = {char['id']: char for char in chars}
+        char_id_to_player = {char["id"]: char for char in chars}
         logging.debug(f"Restoring auto raids for {len(char_id_to_player)} characters")
-        
+
         async with get_async_session() as session:
             result = await session.execute(
-                select(AutoRaidStatus)
-                .where(AutoRaidStatus.char_id.in_(char_id_to_player.keys()))
+                select(AutoRaidStatus).where(
+                    AutoRaidStatus.char_id.in_(char_id_to_player.keys())
+                )
             )
             auto_raids = result.scalars().all()
-            
+
             for auto_raid in auto_raids:
                 char_data = char_id_to_player.get(auto_raid.char_id)
                 if not char_data:
                     continue
-                    
+
                 sender = await self.build_sender_from_character_id(
                     char_id=auto_raid.char_id,
                     session=session,
-                    default_username=char_data['name']
+                    default_username=char_data["name"],
                 )
-                
+
                 if not sender:
                     continue
-                    
+
                 msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
                 await send_to_server_and_wait_response(self.middleman_connection_id, msg)
-    
+
     async def restore_auto_raid(self, session: AsyncSession, char_id: str, username: str):
         if not self.manager.middleman_connected:
             return
-                    
+
         result = await session.execute(
-            select(AutoRaidStatus)
-            .where(AutoRaidStatus.char_id == char_id)
+            select(AutoRaidStatus).where(AutoRaidStatus.char_id == char_id)
         )
         auto_raid = result.scalar_one_or_none()
-        
+
         if auto_raid is not None:
-            sender = await self.build_sender_from_character_id(char_id, session=session, default_username=username)
+            sender = await self.build_sender_from_character_id(
+                char_id, session=session, default_username=username
+            )
             if not sender:
                 logging.debug(f"Could not build sender for character {char_id}")
                 return
-                
-            logging.debug(f"Restoring auto raid for {sender.get('display_name', username)}")
+
+            logging.debug(
+                f"Restoring auto raid for {sender.get('display_name', username)}"
+            )
             msg = RavenBotTemplates.auto_join_raid(sender, auto_raid.auto_raid_count)
             await send_to_server_and_wait_response(self.middleman_connection_id, msg)
         else:
-            logging.debug(f"No auto raid found for {username}")   
+            logging.debug(f"No auto raid found for {username}")
 
     async def restore_sailors(self):
         if not self.manager.middleman_connected:
             return
         chars: list[Player] = await self.get_query("select * from players")
-        char_id_to_player = {char['id']: char for char in chars}
+        char_id_to_player = {char["id"]: char for char in chars}
 
         logging.debug(f"Restoring sailors for {len(chars)} characters")
         async with get_async_session() as session:
             result = await session.execute(
-                select(Character)
-                .where(Character.id.in_(char_id_to_player.keys()))
+                select(Character).where(Character.id.in_(char_id_to_player.keys()))
             )
             characters = result.scalars().all()
 
@@ -1463,36 +1740,41 @@ class RFChannel:
                 char_data = char_id_to_player.get(char.id)
                 if not char_data:
                     continue
-                if char_data['training'] != "None":
+                if char_data["training"] != "None":
                     continue
                 if char.training != "Sailing":
                     continue
-                sender = await self.build_sender_from_character_id(char.id, session=session, default_username=char_data['name'])
+                sender = await self.build_sender_from_character_id(
+                    char.id, session=session, default_username=char_data["name"]
+                )
                 if not sender:
                     logging.debug(f"Could not build sender for character {char.id}")
                     return
                 msg = RavenBotTemplates.sail(sender)
                 await send_to_server_and_wait_response(self.middleman_connection_id, msg)
-    
+
     async def restore_sailor(self, username: str):
         if not self.manager.middleman_connected:
             return
-        char: Player = await self.get_query(f"select * from players where name = '{username}'")
+        char: Player = await self.get_query(
+            f"select * from players where name = '{username}'"
+        )
         if not char:
             return
-        if char['training'] != "None":
+        if char["training"] != "None":
             return
         async with get_async_session() as session:
             result = await session.execute(
-                select(Character.training)
-                .where(Character.id == char['id'])
+                select(Character.training).where(Character.id == char["id"])
             )
             training = result.scalar_one_or_none()
             if not training:
                 return
             if training != "Sailing":
                 return
-            sender = await self.build_sender_from_character_id(char['id'], session=session)
+            sender = await self.build_sender_from_character_id(
+                char["id"], session=session
+            )
             if not sender:
                 logging.debug(f"Could not build sender for character {char['id']}")
                 return
@@ -1504,12 +1786,11 @@ class RFChannel:
         if not self.manager.middleman_connected:
             return
         chars: list[Player] = await self.get_query("select * from players")
-        char_id_to_player = {char['id']: char for char in chars}
-        
+        char_id_to_player = {char["id"]: char for char in chars}
+
         async with get_async_session() as session:
             result = await session.execute(
-                select(Character)
-                .where(
+                select(Character).where(
                     Character.id.in_(char_id_to_player.keys()),
                 )
             )
@@ -1518,33 +1799,34 @@ class RFChannel:
                 char_data = char_id_to_player.get(char.id)
                 if not char_data:
                     continue
-                training = char_data['training']
+                training = char_data["training"]
                 if (not training) or training == "None":
-                    if (not char_data['island']) or char_data['sailing']:
+                    if (not char_data["island"]) or char_data["sailing"]:
                         training = "Sailing"
                     else:
                         continue
                 char.training = training
-    
+
     async def fetch_training(self, username: str, wait_first: bool = False):
         if not self.manager.middleman_connected:
             return
         if wait_first:
             await asyncio.sleep(1)
-        char: Player = await self.get_query(f"select * from players where name = '{username}'")
+        char: Player = await self.get_query(
+            f"select * from players where name = '{username}'"
+        )
         if not char:
             return
         async with get_async_session() as session:
             result = await session.execute(
-                select(Character)
-                .where(Character.id == char['id'])
+                select(Character).where(Character.id == char["id"])
             )
             char_db = result.scalar_one_or_none()
             if not char_db:
                 return
-            training = char['training']
+            training = char["training"]
             if (not training) or training == "None":
-                if (not char['island']) or char['sailing']:
+                if (not char["island"]) or char["sailing"]:
                     training = "Sailing"
                 else:
                     return

@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.orm import Mapped, Relationship, mapped_column, relationship
 from sqlalchemy.sql.schema import Column, ColumnDefault
 
-from bot.models import QueuedScroll
+from bot.models_old import QueuedScroll
 
 from . import Base
 from .db import engine

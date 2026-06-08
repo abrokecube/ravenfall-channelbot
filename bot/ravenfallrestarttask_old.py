@@ -5,14 +5,15 @@ import asyncio
 from utils.format_time import format_seconds, TimeSize
 from enum import Enum
 from typing import TYPE_CHECKING
-from .models import RFChannelEvent, RFChannelSubEvent
+from .models_old import RFChannelEvent, RFChannelSubEvent
 import logging
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from .ravenfallchannel import RFChannel
-    from .ravenfallmanager import RFChannelManager
+    from .ravenfallchannel_old import RFChannel
+    from .ravenfallmanager_old import RFChannelManager
+
 
 class RestartReason(Enum):
     AUTO = "auto_restart"
@@ -21,11 +22,12 @@ class RestartReason(Enum):
     MULTIPLIER_DESYNC = "multiplier_desync"
     ITEM_DESYNC = "item_desync"
     MEMORY_USE = "memory_use"
-    
+
 
 class PreRestartEvent(Enum):
     WARNING = "warning"
     PRE_RESTART = "pre_restart"
+
 
 class RestartStatus(Enum):
     IDLE = "idle"
@@ -33,13 +35,14 @@ class RestartStatus(Enum):
     RESTARTING = "restarting"
     FINISHED = "finished"
     PAUSED = "paused"
-    
+
 
 WARNING_MSG_TIMES: tuple[tuple[int, PreRestartEvent], ...] = (
-    (120, PreRestartEvent.WARNING), 
+    (120, PreRestartEvent.WARNING),
     (30, PreRestartEvent.WARNING),
-    (20, PreRestartEvent.PRE_RESTART)
+    (20, PreRestartEvent.PRE_RESTART),
 )
+
 
 class RFRestartTask:
     def __init__(
@@ -49,7 +52,7 @@ class RFRestartTask:
         time_to_restart: float | None = 0,
         mute_countdown: bool = False,
         label: str = "",
-        reason: RestartReason | None = None
+        reason: RestartReason | None = None,
     ):
         self.channel: RFChannel = channel
         self.manager: RFChannelManager = manager
@@ -120,18 +123,25 @@ class RFRestartTask:
                             try:
                                 await self.channel._ravenfall_pre_restart()  # pyright: ignore[reportPrivateUsage]
                             except Exception as e:
-                                logger.error(f"Failed to run pre restart for {self.channel.channel_name}: {e}", exc_info=True)
-                    if WARNING_MSG_TIMES[new_warning_idx][1] == PreRestartEvent.WARNING and time_left > 7 and not self.mute_countdown:
+                                logger.error(
+                                    f"Failed to run pre restart for {self.channel.channel_name}: {e}",
+                                    exc_info=True,
+                                )
+                    if (
+                        WARNING_MSG_TIMES[new_warning_idx][1] == PreRestartEvent.WARNING
+                        and time_left > 7
+                        and not self.mute_countdown
+                    ):
                         msg = f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
                         if (not self.sent_reason) and self.label:
                             msg += f" Reason: {self.label}"
-                            
+
                         if not self.sent_initial_announcement:
                             await self.channel.send_announcement(msg)
                             self.sent_initial_announcement = True
                         else:
                             await self.channel.send_chat_message(msg)
-                            
+
                         if not self.sent_reason:
                             self.sent_reason = True
                 warning_idx = new_warning_idx
@@ -164,26 +174,37 @@ class RFRestartTask:
                 await asyncio.sleep(2)
                 if self.done:
                     return
-            
+
                 time_left = self.get_time_left()
                 try:
                     if self.channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
                         event_type = "dungeon_prep"
-                    if self.channel.event == RFChannelEvent.DUNGEON and self.channel.dungeon and self.channel.dungeon['players'] > 0:
+                    if (
+                        self.channel.event == RFChannelEvent.DUNGEON
+                        and self.channel.dungeon
+                        and self.channel.dungeon["players"] > 0
+                    ):
                         event_type = "dungeon"
-                    elif self.channel.event == RFChannelEvent.RAID and self.channel.raid and self.channel.raid["players"] > 0:
+                    elif (
+                        self.channel.event == RFChannelEvent.RAID
+                        and self.channel.raid
+                        and self.channel.raid["players"] > 0
+                    ):
                         event_type = "raid"
                     if not self.manager.ravennest_is_online:
                         event_type = "server_down"
                     if time_left < 35 and not await self.manager.check_update_endpoint():
                         event_type = "updater_down"
-                    
+
                     if event_type:
                         self.future_pause_reason = names[event_type]
                     else:
                         self.future_pause_reason = ""
                 except Exception as e:
-                    logger.error(f"Error checking restart pause events for {self.channel.channel_name}: {e}", exc_info=True)
+                    logger.error(
+                        f"Error checking restart pause events for {self.channel.channel_name}: {e}",
+                        exc_info=True,
+                    )
                     event_type = "error"
 
                 if (time_left > WARNING_MSG_TIMES[0][0]) and not self._paused:
@@ -203,8 +224,7 @@ class RFRestartTask:
                     if (not self._paused) or old_event_type != event_type:
                         self.pause(names[event_type])
                         await self.channel.send_chat_message(
-                            messages[event_type],
-                            ignore_error=True
+                            messages[event_type], ignore_error=True
                         )
 
     async def _execute(self):
@@ -215,12 +235,13 @@ class RFRestartTask:
         self._status = RestartStatus.RESTARTING
         try:
             _ = await self.channel._restart_ravenfall(  # pyright: ignore[reportPrivateUsage]
-                run_pre_restart=False,
-                run_post_restart=True,
-                restart_task=self
+                run_pre_restart=False, run_post_restart=True, restart_task=self
             )
         except Exception as e:
-            logger.error(f"Failed to restart Ravenfall for {self.channel.channel_name}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to restart Ravenfall for {self.channel.channel_name}: {e}",
+                exc_info=True,
+            )
         self.done = True
         self._status = RestartStatus.FINISHED
 
@@ -229,13 +250,13 @@ class RFRestartTask:
 
     def paused(self):
         return self._paused
-    
+
     def get_time_left(self) -> float:
         pause_time = self._pause_time
         if self._paused:
             pause_time += time.time() - self._pause_start
         return self.time_to_restart - (time.time() - self.start_t - pause_time)
-    
+
     def pause(self, event_name: str = ""):
         if not self._paused:
             self._paused = True
