@@ -1,7 +1,6 @@
 - Add help for types and checks in the help command
-- implement cross channel comms for global ravenbot messages
 - implement ravenfall command parser to enable cross platform ravenfalling
-- RavenfallStatusMessagesCog: implement village_boost / village_boost_no_boost message handling
-  The old implementation listened for these RavenfallMessageEvent identifiers and
-  forwarded the formatted boost/exp-progress text to chat. Still deciding on
-  the right approach (send_global_message vs send_channel_message, category scheme).
+- RavenfallStatusMessagesCog: add downstream sender for village_boost / village_boost_no_boost
+  The RavenfallEnricherCog now adds computed fields (requiredExp, currentExp, levelPercent)
+  to event.message.format_args. A sender in ravenfall_status still needed to forward
+  the formatted text to chat. Decide on send_global_message vs send_channel_message.
