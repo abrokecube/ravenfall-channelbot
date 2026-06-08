@@ -1,8 +1,6 @@
 - Add help for types and checks in the help command
 - implement cross channel comms for global ravenbot messages
 - implement ravenfall command parser to enable cross platform ravenfalling
-- sail messages grouping
-- dungeon loot pastebin links
 - add ravenbot cpu usage check
 - RavenfallStatusMessagesCog: implement village_boost / village_boost_no_boost message handling
   The old implementation listened for these RavenfallMessageEvent identifiers and

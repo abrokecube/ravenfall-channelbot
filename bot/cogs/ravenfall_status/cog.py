@@ -193,8 +193,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
     @on_match(
         RavenfallMessageEvent,
         lambda e: (
-            e.message_match is not None
-            and e.message_match.identifier == "loot_summary"
+            e.message_match is not None and e.message_match.identifier == "loot_summary"
         ),
     )
     async def _on_loot_summary(
@@ -206,7 +205,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
         text = event.orig_message.format
         channel_name = event.ravenfall.channel_name
         for sentence in text.split(". "):
-            sentence = sentence.strip()
+            sentence = sentence.strip()  # noqa: PLW2901
             if not sentence:
                 continue
             parts = sentence.split(" was found by ")
@@ -215,7 +214,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
             item = parts[0].strip()
             players_str = parts[1].strip()
             for player in re.split(r" and |, ", players_str):
-                player = player.strip()
+                player = player.strip()  # noqa: PLW2901
                 if player:
                     self._loot_summary_items[channel_name].append((player, item))
         self._loot_summary_last_time[channel_name] = time.monotonic()
@@ -289,7 +288,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
             url = pasted.url or "unknown"
             channel_srv = self.global_context.require_service(RavenfallChannelService)
             await channel_srv.send_global_message(
-                f"Loot summary: {url}",
+                f"Loot: {url}",
                 "ravenfall.status.loot_summary",
                 channel_name,
             )
