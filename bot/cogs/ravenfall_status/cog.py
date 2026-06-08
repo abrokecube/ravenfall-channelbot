@@ -23,6 +23,7 @@ from bot.services.pastebin_service import PastebinService
 from bot.services.ravenfall_channels import RavenfallChannelService
 from utils.format_time import TimeSize, format_seconds
 from utils.routines import routine
+from utils.strings import DIAMOND, EN_DASH
 from utils.strutils import strjoin
 
 if TYPE_CHECKING:
@@ -75,7 +76,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
             return
         channel_srv = self.global_context.require_service(RavenfallChannelService)
         await channel_srv.send_global_message(
-            f"\U0001f389 Town level is now {event.data.level}!",
+            f"🎉 Town level is now {event.data.level}!",
             "ravenfall.status.town_level_up",
             event.ravenfall.channel_name,
         )
@@ -114,9 +115,9 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
             return
         channel_srv = self.global_context.require_service(RavenfallChannelService)
         text = (
-            f"DUNGEON \u2013 "
-            f"Boss HP: {event.data.boss.max_health:,} \u2013 "
-            f"Enemies: {event.data.enemies:,} \u2013 "
+            f"DUNGEON {EN_DASH} "
+            f"Boss HP: {event.data.boss.max_health:,} {EN_DASH} "
+            f"Enemies: {event.data.enemies:,} {EN_DASH} "
             f"Players: {event.data.players:,}"
         )
         await channel_srv.send_global_message(
@@ -132,7 +133,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
         if not self.config.enable_event_notifications:
             return
         channel_srv = self.global_context.require_service(RavenfallChannelService)
-        text = f"RAID \u2013 Boss HP: {event.data.boss.health:,}"
+        text = f"RAID {EN_DASH} Boss HP: {event.data.boss.health:,}"
         await channel_srv.send_global_message(
             text,
             "ravenfall.status.raid_started",
@@ -170,7 +171,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
         url = pasted.url or "unknown"
         first_three = ", ".join(loots[:3])
         await self._send_loot(
-            f"{first_three} \u2726 More: {url}",
+            f"{first_three} {DIAMOND} More: {url}",
             event.ravenfall.channel_name,
         )
 
