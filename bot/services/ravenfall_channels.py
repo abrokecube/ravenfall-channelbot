@@ -110,6 +110,8 @@ class RavenfallLinkedChannel(BaseModel):
     exclude_categories: set[str] = set()
     is_primary: bool = False
     uses_ravenbot: bool = False
+    ravenfall_command_prefix: str = "!"
+    enable_ravenfall_commands: bool = True
 
 
 class TupleOfAllTime(NamedTuple):

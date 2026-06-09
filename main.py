@@ -14,8 +14,9 @@ from bot.cogs.help import HelpCog
 from bot.cogs.info import InfoCog
 from bot.cogs.process_watchdog import ProcessWatchdogCog
 from bot.cogs.ravenfall import RavenfallCog
-from bot.cogs.ravenfall_redeem.cog import RFRedeemCog
+from bot.cogs.ravenfall_commands import RavenfallCommandsCog
 from bot.cogs.ravenfall_enricher import RavenfallEnricherCog
+from bot.cogs.ravenfall_redeem.cog import RFRedeemCog
 from bot.cogs.ravenfall_scroll_queue import RFScrollQueueCog
 from bot.cogs.ravenfall_status import RavenfallStatusMessagesCog
 from bot.cogs.ravenfall_watcher import RavenfallWatcherCog
@@ -199,6 +200,7 @@ async def run():
         tasks.append(event_manager.add_cog(AccountCog))
         tasks.append(event_manager.add_cog(RFRedeemCog))
         tasks.append(event_manager.add_cog(RFScrollQueueCog))
+        tasks.append(event_manager.add_cog(RavenfallCommandsCog))
         tasks.append(event_manager.add_cog(RavenfallCog))
         tasks.append(event_manager.add_cog(RavenfallEnricherCog))
         tasks.append(event_manager.add_cog(RavenfallStatusMessagesCog))
