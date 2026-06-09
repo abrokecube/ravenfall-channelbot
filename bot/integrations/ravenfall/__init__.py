@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 from . import payloads as payloads
-from .converters import RavenfallInstanceConverter as RavenfallInstanceConverter
-from .converters import RavenfallItemConverter as RavenfallItemConverter
-from .converters import RavenfallSkillChoice as RavenfallSkillChoice
 from .enums import DungeonEndReason as DungeonEndReason
 from .enums import DungeonStage as DungeonStage
 from .enums import DungeonStartReason as DungeonStartReason
@@ -35,3 +32,6 @@ from .models import Dungeon as Dungeon
 from .models import RavenfallConfig as RavenfallConfig
 from .models import RavenfallInstanceConfig as RavenfallInstanceConfig
 from .services import RavenfallService as RavenfallService
+from .converters import RavenfallInstanceConverter as RavenfallInstanceConverter
+from .converters import RavenfallItemConverter as RavenfallItemConverter
+from .converters import RavenfallSkillChoice as RavenfallSkillChoice

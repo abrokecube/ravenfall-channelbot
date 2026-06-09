@@ -126,7 +126,7 @@ class CurrencyCog(Cog, RemoteCallableMixin):
 
     # --- Chat Commands ---
 
-    @command(name="credits balance", aliases=["credits bal", "cb"])
+    @command(name="credits balance", aliases=["credits bal", "cba", "cbal"])
     async def get_balance(self, ctx: CommandEvent) -> None:
         """Check your current balance (including remote bots)."""
         account_service = self.global_context.require_service(AccountService)
@@ -160,7 +160,7 @@ class CurrencyCog(Cog, RemoteCallableMixin):
     @parameter(
         "amount", converter=RangeInt(min_=1, max_=None), description="Amount to pay"
     )
-    @command("credits send", aliases=["credits s", "cs"])
+    @command("credits send", aliases=["credits s", "cse", "csend"])
     async def pay(self, ctx: CommandEvent, target_user: str, amount: int) -> None:
         """Transfer currency to another user."""
         account_service = self.global_context.require_service(AccountService)

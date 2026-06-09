@@ -73,45 +73,11 @@ class ScrollType(Enum):
 
 class BaseQueueItem(Struct):
     queue_item_types: ClassVar[dict[str, type[BaseQueueItem]]] = {}
-    queue_item_name: ClassVar[str]
+    queue_item_name: ClassVar[str] = ""
     scroll: ScrollType
 
-    def __init_subclass__(
-        cls,
-        rename: None
-        | Literal["lower", "upper", "camel", "pascal", "kebab"]
-        | Callable[[str], str | None]
-        | Mapping[str, str] = None,
-        omit_defaults: bool = False,  # noqa: FBT001, FBT002
-        forbid_unknown_fields: bool = False,  # noqa: FBT001, FBT002
-        frozen: bool = False,  # noqa: FBT001, FBT002
-        eq: bool = True,  # noqa: FBT001, FBT002
-        order: bool = False,  # noqa: FBT001, FBT002
-        kw_only: bool = False,  # noqa: FBT001, FBT002
-        repr_omit_defaults: bool = False,  # noqa: FBT001, FBT002
-        array_like: bool = False,  # noqa: FBT001, FBT002
-        gc: bool = True,  # noqa: FBT001, FBT002
-        weakref: bool = False,  # noqa: FBT001, FBT002
-        dict: bool = False,  # noqa: A002, FBT001, FBT002
-        cache_hash: bool = False,  # noqa: FBT001, FBT002
-    ) -> None:
-        super().__init_subclass__(
-            cls.queue_item_name,
-            "type",
-            rename,
-            omit_defaults,
-            forbid_unknown_fields,
-            frozen,
-            eq,
-            order,
-            kw_only,
-            repr_omit_defaults,
-            array_like,
-            gc,
-            weakref,
-            dict,
-            cache_hash,
-        )
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
         if cls.queue_item_name in cls.queue_item_types:
             msg = (
                 f"Queue item class {cls.__name__} is trying to use the name "
@@ -748,11 +714,11 @@ class RFScrollQueueCog(Cog, ConfigSubscriberMixin):
         converter=RavenfallInstanceConverter,
         default=RavenfallInstanceConverter.MATCH_MESSAGE_EVENT,
     )
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
     @command(
         name="queue clear",
         aliases=["q clear", "qc", "clearscrollqueue", "csq", "trimscrollqueue", "tsq"],
     )
-    @checks(MinPermissionLevel(UserRole.MODERATOR))
     async def trim_scroll_queue(
         self,
         ctx: CommandEvent,

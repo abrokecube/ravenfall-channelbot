@@ -14,6 +14,7 @@ from sqlalchemy import select
 from twitchAPI.chat import Chat
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.oauth import UserAuthenticator
+from twitchAPI.object.api import TwitchUser
 from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope as TWAuthScope
 from twitchAPI.type import (
@@ -52,7 +53,6 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from twitchAPI.chat import ChatMessage, ChatUser
     from twitchAPI.object import eventsub
-    from twitchAPI.object.api import TwitchUser
 
     from bot.core.components import EventManager
 
@@ -319,6 +319,7 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                     access_token=access_token,
                     refresh_token=refresh_token,
                 )
+                session.add(obj)
                 await session.flush()
             if user_login:
                 obj.user_name = user_login
@@ -385,71 +386,78 @@ class TwitchEventSource(BaseEventSource, ConfigSubscriberMixin):
                 )
         twitch_channel = TwitchChannel(twitch, user_id, scopes)
 
-        while True:
-            if access_token is None or refresh_token is None:
-                auth = UserAuthenticator(self.bot_twitch, scopes, True)
-                print_to_console(f"Auth scopes: {', '.join([x.value for x in scopes])}")
-                print_to_console(
-                    f"{Fore.LIGHTYELLOW_EX}Please authenticate with the Twitch account: "
-                    f"{user_name or user_id}"
-                )
-                result = cast(
-                    "tuple[str, str] | None", await auth.authenticate(use_browser=False)
-                )
-                if result is None:
-                    continue
-                access_token, refresh_token = result
+        async with self._auth_lock:
+            while True:
+                if access_token is None or refresh_token is None:
+                    auth = UserAuthenticator(self.bot_twitch, scopes, True)
+                    print_to_console(
+                        f"Auth scopes: {', '.join([x.value for x in scopes])}"
+                    )
+                    print_to_console(
+                        f"{Fore.LIGHTYELLOW_EX}Please authenticate with the "
+                        "Twitch account: "
+                        f"{user_name or user_id}"
+                    )
+                    result = cast(
+                        "tuple[str, str] | None",
+                        await auth.authenticate(use_browser=False),
+                    )
+                    if result is None:
+                        continue
+                    access_token, refresh_token = result
 
-            try:
-                await twitch.set_user_authentication(access_token, scopes, refresh_token)
-                access_token = twitch.get_user_auth_token()
-                if not access_token:
-                    print_to_console(f"{Fore.LIGHTRED_EX}Failed to authenticate")
+                try:
+                    await twitch.set_user_authentication(
+                        access_token, scopes, refresh_token
+                    )
+                    access_token = twitch.get_user_auth_token()
+                    if not access_token:
+                        print_to_console(f"{Fore.LIGHTRED_EX}Failed to authenticate")
+                        continue
+                    user: TwitchUser | None = None
+                    if save_new_tokens or not user_name:
+                        user = await anext(twitch.get_users())
+                        if user:
+                            await self._save_user_token(
+                                user.id, user.login, access_token, refresh_token
+                            )
+                    else:
+                        await self._save_user_token(user_id, access_token=access_token)
+                    twitch.user_auth_refresh_callback = functools.partial(
+                        self._twitchio_token_callback, user_id=user_id
+                    )
+                except MissingScopeException:
+                    print_to_console(f"{Fore.LIGHTRED_EX}Token is missing scopes")
+                    access_token = None
+                    refresh_token = None
+                    save_new_tokens = True
                     continue
-                user: TwitchUser | None = None
-                if save_new_tokens or not user_name:
-                    user = await anext(twitch.get_users())
-                    if user:
-                        await self._save_user_token(
-                            user.id, user.login, access_token, refresh_token
-                        )
-                else:
-                    await self._save_user_token(user_id, access_token=access_token)
-                twitch.user_auth_refresh_callback = functools.partial(
-                    self._twitchio_token_callback, user_id=user_id
-                )
-            except MissingScopeException:
-                print_to_console(f"{Fore.LIGHTRED_EX}Token is missing scopes")
-                access_token = None
-                refresh_token = None
-                save_new_tokens = True
-                continue
-            except InvalidTokenException:
-                print_to_console(f"{Fore.LIGHTRED_EX}Invalid token")
-                access_token = None
-                refresh_token = None
-                save_new_tokens = True
-                continue
-            except Exception as e:  # noqa: BLE001
-                print_to_console(
-                    f"{Fore.LIGHTRED_EX}Error setting user authentication: {e}"
-                )
-                access_token = None
-                refresh_token = None
-                save_new_tokens = True
-                continue
+                except InvalidTokenException:
+                    print_to_console(f"{Fore.LIGHTRED_EX}Invalid token")
+                    access_token = None
+                    refresh_token = None
+                    save_new_tokens = True
+                    continue
+                except Exception as e:  # noqa: BLE001
+                    print_to_console(
+                        f"{Fore.LIGHTRED_EX}Error setting user authentication: {e}"
+                    )
+                    access_token = None
+                    refresh_token = None
+                    save_new_tokens = True
+                    continue
 
-            if user is not None:
-                if user.id == str(user_id):
-                    return twitch_channel
-                print_to_console(
-                    f"{Fore.LIGHTRED_EX}Token does not match user, please try again"
-                )
-                access_token = None
-                refresh_token = None
-                save_new_tokens = True
-                continue
-            return twitch_channel
+                if user is not None:
+                    if user.id == str(user_id):
+                        return twitch_channel
+                    print_to_console(
+                        f"{Fore.LIGHTRED_EX}Token does not match user, please try again"
+                    )
+                    access_token = None
+                    refresh_token = None
+                    save_new_tokens = True
+                    continue
+                return twitch_channel
 
     async def _fetch_channel_settings(
         self, channel_id: str, session: AsyncSession

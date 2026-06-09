@@ -89,7 +89,7 @@ class CommandDispatcher(BaseDispatcher):
             other = self.listeners[name]
             msg = (
                 f"Command name '{name}' ({cog_name}) is taken by command '{other.id}' "
-                f"({other.cog.__qualname__})"
+                f"({other.cog.__class__.__name__})"
             )
             raise ValueError(msg)
         if name in self.listeners_and_aliases:
@@ -97,7 +97,7 @@ class CommandDispatcher(BaseDispatcher):
             msg = (
                 f"Command name '{name}' ({cog_name}) is taken by "
                 f"an alias of '{other.id}' "
-                f"({other.cog.__qualname__})"
+                f"({other.cog.__class__.__name__})"
             )
             raise ValueError(msg)
         for alias in aliases:
@@ -106,7 +106,7 @@ class CommandDispatcher(BaseDispatcher):
                 msg = (
                     f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken "
                     f"by command '{other.id}' "
-                    f"({other.cog.__qualname__})"
+                    f"({other.cog.__class__.__name__})"
                 )
                 raise ValueError(msg)
             if alias in self.listeners_and_aliases:
@@ -114,7 +114,7 @@ class CommandDispatcher(BaseDispatcher):
                 msg = (
                     f"Command alias '{alias}' of command '{name}' ({cog_name}) is taken "
                     f"by an alias of '{other.id}' "
-                    f"({other.cog.__qualname__})"
+                    f"({other.cog.__class__.__name__})"
                 )
                 raise ValueError(msg)
 

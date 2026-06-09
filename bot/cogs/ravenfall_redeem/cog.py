@@ -247,8 +247,10 @@ class RFRedeemCog(Cog, ConfigSubscriberMixin):
     @routine(delta=timedelta(seconds=15), wait_remainder=True)
     async def idle_points(self):
         """Reward points to characters in town."""
-        ravenfall_srv = self.global_context.require_service(RavenfallService)
-        rf_channel_srv = self.global_context.require_service(RavenfallChannelService)
+        ravenfall_srv = await self.global_context.wait_for_service(RavenfallService)
+        rf_channel_srv = await self.global_context.wait_for_service(
+            RavenfallChannelService
+        )
         currency_srv = self.global_context.require_service(CurrencyService)
         account_srv = self.global_context.require_service(AccountService)
         channels = [

@@ -15,11 +15,11 @@ from bot.cogs.info import InfoCog
 from bot.cogs.process_watchdog import ProcessWatchdogCog
 from bot.cogs.ravenfall import RavenfallCog
 from bot.cogs.ravenfall_commands import RavenfallCommandsCog
-from bot.cogs.ravenfall_translator import RavenfallTranslatorCog
 from bot.cogs.ravenfall_enricher import RavenfallEnricherCog
 from bot.cogs.ravenfall_redeem.cog import RFRedeemCog
 from bot.cogs.ravenfall_scroll_queue import RFScrollQueueCog
 from bot.cogs.ravenfall_status import RavenfallStatusMessagesCog
+from bot.cogs.ravenfall_translator import RavenfallTranslatorCog
 from bot.cogs.ravenfall_watcher import RavenfallWatcherCog
 from bot.cogs.ravenfall_webops import RavenfallWebOpsCog
 from bot.cogs.testing import TestingCog
@@ -223,9 +223,9 @@ async def run():
 
         twitch_auths: defaultdict[str, set[AuthScope]] = defaultdict(set)
 
-        # twitch_auths[bot_config.owner_twitch_id].update(
-        #     [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
-        # )
+        twitch_auths[bot_config.owner_twitch_id].update(
+            [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
+        )
 
         for instance in ravenfall_ev_src.ravenfall_instances:
             twitch_auths[instance.channel_id].add(AuthScope.CHANNEL_BOT)

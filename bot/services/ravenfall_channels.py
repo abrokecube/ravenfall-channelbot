@@ -13,7 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 import ravenpy
 from bot.clients.ravenfall_middleman import Sender
-from bot.core.components import BaseService
+from bot.core.components import BaseService, fire_and_forget
 from bot.core.decorators import on_match, priority
 from bot.db import Base
 from bot.db.session import get_async_session
@@ -212,7 +212,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
                     )
                 )
 
-        await self.fill_missing_character_data()
+        fire_and_forget(self.fill_missing_character_data())
 
     def get_channels(self, instance_name: str) -> list[RavenfallLinkedChannel]:
         """Get the channels for a Ravenfall instance."""

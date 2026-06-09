@@ -70,7 +70,7 @@ class RavenfallCommandsCog(Cog):
 
     @override
     async def setup(self) -> None:
-        channel_srv: RavenfallChannelService = self.global_context.require_service(
+        channel_srv: RavenfallChannelService = await self.global_context.wait_for_service(
             RavenfallChannelService
         )
         self._channel_srv = channel_srv

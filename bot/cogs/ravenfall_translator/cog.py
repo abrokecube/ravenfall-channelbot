@@ -35,7 +35,9 @@ class RavenfallTranslatorCog(Cog):
     async def setup(self) -> None:
         from bot.services.ravenfall_channels import RavenfallChannelService
 
-        self._channel_srv = self.global_context.require_service(RavenfallChannelService)
+        self._channel_srv = await self.global_context.wait_for_service(
+            RavenfallChannelService
+        )
 
     def _get_translator(self, instance: RavenfallInstance) -> TemplateTranslator | None:
         path = instance.config.translations_path
@@ -51,9 +53,7 @@ class RavenfallTranslatorCog(Cog):
 
     @priority(20)
     @on_match(RavenfallMessageEvent)
-    async def _translate(
-        self, _g_ctx: GlobalContext, event: RavenfallMessageEvent, _match: object
-    ) -> None:
+    async def _translate(self, event: RavenfallMessageEvent, _match: object) -> None:
         msg = event.message
         if not isinstance(msg, RavenfallFormattedMessage):
             return

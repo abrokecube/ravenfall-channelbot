@@ -164,6 +164,8 @@ cython_debug/
 .tio*
 
 *.db
+*.db-shm
+*.db-wal
 
 user_token.json
 channels.json
