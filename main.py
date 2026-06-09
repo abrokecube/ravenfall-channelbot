@@ -15,6 +15,7 @@ from bot.cogs.info import InfoCog
 from bot.cogs.process_watchdog import ProcessWatchdogCog
 from bot.cogs.ravenfall import RavenfallCog
 from bot.cogs.ravenfall_commands import RavenfallCommandsCog
+from bot.cogs.ravenfall_translator import RavenfallTranslatorCog
 from bot.cogs.ravenfall_enricher import RavenfallEnricherCog
 from bot.cogs.ravenfall_redeem.cog import RFRedeemCog
 from bot.cogs.ravenfall_scroll_queue import RFScrollQueueCog
@@ -201,6 +202,7 @@ async def run():
         tasks.append(event_manager.add_cog(RFRedeemCog))
         tasks.append(event_manager.add_cog(RFScrollQueueCog))
         tasks.append(event_manager.add_cog(RavenfallCommandsCog))
+        tasks.append(event_manager.add_cog(RavenfallTranslatorCog))
         tasks.append(event_manager.add_cog(RavenfallCog))
         tasks.append(event_manager.add_cog(RavenfallEnricherCog))
         tasks.append(event_manager.add_cog(RavenfallStatusMessagesCog))

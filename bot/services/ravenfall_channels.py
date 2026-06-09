@@ -112,6 +112,7 @@ class RavenfallLinkedChannel(BaseModel):
     uses_ravenbot: bool = False
     ravenfall_command_prefix: str = "!"
     enable_ravenfall_commands: bool = True
+    channel_translations_path: str | None = None
 
 
 class TupleOfAllTime(NamedTuple):

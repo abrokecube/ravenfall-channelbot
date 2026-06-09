@@ -52,6 +52,7 @@ class RavenfallInstanceConfig(BaseModel):
     twitch_login: str
     query_server_base_url: str
     middleman_connection_id: str | None = None
+    translations_path: str | None = None
 
 
 class RavenfallConfig(ConfigModel):
