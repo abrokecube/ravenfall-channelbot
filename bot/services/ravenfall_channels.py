@@ -88,14 +88,7 @@ class RavenfallChannelsConfig(ConfigModel):
 
     config_table_name: ClassVar[str | None] = "services.ravenfall_channels"
 
-    instances: list[ChannelRavenfallInstance] = Field(default_factory=list)
-
-
-class ChannelRavenfallInstance(BaseModel):
-    """One Ravenfall instance."""
-
-    twitch_login: str
-    channels: list[RavenfallLinkedChannel]
+    channels: list[RavenfallLinkedChannel] = Field(default_factory=list)
 
 
 class RavenfallLinkedChannel(BaseModel):
@@ -104,6 +97,7 @@ class RavenfallLinkedChannel(BaseModel):
     Used by external integrations.
     """
 
+    twitch_login: str
     platform: str
     id: str
     categories: set[str] = set()
@@ -112,7 +106,6 @@ class RavenfallLinkedChannel(BaseModel):
     uses_ravenbot: bool = False
     ravenfall_command_prefix: str = "!"
     enable_ravenfall_commands: bool = True
-    channel_translations_path: str | None = None
 
 
 class TupleOfAllTime(NamedTuple):
@@ -136,7 +129,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
 
     def __init__(self, event_manager: EventManager) -> None:
         super().__init__()
-        self.linked_channels: dict[str, list[RavenfallLinkedChannel]] = {}
+        self.linked_channels: dict[str, list[RavenfallLinkedChannel]] = defaultdict(list)
         self.event_manager: EventManager = event_manager
         self.message_event_callbacks: set[MessageCallback] = set()
         self.callback_settings: dict[MessageCallback, CallbackSettings] = {}
@@ -156,16 +149,13 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
         )
         config = config_service.get_table(RavenfallChannelsConfig)
         a = {x.channel_name for x in ravenfall_service.event_source.ravenfall_instances}
-        b = {x.twitch_login for x in config.instances}
+        b = {x.twitch_login for x in config.channels}
         diff = b - a
         for item in diff:
             LOGGER.warning(f"Unknown channel '{item}'")
 
-        for instance in config.instances:
-            if instance.twitch_login in a:
-                self.linked_channels[instance.twitch_login] = instance.channels
-            else:
-                self.linked_channels[instance.twitch_login] = []
+        for l_channel in config.channels:
+            self.linked_channels[l_channel.twitch_login].append(l_channel)
 
         for instance in ravenfall_service.event_source.ravenfall_instances:
             has_twitch = False
@@ -194,9 +184,11 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
             if not has_twitch:
                 self.linked_channels[instance.twitch_login].append(
                     RavenfallLinkedChannel(
+                        twitch_login=instance.channel_name,
                         platform=EVENT_SOURCE_TWITCH,
                         id=instance.channel_id,
                         is_primary=not has_primary,
+                        uses_ravenbot=True,
                     )
                 )
         for channels in self.linked_channels.values():

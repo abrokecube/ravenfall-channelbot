@@ -37,18 +37,8 @@ class RavenfallTranslatorCog(Cog):
 
         self._channel_srv = self.global_context.require_service(RavenfallChannelService)
 
-    def _get_translator(
-        self, instance: RavenfallInstance, channel_id: str = ""
-    ) -> TemplateTranslator | None:
+    def _get_translator(self, instance: RavenfallInstance) -> TemplateTranslator | None:
         path = instance.config.translations_path
-
-        # Channel-level override takes priority
-        if self._channel_srv and channel_id:
-            channels = self._channel_srv.get_channels(instance.channel_name)
-            for ch in channels:
-                if ch.id == channel_id and ch.channel_translations_path:
-                    path = ch.channel_translations_path
-                    break
 
         if not path:
             return None
@@ -74,9 +64,7 @@ class RavenfallTranslatorCog(Cog):
         if not translator:
             return
 
-        result = translator.translate(
-            msg.identifier, msg.format, msg.format_args
-        )
+        result = translator.translate(msg.identifier, msg.format, msg.format_args)
         if result is None:
             return
 

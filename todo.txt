@@ -1,5 +1,4 @@
 - Add help for types and checks in the help command
-- implement ravenfall command parser to enable cross platform ravenfalling
 - RavenfallStatusMessagesCog: add downstream sender for village_boost / village_boost_no_boost
   The RavenfallEnricherCog now adds computed fields (requiredExp, currentExp, levelPercent)
   to event.message.format_args. A sender in ravenfall_status still needed to forward
