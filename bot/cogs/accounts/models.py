@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import (  # noqa: TC002
+from sqlalchemy.orm import (
     Mapped,
     Relationship,
     mapped_column,
@@ -40,6 +40,6 @@ class AccountLink(Base):
 
     account: Relationship[Account] = relationship("Account", back_populates="links")
 
-    __table_args__: Any = (
+    __table_args__: object = (
         UniqueConstraint("platform", "platform_id", name="uq_platform_id"),
     )
