@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import logging
+import re
+import time
+from datetime import timedelta
 from typing import TYPE_CHECKING, override
 
 from bot.core.components import Cog, EventManager
+from bot.core.decorators import on_match, priority
+from bot.integrations.chat_messages import GlobalMessengerService
 from bot.integrations.chat_messages.utils import min_permission_level
 from bot.integrations.commands import (
     CommandError,
@@ -11,10 +16,12 @@ from bot.integrations.commands import (
     command,
 )
 from bot.integrations.ravenfall.command_registry import ALIASES, COMMANDS, CommandDef
+from bot.integrations.ravenfall.events import MessageOrigin, RavenfallMessageEvent
 from bot.services.ravenfall_channels import (
     RavenfallChannelService,
     RavenfallLinkedChannel,
 )
+from utils.routines import routine
 
 if TYPE_CHECKING:
     from bot.clients.ravenfall_middleman import Sender
@@ -25,15 +32,31 @@ LOGGER = logging.getLogger(__name__)
 
 _DEFAULT_PREFIX = ">"
 
+_reformat = re.compile(r"{.*?}")
+_PENDING_TTL: float = 120.0
+_MAX_PENDING: int = 1000
+
+
+def _format_ravenfall_message(msg: object) -> str | None:
+    try:
+        fmt = _reformat.sub("{}", msg.format)  # pyright: ignore[reportUnknownMemberType]
+        if hasattr(msg, "format_args_as_array"):
+            args = msg.format_args_as_array()
+        else:
+            args = msg.args  # pyright: ignore[reportUnknownMemberType]
+        return fmt.format(*args)
+    except (IndexError, KeyError, ValueError, TypeError, AttributeError):
+        return None
+
 
 async def _build_and_send(
     instance: RavenfallInstance,
     sender: Sender,
     command_def: CommandDef,
     args: str,
-) -> None:
+) -> str:
     payload = command_def.build(args)
-    __ = await instance.send_to_ravenfall(sender, payload)
+    return await instance.send_to_ravenfall(sender, payload)
 
 
 def _get_channel_config(
@@ -54,6 +77,7 @@ class RavenfallCommandsCog(Cog):
     def __init__(self, event_manager: EventManager) -> None:
         super().__init__(event_manager)
         self._channel_srv: RavenfallChannelService | None = None
+        self._pending: dict[str, tuple[str, float, bool]] = {}
 
     @override
     async def setup(self) -> None:
@@ -62,9 +86,11 @@ class RavenfallCommandsCog(Cog):
         )
         self._channel_srv = channel_srv
         channel_srv.register_message_event_callback(self._on_ravenfall_command)
+        __ = self._pending_cleanup.start()
 
     @override
     async def teardown(self) -> None:
+        self._pending_cleanup.stop()
         if self._channel_srv:
             self._channel_srv.unregister_message_event_callback(
                 self._on_ravenfall_command
@@ -112,7 +138,42 @@ class RavenfallCommandsCog(Cog):
             )
             return
 
-        await _build_and_send(instance, sender, command_def, args_str)
+        corr_id = await _build_and_send(instance, sender, command_def, args_str)
+        if corr_id and len(self._pending) < _MAX_PENDING:
+            self._pending[corr_id] = (
+                event.room_id,
+                time.monotonic() + _PENDING_TTL,
+                channel_config.uses_ravenbot,
+            )
+        self._evict_expired()
+
+    @priority(10)
+    @on_match(RavenfallMessageEvent)
+    async def _on_ravenfall_response(
+        self, _g_ctx: object, event: RavenfallMessageEvent, _match: object
+    ) -> None:
+        corr_id = event.message.correlation_id
+        if not corr_id or corr_id not in self._pending:
+            return
+
+        ch_id, expiry, uses_ravenbot = self._pending[corr_id]
+        if time.monotonic() > expiry:
+            del self._pending[corr_id]
+            return
+
+        # Block forward to RavenBot if this channel doesn't use one
+        if event.message_source == MessageOrigin.PROCESSOR and not uses_ravenbot:
+            event.block()
+
+        # Route user-directed messages back to source channel
+        recipient = event.message.recipient
+        if recipient and recipient.platform != "system":
+            text = _format_ravenfall_message(event.message)
+            if text:
+                messenger = self.global_context.require_service(GlobalMessengerService)
+                __ = await messenger.send(
+                    text, recipient.platform or "twitch", ch_id
+                )
 
     def _find_command(self, cmd_name: str) -> CommandDef | None:
         cmd_name = cmd_name.lower()
@@ -120,11 +181,9 @@ class RavenfallCommandsCog(Cog):
         if alias_target:
             cmd_name = alias_target
 
-        # Exact match first
         if cmd_name in COMMANDS:
             return COMMANDS[cmd_name]
 
-        # Try longest prefix match for subcommands
         matched: tuple[str, CommandDef] | None = None
         for key, defn in COMMANDS.items():
             if (cmd_name.startswith(key + " ") or cmd_name == key) and (
@@ -205,3 +264,13 @@ class RavenfallCommandsCog(Cog):
             lines.append(f"  Subcommands: {', '.join(short)}")
 
         return "\n".join(lines)
+
+    def _evict_expired(self) -> None:
+        now = time.monotonic()
+        expired = [k for k, (_, expiry, _) in self._pending.items() if now > expiry]
+        for k in expired:
+            del self._pending[k]
+
+    @routine(delta=timedelta(seconds=30))
+    async def _pending_cleanup(self) -> None:
+        self._evict_expired()
