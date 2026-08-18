@@ -11,7 +11,7 @@ from ravenpy import ravenpy
 from typing import Optional, Tuple
 
 load_dotenv()
-import bot.multichat_command as mc
+from utils.script_helpers import get_multichat_client
 
 CHANNEL_ID = "756734432"
 INGREDIENT_USE_PERCENTAGE = 0.75
@@ -40,21 +40,21 @@ def create_curve(points: list[Tuple[float, float]]) -> callable:
     """
     # Sort points by x value
     points = sorted(points, key=lambda p: p[0])
-    
+
     def curve_function(x: float) -> float:
         # Handle values below the first point
         if x <= points[0][0]:
             return points[0][1]
-            
+
         # Handle values above the last point
         if x >= points[-1][0]:
             return points[-1][1]
-            
+
         # Find the segment that contains x
         for i in range(len(points) - 1):
             x1, y1 = points[i]
             x2, y2 = points[i + 1]
-            
+
             if x1 <= x <= x2:
                 # Linear interpolation
                 if x1 == x2:  # Avoid division by zero
@@ -62,9 +62,9 @@ def create_curve(points: list[Tuple[float, float]]) -> callable:
                 # Calculate position between points (0 to 1)
                 t = (x - x1) / (x2 - x1)
                 return y1 + t * (y2 - y1)
-                
+
         return points[-1][1]  # Shouldn't get here if points are valid
-    
+
     return curve_function
 
 INGREDIENT_CURVE = create_curve([
@@ -94,7 +94,7 @@ def get_fundamental_ingredients(item: ravenpy.Item) -> list[ravenpy.Ingredient]:
                 ingredients_count[ing.item.id] += ing.amount * amount
             recurse_ingredients(ing.item, amount * ing.amount)
     recurse_ingredients(item)
-    
+
     ingredients = []
     for ingredient_id, amount in ingredients_count.items():
         ingredients.append(ravenpy.Ingredient(item=ravenpy._items_id_data[ingredient_id], amount=amount))
@@ -105,21 +105,22 @@ async def main():
     rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     await rf.login()
     await rf.refresh_items()
-    
-    char_items = await mc.get_char_items(CHANNEL_ID)
+
+    multichat = get_multichat_client()
+    char_items = await multichat.get_char_items(CHANNEL_ID)
     total_items: dict[str, int] = {}
-    for user in char_items["data"]:
-        for user_item in user["items"]:
-            if user_item['soulbound'] or user_item['equipped']:
+    for user in char_items:
+        for user_item in user.items:
+            if user_item.soulbound or user_item.equipped:
                 continue
-            item = ravenpy._items_id_data.get(user_item["id"])
+            item = ravenpy._items_id_data.get(user_item.id)
             if item is None:
                 continue
             if item.name in total_items:
-                total_items[item.name] += user_item["amount"]
+                total_items[item.name] += user_item.amount
             else:
-                total_items[item.name] = user_item["amount"]
-    
+                total_items[item.name] = user_item.amount
+
     item_base_ingredients: dict[str, dict[str, int]] = {}
     item_total_ingredient_count: dict[str, dict[str, int]] = {}
     item_max_stock: dict[str, dict[str, int]] = {}
@@ -141,7 +142,7 @@ async def main():
         item_total_ingredient_count[item.name] = total_ing_count
         item_max_stock[item.name] = min(CATEGORY_LIMITS[item.category], MAX_STOCK_COUNT)
         item_recipes[item.name] = direct_recipe
-    
+
     remaining_resources: dict[str, int] = {
         name: max(0, math.floor(amount)) for name, amount in resources.items()
     }
@@ -196,7 +197,7 @@ async def main():
 
             if best_item is None:
                 break
-            
+
             icount = 0
             for ingredient_name, ingredient_amount in item_base_ingredients[best_item].items():
                 remaining_resources[ingredient_name] -= ingredient_amount
@@ -287,7 +288,7 @@ async def main():
     commands_path.write_text("\n".join(out_text), encoding="utf-8")
 
     print(f"\nCraft commands written to {commands_path.resolve()}")
-    
+
     items_json_path = Path("./output/required_items.json")
     items_json_path.parent.mkdir(parents=True, exist_ok=True)
     with items_json_path.open("w", encoding="utf-8") as f:

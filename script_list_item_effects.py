@@ -58,9 +58,10 @@ def status_effects_text(item: Item):
     return ", ".join(effects_asdf)
 
 
-async def main():
+def main():
+    ravenpy.load_local_item_data()
     for item in ravenpy.get_all_items():
         if item.effects:
             print(f"{item.name} - {status_effects_text(item)}")
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

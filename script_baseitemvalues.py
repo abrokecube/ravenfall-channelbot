@@ -16,7 +16,7 @@ async def main():
     for item in ravenpy.get_all_items():
         if not item.craft_ingredients:
             base_item_values[item.name] = item.sell_price
-    
+
     with open("data/base_item_values.json", "w") as f:
         json.dump(base_item_values, f, indent=4)
 

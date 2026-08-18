@@ -24,7 +24,6 @@ async def main():
             out_text.append(f"{item.type.name},{item.name},{format_seconds(item.drop_cooldown, size=TimeSize.SMALL_SPACES)}")
     with open("./output/item_cooldowns.csv", "w") as f:
         f.write("\n".join(out_text))
-    
-    
+
 if __name__ == "__main__":
     asyncio.run(main())
