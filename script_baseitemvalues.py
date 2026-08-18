@@ -5,10 +5,13 @@ import json
 from dotenv import load_dotenv
 import ravenpy
 
+from utils.script_helpers import get_ravenfall_credentials
+
 load_dotenv()
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER", ""), os.getenv("RAVENFALL_API_PASS", ""))
+    username, password = get_ravenfall_credentials()
+    rf = ravenpy.RavenNest(username, password)
     await rf.login()
     await rf.refresh_items()
 

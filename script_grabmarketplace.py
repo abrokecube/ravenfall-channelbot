@@ -8,12 +8,13 @@ from typing import Tuple, Optional
 import csv
 
 load_dotenv()
-from utils.script_helpers import get_multichat_client
+from utils.script_helpers import get_multichat_client, get_ravenfall_credentials
 
 OUT_CSV_FILE = "./output/marketplace_items.csv"
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
+    username, password = get_ravenfall_credentials()
+    rf = ravenpy.RavenNest(username, password)
     await rf.login()
 
     multichat = get_multichat_client()

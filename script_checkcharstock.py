@@ -11,7 +11,7 @@ from ravenpy import ravenpy
 from typing import Optional, Tuple
 
 load_dotenv()
-from utils.script_helpers import get_multichat_client
+from utils.script_helpers import get_multichat_client, get_ravenfall_credentials
 
 CHANNEL_ID = "756734432"
 CHAR_ID = "1253884011"
@@ -20,7 +20,8 @@ IN_ITEM_LIST = "./output/root_ingredients.json"
 
 async def main():
     item_list = json.loads(Path(IN_ITEM_LIST).read_text(encoding="utf-8"))
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
+    username, password = get_ravenfall_credentials()
+    rf = ravenpy.RavenNest(username, password)
     await rf.login()
     await rf.refresh_items()
 

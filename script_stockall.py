@@ -11,7 +11,7 @@ from ravenpy import ravenpy
 from typing import Optional, Tuple
 
 load_dotenv()
-from utils.script_helpers import get_multichat_client
+from utils.script_helpers import get_multichat_client, get_ravenfall_credentials
 
 CHANNEL_ID = "756734432"
 INGREDIENT_USE_PERCENTAGE = 0.75
@@ -102,7 +102,8 @@ def get_fundamental_ingredients(item: ravenpy.Item) -> list[ravenpy.Ingredient]:
 
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
+    username, password = get_ravenfall_credentials()
+    rf = ravenpy.RavenNest(username, password)
     await rf.login()
     await rf.refresh_items()
 

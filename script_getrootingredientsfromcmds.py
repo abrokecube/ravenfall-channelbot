@@ -12,11 +12,14 @@ from typing import Optional, Tuple
 
 load_dotenv()
 
+from utils.script_helpers import get_ravenfall_credentials
+
 IN_FILE = "./output/planned_crafts copy.txt"
 OUT_FILE = "./output/root_ingredients.json"
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
+    username, password = get_ravenfall_credentials()
+    rf = ravenpy.RavenNest(username, password)
     await rf.login()
     await rf.refresh_items()
 

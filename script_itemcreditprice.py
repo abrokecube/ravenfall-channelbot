@@ -86,12 +86,15 @@ def get_fundamental_ingredients(item: ravenpy.Item) -> list[ravenpy.Ingredient]:
 
 load_dotenv()
 
+from utils.script_helpers import get_ravenfall_credentials
+
 base_item_values: dict[str, int] = {}
 with open("data/base_item_values.json", "r", encoding="utf-8") as f:
     base_item_values = json.load(f)
 
 async def main():
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
+    username, password = get_ravenfall_credentials()
+    rf = ravenpy.RavenNest(username, password)
     await rf.login()
     await rf.refresh_items()
     # Compute values for craftable items: 95% of the sum of ingredient sell prices
