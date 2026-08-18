@@ -24,6 +24,7 @@ from bot.core.components import (
 from bot.core.enums import BucketType
 from bot.db import Base
 from bot.db.session import get_async_session
+from bot.db.types import SafeDateTimeUTC
 from bot.integrations.chat_messages import UserRole, checks
 from bot.integrations.chat_messages.utils import min_permission_level
 from bot.integrations.commands import (
@@ -77,7 +78,7 @@ class UserCreditIdleEarn(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     char_id: Mapped[str] = mapped_column(String, unique=True)
     total_time: Mapped[float] = mapped_column(Float, default=0)  # in seconds
-    last_seen_timestamp: Mapped[datetime] = mapped_column(DateTime)
+    last_seen_timestamp: Mapped[datetime] = mapped_column(SafeDateTimeUTC)
 
 
 class RFRedeemChannelConfig(BaseModel):

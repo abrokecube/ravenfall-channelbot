@@ -34,9 +34,7 @@ class RavenfallEnricherCog(Cog):
             and e.message_match.identifier in ("village_boost", "village_boost_no_boost")
         ),
     )
-    async def _on_village_boost(
-        self, _g_ctx: GlobalContext, event: RavenfallMessageEvent, _match: object
-    ):
+    async def _on_village_boost(self, event: RavenfallMessageEvent, _match: object):
         msg = event.message
         if not isinstance(msg, RavenfallFormattedMessage):
             return

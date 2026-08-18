@@ -3,13 +3,11 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     JSON,
-    DateTime,
-    Float,
-    ForeignKey,
     Integer,
     LargeBinary,
     String,
@@ -19,10 +17,10 @@ from sqlalchemy import (
 from sqlalchemy.engine import Result
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.ext.asyncio import AsyncConnection
-from sqlalchemy.orm import Mapped, Relationship, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql.schema import Column, ColumnDefault
 
-from bot.models_old import QueuedScroll
+from bot.db.types import SafeDateTimeUTC
 
 from . import Base
 from .db import engine
@@ -54,7 +52,7 @@ class UserCreditTransaction(Base):
     user_id: Mapped[int] = mapped_column(Integer)
     credits: Mapped[int] = mapped_column(Integer)
     description: Mapped[str] = mapped_column(String)
-    timestamp: Mapped[DateTime] = mapped_column(DateTime)
+    timestamp: Mapped[datetime] = mapped_column(SafeDateTimeUTC)
 
 
 class KeyValue(Base):

@@ -223,9 +223,11 @@ async def run():
 
         twitch_auths: defaultdict[str, set[AuthScope]] = defaultdict(set)
 
-        twitch_auths[bot_config.owner_twitch_id].update(
-            [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
-        )
+        # twitch_auths[bot_config.owner_twitch_id].update(
+        #     [AuthScope.CHANNEL_BOT, AuthScope.CHANNEL_MANAGE_REDEMPTIONS]
+        # )
+        twitch_auths["1306259099"].update([AuthScope.CHANNEL_BOT])
+        twitch_auths["1494596056"].update([AuthScope.CHANNEL_BOT])
 
         for instance in ravenfall_ev_src.ravenfall_instances:
             twitch_auths[instance.channel_id].add(AuthScope.CHANNEL_BOT)

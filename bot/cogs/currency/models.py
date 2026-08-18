@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import datetime
+import datetime  # noqa: TC003
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, text
-from sqlalchemy.orm import Mapped, mapped_column  # noqa: TC002
+from sqlalchemy import BigInteger, ForeignKey, Integer, String, func, text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from bot.db import Base
+from bot.db.types import SafeDateTimeUTC
 
 
 class AccountBalance(Base):
@@ -33,5 +34,6 @@ class TransactionHistory(Base):
     new_balance: Mapped[int] = mapped_column(BigInteger)
     reason: Mapped[str] = mapped_column(String)
     timestamp: Mapped[datetime.datetime] = mapped_column(
-        DateTime, default=datetime.datetime.now, server_default=text("CURRENT_TIMESTAMP")
+        SafeDateTimeUTC,
+        default=func.now(),
     )

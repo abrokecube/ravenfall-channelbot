@@ -75,9 +75,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
             self.config = config
 
     @on_match(TownLevelUpEvent)
-    async def _on_town_level_up(
-        self, _g_ctx: GlobalContext, event: TownLevelUpEvent, _match: object
-    ):
+    async def _on_town_level_up(self, event: TownLevelUpEvent, _match: object):
         if not self.config.enable_town_level_notifications:
             return
         channel_srv = self.global_context.require_service(RavenfallChannelService)
@@ -88,9 +86,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
         )
 
     @on_match(MultiplierChangedEvent)
-    async def _on_multiplier_changed(
-        self, _g_ctx: GlobalContext, event: MultiplierChangedEvent, _match: object
-    ):
+    async def _on_multiplier_changed(self, event: MultiplierChangedEvent, _match: object):
         if not self.config.enable_multiplier_notifications:
             return
         channel_srv = self.global_context.require_service(RavenfallChannelService)
@@ -114,9 +110,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
                 )
 
     @on_match(DungeonStartedEvent)
-    async def _on_dungeon_started(
-        self, _g_ctx: GlobalContext, event: DungeonStartedEvent, _match: object
-    ):
+    async def _on_dungeon_started(self, event: DungeonStartedEvent, _match: object):
         if not self.config.enable_event_notifications:
             return
         channel_srv = self.global_context.require_service(RavenfallChannelService)
@@ -133,9 +127,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
         )
 
     @on_match(RaidStartedEvent)
-    async def _on_raid_started(
-        self, _g_ctx: GlobalContext, event: RaidStartedEvent, _match: object
-    ):
+    async def _on_raid_started(self, event: RaidStartedEvent, _match: object):
         if not self.config.enable_event_notifications:
             return
         channel_srv = self.global_context.require_service(RavenfallChannelService)
@@ -151,9 +143,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
         RavenfallMessageEvent,
         lambda e: e.message_match is not None and e.message_match.identifier == "loot",
     )
-    async def _on_loot(
-        self, _g_ctx: GlobalContext, event: RavenfallMessageEvent, _match: object
-    ):
+    async def _on_loot(self, event: RavenfallMessageEvent, _match: object):
         if not self.config.enable_loot_messages:
             return
         event.block()
@@ -196,9 +186,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
             e.message_match is not None and e.message_match.identifier == "loot_summary"
         ),
     )
-    async def _on_loot_summary(
-        self, _g_ctx: GlobalContext, event: RavenfallMessageEvent, _match: object
-    ):
+    async def _on_loot_summary(self, event: RavenfallMessageEvent, _match: object):
         if not self.config.enable_loot_summary:
             return
         event.block()
@@ -226,9 +214,7 @@ class RavenfallStatusMessagesCog(Cog, ConfigSubscriberMixin):
             e.message_match is not None and e.message_match.identifier == "ferry_arrived"
         ),
     )
-    async def _on_ferry_arrived(
-        self, _g_ctx: GlobalContext, event: RavenfallMessageEvent, _match: object
-    ):
+    async def _on_ferry_arrived(self, event: RavenfallMessageEvent, _match: object):
         if not self.config.enable_island_arrivals:
             return
         event.block()

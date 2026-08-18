@@ -138,7 +138,7 @@ class RavenfallCommandsCog(Cog):
     @priority(10)
     @on_match(RavenfallMessageEvent)
     async def _on_ravenfall_response(
-        self, _g_ctx: object, event: RavenfallMessageEvent, _match: object
+        self, event: RavenfallMessageEvent, _match: object
     ) -> None:
         corr_id = event.message.correlation_id
         if not corr_id or corr_id not in self._pending:

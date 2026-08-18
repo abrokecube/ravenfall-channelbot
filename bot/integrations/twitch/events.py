@@ -48,6 +48,7 @@ class TwitchEvent(BaseEvent):
 class TwitchIRCMessageEvent(MessageEvent, TwitchEvent):
     """Twitch chat message event."""
 
+    platform: str = EVENT_SOURCE_TWITCH
     data: TwitchChatMessage
     room_capabilities: ChatRoomCapabilities = ChatRoomCapabilities(  # noqa: RUF009
         multiline=False, max_message_length=500
@@ -85,6 +86,7 @@ class TwitchIRCMessageEvent(MessageEvent, TwitchEvent):
 class TwitchEventSubMessageEvent(MessageEvent, TwitchEvent):
     """Twitch EventSub chat message event."""
 
+    platform: str = EVENT_SOURCE_TWITCH
     data: ChannelChatMessageData
     room_capabilities: ChatRoomCapabilities = ChatRoomCapabilities(  # noqa: RUF009
         multiline=False, max_message_length=500

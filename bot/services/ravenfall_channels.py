@@ -486,6 +486,7 @@ class RavenfallChannelService(BaseService, EventReceiverMixin):
             sender_data.is_vip = is_vip
             sender_data.sub_tier = sub_tier
 
+            session.expunge(sender_data)
             return sender_data
 
     async def get_sender_from_message_event_user(self, event: MessageEvent) -> Sender:
