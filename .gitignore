@@ -172,3 +172,6 @@ logs/
 output/
 pid
 config.toml
+
+# superpowers design docs and plans
+docs/superpowers/
