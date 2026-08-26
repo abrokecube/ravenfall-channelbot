@@ -198,15 +198,20 @@ class GameCog(Cog):
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("reason", aliases=["r"])
+    @parameter("force", aliases=["f"])
     @checks(MinPermissionLevel(UserRole.MODERATOR))
-    async def rfrestart(self, ctx: CommandEvent, seconds: int = 30, *, reason: str = "User restart", channel: RFChannel = 'this'):
+    async def rfrestart(self, ctx: CommandEvent, seconds: int = 30, *, reason: str = "User restart", channel: RFChannel = 'this', force: bool = False):
         """Creates a new restart task.
         
         Args:
             channel: Target channel.
+            force: Force the restart even during dungeons, raids, or server issues.
         """
-        channel.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True)
-        await ctx.message.reply(f"Restart queued. Restarting in {seconds}s.")
+        channel.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True, force=force)
+        msg = f"Restart queued. Restarting in {seconds}s."
+        if force:
+            msg += " (forced)"
+        await ctx.message.reply(msg)
 
     @command(
         name="rfbotrestart",
