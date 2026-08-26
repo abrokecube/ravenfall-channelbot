@@ -49,7 +49,8 @@ class RFRestartTask:
         time_to_restart: int | None = 0,
         mute_countdown: bool = False,
         label: str = "",
-        reason: RestartReason | None = None
+        reason: RestartReason | None = None,
+        force: bool = False
     ):
         self.channel = channel
         self.manager = manager
@@ -68,6 +69,7 @@ class RFRestartTask:
         self.mute_countdown: bool = mute_countdown
         self.label: str = label
         self.reason: RestartReason | None = reason
+        self.force: bool = force
         self._status: RestartStatus = RestartStatus.IDLE
         self.event_watch_lock = asyncio.Lock()
         self.sent_initial_announcement = False
@@ -161,7 +163,10 @@ class RFRestartTask:
                 await asyncio.sleep(2)
                 if self.done:
                     return
-            
+
+                if self.force:
+                    continue
+
                 time_left = self.get_time_left()
                 try:
                     if self.channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
