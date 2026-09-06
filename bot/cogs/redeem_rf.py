@@ -677,7 +677,7 @@ class RedeemRFCog(Cog):
             "creditv",
         ]
     )
-    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
+    @parameter("item", regex=r"^([a-zA-Z ]|2[hH])+$", converter=RFItemConverter)
     async def credits_value(self, ctx: CommandEvent, item: Item):
         """Get the value of an item in credits.
         
@@ -710,7 +710,7 @@ class RedeemRFCog(Cog):
             "creditpurchase",
         ]
     )
-    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
+    @parameter("item", regex=r"^([a-zA-Z ]|2[hH])+$", converter=RFItemConverter)
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("count", converter=RangeInt(1, None))
     @checks(TwitchOnly)
@@ -820,7 +820,7 @@ class RedeemRFCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
+    @parameter("item", regex=r"^([a-zA-Z ]|2[hH])+$", converter=RFItemConverter)
     async def stock_item(self, ctx: CommandEvent, item: Item, *, channel: RFChannel = 'this'):
         """Gets the stock count of an item.
         

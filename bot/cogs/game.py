@@ -445,7 +445,7 @@ class GameCog(Cog):
 
     @command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @parameter("item", regex=r"^[a-zA-Z ]+$", converter=RFItemConverter)
+    @parameter("item", regex=r"^([a-zA-Z ]|2[hH])+$", converter=RFItemConverter)
     @checks(MinPermissionLevel(UserRole.MODERATOR))
     async def restockscrolls(self, ctx: CommandEvent, item: Item, count: int, *, channel: RFChannel = 'this'):
         """Restocks scrolls in the loyalty shop.
