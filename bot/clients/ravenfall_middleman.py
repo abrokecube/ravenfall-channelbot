@@ -327,7 +327,10 @@ class MiddlemanClient:
             message: The message to send
 
         """
-        data = {"connectionId": connection_id, "data": json_encode.encode(message)}
+        data = {
+            "connectionId": connection_id,
+            "data": json_encode.encode(message).decode("utf-8"),
+        }
         await self._post("/api/send-to-client", None, data)
 
     async def send_to_ravenfall(
@@ -342,7 +345,10 @@ class MiddlemanClient:
             message: The message to send
 
         """
-        data = {"connectionId": connection_id, "data": json_encode.encode(message)}
+        data = {
+            "connectionId": connection_id,
+            "data": json_encode.encode(message).decode("utf-8"),
+        }
         await self._post("/api/send-to-server", None, data)
 
     async def send_to_ravenfall_and_wait_for_response(
@@ -363,7 +369,7 @@ class MiddlemanClient:
         """
         data = {
             "connectionId": connection_id,
-            "data": json_encode.encode(message),
+            "data": json_encode.encode(message).decode("utf-8"),
             "timeout": timeout,
             "expectedCount": expected_count,
         }
