@@ -70,6 +70,13 @@ class CharCoins(Struct):
     coins: int
 
 
+class ItemEnchantmentInfo(Struct):
+    """A single enchantment on an item. ``percentage`` is in percent (e.g. 104.0)."""
+
+    stat: str
+    percentage: float
+
+
 class CharItem(Struct):
     """Individual character item information."""
 
@@ -77,6 +84,7 @@ class CharItem(Struct):
     amount: int
     soulbound: bool
     equipped: bool
+    enchantments: list[ItemEnchantmentInfo] = field(default_factory=list)
 
 
 class CharItems(Struct):
