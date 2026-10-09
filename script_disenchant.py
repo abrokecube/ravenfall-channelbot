@@ -61,7 +61,10 @@ async def main() -> int:
     town = args.town.strip().lower()
     channel_id = None
     for info in await multichat.get_char_info():
-        if info.channel_id and town in (info.channel_id, (info.channel_name or "").lower()):
+        if info.channel_id and town in (
+            info.channel_id,
+            (info.channel_name or "").lower(),
+        ):
             channel_id = info.channel_id
             break
     if channel_id is None:

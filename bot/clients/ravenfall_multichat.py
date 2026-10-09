@@ -54,9 +54,9 @@ class CharInfo(Struct):
     index: int
     user_name: str
     id: str
-    channel_id: str
-    channel_name: str
-    desync_s: float
+    channel_id: str | None
+    channel_name: str | None
+    desync_s: float | None
     last_update_time: float
     recommendations: list[str]
     total_item_count: int
