@@ -444,8 +444,13 @@ class GameCog(Cog):
         await self.event_manager.execute_text(f"channelscrolls{result.group('args')}", ctx)
 
     @on_message(lambda e: re.match(r"^\?show(?P<args>.*)", e.text, re.IGNORECASE))
-    async def show_char(self, ctx: MessageEvent, result: re.Match):
-        await send_multichat_command(f"?say !show{result.group('args')}", ctx.room_id, ctx.room_name, ctx.room_id, ctx.room_name)
+    async def show_char(self, ctx: MessageEvent, result: re.Match, *, channel: RFChannel = 'this'):
+        target_user = result.group('args').strip()
+        if (not target_user) or not isinstance(target_user, str) or len(target_user) == 0:
+            raise CommandError("You must specify a username.")
+        msg = RavenBotTemplates.observe(username=target_user)
+        await send_to_server(channel.middleman_connection_id, msg)
+        # await send_multichat_command(f"?say !show{result.group('args')}", ctx.room_id, ctx.room_name, ctx.room_id, ctx.room_name)
 
     @command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)

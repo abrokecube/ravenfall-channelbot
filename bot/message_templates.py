@@ -133,6 +133,23 @@ class RavenBotTemplates:
         return a.build()
     
     @staticmethod
+    def observe(
+        username: str,
+        correlation_id: Optional[Union[str, UUID]] = None,
+    ):
+        sender = SenderBuilder(
+            username=username.lower(),
+            display_name=username.lower(),
+        )
+        a = RavenBotMessageBuilder(
+            sender=sender.build(),
+            identifier="observe",
+            correlation_id=correlation_id,
+        )
+        return a.build()
+    
+    
+    @staticmethod
     def train(
         sender: Dict[str, Any],
         skill: str,
