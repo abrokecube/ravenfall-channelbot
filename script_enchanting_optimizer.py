@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import ravenpy
@@ -13,6 +14,7 @@ from utils.format_time import TimeSize, format_seconds
 MAX_LEVEL = 999
 ENCHANTMENT_INTERVAL = 60  # minutes between successful enchants
 MIN_ENCHANTMENT_TIME = 30  # seconds
+COOLDOWN_COINS_PER_SECOND = 50  # PlayerManager.Enchanting_CooldownCoinsPerSecond
 LOW_LUCK_LEVEL = 10
 LOW_LUCK_MIN_CHANCE = 0.05
 LOW_LUCK_CHANCE = 0.5
@@ -161,6 +163,20 @@ class AttemptStats:
 # ---------------------------------------------------------------------------
 
 
+# sortable table columns: name -> (descending by default, getter)
+SORT_COLUMNS: dict[str, tuple[bool, Callable[[Fleet, AttemptStats], float]]] = {
+    "level": (True, lambda f, s: s.item_level),
+    "slots": (True, lambda f, s: s.slots),
+    "success": (True, lambda f, s: s.success_chance),
+    "exp-ench": (True, lambda f, s: s.xp_per_success),
+    "interval": (False, lambda f, s: f.interval(s)),
+    "rate": (True, lambda f, s: f.attempts_per_second(s)),
+    "exp-hour": (True, lambda f, s: f.xp_per_hour(s)),
+    "coins-hour": (False, lambda f, s: f.coins_per_hour(s)),
+    "coins-exp": (False, lambda f, s: f.coins_per_exp(s)),
+}
+
+
 @dataclass(frozen=True)
 class Fleet:
     """The set of accounts enchanting for the same clan.
@@ -168,25 +184,68 @@ class Fleet:
     Every account has its own enchant cooldown, but all of them feed the
     same clan skill. ``max_rate`` caps the combined attempts per minute
     (command/API rate limit); 0 means unlimited.
+
+    ``clear_cooldowns`` enables cooldown-clearing mode: every cooldown is
+    cleared right after the attempt (50 coins per remaining second), so
+    attempts are limited only by ``max_rate``, which must be > 0.
+    Items are then ranked by coins spent per exp gained.
     """
 
     accounts: int = 1
     max_rate: float = 0.0
+    clear_cooldowns: bool = False
+    sort_by: str = "exp-hour"
+    reverse: bool = False
+
+    @property
+    def clearing(self) -> bool:
+        """Whether cooldown-clearing mode is on."""
+        return self.clear_cooldowns
+
+    def interval(self, stats: AttemptStats) -> float:
+        """Seconds between attempts of a single account."""
+        cooldown = stats.exp_time_per_attempt
+        if not self.clear_cooldowns:
+            return cooldown
+        return min(cooldown, self.accounts * 60 / self.max_rate)
 
     def attempts_per_second(self, stats: AttemptStats) -> float:
         """Combined attempts/s: cooldown-bound, then capped by the rate limit."""
-        rate = self.accounts / stats.exp_time_per_attempt
+        rate = self.accounts / self.interval(stats)
         if self.max_rate > 0:
             rate = min(rate, self.max_rate / 60)
         return rate
+
+    def cost_per_attempt(self, stats: AttemptStats) -> float:
+        """Coins spent clearing the cooldown after one attempt."""
+        saved = stats.exp_time_per_attempt - self.interval(stats)
+        return max(0.0, saved) * COOLDOWN_COINS_PER_SECOND
 
     def xp_per_hour(self, stats: AttemptStats) -> float:
         """Combined expected exp/hour of all accounts."""
         return self.attempts_per_second(stats) * stats.exp_xp_per_attempt * 3600
 
+    def coins_per_hour(self, stats: AttemptStats) -> float:
+        """Combined coins/hour spent on clearing cooldowns."""
+        return self.attempts_per_second(stats) * self.cost_per_attempt(stats) * 3600
+
+    def coins_per_exp(self, stats: AttemptStats) -> float:
+        """Coins spent on clearing per exp gained."""
+        return self.cost_per_attempt(stats) / stats.exp_xp_per_attempt
+
+    def sort_key(self, stats: AttemptStats) -> tuple[float, float]:
+        """Ranking key for ``sort_by`` (ties broken by exp/hour, best first)."""
+        descending, getter = SORT_COLUMNS[self.sort_by]
+        value = getter(self, stats)
+        if descending != self.reverse:
+            value = -value
+        return (value, -self.xp_per_hour(stats))
+
     def is_rate_limited(self, stats: AttemptStats) -> bool:
         """Whether the rate limit, not the cooldown, is the bottleneck."""
-        return 0 < self.max_rate / 60 < self.accounts / stats.exp_time_per_attempt
+        if self.max_rate <= 0:
+            return False
+        return self.attempts_per_second(stats) >= self.max_rate / 60 - 1e-12
 
 
 # ---------------------------------------------------------------------------
@@ -219,36 +278,8 @@ def rank_items(
     for item, level in get_enchantable_items(max_item_level):
         stats = AttemptStats(level, skill_level)
         rows.append((item, level, stats))
-    rows.sort(key=lambda r: (-fleet.xp_per_hour(r[2]), r[2].item_level, r[0].name))
+    rows.sort(key=lambda r: (*fleet.sort_key(r[2]), r[2].item_level, r[0].name))
     return rows
-
-
-def collapse_by_tie(
-    rows: list[tuple[Item, int, AttemptStats]],
-    fleet: Fleet,
-) -> list[tuple[int, list[Item], AttemptStats]]:
-    """Collapse equal-performing rows (same item level) into groups."""
-    groups: dict[int, list[Item]] = {}
-    stats_by_level: dict[int, AttemptStats] = {}
-    for item, level, stats in rows:
-        if level not in groups:
-            groups[level] = []
-            stats_by_level[level] = stats
-        groups[level].append(item)
-    out: list[tuple[int, list[Item], AttemptStats]] = [
-        (level, groups[level], stats_by_level[level]) for level in groups
-    ]
-    out.sort(key=lambda r: (-fleet.xp_per_hour(r[2]), r[0]))
-    return out
-
-
-def names_for(items: list[Item], max_names: int) -> str:
-    """Get representative item names, cheapest vendor price first."""
-    items = sorted(items, key=lambda i: (i.buy_price or 10**12, i.name))
-    names = [i.name for i in items[:max_names]]
-    if len(items) > max_names:
-        names.append(f"... +{len(items) - max_names} more")
-    return ", ".join(names)
 
 
 def print_ranking(
@@ -256,52 +287,66 @@ def print_ranking(
     fleet: Fleet,
     max_item_level: int,
     top: int,
-    names_per_row: int,
 ) -> None:
     """Print the ranked best-items table for the current skill level."""
-    rows = collapse_by_tie(rank_items(skill_level, fleet, max_item_level), fleet)
+    rows = rank_items(skill_level, fleet, max_item_level)
 
     print(f"\nClan 'Enchanting' skill level: {skill_level}")
     limit = f"{fleet.max_rate:g}/min" if fleet.max_rate > 0 else "none"
     print(f"Accounts: {fleet.accounts}   Combined rate limit: {limit}")
     print(
-        "Best items to enchant right now "
-        "(expected values incl. failures and consolation enchants):\n"
+        f"Best items to enchant right now, sorted by {fleet.sort_by}"
+        f"{' (reversed)' if fleet.reverse else ''} "
+        "(expected values incl. failures and consolation enchants):"
     )
+    clearing = fleet.clearing
+    if clearing:
+        print(
+            f"Clearing every cooldown ({COOLDOWN_COINS_PER_SECOND} coins/s)."
+        )
+    print()
     header = (
         f"{'item lv':>7} {'slots':>5} {'succ%':>6} {'exp/ench':>12} "
-        f"{'avg attempt':>13} {'att/min':>8} {'exp/hour':>12}  items"
+        f"{'interval':>13} {'att/min':>8} {'exp/hour':>12}"
     )
-    print(header)
+    if clearing:
+        header += f" {'coins/hour':>14} {'coins/exp':>10}"
+    print(header + "  item")
     print("-" * len(header))
-    for level, items, stats in rows[:top]:
-        print(
+    for item, level, stats in rows[:top]:
+        line = (
             f"{level:>7} {stats.slots:>5} {min(stats.success_chance, 1.0) * 100:>5.1f}% "
             f"{stats.xp_per_success:>12,.0f} "
-            f"{format_seconds(stats.exp_time_per_attempt, TimeSize.SMALL):>13} "
+            f"{format_seconds(fleet.interval(stats), TimeSize.SMALL):>13} "
             f"{fleet.attempts_per_second(stats) * 60:>8,.1f} "
             f"{fleet.xp_per_hour(stats):>12,.0f}"
-            f"{'*' if fleet.is_rate_limited(stats) else ' '} "
-            f"{names_for(items, names_per_row)}"
         )
+        if clearing:
+            line += (
+                f" {fleet.coins_per_hour(stats):>14,.0f}"
+                f" {fleet.coins_per_exp(stats):>10,.2f}"
+            )
+        mark = "*" if fleet.is_rate_limited(stats) else " "
+        print(f"{line}{mark} {item.name}")
 
 
 # ---------------------------------------------------------------------------
 # Leveling simulation
 # ---------------------------------------------------------------------------
 
-type PlanRow = tuple[int, int, Item, AttemptStats, float, float]
+type PlanRow = tuple[int, int, Item, AttemptStats, float, float, float]
 
 
-def print_plan_row(row: PlanRow, cumulative: float) -> None:
+def print_plan_row(row: PlanRow, cumulative: float, clearing: bool) -> None:
     """Print one plan row covering a run of levels."""
-    start, end, item, stats, attempts, seconds = row
+    start, end, item, stats, attempts, seconds, coins = row
     levels = f"Lv {start}" if end == start else f"Lv {start}-{end}"
     print(
         f"{levels:>10}: {item.name:<28} (item lv {stats.item_level:>3}, "
         f"{stats.slots} slot(s))  {attempts:>6,.0f} ench  "
         f"~{format_seconds(seconds, TimeSize.MEDIUM):>14}  "
         f"total ~{format_seconds(cumulative, TimeSize.MEDIUM):>14}"
+        + (f"  {coins:>14,.0f} coins" if clearing else "")
     )
 
 
@@ -322,6 +367,7 @@ def simulate_leveling(
     seconds_elapsed = 0.0
     total_attempts = 0.0
     total_xp = 0.0
+    total_coins = 0.0
     plan_rows: list[PlanRow] = []
 
     print()
@@ -330,6 +376,7 @@ def simulate_leveling(
     plan_stats: AttemptStats | None = None
     plan_attempts = 0.0
     plan_seconds = 0.0
+    plan_coins = 0.0
 
     while level < target_level:
         item, _level_req, stats = rank_items(level, fleet, max_item_level)[0]
@@ -337,6 +384,7 @@ def simulate_leveling(
         exp_needed = next_req - exp
         attempts = math.ceil(exp_needed / stats.exp_xp_per_attempt)
         level_seconds = attempts / fleet.attempts_per_second(stats)
+        level_coins = attempts * fleet.cost_per_attempt(stats)
 
         item_changed = plan_item is None or plan_item.id != item.id
         stats_changed = (
@@ -353,16 +401,20 @@ def simulate_leveling(
                         plan_stats,
                         plan_attempts,
                         plan_seconds,
+                        plan_coins,
                     )
                 )
             plan_start = level
             plan_attempts = 0.0
             plan_seconds = 0.0
+            plan_coins = 0.0
         plan_item = item
         plan_stats = stats
 
         plan_attempts += attempts
         plan_seconds += level_seconds
+        plan_coins += level_coins
+        total_coins += level_coins
         seconds_elapsed += level_seconds
         total_attempts += attempts
         total_xp += attempts * stats.exp_xp_per_attempt
@@ -373,7 +425,15 @@ def simulate_leveling(
 
     if plan_item is not None and plan_stats is not None:
         plan_rows.append(
-            (plan_start, level - 1, plan_item, plan_stats, plan_attempts, plan_seconds)
+            (
+                plan_start,
+                level - 1,
+                plan_item,
+                plan_stats,
+                plan_attempts,
+                plan_seconds,
+                plan_coins,
+            )
         )
 
     cumulative = 0.0
@@ -384,7 +444,7 @@ def simulate_leveling(
         if row[0] >= show_until:
             hidden_rows += 1
             continue
-        print_plan_row(row, cumulative)
+        print_plan_row(row, cumulative, fleet.clearing)
     if hidden_rows:
         print(
             f"  ... {hidden_rows} more row(s) up to Lv {target_level} hidden "
@@ -456,12 +516,6 @@ def main() -> None:
         help="Rows to show in the ranking table (default: 12).",
     )
     parser.add_argument(
-        "--names",
-        type=int,
-        default=3,
-        help="Item names to show per ranking row (default: 3).",
-    )
-    parser.add_argument(
         "--accounts",
         type=int,
         default=1,
@@ -486,6 +540,30 @@ def main() -> None:
             "(default: 100, 0 = all). Totals still cover the full target."
         ),
     )
+    parser.add_argument(
+        "--clear-cooldowns",
+        action="store_true",
+        help=(
+            "Clear every enchant cooldown for coins (50 coins/s) so attempts "
+            "are limited only by --max-rate (required). Items are ranked by "
+            "coins spent per exp instead of exp/hour."
+        ),
+    )
+    parser.add_argument(
+        "--sort",
+        choices=list(SORT_COLUMNS),
+        default="exp-hour",
+        help=(
+            "Column to rank items by (default: exp-hour). Also decides which "
+            "item the leveling plan picks. Highest first, except for "
+            "interval/coins-hour/coins-exp which put the lowest first."
+        ),
+    )
+    parser.add_argument(
+        "--reverse",
+        action="store_true",
+        help="Flip the sort direction.",
+    )
     args = parser.parse_args()
 
     level = min(max(1, args.eq_level), MAX_LEVEL)
@@ -494,8 +572,17 @@ def main() -> None:
         print("Target level must be higher than the current level.")
         return
 
-    fleet = Fleet(max(1, args.accounts), max(0.0, args.max_rate))
-    print_ranking(level, fleet, args.max_item_level, args.top, args.names)
+    if args.clear_cooldowns and args.max_rate <= 0:
+        parser.error("--clear-cooldowns needs --max-rate (attempts/min) > 0")
+
+    fleet = Fleet(
+        max(1, args.accounts),
+        max(0.0, args.max_rate),
+        args.clear_cooldowns,
+        args.sort,
+        args.reverse,
+    )
+    print_ranking(level, fleet, args.max_item_level, args.top)
     simulate_leveling(
         level, args.eq_exp, target, fleet, args.max_item_level, args.show_levels
     )
