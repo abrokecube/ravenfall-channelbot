@@ -445,7 +445,7 @@ class GameCog(Cog):
 
     @on_message(lambda e: re.match(r"^\?show(?P<args>.*)", e.text, re.IGNORECASE))
     async def show_char(self, ctx: MessageEvent, result: re.Match):
-        await send_multichat_command(f"say !show{result.group('args')}", "0", "", ctx.room_id, ctx.room_name)
+        await send_multichat_command(f"say !show{result.group('args')}", ctx.room_id, ctx.room_name, ctx.room_id, ctx.room_name)
 
     @command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
