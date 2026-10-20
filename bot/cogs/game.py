@@ -444,16 +444,22 @@ class GameCog(Cog):
         await self.event_manager.execute_text(f"channelscrolls{result.group('args')}", ctx)
 
     @on_message(lambda e: re.match(r"^\?show(?P<args>.*)", e.text, re.IGNORECASE))
-    async def show_char(self, ctx: MessageEvent, result: re.Match):
-        channel = self.global_context.ravenfall_manager.channel_id_to_channel.get(ctx.room_id)
-        if channel is None:
-            return
-        target_user = result.group('args').strip()
-        if (not target_user) or not isinstance(target_user, str) or len(target_user) == 0:
+    async def show_char_alias(self, ctx: MessageEvent, result: re.Match):
+        await self.event_manager.execute_text(f"showuser{result.group('args')}", ctx)
+
+    @command(name="showuser", aliases=["showchar", "showcharacter"])
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    async def showuser(self, ctx: CommandEvent, user: TwitchUsername, *, channel: RFChannel = 'this'):
+        """Shows a character's stats.
+
+        Args:
+            user: The username of the character to show.
+            channel: Target channel.
+        """
+        if not user or not isinstance(user, str) or len(user) == 0:
             raise CommandError("You must specify a username.")
-        msg = RavenBotTemplates.observe(username=target_user)
+        msg = RavenBotTemplates.observe(username=user)
         await send_to_server(channel.middleman_connection_id, msg)
-        # await send_multichat_command(f"?say !show{result.group('args')}", ctx.room_id, ctx.room_name, ctx.room_id, ctx.room_name)
 
     @command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
