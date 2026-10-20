@@ -444,7 +444,8 @@ class GameCog(Cog):
         await self.event_manager.execute_text(f"channelscrolls{result.group('args')}", ctx)
 
     @on_message(lambda e: re.match(r"^\?show(?P<args>.*)", e.text, re.IGNORECASE))
-    async def show_char(self, ctx: MessageEvent, result: re.Match, *, channel: RFChannel = 'this'):
+    async def show_char(self, ctx: MessageEvent, result: re.Match):
+        channel = await self.global_context.ravenfall_manager.channel_id_to_channel(ctx.room_id)
         target_user = result.group('args').strip()
         if (not target_user) or not isinstance(target_user, str) or len(target_user) == 0:
             raise CommandError("You must specify a username.")
