@@ -443,6 +443,10 @@ class GameCog(Cog):
     async def scrolls_aliases(self, ctx: MessageEvent, result: re.Match):
         await self.event_manager.execute_text(f"channelscrolls{result.group('args')}", ctx)
 
+    @on_message(lambda e: re.match(r"^\?show(?P<args>.*)", e.text, re.IGNORECASE))
+    async def show_char(self, ctx: MessageEvent, result: re.Match):
+        await send_multichat_command(f"?say !show{result.group('args')}", "0", "", ctx.room_id, ctx.room_name)
+
     @command(name="restockscrolls")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     @parameter("item", regex=r"^([a-zA-Z ]|2[hH])+$", converter=RFItemConverter)
