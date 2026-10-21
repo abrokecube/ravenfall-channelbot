@@ -446,6 +446,7 @@ class GameCog(Cog):
     @on_message(lambda e: re.match(r"^\?show(?P<args>.*)", e.text, re.IGNORECASE))
     async def show_char_alias(self, ctx: MessageEvent, result: re.Match):
         await self.event_manager.execute_text(f"showuser{result.group('args')}", ctx)
+        await self.event_manager.execute_text(f"character {result.group('args')}", ctx)
 
     @command(name="showuser", aliases=["showchar", "showcharacter"])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
