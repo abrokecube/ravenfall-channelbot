@@ -911,10 +911,12 @@ class Character:
             self.island = (
                 _getenum_or_none(cast("str", state["island"]), Islands) or Islands.Unknown
             )
-        self.destination: Islands = (
-            _getenum_or_none(cast("str", state["destination"]), Islands)
-            or Islands.Unknown
-        )
+        self.destination: Islands = Islands.Unknown
+        if state["destination"] != "None":
+            self.destination = (
+                _getenum_or_none(cast("str", state["destination"]), Islands)
+                or Islands.Unknown
+            )
         self.waiting_for_ferry: bool = False
         self.estimated_level_time: datetime = _call_or_none(
             cast("str", state["estimatedTimeForLevelUp"]), _parse_time
