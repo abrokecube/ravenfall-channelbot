@@ -1,18 +1,19 @@
 from enum import Enum
 
+
 class ItemTypes(Enum):
     TwoHandedSword = 1
     OneHandedSword = 2
     TwoHandedAxe = 3
     OneHandedAxe = 4
-    TwoHandedStaff = 5 
+    TwoHandedStaff = 5
     TwoHandedBow = 6
     TwoHandedSpear = 7
     Helmet = 8
     Chest = 9
     Gloves = 10
     Boots = 11
-    Leggings = 12 
+    Leggings = 12
     Shield = 13
     LeftShoulder = 14
     RightShoulder = 15
@@ -39,13 +40,14 @@ class ItemTypes(Enum):
     Alchemy = 36
     Boat = 37
 
+
 class ItemCategory(Enum):
     Weapon = 0
     Armor = 1
     Ring = 2
     Amulet = 3
     Food = 4
-    Potion = 5 
+    Potion = 5
     Pet = 6
     Resource = 7
     StreamerToken = 8
@@ -55,6 +57,7 @@ class ItemCategory(Enum):
     QuestItem = 12
     LootBox = 13
     Vehicle = 14
+
 
 class ItemMaterials(Enum):
     Bronze = 1
@@ -86,6 +89,7 @@ class ItemMaterials(Enum):
     ElderAncient = 27
     ElderAtlarus = 28
 
+
 class Skills(Enum):
     Attack = 0
     Defense = 1
@@ -107,7 +111,9 @@ class Skills(Enum):
     Melee = 900
     All = 999
 
+
 class Enchantments(Enum):
+    NoneEnchantment = -1
     Attack = 0
     Defense = 1
     Strength = 2
@@ -129,6 +135,7 @@ class Enchantments(Enum):
     Aim = 18
     Armor = 19
 
+
 class Stat(Enum):
     WeaponAim = 0
     WeaponPower = 1
@@ -137,6 +144,7 @@ class Stat(Enum):
     RangedAim = 4
     RangedPower = 5
     ArmorPower = 6
+
 
 class Effects(Enum):
     NoEffect = 0
@@ -173,8 +181,9 @@ class Effects(Enum):
     AddItem = 900
     Teleport = 999
 
+
 class Islands(Enum):
-    # NoneIsland = -2
+    Unknown = -2
     Ferry = -1
     Sailing = 0
     Home = 1
@@ -188,14 +197,21 @@ class Islands(Enum):
     Ravebridge = 9
     Sea = 10
 
+    def __bool__(self):
+        # Unknown/Sailing mean "not on an island", so `if char.island:` keeps working.
+        return self not in (Islands.Unknown, Islands.Sailing)
+
+
 class ClanSkill(Enum):
     Enchanting = 1
+
 
 class ClanRole(Enum):
     Inactive = 0
     Recruit = 1
     Member = 2
     Officer = 3
+
 
 class PlayerTask(Enum):
     Woodcutting = 0

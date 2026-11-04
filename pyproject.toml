@@ -23,6 +23,7 @@ dependencies = [
     "httpcore==1.0.9",
     "httpx==0.28.1",
     "idna==3.11",
+    "msgspec>=0.22.0",
     "multidict==6.7.0",
     "numerize>=0.12",
     "propcache==0.4.1",
