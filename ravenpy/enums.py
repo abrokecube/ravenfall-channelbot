@@ -38,6 +38,7 @@ class ItemTypes(Enum):
     Crafting = 34
     Cooking = 35
     Alchemy = 36
+    Boat = 37
 
 
 class ItemCategory(Enum):
@@ -53,6 +54,9 @@ class ItemCategory(Enum):
     Scroll = 9
     Skin = 10
     Cosmetic = 11
+    QuestItem = 12
+    LootBox = 13
+    Vehicle = 14
 
 
 class ItemMaterials(Enum):
@@ -172,9 +176,10 @@ class Effects(Enum):
     ReducedAttackSpeed = 26
     ReducedCastSpeed = 27
     IncreasedCriticalHitDamage = 28
-    RemoveItem = 29
-    AddItem = 30
-    Teleport = 31
+    IncreasedFerrySpeed = 29
+    RemoveItem = 800
+    AddItem = 900
+    Teleport = 999
 
 
 class Islands(Enum):
@@ -188,6 +193,9 @@ class Islands(Enum):
     Heim = 5
     Atria = 6
     Eldara = 7
+    Mangrove = 8
+    Ravebridge = 9
+    Sea = 10
 
 
 class ClanSkill(Enum):
