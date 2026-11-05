@@ -196,10 +196,11 @@ class Islands(Enum):
     Mangrove = 8
     Ravebridge = 9
     Sea = 10
+    War = 11
 
     def __bool__(self):
-        # Unknown/Sailing mean "not on an island", so `if char.island:` keeps working.
-        return self not in (Islands.Unknown, Islands.Sailing)
+        # Unknown/Sailing/Ferry/Sea mean "not on an island", so `if char.island:` keeps working.
+        return self not in (Islands.Unknown, Islands.Sailing, Islands.Ferry, Islands.Sea)
 
 
 class ClanSkill(Enum):

@@ -23,6 +23,15 @@ class CharacterStat:
         self.enchant_percent += percent
         self.enchant_levels = round(self.level * self.enchant_percent)
 
+def _skill_or_none(name: str | None) -> Skills | None:
+    if not name:
+        return None
+    skill = Skills.__members__.get(name) or Skills.__members__.get(name.capitalize())
+    # The game reports "Melee" for "train all", but the underlying stat is Health.
+    if skill == Skills.Melee:
+        return Skills.All
+    return skill
+
 class Character:
     def __init__(self, data: Player):
         self._raw: Dict = data
@@ -78,26 +87,32 @@ class Character:
         self.hp: int = data['stats']["health"]["currentvalue"]
         self.in_raid: bool = data['inraid']
         self.in_arena: bool = data['inarena']
+        self.in_duel: bool = data.get('induel', False)
         self.in_dungeon: bool = data['indungeon']
         self.in_onsen: bool = data['resting']
         self.is_resting: bool = self.in_onsen
         self.is_sailing: bool = data['sailing']
+        self.command_idle_time: float = data.get('commandidletime', 0.0)
         
         self.training: Skills | None = None
-        self.island: Islands = Islands[data['island']] if data['island'] != "" else None
-   
+        self.island: Islands | None = None
+        island_name = data.get('island') or ''
+        if island_name:
+            self.island = Islands.__members__.get(island_name) or Islands.__members__.get(island_name.capitalize())
+
         self.rested_time = timedelta(seconds=int(data['restedtime']))
         self.target_item: ravenpy.CharacterItem | None = None
-        if data['training'] == "Fighting":
-            task_arg = data['taskargument'].capitalize()
+        training_name = data.get('training') or ''
+        if training_name == "Fighting":
+            task_arg = (data.get('taskargument') or '').capitalize()
             replace = ravenpy.fighting_replacements.get(task_arg)
             if replace:
                 task_arg = replace
-            self.training = Skills[task_arg]
-        elif (not data['training']) or data['training'].lower() == "none":
+            self.training = _skill_or_none(task_arg)
+        elif (not training_name) or training_name.lower() == "none":
             pass
         else:
-            self.training = Skills[data['training'].capitalize()]
+            self.training = _skill_or_none(training_name)
             result = ravenpy.get_item(data['taskargument'])
             if result:
                 target_item = result
@@ -130,6 +145,8 @@ class Character:
             self.training_skills.append(char_stat.skill)
             
     def get_skill(self, skill: Skills):
+        if skill in (Skills.Melee, Skills.All):
+            skill = Skills.Health
         return self._skill_dict[skill]
 
 async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | None:

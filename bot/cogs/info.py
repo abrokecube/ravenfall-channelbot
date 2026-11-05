@@ -243,6 +243,8 @@ class InfoCog(Cog):
             where = "in a raid"
         if char.in_arena:
             where = "in the arena"
+        if char.in_duel:
+            where = "in a duel"
         if char.in_dungeon:
             where = "in a dungeon"
         if char.in_onsen:
@@ -275,7 +277,9 @@ class InfoCog(Cog):
             target_item = f"{char.target_item.amount}× {char.target_item.item.name}"
 
         where_island = ""
-        if char.island:
+        if char.island == ravenpy.Islands.War:
+            where_island = "in a raid war"
+        elif char.island:
             where_island = f"at {char.island.name.capitalize()}"
         elif not (char.in_raid or char.in_dungeon):
             where_island = "sailing the seas"
@@ -488,10 +492,12 @@ class InfoCog(Cog):
                     else:
                         players_grouped["Not training"].append(p)
             case "island":
-                for a in ["Home", "Away", "Ironhill", "Kyo", "Heim", "Atria", "Eldara", "Unknown"]:
+                for a in ["Home", "Away", "Ironhill", "Kyo", "Heim", "Atria", "Eldara", "Mangrove", "Ravebridge", "Sea", "War", "Unknown"]:
                     players_grouped[a] = []
                 for p in players_parsed:
-                    if p.island:
+                    if p.island == ravenpy.Islands.Sea:
+                        players_grouped["Sea"].append(p)
+                    elif p.island:
                         players_grouped[p.island.name].append(p)
                     else:
                         players_grouped["Unknown"].append(p)                
@@ -524,6 +530,7 @@ class InfoCog(Cog):
         char_actions = {}
         for char in players_parsed:
             action_symbol = " "
+            is_event_island = char.island in (ravenpy.Islands.Mangrove, ravenpy.Islands.Ravebridge, ravenpy.Islands.War)
             training_skill_is_maxed = False
             if char.training:
                 if char.training in (Skills.All, Skills.Health):
@@ -535,7 +542,7 @@ class InfoCog(Cog):
                 action_symbol = "-"
                 
             rec_island = ""
-            if char.training and not char.training == Skills.Sailing:
+            if char.training and not char.training == Skills.Sailing and not is_event_island and not char.in_duel:
                 if not (char.in_raid or char.in_dungeon):
                     if char.training in (Skills.All, Skills.Health):
                         skill = max(char.attack, char.defense, char.strength, key=lambda x: x.level)
@@ -554,6 +561,8 @@ class InfoCog(Cog):
             
             not_earning = ""
             if (not char.is_resting) \
+                and (not char.is_sailing) \
+                and (not is_event_island) \
                 and (not any([y != 0 for x, y in char_exprates[char.user_name][-15:]])) \
                 and not training_skill_is_maxed:
                 not_earning = "Not earning exp"
@@ -605,14 +614,20 @@ class InfoCog(Cog):
                     where = "raid"
                 if char.in_arena:
                     where = "arena"
+                if char.in_duel:
+                    where = "duel"
                 if char.in_dungeon:
                     where = "dungeon"
                 if char.in_onsen:
                     where = "resting"
 
                 where_island = ""
-                if char.island:
+                if char.island == ravenpy.Islands.Sea:
+                    where_island = "Sea"
+                elif char.island:
                     where_island = f"{char.island.name.capitalize()}"
+                elif char.is_sailing:
+                    where_island = "Sailing"
                     
                 rest_time = "0s"
                 if char.rested_time.total_seconds() > 0:

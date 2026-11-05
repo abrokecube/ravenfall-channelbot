@@ -675,11 +675,16 @@ class GameCog(Cog):
             user: Target user.
             channel: Target channel.
         """
-        query_result = await channel.get_query(f"select id, island, training, sailing from players where name = '{user}'")
+        query_result = await channel.get_query(f"select id, island, training, sailing, induel from players where name = '{user}'")
         if not query_result:
             raise CommandError("User not found")
         if query_result['sailing']:
             raise CommandError("User is sailing")
+        if query_result.get('induel'):
+            raise CommandError("User is in a duel")
+        island = (query_result.get('island') or '').lower()
+        if island in ("mangrove", "ravebridge"):
+            raise CommandError(f"User is on the {island} island")
         sender = await channel.build_sender_from_character_id(query_result['id'])
         await send_to_server(
             channel.middleman_connection_id,
