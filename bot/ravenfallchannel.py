@@ -57,6 +57,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up
 RETRY_WINDOW = 3 * 60  # Number of seconds to wait before resetting attempt counter
 MAX_DUNGEON_LENGTH = 15 * 60
+MAX_SCROLL_QUEUE_FAILURES = 10  # Consecutive failed scroll uses before the whole queue is refunded
 
 # Command timeout values in seconds for monitored commands
 COMMAND_TIMEOUTS = {
@@ -167,7 +168,8 @@ class RFChannel:
         
         self.update_events_routine_first_iteration = True
         self.scroll_queue: deque[QueuedScroll] = deque()
-        
+        self.scroll_queue_failures = 0
+
     async def save_scroll_queue(self):
         encoded = []
         for item in self.scroll_queue:
@@ -871,6 +873,7 @@ class RFChannel:
         if self.event != RFChannelEvent.NONE:
             return
         if len(self.scroll_queue) == 0:
+            self.scroll_queue_failures = 0
             return
         scrolls = await get_scroll_counts(self.channel_id)
         stock = 0
@@ -897,6 +900,7 @@ class RFChannel:
         for _ in range(10):
             await asyncio.sleep(1)
             if self.event == expected_event:
+                self.scroll_queue_failures = 0
                 self.scroll_queue.popleft()
                 await self.save_scroll_queue()
                 if next_scroll.reward_id:
@@ -907,8 +911,20 @@ class RFChannel:
                         TwitchCustomRewardRedemptionStatus.FULFILLED
                     )
                 return
-        logging.warning(f"Scroll queue: Expected event {expected_event} did not occur")
-    
+        self.scroll_queue_failures += 1
+        logging.warning(
+            f"Scroll queue: Expected event {expected_event} did not occur "
+            f"({self.scroll_queue_failures}/{MAX_SCROLL_QUEUE_FAILURES})"
+        )
+        if self.scroll_queue_failures >= MAX_SCROLL_QUEUE_FAILURES:
+            self.scroll_queue_failures = 0
+            refunded = len(self.scroll_queue)
+            await self.remove_scrolls_from_queue(0)
+            await self.send_chat_message(
+                f"{utils.pl(refunded, 'scroll')} {utils.pl2(refunded, 'was', 'were', False)} refunded due to failures.",
+                ignore_error=True
+            )
+
     def get_seconds_until_restart(self):
         if not (self.restart_task and (not self.restart_task.finished())):
             return 999999
