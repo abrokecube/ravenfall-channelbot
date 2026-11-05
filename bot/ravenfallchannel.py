@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3  # Maximum number of restart attempts before giving up
 RETRY_WINDOW = 3 * 60  # Number of seconds to wait before resetting attempt counter
 MAX_DUNGEON_LENGTH = 15 * 60
-MAX_SCROLL_QUEUE_FAILURES = 10  # Consecutive failed scroll uses before the whole queue is refunded
+MAX_SCROLL_QUEUE_FAILURES = 5  # Consecutive failed scroll uses before the whole queue is refunded
 
 # Command timeout values in seconds for monitored commands
 COMMAND_TIMEOUTS = {
