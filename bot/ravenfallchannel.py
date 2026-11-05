@@ -354,7 +354,11 @@ class RFChannel:
             key = match.key
         message_args = message['Args']
         additional_args = {}
-        if key == "ravebridge_start":
+        is_ravebridge_start = key == "ravebridge_start" or (
+            (message.get('Category') or '').lower() == 'ravebridge'
+            and any(tag.lower() == 'start' for tag in message.get('Tags') or [])
+        )
+        if is_ravebridge_start:
             ravebridge_cd = self.cooldowns.scoped(
                 "ravebridge_start",
                 CooldownBucket(rate=1, per=60)

@@ -17,6 +17,9 @@ raid_finished_disconnected: "Victorious!! Raid boss was slain but unfortunately 
 ravebridge_start: 
  - "The goblins of Ravebridge are rising! The castle calls for help: type !ravebridge to go."
  - "Ravebridge is open! Far to the west the old castle town waits. Type !ravebridge to come along."
+ - "The road to Ravebridge opens by itself: something is happening in the old castle town. Type !ravebridge to go."
+ - "The goblins storm Ravebridge! The streamer takes up arms: type !hero to fight beside them."
+ - "The goblins storm Ravebridge! Type !ravebridge to fight them off."
 
 dungeon_disabled: "Dungeons has been disabled in this stream by the broadcaster."
 dungeon_scroll_overlap: "Someone just used a dungeon scroll."
