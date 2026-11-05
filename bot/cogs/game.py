@@ -232,7 +232,7 @@ class GameCog(Cog):
     @parameter("cancel", aliases=["x"])
     @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
     async def rfupdate(self, ctx: CommandEvent, seconds: int = 120, *, check: bool = False, force: bool = False, cancel: bool = False):
-        """Updates Ravenfall to the latest release and restarts every town.
+        """Updates Ravenfall and RavenBot to the latest release and restarts every town.
 
         Scroll uses are paused for the whole update, and towns only go down once
         every dungeon and raid has finished.
@@ -272,7 +272,7 @@ class GameCog(Cog):
             return
 
         if updater.start(release, seconds, ctx.message.reply):
-            await ctx.message.reply(f"{status} Downloading the update...")
+            await ctx.message.reply(f"{status} Preparing the update...")
 
     @command(
         name="rfbotrestart",

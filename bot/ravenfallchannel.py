@@ -1180,10 +1180,18 @@ class RFChannel:
         if self.manager.middleman_connected and self.auto_restore_raids:
             await self.restore_auto_raids()
 
+    @property
+    def _ravenbot_start_command(self) -> str:
+        return f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
+
+    async def stop_ravenbot(self):
+        await stop_process(self.sandboxie_box, "RavenBot.exe")
+
+    async def start_ravenbot(self):
+        return await start_process(self.sandboxie_box, self._ravenbot_start_command)
+
     async def restart_ravenbot(self):
-        await restart_process(
-            self.sandboxie_box, "RavenBot.exe", f"cd {os.getenv('RAVENBOT_FOLDER')} & start RavenBot.exe"
-        )
+        await restart_process(self.sandboxie_box, "RavenBot.exe", self._ravenbot_start_command)
 
     async def _monitor_ravenbot_response_task(self, command: str, timeout: float = 5, resend_text: str = None):
         """

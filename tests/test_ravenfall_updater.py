@@ -6,6 +6,7 @@ restart tasks, RFChannel's restart logic, and the file handling on temp folders.
 
 import asyncio
 import hashlib
+import json
 import os
 import shutil
 import stat
@@ -27,13 +28,29 @@ from bot import ravenfallupdater as updater
 from bot.models import RFChannelEvent, RFChannelSubEvent
 from bot.ravenfallchannel import RFChannel
 from bot.ravenfallrestarttask import RestartReason
-from bot.ravenfallupdater import GameRelease, RFGameUpdater, TownGate
+from bot.ravenfallupdater import GameRelease, ReleaseAsset, RFGameUpdater, TownGate
 
 
 def write(path: Path, text: str = "x") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     return path
+
+
+def write_background_download(folder: Path, version: str, content: bytes, ready_bytes: int | None = None) -> None:
+    """Leaves what the game's BackgroundUpdate leaves behind."""
+    (folder / "update").mkdir(parents=True, exist_ok=True)
+    (folder / "update" / "update.7z").write_bytes(content)
+    ready = {"Version": version, "File": "update.7z", "Bytes": len(content) if ready_bytes is None else ready_bytes}
+    (folder / "update" / "ready.json").write_text(json.dumps(ready))
+
+
+def make_release(version: str, sha256: str = "") -> GameRelease:
+    return GameRelease(
+        version,
+        ReleaseAsset("update.7z", "https://example.invalid/update.7z", sha256),
+        ReleaseAsset("RavenBot.7z", "https://example.invalid/RavenBot.7z", ""),
+    )
 
 
 class VersionTests(unittest.TestCase):
@@ -43,7 +60,7 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(updater.normalize_version("0.9.6.0"), "0.9.6.0")
 
     def test_is_newer_than(self):
-        release = GameRelease("0.9.6.0a", "", "")
+        release = make_release("0.9.6.0a")
         self.assertTrue(release.is_newer_than({"a": "0.9.4.3a"}))
         self.assertTrue(release.is_newer_than({"a": "0.9.6.0a", "b": "0.9.4.3a"}))
         self.assertFalse(release.is_newer_than({"a": "0.9.6.0a", "b": None}))
@@ -106,6 +123,22 @@ class FileTests(unittest.TestCase):
         self.assertEqual(updater.find_locked_files(self.source, self.game), [])
 
 
+    def test_ravenbot_install_only_touches_the_exe(self):
+        source = self.root / "bot source"
+        bot = self.root / "bot"
+        write(source / "RavenBot.exe", "new")
+        write(source / "settings.json", "theirs")
+        write(bot / "RavenBot.exe", "old")
+        write(bot / "settings.json", "mine")
+        write(bot / "user-settings" / "a.json", "mine")
+
+        updater.install_ravenbot(source, bot)
+
+        self.assertEqual((bot / "RavenBot.exe").read_text(), "new")
+        self.assertEqual((bot / "settings.json").read_text(), "mine")
+        self.assertEqual((bot / "user-settings" / "a.json").read_text(), "mine")
+
+
 class DownloadTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.body = b"update" * 1000
@@ -125,12 +158,79 @@ class DownloadTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_good_checksum(self):
         sha256 = hashlib.sha256(self.body).hexdigest()
-        await updater.download_release(GameRelease("1", self.url, sha256), self.destination)
+        await updater.download_asset(ReleaseAsset("update.7z", self.url, sha256), self.destination)
         self.assertEqual(self.destination.read_bytes(), self.body)
 
     async def test_bad_checksum(self):
         with self.assertRaises(updater.GameUpdateError):
-            await updater.download_release(GameRelease("1", self.url, "0" * 64), self.destination)
+            await updater.download_asset(ReleaseAsset("update.7z", self.url, "0" * 64), self.destination)
+
+
+class PredownloadedUpdateTests(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        self.content = b"update" * 100
+        self.release = make_release("0.9.6.1a", hashlib.sha256(self.content).hexdigest())
+        self.destination = self.root / "out.7z"
+
+    def copy(self, *folders):
+        return updater.copy_predownloaded_update(self.release, folders, self.destination)
+
+    def test_uses_a_matching_download(self):
+        write_background_download(self.root / "box", "0.9.6.1a", self.content)
+        self.assertTrue(self.copy(self.root / "box"))
+        self.assertEqual(self.destination.read_bytes(), self.content)
+
+    def test_reads_a_ready_file_with_a_bom(self):
+        write_background_download(self.root / "box", "0.9.6.1a", self.content)
+        ready = self.root / "box" / "update" / "ready.json"
+        ready.write_text(ready.read_text(), encoding="utf-8-sig")
+        self.assertTrue(self.copy(self.root / "box"))
+
+    def test_ignores_downloads_that_do_not_match(self):
+        cases = {
+            "other version": ("0.9.6.0a", self.content, None),
+            "partial": ("0.9.6.1a", self.content[:10], len(self.content)),
+            "corrupt": ("0.9.6.1a", b"x" * len(self.content), None),
+        }
+        for name, (version, content, ready_bytes) in cases.items():
+            with self.subTest(name):
+                write_background_download(self.root / name, version, content, ready_bytes)
+                self.assertFalse(self.copy(self.root / name))
+
+    def test_ignores_a_download_still_running(self):
+        write(self.root / "box" / "update" / "update.7z", "partial")
+        self.assertFalse(self.copy(self.root / "box", self.root / "empty box"))
+
+    def test_ignores_an_unreadable_ready_file(self):
+        write_background_download(self.root / "box", "0.9.6.1a", self.content)
+        for text in ("{not json", "[]"):
+            with self.subTest(text):
+                (self.root / "box" / "update" / "ready.json").write_text(text)
+                self.assertFalse(self.copy(self.root / "box"))
+
+    def test_moves_on_to_the_next_folder(self):
+        write_background_download(self.root / "bad", "0.9.6.1a", b"x" * len(self.content))
+        write_background_download(self.root / "good", "0.9.6.1a", self.content)
+        self.assertTrue(self.copy(self.root / "bad", self.root / "good"))
+        self.assertEqual(self.destination.read_bytes(), self.content)
+
+
+class FindAssetTests(unittest.TestCase):
+    def test_finds_asset_with_checksum(self):
+        release = {"assets": [{"name": "RavenBot.7z", "digest": "sha256:abc"}]}
+        self.assertEqual(
+            updater.find_asset(release, "v1", "RavenBot.7z"),
+            ReleaseAsset("RavenBot.7z", f"{updater.DOWNLOAD_URL_PREFIX}v1/RavenBot.7z", "abc"),
+        )
+
+    def test_refuses_missing_asset_or_checksum(self):
+        with self.assertRaises(updater.GameUpdateError):
+            updater.find_asset({"assets": []}, "v1", "RavenBot.7z")
+        with self.assertRaises(updater.GameUpdateError):
+            updater.find_asset({"assets": [{"name": "RavenBot.7z"}]}, "v1", "RavenBot.7z")
 
 
 class FetchReleaseTests(unittest.IsolatedAsyncioTestCase):
@@ -210,15 +310,20 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
         self.manager = FakeManager()
         self.game_updater = self.manager.game_updater
         self.reports: list[str] = []
-        self.release = GameRelease("0.9.6.0a", "https://example.invalid", "")
+        self.release = make_release("0.9.6.0a")
 
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.game = Path(folder.name) / "game"
         write(self.game / "Ravenfall.exe", "old")
         write(self.game / "RavenWeave.exe", "old")
+        self.root = Path(folder.name)
+        self.bot = Path(folder.name) / "bot"
+        write(self.bot / "RavenBot.exe", "old")
+        write(self.bot / "settings.json", "mine")
         env = mock.patch.dict(os.environ, {
             "RAVENFALL_FOLDER": str(self.game),
+            "RAVENBOT_FOLDER": str(self.bot),
             "RAVENFALL_SANDBOXED_FOLDER": str(Path(folder.name) / "{box}"),
         })
         env.start()
@@ -226,10 +331,13 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
 
         log = self.log
 
-        async def stop_process(box, _process):
-            log.append(f"stop {box}")
+        async def stop_process(box, process):
+            log.append(f"stop bot {box}" if process == "RavenBot.exe" else f"stop {box}")
 
-        async def start_process(box, _command):
+        async def start_process(box, command):
+            if "RavenBot.exe" in command:
+                log.append(f"start bot {box}")
+                return self.bot_start_code, ""
             log.append(f"start {box}")
             self.town_named(box).fake_version = self.new_version
             return 0, ""
@@ -238,12 +346,15 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
             await stop_process(box, process)
             return await start_process(box, command)
 
-        async def download(_release, destination):
-            log.append("download")
+        async def download(asset, destination):
+            log.append(f"download {asset.name}")
             destination.write_bytes(b"")
 
-        async def extract(_archive, destination):
-            log.append("extract")
+        async def extract(archive, destination, _expected):
+            log.append(f"extract {archive.name}")
+            if archive.name == "RavenBot.7z":
+                write(destination / "RavenBot" / "RavenBot.exe", "new")
+                return
             write(destination / "Ravenfall.exe", "new")
             write(destination / "Ravenfall_Data" / "level0", "new")
             write(destination / "updater" / "RavenWeave.exe", "new")
@@ -255,6 +366,7 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
             return real_install(*args)
 
         self.new_version = "0.9.6.0a"
+        self.bot_start_code = 0
         for constant, value in (("EVENTS_SETTLE_TIME", 0.1), ("EVENT_POLL_INTERVAL", 0.05)):
             patcher = mock.patch.object(updater, constant, value)
             patcher.start()
@@ -263,7 +375,7 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
             ("bot.ravenfallchannel.stop_process", stop_process),
             ("bot.ravenfallchannel.start_process", start_process),
             ("bot.ravenfallchannel.restart_process", restart_process),
-            ("bot.ravenfallupdater.download_release", download),
+            ("bot.ravenfallupdater.download_asset", download),
             ("bot.ravenfallupdater.extract_archive", extract),
             ("bot.ravenfallupdater.install_files", install),
         ):
@@ -288,8 +400,8 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.log.count("install"), 1)
         install = self.log.index("install")
-        self.assertLess(self.log.index("download"), self.log.index("stop a"))
-        self.assertLess(self.log.index("extract"), self.log.index("stop a"))
+        for step in ("download update.7z", "download RavenBot.7z", "extract update.7z", "extract RavenBot.7z"):
+            self.assertLess(self.log.index(step), self.log.index("stop a"))
         self.assertLess(self.log.index("stop a"), install)
         self.assertLess(self.log.index("stop b"), install)
         self.assertLess(install, self.log.index("start a"))
@@ -301,7 +413,7 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((self.game / "Ravenfall.exe").read_text(), "new")
         self.assertFalse((self.game / "RavenWeave.exe").exists())
         self.assertFalse((self.game / "updater").exists())
-        self.assertIn("Ravenfall has been updated to 0.9.6.0a!", self.reports)
+        self.assertIn("Ravenfall and RavenBot have been updated to 0.9.6.0a!", self.reports)
         self.assertFalse(self.game_updater.in_progress)
         self.assertFalse(self.game_updater.holding_restarts)
         for town in self.manager.channels:
@@ -417,7 +529,7 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
         async def fail(*_):
             raise updater.GameUpdateError("no internet")
 
-        with mock.patch("bot.ravenfallupdater.download_release", fail):
+        with mock.patch("bot.ravenfallupdater.download_asset", fail):
             await self.run_update()
         self.assertFalse(self.game_updater.holding_scrolls)
 
@@ -449,13 +561,92 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.reports), 1)
         self.assertIn("disk full", self.reports[0])
 
+    async def test_ravenbot_is_replaced_between_the_towns_stopping_and_starting(self):
+        make_town(self.manager, "a", "0.9.4.3a", self.log)
+        make_town(self.manager, "b", "0.9.4.3a", self.log)
+        await self.run_update()
+
+        install = self.log.index("install")
+        for box in ("a", "b"):
+            self.assertEqual(self.log.count(f"stop bot {box}"), 1)
+            self.assertEqual(self.log.count(f"start bot {box}"), 1)
+            self.assertLess(self.log.index(f"stop {box}"), self.log.index(f"stop bot {box}"))
+            self.assertLess(self.log.index(f"stop bot {box}"), install)
+            self.assertLess(install, self.log.index(f"start bot {box}"))
+            # Towns connect to RavenBot on startup, so it has to be up first
+            self.assertLess(self.log.index(f"start bot {box}"), self.log.index(f"start {box}"))
+        self.assertEqual((self.bot / "RavenBot.exe").read_text(), "new")
+        self.assertEqual((self.bot / "settings.json").read_text(), "mine")
+
+    async def test_towns_sharing_a_box_share_a_ravenbot(self):
+        make_town(self.manager, "a", "0.9.4.3a", self.log)
+        make_town(self.manager, "b", "0.9.4.3a", self.log).sandboxie_box = "a"
+        await self.run_update()
+        self.assertEqual(self.log.count("stop bot a"), 1)
+        self.assertEqual(self.log.count("start bot a"), 1)
+
+    async def test_locked_ravenbot_changes_nothing_and_everything_comes_back(self):
+        make_town(self.manager, "a", "0.9.4.3a", self.log)
+        self.new_version = "0.9.4.3a"
+        real_find_locked = updater.find_locked_files
+
+        def find_locked(source, folder):
+            return [Path("RavenBot.exe")] if folder == self.bot else real_find_locked(source, folder)
+
+        with mock.patch.object(updater, "FILES_RELEASED_TIMEOUT", 0), \
+                mock.patch("bot.ravenfallupdater.find_locked_files", find_locked):
+            await self.run_update()
+
+        self.assertEqual((self.game / "Ravenfall.exe").read_text(), "old")
+        self.assertEqual((self.bot / "RavenBot.exe").read_text(), "old")
+        self.assertNotIn("install", self.log)
+        self.assertIn("start bot a", self.log)
+        self.assertIn("start a", self.log)
+        self.assertEqual(len(self.reports), 1)
+        self.assertIn("still in use", self.reports[0])
+
+    async def test_ravenbot_that_fails_to_start_is_reported(self):
+        make_town(self.manager, "a", "0.9.4.3a", self.log)
+        self.bot_start_code = 1
+        await self.run_update()
+        self.assertIn("start a", self.log)
+        self.assertTrue(any("RavenBot failed to start for: a" in report for report in self.reports))
+
+    async def test_missing_ravenbot_folder_touches_nothing(self):
+        make_town(self.manager, "a", "0.9.4.3a", self.log)
+        with mock.patch.dict(os.environ, {"RAVENBOT_FOLDER": ""}):
+            await self.run_update()
+        self.assertEqual(self.log, [])
+        self.assertIn("RAVENBOT_FOLDER", self.reports[0])
+
+    async def test_uses_a_town_background_download_and_still_fetches_ravenbot(self):
+        make_town(self.manager, "a", "0.9.4.3a", self.log)
+        make_town(self.manager, "b", "0.9.4.3a", self.log)
+        content = b"already here"
+        self.release = make_release("0.9.6.0a", hashlib.sha256(content).hexdigest())
+        write_background_download(self.root / "b", "0.9.6.0a", content)
+
+        await self.run_update()
+
+        self.assertNotIn("download update.7z", self.log)
+        self.assertIn("download RavenBot.7z", self.log)
+        self.assertIn("extract update.7z", self.log)
+        self.assertEqual((self.game / "Ravenfall.exe").read_text(), "new")
+
+    async def test_corrupt_background_download_is_downloaded_again(self):
+        make_town(self.manager, "a", "0.9.4.3a", self.log)
+        self.release = make_release("0.9.6.0a", "0" * 64)
+        write_background_download(self.root / "a", "0.9.6.0a", b"corrupt")
+        await self.run_update()
+        self.assertIn("download update.7z", self.log)
+
     async def test_failed_download_touches_nothing(self):
         make_town(self.manager, "a", "0.9.4.3a", self.log)
 
         async def fail(*_):
             raise updater.GameUpdateError("no internet")
 
-        with mock.patch("bot.ravenfallupdater.download_release", fail):
+        with mock.patch("bot.ravenfallupdater.download_asset", fail):
             await self.run_update()
         self.assertEqual(self.log, [])
         self.assertIn("no internet", self.reports[0])
@@ -471,7 +662,7 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
         make_town(self.manager, "a", "0.9.4.3", self.log)
         self.new_version = "0.9.6.0"
         await self.run_update()
-        self.assertEqual(self.reports, ["Ravenfall has been updated to 0.9.6.0a!"])
+        self.assertEqual(self.reports, ["Ravenfall and RavenBot have been updated to 0.9.6.0a!"])
 
     async def test_cancel_during_countdown(self):
         town = make_town(self.manager, "a", "0.9.4.3a", self.log)

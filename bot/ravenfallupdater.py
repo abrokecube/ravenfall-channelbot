@@ -3,12 +3,18 @@
 The towns all run out of one folder through Sandboxie, so they have to go down
 together: nothing can be overwritten while any of them still has the files open.
 The update is downloaded and unpacked first, so a bad download never costs any
-downtime. Scroll uses are paused for the whole update, and nothing else happens
-until no town has a dungeon or raid going. Each town then goes through its normal
-restart task (countdown, pre and post restart), with two additions: when its
+downtime. Towns download new versions by themselves in the background, each into
+an update\\ folder of its own because of the sandbox, so one of those is used
+instead when it is complete and matches the release. Scroll uses are paused for
+the whole update, and nothing else happens until no town has a dungeon or raid
+going. Each town then goes through its normal restart task (countdown, pre and post restart), with two additions: when its
 countdown ends it waits for every other town to be ready, so that no town goes
 down while another is held up by an event that started late, and after stopping
 they wait for each other again, and the last one to stop installs the files.
+
+RavenBot comes from the same release. While the towns are down it is stopped in
+every box, its exe is replaced, and it is started again before the towns are, so
+they find it running. Only the exe is touched, which leaves its settings alone.
 
 RavenWeave, the game's own updater, is removed on purpose. Note that the update
 carries it in updater\\, and that the game moves anything it finds there into its
@@ -19,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -43,12 +50,17 @@ logger = logging.getLogger(__name__)
 
 VERSION_URL = "https://www.ravenfall.stream/api/version/check"
 GITHUB_REPO = "zerratar/Ravenfall-Legacy"
-ASSET_NAME = "update.7z"
+GAME_ASSET = "update.7z"
+RAVENBOT_ASSET = "RavenBot.7z"
 DOWNLOAD_URL_PREFIX = f"https://github.com/{GITHUB_REPO}/releases/download/"
 
 GAME_EXE = "Ravenfall.exe"
+RAVENBOT_EXE = "RavenBot.exe"
 UPDATER_EXE = "RavenWeave.exe"
 UPDATER_FOLDER = "updater"
+# Where the game keeps a background download. The ready file only exists once it is complete.
+DOWNLOAD_FOLDER = "update"
+DOWNLOAD_READY_FILE = "ready.json"
 
 # How long a restart already underway gets to finish before it is cut off
 RUNNING_RESTART_TIMEOUT = 5 * 60
@@ -75,10 +87,17 @@ def normalize_version(version: str) -> str:
 
 
 @dataclass(frozen=True)
-class GameRelease:
-    version: str
+class ReleaseAsset:
+    name: str
     url: str
     sha256: str
+
+
+@dataclass(frozen=True)
+class GameRelease:
+    version: str
+    game: ReleaseAsset
+    ravenbot: ReleaseAsset
 
     def is_newer_than(self, installed: dict[str, str | None]) -> bool | None:
         """Whether any town is behind this release, or None if no town could say."""
@@ -96,7 +115,7 @@ async def fetch_latest_release() -> GameRelease:
             latest = await response.json()
 
         url: str = latest["downloadUrl"]
-        if not url.startswith(DOWNLOAD_URL_PREFIX) or not url.endswith(f"/{ASSET_NAME}"):
+        if not url.startswith(DOWNLOAD_URL_PREFIX) or not url.endswith(f"/{GAME_ASSET}"):
             raise GameUpdateError(f"Unexpected download url: {url}")
         tag = url.split("/")[-2]
 
@@ -106,27 +125,61 @@ async def fetch_latest_release() -> GameRelease:
             response.raise_for_status()
             release = await response.json()
 
-    asset = next((a for a in release["assets"] if a["name"] == ASSET_NAME), None)
+    return GameRelease(
+        version=latest["version"],
+        game=find_asset(release, tag, GAME_ASSET),
+        ravenbot=find_asset(release, tag, RAVENBOT_ASSET),
+    )
+
+
+def find_asset(release: dict, tag: str, name: str) -> ReleaseAsset:
+    asset = next((a for a in release["assets"] if a["name"] == name), None)
     if asset is None:
-        raise GameUpdateError(f"Release {tag} has no {ASSET_NAME}")
+        raise GameUpdateError(f"Release {tag} has no {name}")
     algorithm, _, digest = (asset.get("digest") or "").partition(":")
     if algorithm != "sha256" or not digest:
-        raise GameUpdateError(f"GitHub did not provide a checksum for {ASSET_NAME}")
-    return GameRelease(version=latest["version"], url=url, sha256=digest)
+        raise GameUpdateError(f"GitHub did not provide a checksum for {name}")
+    return ReleaseAsset(name, f"{DOWNLOAD_URL_PREFIX}{tag}/{name}", digest)
 
 
-async def download_release(release: GameRelease, destination: Path) -> None:
+async def download_asset(asset: ReleaseAsset, destination: Path) -> None:
     timeout = aiohttp.ClientTimeout(total=None, sock_read=60)
     checksum = hashlib.sha256()
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(release.url) as response:
+        async with session.get(asset.url) as response:
             response.raise_for_status()
             with destination.open("wb") as file:
                 async for chunk in response.content.iter_chunked(1024 * 1024):
                     checksum.update(chunk)
                     await asyncio.to_thread(file.write, chunk)
-    if checksum.hexdigest() != release.sha256:
-        raise GameUpdateError(f"Checksum mismatch on {ASSET_NAME}, the download is corrupt")
+    if checksum.hexdigest() != asset.sha256:
+        raise GameUpdateError(f"Checksum mismatch on {asset.name}, the download is corrupt")
+
+
+def copy_predownloaded_update(release: GameRelease, folders: Iterable[Path], destination: Path) -> bool:
+    """Copies the first of the towns' background downloads that matches the release.
+
+    It is copied, so that a town that is still running can't change it mid-unpack.
+    Returns False if none of them can be used.
+    """
+    for folder in folders:
+        archive = folder / DOWNLOAD_FOLDER / GAME_ASSET
+        try:
+            # The game writes the ready file itself, so it may come with a BOM
+            ready = json.loads((folder / DOWNLOAD_FOLDER / DOWNLOAD_READY_FILE).read_text("utf-8-sig"))
+            if ready.get("Version") != release.version or ready.get("Bytes") != archive.stat().st_size:
+                continue
+            shutil.copyfile(archive, destination)
+            with destination.open("rb") as file:
+                checksum = hashlib.file_digest(file, "sha256").hexdigest()
+        except (OSError, ValueError, AttributeError) as e:
+            logger.debug(f"Can't use the download in {folder}: {e}")
+            continue
+        if checksum == release.game.sha256:
+            logger.info(f"Using the update that was already downloaded to {archive}")
+            return True
+        logger.warning(f"Ignoring {archive}, its checksum does not match the release")
+    return False
 
 
 def find_seven_zip() -> str:
@@ -142,7 +195,8 @@ def find_seven_zip() -> str:
     raise GameUpdateError("7-Zip was not found, install it or set SEVEN_ZIP_PATH")
 
 
-async def extract_archive(archive: Path, destination: Path) -> None:
+async def extract_archive(archive: Path, destination: Path, expected: Iterable[str]) -> None:
+    """Unpacks the archive, and checks that the expected paths came out of it."""
     process = await asyncio.create_subprocess_exec(
         find_seven_zip(), "x", "-y", f"-o{destination}", str(archive),
         stdout=asyncio.subprocess.DEVNULL,
@@ -155,8 +209,9 @@ async def extract_archive(archive: Path, destination: Path) -> None:
             process.kill()
     if process.returncode != 0:
         raise GameUpdateError(f"7-Zip failed: {stderr.decode(errors='replace').strip()}")
-    if not (destination / GAME_EXE).is_file() or not (destination / "Ravenfall_Data").is_dir():
-        raise GameUpdateError(f"{ASSET_NAME} does not look like a Ravenfall install")
+    missing = [path for path in expected if not (destination / path).exists()]
+    if missing:
+        raise GameUpdateError(f"{archive.name} is missing {missing[0]}")
 
 
 def iter_update_files(source: Path) -> Iterator[Path]:
@@ -204,15 +259,19 @@ def install_files(source: Path, game_folder: Path, box_folders: Iterable[Path] =
     return count
 
 
-async def wait_for_unlocked_files(source: Path, game_folder: Path) -> None:
+def install_ravenbot(source: Path, ravenbot_folder: Path) -> None:
+    shutil.copy2(source / RAVENBOT_EXE, ravenbot_folder / RAVENBOT_EXE)
+
+
+async def wait_for_unlocked_files(source: Path, target_folder: Path) -> None:
     """Gives processes on their way out, like the crash handler, time to exit."""
     deadline = time.monotonic() + FILES_RELEASED_TIMEOUT
     while True:
-        locked = await asyncio.to_thread(find_locked_files, source, game_folder)
+        locked = await asyncio.to_thread(find_locked_files, source, target_folder)
         if not locked:
             return
         if time.monotonic() >= deadline:
-            raise GameUpdateError(f"{len(locked)} game files are still in use, e.g. {locked[0]}")
+            raise GameUpdateError(f"{len(locked)} files are still in use, e.g. {locked[0]}")
         await asyncio.sleep(2)
 
 
@@ -338,29 +397,57 @@ class RFGameUpdater:
             self.status = "idle"
             await asyncio.to_thread(shutil.rmtree, work_folder, ignore_errors=True)
 
-    def _paths(self) -> tuple[Path, list[Path]]:
+    def _paths(self) -> tuple[Path, Path, list[Path]]:
         game_folder = os.getenv("RAVENFALL_FOLDER")
         if not game_folder or not Path(game_folder).is_dir():
             raise GameUpdateError("RAVENFALL_FOLDER is not set to a folder")
+        ravenbot_folder = os.getenv("RAVENBOT_FOLDER")
+        if not ravenbot_folder or not Path(ravenbot_folder).is_dir():
+            raise GameUpdateError("RAVENBOT_FOLDER is not set to a folder")
         sandboxed_folder = os.getenv("RAVENFALL_SANDBOXED_FOLDER", "")
         box_folders = [
             Path(sandboxed_folder.replace("{box}", channel.sandboxie_box))
             for channel in self.manager.channels
             if sandboxed_folder and channel.sandboxie_box
         ]
-        return Path(game_folder), box_folders
+        return Path(game_folder), Path(ravenbot_folder), box_folders
+
+    def _ravenbot_channels(self) -> list[RFChannel]:
+        """One channel per box, since each box runs one RavenBot."""
+        return list({channel.sandboxie_box: channel for channel in self.manager.channels}.values())
+
+    async def _start_ravenbots(self, say: Report) -> None:
+        channels = self._ravenbot_channels()
+        results = await asyncio.gather(
+            *(channel.start_ravenbot() for channel in channels), return_exceptions=True
+        )
+        failed = [
+            channel.channel_name
+            for channel, result in zip(channels, results)
+            if isinstance(result, Exception) or result[0] != 0
+        ]
+        if failed:
+            logger.error(f"RavenBot failed to start for: {failed}")
+            await say(f"RavenBot failed to start for: {', '.join(failed)}")
 
     async def _update(self, release: GameRelease, seconds: int, work_folder: Path, say: Report) -> None:
-        game_folder, box_folders = self._paths()
-        archive = work_folder / ASSET_NAME
+        game_folder, ravenbot_folder, box_folders = self._paths()
+        game_archive = work_folder / GAME_ASSET
+        ravenbot_archive = work_folder / RAVENBOT_ASSET
         extracted = work_folder / "extracted"
+        ravenbot_extracted = work_folder / "extracted-ravenbot"
+        ravenbot_files = ravenbot_extracted / "RavenBot"
 
         self.status = "downloading"
-        logger.info(f"Downloading Ravenfall {release.version} from {release.url}")
-        await download_release(release, archive)
+        folders = [*box_folders, game_folder]
+        if not await asyncio.to_thread(copy_predownloaded_update, release, folders, game_archive):
+            logger.info(f"Downloading Ravenfall {release.version} from {release.game.url}")
+            await download_asset(release.game, game_archive)
+        await download_asset(release.ravenbot, ravenbot_archive)
 
         self.status = "unpacking"
-        await extract_archive(archive, extracted)
+        await extract_archive(game_archive, extracted, (GAME_EXE, "Ravenfall_Data"))
+        await extract_archive(ravenbot_archive, ravenbot_extracted, (f"RavenBot/{RAVENBOT_EXE}",))
 
         install_error: Exception | None = None
 
@@ -369,12 +456,17 @@ class RFGameUpdater:
             self.status = "installing"
             logger.info(f"Installing Ravenfall {release.version} to {game_folder}")
             try:
+                await asyncio.gather(*(channel.stop_ravenbot() for channel in self._ravenbot_channels()))
+                # Everything is checked first, so that a locked file changes nothing
                 await wait_for_unlocked_files(extracted, game_folder)
+                await wait_for_unlocked_files(ravenbot_files, ravenbot_folder)
                 count = await asyncio.to_thread(install_files, extracted, game_folder, box_folders)
-                logger.info(f"Installed {count} files")
+                await asyncio.to_thread(install_ravenbot, ravenbot_files, ravenbot_folder)
+                logger.info(f"Installed {count} files and {RAVENBOT_EXE}")
             except Exception as e:
                 logger.error(f"Failed to install the update: {e}", exc_info=True)
                 install_error = e
+            await self._start_ravenbots(say)
 
         self.status = "waiting for dungeons and raids to finish"
         await self._wait_for_events_to_finish(say)
@@ -407,7 +499,7 @@ class RFGameUpdater:
             towns = ", ".join(f"{name} ({version})" for name, version in behind.items())
             await say(f"Installed Ravenfall {release.version}, but these towns aren't running it: {towns}")
         else:
-            await say(f"Ravenfall has been updated to {release.version}!")
+            await say(f"Ravenfall and RavenBot have been updated to {release.version}!")
 
     async def _wait_for_events_to_finish(self, say: Report) -> None:
         clear_since = None
