@@ -21,6 +21,7 @@ from ..commands.exceptions import CommandError
 from ..ravenfallchannel import RFChannel
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
+from ..ravenfallupdater import fetch_latest_release
 
 from utils.format_time import format_seconds, TimeSize
 from utils.utils import pl, pl2
@@ -162,6 +163,9 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
+        if self.global_context.ravenfall_manager.game_updater.holding_restarts:
+            await ctx.message.reply("A game update is in progress, use rfupdate --cancel instead.")
+            return
         if not channel.cancel_restart():
             await ctx.message.reply("No restart task found.")
             return
@@ -207,11 +211,68 @@ class GameCog(Cog):
             channel: Target channel.
             force: Force the restart even during dungeons, raids, or server issues.
         """
-        channel.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True, force=force)
+        if not channel.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True, force=force):
+            await ctx.message.reply("Can't queue a restart right now.")
+            return
         msg = f"Restart queued. Restarting in {seconds}s."
         if force:
             msg += " (forced)"
         await ctx.message.reply(msg)
+
+    @command(
+        name="rfupdate",
+        aliases=[
+            'rf update',
+            'gameupdate',
+            'updategame',
+        ]
+    )
+    @parameter("check", aliases=["c"])
+    @parameter("force", aliases=["f"])
+    @parameter("cancel", aliases=["x"])
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfupdate(self, ctx: CommandEvent, seconds: int = 120, *, check: bool = False, force: bool = False, cancel: bool = False):
+        """Updates Ravenfall to the latest release and restarts every town.
+
+        Scroll uses are paused for the whole update, and towns only go down once
+        every dungeon and raid has finished.
+
+        Args:
+            seconds: Restart countdown, which starts once all dungeons and raids have finished.
+            check: Only report whether there is an update.
+            force: Install even if the towns look up to date, or if none are online to ask.
+            cancel: Cancel a running update, if the towns have not been stopped yet.
+        """
+        updater = self.global_context.ravenfall_manager.game_updater
+        if cancel:
+            cancelled = updater.cancel()
+            await ctx.message.reply("Game update cancelled." if cancelled else "There is no update that can be cancelled.")
+            return
+        if updater.in_progress:
+            await ctx.message.reply(f"A game update is already running ({updater.status}).")
+            return
+
+        try:
+            release = await fetch_latest_release()
+        except Exception as e:
+            logger.error(f"Failed to check for a game update: {e}", exc_info=True)
+            await ctx.message.reply(f"Failed to check for a game update: {e}")
+            return
+
+        installed = await updater.installed_versions()
+        versions = ", ".join(sorted({version or "offline" for version in installed.values()}))
+        outdated = release.is_newer_than(installed)
+        status = f"Latest version: {release.version}, towns are on: {versions}."
+        if check or (outdated is not True and not force):
+            if outdated is None:
+                status += " No town is online to compare with, use --force to install anyway."
+            elif not outdated:
+                status += " Already up to date."
+            await ctx.message.reply(status)
+            return
+
+        if updater.start(release, seconds, ctx.message.reply):
+            await ctx.message.reply(f"{status} Downloading the update...")
 
     @command(
         name="rfbotrestart",

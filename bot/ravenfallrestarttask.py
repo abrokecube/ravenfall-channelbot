@@ -4,7 +4,7 @@ import time
 import asyncio
 from utils.format_time import format_seconds, TimeSize
 from enum import Enum
-from typing import List, Tuple, TYPE_CHECKING
+from typing import Awaitable, Callable, List, Tuple, TYPE_CHECKING
 from .models import RFChannelEvent, RFChannelSubEvent
 import logging
 
@@ -21,6 +21,7 @@ class RestartReason(Enum):
     MULTIPLIER_DESYNC = "multiplier_desync"
     ITEM_DESYNC = "item_desync"
     MEMORY_USE = "memory_use"
+    GAME_UPDATE = "game_update"
     
 
 class PreRestartEvent(Enum):
@@ -50,7 +51,8 @@ class RFRestartTask:
         mute_countdown: bool = False,
         label: str = "",
         reason: RestartReason | None = None,
-        force: bool = False
+        force: bool = False,
+        before_start: Callable[[], Awaitable[None]] | None = None
     ):
         self.channel = channel
         self.manager = manager
@@ -70,6 +72,14 @@ class RFRestartTask:
         self.label: str = label
         self.reason: RestartReason | None = reason
         self.force: bool = force
+        # Runs when the countdown is over, and can hold back the restart
+        self.before_stop: Callable[[], Awaitable[None]] | None = None
+        # Runs once the game has been stopped, before it gets started again
+        self.before_start = before_start
+        # Tasks that must stop their game together with this one. If any of them
+        # is held up by an event, this one waits with it.
+        self.peers: List[RFRestartTask] = []
+        self.own_event: str = ""
         self._status: RestartStatus = RestartStatus.IDLE
         self.event_watch_lock = asyncio.Lock()
         self.sent_initial_announcement = False
@@ -136,6 +146,8 @@ class RFRestartTask:
                 warning_idx = new_warning_idx
         async with self.event_watch_lock:  # wait for any pending events to be processed
             pass
+        if self.before_stop:
+            await self.before_stop()
         await self._execute()
 
     async def _event_watcher(self):
@@ -147,6 +159,7 @@ class RFRestartTask:
             "dungeon_prep": "Restart postponed due to dungeon being prepared.",
             "raid": "Restart postponed due to raid.",
             "error": "Restart postponed due to an error while checking Ravenfall status.",
+            "peer_busy": "Restart postponed; waiting for another town to be ready.",
         }
         names = {
             "server_down": "server offline",
@@ -155,6 +168,7 @@ class RFRestartTask:
             "dungeon_prep": "dungeon being prepared",
             "raid": "raid",
             "error": "error checking status",
+            "peer_busy": "waiting for another town",
         }
         while True:
             old_event_type = event_type
@@ -179,7 +193,11 @@ class RFRestartTask:
                         event_type = "server_down"
                     if time_left < 35 and not await self.manager.check_update_endpoint():
                         event_type = "updater_down"
-                    
+
+                    self.own_event = event_type
+                    if not event_type and any(peer.own_event for peer in self.peers):
+                        event_type = "peer_busy"
+
                     if event_type:
                         self.future_pause_reason = names[event_type]
                     else:
@@ -216,7 +234,8 @@ class RFRestartTask:
             await self.channel._restart_ravenfall(
                 run_pre_restart=False,
                 run_post_restart=True,
-                restart_task=self
+                restart_task=self,
+                before_start=self.before_start
             )
         except Exception as e:
             logger.error(f"Failed to restart Ravenfall for {self.channel.channel_name}: {e}", exc_info=True)

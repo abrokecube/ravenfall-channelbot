@@ -31,16 +31,21 @@ def runshell_detached(cmd):
         creationflags=DETACHED_PROCESS
     )
 
-async def restart_process(box_name, process_name, startup_command: str):
+async def stop_process(box_name, process_name):
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"taskkill /f /im {process_name}"
     )
-    code, text = await runshell(shellcmd)
+    await runshell(shellcmd)
     await asyncio.sleep(5)
+
+async def start_process(box_name, startup_command: str):
     shellcmd = (
         f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
         f"cmd /c \"{startup_command.replace("\"", "\\\"")}\""
     )
-    code, text = await runshell(shellcmd)
-    return code, text
+    return await runshell(shellcmd)
+
+async def restart_process(box_name, process_name, startup_command: str):
+    await stop_process(box_name, process_name)
+    return await start_process(box_name, startup_command)

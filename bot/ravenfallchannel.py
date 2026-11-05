@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING, Literal
+from typing import Optional, Dict, Any, List, Tuple, TYPE_CHECKING, Literal, Awaitable, Callable
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 from utils.routines import routine
 from utils.format_time import format_seconds, TimeSize
 from utils.backup_file_with_date import backup_file_with_date_async
-from utils.runshell import restart_process, runshell, runshell_detached
+from utils.runshell import restart_process, start_process, stop_process, runshell, runshell_detached
 from utils.strutils import split_by_utf16_bytes
 from utils import utils
 
@@ -860,6 +860,8 @@ class RFChannel:
     async def scroll_queue_routine(self):
         if self.update_events_routine_first_iteration:
             return
+        if self.manager.game_updater.holding_scrolls:
+            return
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
                 pass
@@ -1034,86 +1036,99 @@ class RFChannel:
             await self.send_chat_message("?randleave")
 
     async def _restart_ravenfall(
-        self, 
-        run_pre_restart: bool = True, 
+        self,
+        run_pre_restart: bool = True,
         run_post_restart: bool = True,
         silent: bool = False,
-        *, 
-        reset_attempts: bool = True,
-        restart_task: RFRestartTask = None
+        *,
+        restart_task: RFRestartTask = None,
+        before_start: Callable[[], Awaitable[None]] | None = None
     ):
-        if reset_attempts:
-            self.ravenfall_restart_attempts = 0
-        self.ravenfall_restart_attempts += 1
+        """Restarts the game, retrying until it comes back up.
+
+        If before_start is given, it runs after the game has stopped, while the
+        channel lock is held but the global lock is not, so that several channels
+        can sit in it at once.
+        """
+        self.ravenfall_restart_attempts = 0
         if run_pre_restart:
             await self._ravenfall_pre_restart()
-            
-        await self.channel_restart_lock.acquire()
-        if not silent and self.global_restart_lock.locked():
-            await self.send_chat_message("Waiting for other restarts to finish...")
-        await self.global_restart_lock.acquire()
-        logger.info(f"Restarting Ravenfall for {self.channel_name}")
-        if not silent:
-            msg = "Restarting Ravenfall..."
-            if restart_task and (not restart_task.sent_reason) and restart_task.label:
-                msg += f" Reason: {restart_task.label}"
-            await self.send_chat_message(msg)
-        code, text = await restart_process(
-            self.sandboxie_box, 
-            "Ravenfall.exe", 
-            f"cd {os.getenv('RAVENFALL_FOLDER')} & {self.ravenfall_start_script}"
-        )
-        if code != 0:
-            logger.error(f"Failed to restart Ravenfall for {self.channel_name}: code {code}, text {text}")
-            if not silent:
-                await self.send_chat_message("Failed to restart Ravenfall!")
-            self.channel_restart_lock.release()
-            self.global_restart_lock.release()
-            return False
 
-        await asyncio.sleep(5)
-        start_time = time.time()
-        auth_timeout = self.restart_timeout
-        authenticated = False
-        
-        while time.time() - start_time < auth_timeout:
-            session: GameSession = await self.get_query("select * from session", 1, suppress_timeout_error=True)
-            if session and session.get('authenticated', False):
-                authenticated = True
+        while True:
+            self.ravenfall_restart_attempts += 1
+            async with self.channel_restart_lock:
+                already_stopped = False
+                if before_start:
+                    await stop_process(self.sandboxie_box, "Ravenfall.exe")
+                    already_stopped = True
+                    await before_start()
+                    before_start = None
+                if not silent and self.global_restart_lock.locked():
+                    await self.send_chat_message("Waiting for other restarts to finish...")
+                async with self.global_restart_lock:
+                    result = await self._launch_ravenfall(silent, restart_task, already_stopped)
+                    if result is True and run_post_restart:
+                        await self.channel_post_restart_lock.acquire()
+
+            if result is False:
+                return False
+            if result is True:
                 break
-            await asyncio.sleep(1)
-        if not authenticated:
-            logger.error(f"Failed to authenticate Ravenfall for {self.channel_name}")
-            self.channel_restart_lock.release()
-            self.global_restart_lock.release()
+
+            restart_task = None
             if self.ravenfall_restart_attempts % 3 == 2:
                 await self.send_chat_message(f"Restart failed, retrying in 2 minutes")
                 await asyncio.sleep(120)
             else:
                 await self.send_chat_message(f"Restart failed, retrying in 20 seconds")
                 await asyncio.sleep(20)
-            return self._restart_ravenfall(False, run_post_restart, silent, reset_attempts=False)
-            # await self.send_chat_message(f"Restart failed (pinging @{os.getenv('OWNER_TWITCH_USERNAME', 'abrokecube')})")
-            # return False
-        # if not silent:
-        #     await self.send_chat_message("Ravenfall has been restarted.")
-        if self.manager.middleman_power_saving and self.manager.middleman_connected:
-            await middleman.force_reconnect(self.middleman_connection_id, 60)
-        logger.info(f"Restarted Ravenfall for {self.channel_name}")
 
         if run_post_restart:
-            await self.channel_post_restart_lock.acquire()
-            self.channel_restart_lock.release()
-            self.global_restart_lock.release()
             try:
                 await self._ravenfall_post_restart()
             except Exception as e:
                 logger.error(f"Failed to run post restart for {self.channel_name}: {e}")
-            self.channel_post_restart_lock.release()
-        else:
-            self.channel_restart_lock.release()
-            self.global_restart_lock.release()
+            finally:
+                self.channel_post_restart_lock.release()
+        return True
 
+    async def _launch_ravenfall(self, silent: bool, restart_task: RFRestartTask | None, already_stopped: bool) -> bool | None:
+        """Starts the game and waits for it to log in.
+
+        Returns True if it did, None if it timed out and is worth retrying, and
+        False if the start command itself failed.
+        """
+        logger.info(f"Restarting Ravenfall for {self.channel_name}")
+        if not silent:
+            msg = "Restarting Ravenfall..."
+            if restart_task and (not restart_task.sent_reason) and restart_task.label:
+                msg += f" Reason: {restart_task.label}"
+            await self.send_chat_message(msg)
+        startup_command = f"cd {os.getenv('RAVENFALL_FOLDER')} & {self.ravenfall_start_script}"
+        if already_stopped:
+            code, text = await start_process(self.sandboxie_box, startup_command)
+        else:
+            code, text = await restart_process(self.sandboxie_box, "Ravenfall.exe", startup_command)
+        if code != 0:
+            logger.error(f"Failed to restart Ravenfall for {self.channel_name}: code {code}, text {text}")
+            if not silent:
+                await self.send_chat_message("Failed to restart Ravenfall!")
+            return False
+
+        await asyncio.sleep(5)
+        start_time = time.time()
+        while time.time() - start_time < self.restart_timeout:
+            session: GameSession = await self.get_query("select * from session", 1, suppress_timeout_error=True)
+            if session and session.get('authenticated', False):
+                break
+            await asyncio.sleep(1)
+        else:
+            logger.error(f"Failed to authenticate Ravenfall for {self.channel_name}")
+            return None
+
+        if self.manager.middleman_power_saving and self.manager.middleman_connected:
+            await middleman.force_reconnect(self.middleman_connection_id, 60)
+        logger.info(f"Restarted Ravenfall for {self.channel_name}")
         return True
 
     async def _ravenfall_post_restart(self):
@@ -1176,9 +1191,9 @@ class RFChannel:
         If no response, restart RavenBot up to MAX_RETRIES times.
         If still unresponsive after MAX_RETRIES, restart Ravenfall.
         """
-        if self.monitoring_paused or self.is_monitoring:
+        if self.monitoring_paused or self.is_monitoring or self.manager.game_updater.holding_restarts:
             return
-            
+
         self.is_monitoring = True
         self.current_monitor = {
             'command': command,
@@ -1250,7 +1265,8 @@ class RFChannel:
                     label="Ravenfall is not responding",
                     reason=RestartReason.UNRESPONSIVE
                 )
-                await restart_task.wait()
+                if restart_task:
+                    await restart_task.wait()
                 await self.send_chat_message(resp_user_retry_2)
                 asked_to_retry = True
             else:
@@ -1266,8 +1282,11 @@ class RFChannel:
     def monitor_ravenbot_response(self, command: str, timeout: float = 10.0, resend_text: str = None):
         asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))
 
-    def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None, overwrite_same_reason: bool = False, force: bool = False):
-        if self.monitoring_paused and reason != RestartReason.USER:
+    def queue_restart(self, time_to_restart: int | None = None, mute_countdown: bool = False, label: str = "", reason: RestartReason | None = None, overwrite_same_reason: bool = False, force: bool = False, before_start: Callable[[], Awaitable[None]] | None = None):
+        if self.manager.game_updater.holding_restarts and reason != RestartReason.GAME_UPDATE:
+            logger.info(f"Not queuing restart for {self.channel_name} because a game update is in progress.")
+            return
+        if self.monitoring_paused and reason not in (RestartReason.USER, RestartReason.GAME_UPDATE):
             logger.error(f"Not queuing restart for {self.channel_name} because monitoring is paused.", exc_info=True)
             return
         allow_overwrite = True
@@ -1280,7 +1299,7 @@ class RFChannel:
             return
         if self.restart_task:
             self.restart_task.cancel()
-        self.restart_task = RFRestartTask(self, self.manager, time_to_restart, mute_countdown, label, reason, force)
+        self.restart_task = RFRestartTask(self, self.manager, time_to_restart, mute_countdown, label, reason, force, before_start)
         self.restart_task.start()
         logger.info(f"Restart task queued for {self.channel_name} with label {label} in {format_seconds(time_to_restart, TimeSize.SMALL, 2, False)}.")
         return self.restart_task
@@ -1292,12 +1311,7 @@ class RFChannel:
     def cancel_restart(self):
         if self.restart_task is None:
             return False
-        self.restart_task.cancel()
-        if self.channel_restart_lock.locked():
-            self.channel_restart_lock.release()
-            self.global_restart_lock.release()
-        if self.channel_post_restart_lock.locked():
-            self.channel_post_restart_lock.release()
+        self.restart_task.cancel()  # _restart_ravenfall releases its locks as it unwinds
         return True
     
     @routine(delta=timedelta(seconds=0.5), max_attempts=99999)
