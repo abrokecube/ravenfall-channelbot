@@ -38,14 +38,17 @@ def write(path: Path, text: str = "x") -> Path:
 
 class VersionTests(unittest.TestCase):
     def test_normalize(self):
-        self.assertEqual(updater.normalize_version("v0.9.6.0a-alpha"), "0.9.6.0a")
-        self.assertEqual(updater.normalize_version(" 0.9.6.0A "), "0.9.6.0a")
+        self.assertEqual(updater.normalize_version("v0.9.6.0a-alpha"), "0.9.6.0")
+        self.assertEqual(updater.normalize_version(" 0.9.6.0A "), "0.9.6.0")
+        self.assertEqual(updater.normalize_version("0.9.6.0"), "0.9.6.0")
 
     def test_is_newer_than(self):
         release = GameRelease("0.9.6.0a", "", "")
         self.assertTrue(release.is_newer_than({"a": "0.9.4.3a"}))
         self.assertTrue(release.is_newer_than({"a": "0.9.6.0a", "b": "0.9.4.3a"}))
         self.assertFalse(release.is_newer_than({"a": "0.9.6.0a", "b": None}))
+        self.assertFalse(release.is_newer_than({"a": "0.9.6.0"}))  # towns leave off the letter
+        self.assertTrue(release.is_newer_than({"a": "0.9.5.2"}))
         self.assertIsNone(release.is_newer_than({"a": None, "b": None}))
 
 
@@ -463,6 +466,12 @@ class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
         self.new_version = "0.9.4.3a"
         await self.run_update()
         self.assertIn("a (0.9.4.3a)", self.reports[0])
+
+    async def test_town_reporting_version_without_letter_counts_as_updated(self):
+        make_town(self.manager, "a", "0.9.4.3", self.log)
+        self.new_version = "0.9.6.0"
+        await self.run_update()
+        self.assertEqual(self.reports, ["Ravenfall has been updated to 0.9.6.0a!"])
 
     async def test_cancel_during_countdown(self):
         town = make_town(self.manager, "a", "0.9.4.3a", self.log)

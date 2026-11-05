@@ -27,6 +27,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from string import ascii_lowercase
 from typing import TYPE_CHECKING, Awaitable, Callable, Iterable, Iterator
 
 import aiohttp
@@ -69,8 +70,8 @@ Report = Callable[[str], Awaitable[object]]
 
 
 def normalize_version(version: str) -> str:
-    """Reduces "v0.9.6.0a-alpha" to "0.9.6.0a", which is how the game reports it."""
-    return version.strip().lower().removeprefix("v").split("-")[0]
+    """Reduces "v0.9.6.0a-alpha" and "0.9.6.0a" to "0.9.6.0", which is how towns report it."""
+    return version.strip().lower().removeprefix("v").split("-")[0].rstrip(ascii_lowercase)
 
 
 @dataclass(frozen=True)
