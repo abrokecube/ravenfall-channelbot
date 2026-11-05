@@ -149,6 +149,30 @@ class GameCog(Cog):
                 restart_task.cancel()
 
     @command(
+        name="rfravebridgetoggle",
+        aliases=[
+            'ravebridgetoggle',
+            'rf ravebridge toggle',
+            'ravebridge toggle',
+            'rfravebridge auto',
+            'rf ravebridge auto',
+        ]
+    )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfravebridgetoggle(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
+        """Toggles automatically ending Ravebridge when it starts.
+        
+        Args:
+            channel: Target channel, e.g. --channel=borkedcube.
+        """
+        channel.auto_end_ravebridge = not channel.auto_end_ravebridge
+        await ctx.message.reply(
+            f"Ravebridge auto-end is now {'enabled' if channel.auto_end_ravebridge else 'disabled'} "
+            f"for {channel.channel_name}."
+        )
+
+    @command(
         name="rfrestartcancel",
         aliases=[
             'rf restart cancel',

@@ -85,6 +85,7 @@ class RFChannel:
             - welcome_message (str, optional): Welcome message. Defaults to ''
             - auto_restart (bool, optional): Whether to auto-restart. Defaults to False
             - event_notifications (bool, optional): Whether to send event notifications. Defaults to False
+            - auto_end_ravebridge (bool, optional): Whether to end Ravebridge as soon as it starts. Defaults to True
             - restart_period (int, optional): Restart period in seconds. Defaults to 3600
             - sandboxie_box (str, optional): Sandboxie box name. Defaults to ''
             - ravenfall_start_script (str, optional): Path to Ravenfall start script. Defaults to ''
@@ -112,6 +113,7 @@ class RFChannel:
         self.welcome_message: str = config.get('welcome_message', '')
         self.auto_restart: bool = bool(config.get('auto_restart', False))
         self.event_notifications: bool = bool(config.get('event_notifications', False))
+        self.auto_end_ravebridge: bool = bool(config.get('auto_end_ravebridge', True))
         self.restart_period: int = int(config.get('restart_period', 3600))
         self.sandboxie_box: str = config.get('sandboxie_box', '')
         self.ravenfall_start_script: str = config.get('ravenfall_start_script', '')
@@ -358,7 +360,7 @@ class RFChannel:
             (message.get('Category') or '').lower() == 'ravebridge'
             and any(tag.lower() == 'start' for tag in message.get('Tags') or [])
         )
-        if is_ravebridge_start:
+        if is_ravebridge_start and self.auto_end_ravebridge:
             ravebridge_cd = self.cooldowns.scoped(
                 "ravebridge_start",
                 CooldownBucket(rate=1, per=60)

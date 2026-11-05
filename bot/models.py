@@ -20,6 +20,7 @@ class Channel(TypedDict):
     ravenfall_start_script: str
     auto_restart: bool
     event_notifications: bool
+    auto_end_ravebridge: bool
     restart_period: int
     middleman_connection_id: str
     ravenfall_loc_strings_path: str
