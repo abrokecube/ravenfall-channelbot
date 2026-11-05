@@ -354,6 +354,14 @@ class RFChannel:
             key = match.key
         message_args = message['Args']
         additional_args = {}
+        if key == "ravebridge_start":
+            ravebridge_cd = self.cooldowns.scoped(
+                "ravebridge_start",
+                CooldownBucket(rate=1, per=60)
+            )
+            if not ravebridge_cd.is_rate_limited():
+                ravebridge_cd.update_rate_limit()
+                await self.send_chat_message(f"{self.ravenbot_prefixes[0]}ravebridge stop")
         if message['Recipent']['Platform'].lower() == 'system':
             if key in (
                 "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count", "dungeon_countdown",
