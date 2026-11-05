@@ -361,7 +361,7 @@ class RFChannel:
             )
             if not ravebridge_cd.is_rate_limited():
                 ravebridge_cd.update_rate_limit()
-                await self.send_chat_message(f"{self.ravenbot_prefixes[0]}ravebridge stop")
+                await self.send_chat_message(f"{self.ravenbot_prefixes[0]}ravebridge end")
         if message['Recipent']['Platform'].lower() == 'system':
             if key in (
                 "dungeon_spawned", "dungeon_auto_joined", "dungeon_auto_joined_count", "dungeon_countdown",
