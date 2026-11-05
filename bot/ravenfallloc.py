@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 MATCH_DEF_TOKENIZER: Pattern = re.compile(r"{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<parsed>[a-zA-Z_0-9]+(:((?:(?!}})).)+)?)}}|(?P<nothing>[^{}]*)")
 TRANSLATE_TOKENIZER: Pattern = re.compile(r'{(?P<given>[a-zA-Z_0-9]+)}|{{(?P<eval>((?:(?!}})).)+)}}|(?P<nothing>[^{}]*)')
 FSTRINGS: Pattern = re.compile(r'{([a-zA-Z_0-9]+)}')
+SKILL_BONUS: Pattern = re.compile(r'\[\+(\d+\.\d+)\]')
 
 class StringArgType(Enum):
     GIVEN = 0
@@ -67,6 +68,13 @@ def to_str(obj):
     else:
         obj = str(obj)
     return obj
+
+def round_skill_bonuses(text: str) -> str:
+    """Round skill bonuses like "[+0.42000002]" to two decimals, as the game does for other stats."""
+    def _round(mo: re.Match) -> str:
+        rounded = f"{float(mo.group(1)):.2f}".rstrip("0").rstrip(".")
+        return f"[+{rounded}]"
+    return SKILL_BONUS.sub(_round, text)
 
 
 class RavenfallLocalization:

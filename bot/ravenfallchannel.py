@@ -21,7 +21,7 @@ from .ravenfallrestarttask import RFRestartTask, RestartReason, WARNING_MSG_TIME
 from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command, get_scroll_counts
 from .messageprocessor import RavenMessage, MessageMetadata
-from .ravenfallloc import RavenfallLocalization
+from .ravenfallloc import RavenfallLocalization, round_skill_bonuses
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from .exceptions import OutOfStockError
@@ -344,6 +344,10 @@ class RFChannel:
         # Make sure session data messages and other things are not processed
         if message['Identifier'] != 'message':
             return message
+        message['Args'] = [
+            round_skill_bonuses(arg) if isinstance(arg, str) else arg
+            for arg in message['Args'] or []
+        ]
         match = self.rfloc.identify_string(message['Format'])
         key = ""
         if match is not None:
