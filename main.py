@@ -123,8 +123,6 @@ for channel in channels:
     if 'command_prefix' not in channel:
         channel['command_prefix'] = '!'
 
-rf_manager: RFChannelManager = None
-
 async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
     async def get_twitch_auth_instance(user_id: int | str, user_name: Optional[str] = None, scopes: List[AuthScope] = TWITCH_CHANNEL_SCOPES) -> Twitch:
         save_new_tokens = True
@@ -202,10 +200,14 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
         await twitch_source.on_channel_point_redemption(redemption.event)
         
     async def on_message(message: ChatMessage):
-        global rf_manager
-        await twitch_source.on_message(message)
-        if rf_manager:
-            await rf_manager.event_twitch_message(message)
+        manager = global_ctx.ravenfall_manager
+        tasks = [twitch_source.on_message(message)]
+        if manager:
+            tasks.append(manager.event_twitch_message(message))
+        # Run together, so a slow command can't make the town miss the reply it's watching for
+        for result in await asyncio.gather(*tasks, return_exceptions=True):
+            if isinstance(result, Exception):
+                logger.error(f"Error handling chat message: {result}", exc_info=result)
 
     async def on_ready(ready_event: EventData):
         logger.info("Twitch chat is ready")

@@ -76,6 +76,8 @@ class GameCog(Cog):
         tasks = []
         for channel_ in channels:
             town_boost = await channel_.get_town_boost()
+            if not town_boost:
+                continue
             msg_text = f"{channel_.ravenbot_prefixes[0]}town {town_boost[0].skill.lower()}"
             tasks.append(channel_.send_chat_message(msg_text))
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -488,7 +490,7 @@ class GameCog(Cog):
         m_client, m_server = await asyncio.gather(*tasks, return_exceptions=True)
         m_client: GameMultiplier
         m_server: ravenpy.ExpMult
-        if (isinstance(m_client, Exception)):
+        if isinstance(m_client, Exception) or not m_client:
             raise CommandError("Ravenfall is offline. Try again later.")
         if (isinstance(m_server, Exception)):
             raise CommandError("RavenNest is offline. Try again later.")
@@ -544,9 +546,8 @@ class GameCog(Cog):
         Args:
             channel: Target channel.
         """
-        try:
-            f = await channel.get_query("select * from ferry")
-        except Exception:
+        f = await channel.get_query("select * from ferry")
+        if not f:
             raise CommandError("Ravenfall is offline. Try again later.")
         
         scrolls = await get_scroll_counts(channel.channel_id)

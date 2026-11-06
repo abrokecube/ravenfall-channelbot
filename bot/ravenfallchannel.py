@@ -274,12 +274,13 @@ class RFChannel:
         arguments = []
         if stripped_text[0] in self.ravenbot_prefixes:
             parts = stripped_text[1:].split()
-            command = parts[0].lower()
-            if len(parts) > 1:
+            if parts:
+                command = parts[0].lower()
                 arguments = parts[1:]
         if message.first and command == "join":
             await self.first_time_joiner(message)
-        if command == "inspect":
+        # Without the middleman, RavenBot gets the command and answers it by itself
+        if command == "inspect" and self.manager.middleman_connected:
             response = await send_to_server_and_wait_response(
                 self.middleman_connection_id,
                 RavenBotTemplates.inspect(
@@ -288,8 +289,10 @@ class RFChannel:
                 message.id,
                 timeout=3
             )
-            if not response.get('timeout', False):
+            if response.get('responses'):
                 await send_to_client(self.middleman_connection_id, json.dumps(response['responses'][0]))
+            elif not response.get('timeout', False):
+                logger.error(f"Failed to inspect in {self.channel_name}: {response.get('error')}")
             else:
                 is_inspecting_other = len(arguments) > 0 and arguments[0].lower() != message.user.name.lower()
                 if not is_inspecting_other:
@@ -559,8 +562,9 @@ class RFChannel:
             return
         if self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
             await asyncio.sleep(0.5)
-            if (message is not None) and self.dungeon['enemies'] < 48:
-                await message.reply(f"(Loading) Game is busy preparing a new dungeon... ({self.dungeon['enemies']}/49) (Use !event to check progress)")
+            dungeon = self.dungeon
+            if (message is not None) and dungeon and dungeon['enemies'] < 48:
+                await message.reply(f"(Loading) Game is busy preparing a new dungeon... ({dungeon['enemies']}/49) (Use !event to check progress)")
         else:
             if message is None:
                 resend_text = content
@@ -577,7 +581,8 @@ class RFChannel:
     async def get_query(self, query: str, timeout: int = 5, suppress_timeout_error: bool = False) -> Any:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
             try:
-                r = await session.get(f"{self.rf_query_url}/{query}")
+                async with session.get(f"{self.rf_query_url}/{query}") as r:
+                    return await r.json()
             except asyncio.TimeoutError:
                 if not suppress_timeout_error:
                     logger.error(f"Timeout fetching Ravenfall query from {self.rf_query_url}")
@@ -588,8 +593,6 @@ class RFChannel:
             except Exception as e:
                 logger.error(f"Error fetching Ravenfall query from {self.rf_query_url}: {e}", exc_info=True)
                 return None
-            data = await r.json()
-        return data
 
     def _ravenbot_is_muted(self):
         if not self.manager.middleman_enabled:
@@ -857,6 +860,8 @@ class RFChannel:
         self.middleman_connection_status = conn_status
 
     async def first_time_joiner(self, msg: ChatMessage):
+        if not self.welcome_message:
+            return
         cd = self.cooldowns.scoped(
             "first_time_joiner",
             CooldownBucket(rate=1, per=10)
@@ -865,6 +870,9 @@ class RFChannel:
             return
         await asyncio.sleep(3)
         boost = await self.get_town_boost()
+        if not boost:
+            logger.warning(f"No town boost to welcome {msg.user.name} with in {self.channel_name}")
+            return
         welcome_msg = self.welcome_message.format_map({
             "townSkillLower": boost[0].skill.lower(),
             "townSkill": boost[0].skill,
@@ -896,6 +904,9 @@ class RFChannel:
             self.scroll_queue_failures = 0
             return
         scrolls = await get_scroll_counts(self.channel_id)
+        if scrolls['status'] != 200:
+            logger.error(f"Failed to fetch scroll counts for {self.channel_name}: {scrolls.get('error')}")
+            return
         stock = 0
         name = ''
         command = ''
@@ -914,7 +925,15 @@ class RFChannel:
         else:
             return
         if stock <= 0:
-            logging.info(f"Out of {name} scrolls! Skipping queue entry...")
+            logger.warning(f"Out of {name} scrolls in {self.channel_name}, removing queue entry")
+            self.scroll_queue.popleft()
+            await self._refund_scroll(next_scroll)
+            await self.save_scroll_queue()
+            refunded = " and refunded it" if next_scroll.reward_id or next_scroll.credits_spent else ""
+            await self.send_chat_message(
+                f"Out of {name} scrolls! Removed one from the queue{refunded}.",
+                ignore_error=True
+            )
             return
         await send_multichat_command(command, "0", self.channel_name, self.channel_id, self.channel_name)
         for _ in range(10):
@@ -932,7 +951,7 @@ class RFChannel:
                     )
                 return
         self.scroll_queue_failures += 1
-        logging.warning(
+        logger.warning(
             f"Scroll queue: Expected event {expected_event} did not occur "
             f"({self.scroll_queue_failures}/{MAX_SCROLL_QUEUE_FAILURES})"
         )
@@ -994,21 +1013,23 @@ class RFChannel:
         
     async def remove_scrolls_from_queue(self, start_pos: int):
         while len(self.scroll_queue) > start_pos:
-            item = self.scroll_queue.pop()
-            try:
-                if item.reward_id:
-                    await self.twitch.update_redemption_status(
-                        self.channel_id,
-                        item.reward_id,
-                        item.reward_redemption_id,
-                        TwitchCustomRewardRedemptionStatus.CANCELED
-                    )
-            except Exception:
-                logger.warning(f"Failed to cancel scroll redemption for {item}")
-            if item.credits_spent != 0:
-                async with get_async_session() as session:
-                    await db_utils.add_credits(session, item.user_id, item.credits_spent, "Scroll refund")
+            await self._refund_scroll(self.scroll_queue.pop())
         await self.save_scroll_queue()
+
+    async def _refund_scroll(self, item: QueuedScroll):
+        try:
+            if item.reward_id:
+                await self.twitch.update_redemption_status(
+                    self.channel_id,
+                    item.reward_id,
+                    item.reward_redemption_id,
+                    TwitchCustomRewardRedemptionStatus.CANCELED
+                )
+        except Exception:
+            logger.warning(f"Failed to cancel scroll redemption for {item}")
+        if item.credits_spent != 0:
+            async with get_async_session() as session:
+                await db_utils.add_credits(session, item.user_id, item.credits_spent, "Scroll refund")
 
         
     # --- [ AUTO RESTART ] ---------------------------------------
@@ -1168,18 +1189,23 @@ class RFChannel:
                 
             await asyncio.sleep(1)
             session: GameSession = await self.get_query("select * from session", 5, suppress_timeout_error=True)
-            if session['players'] > 0:
+            if session and session['players'] > 0:
                 break
 
         # Wait for the game to finish rejoining players
         player_count = 0
-        while True:
+        deadline = time.time() + self.restart_timeout
+        while time.time() < deadline:
             await asyncio.sleep(2)
             session: GameSession = await self.get_query("select * from session", 5, suppress_timeout_error=True)
+            if not session:
+                continue
             new_player_count = session['players']
             if player_count > 0 and new_player_count == player_count:
                 break
             player_count = new_player_count
+        else:
+            logger.warning(f"Timed out waiting for players to finish joining in {self.channel_name}")
 
         r = await send_multichat_command(
             text="?undorandleave",
@@ -1227,12 +1253,30 @@ class RFChannel:
         """
         if self.monitoring_paused or self.is_monitoring or self.manager.game_updater.holding_restarts or self.manager.town_shutdown.active:
             return
+        if self._restart_in_progress():
+            return
 
         self.is_monitoring = True
         self.current_monitor = {
             'command': command,
             'start_time': time.time()
         }
+        try:
+            asked_to_retry = await self._await_ravenbot_response(command, timeout, resend_text)
+        finally:
+            self.is_monitoring = False
+            self.current_monitor = None
+        if asked_to_retry and resend_text:
+            self.monitor_ravenbot_response(command, timeout, resend_text)
+
+    def _restart_in_progress(self) -> bool:
+        return self.is_restarting() or self.channel_post_restart_lock.locked()
+
+    async def _await_ravenbot_response(self, command: str, timeout: float, resend_text: str | None) -> bool:
+        """Waits for RavenBot to respond, and restarts things if it doesn't.
+
+        Returns True if the command should be tried again.
+        """
         logger.debug(f"Monitoring for response to command: {command} in {self.channel_name}")
         
         while self.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
@@ -1254,6 +1298,10 @@ class RFChannel:
         
         asked_to_retry = False
         if response is None:
+            # The game going down is why it didn't respond, so don't count this as a failure
+            if self._restart_in_progress():
+                return False
+
             # No response, handle retry or restart
             current_time = time.time()
             
@@ -1308,10 +1356,7 @@ class RFChannel:
         else:
             logger.debug(f"Received a response to command: {command} in {self.channel_name}")
 
-        self.is_monitoring = False
-        self.current_monitor = None
-        if asked_to_retry and resend_text:
-            self.monitor_ravenbot_response(command, timeout, resend_text)
+        return asked_to_retry
 
     def monitor_ravenbot_response(self, command: str, timeout: float = 10.0, resend_text: str = None):
         asyncio.create_task(self._monitor_ravenbot_response_task(command, timeout, resend_text))

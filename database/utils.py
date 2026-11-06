@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from database.models import User, Channel, Character, SenderData, TwitchAuth, UserCredits, UserCreditTransaction
 from typing import Union, Optional, Tuple
-from sqlalchemy import select
+from sqlalchemy import select, update
 from datetime import datetime
 
 
@@ -301,7 +301,14 @@ async def get_user_credits(session: AsyncSession, user_id: Union[int, str]) -> i
 
 async def add_credits(session: AsyncSession, user_id: Union[int, str], amount: int, description: str = "", record_transaction: bool=True) -> int:
     user_credits = await get_user_credits_raw(session, user_id)
-    user_credits.credits += amount
+    await session.flush()
+    # Changed in the database, so an update from another session can't be overwritten
+    await session.execute(
+        update(UserCredits)
+        .where(UserCredits.id == user_credits.id)
+        .values(credits=UserCredits.credits + amount)
+    )
+    await session.refresh(user_credits)
     if record_transaction:
         transaction = UserCreditTransaction(user_id=user_id, credits=amount, description=description, timestamp=datetime.now())
         session.add(transaction)

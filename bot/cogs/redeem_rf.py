@@ -36,6 +36,7 @@ from bot.messageprocessor import RavenfallMessage
 import logging
 import json
 from typing import Dict, Tuple, List
+from collections import defaultdict
 from ravenpy import ravenpy
 from ravenpy.ravenpy import Item
 import os
@@ -59,6 +60,9 @@ RAID_SCROLL_SIZE = 1
 DUNGEON_SCROLL_SIZE = 6
 MAX_QUEUE_SIZE = 25
 NON_MOD_MAX_BATCH_SCROLLS = 99
+
+# Held from checking a balance until it is deducted, so that a user can't spend it twice
+credit_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 assert DUNGEON_SCROLL_SIZE <= NON_MOD_MAX_BATCH_SCROLLS, "Non-mods won't be able to queue dungeon scrolls!"
 assert RAID_SCROLL_SIZE <= NON_MOD_MAX_BATCH_SCROLLS, "Non-mods won't be able to queue raid scrolls!"
@@ -583,6 +587,7 @@ class RedeemRFCog(Cog):
             await ctx.send(f"There are not enough coins in stock. You have been refunded.")
             return
         except RecipientNotFoundError as e:
+            await ctx.cancel()
             logger.error(f"Error in command: {e}")
             await asyncio.sleep(0.5)
             await ctx.send(f"❌ Error: You are not in the game. You have been refunded.")
@@ -729,6 +734,10 @@ class RedeemRFCog(Cog):
         if price == 0:
             await ctx.message.reply(f"{item.name} is not redeemable.")
             return
+        async with credit_locks[ctx.message.author_id]:
+            await self._buy_item(ctx, item, count, price, channel)
+
+    async def _buy_item(self, ctx: CommandEvent, item: Item, count: int, price: int, channel: RFChannel):
         async with get_async_session() as session:
             balance = await get_user_credits(session, ctx.message.author_id)
             if balance < price * count:
@@ -1088,6 +1097,10 @@ class RedeemRFCog(Cog):
             await ctx.message.reply("Channel not found.")
             return
 
+        async with credit_locks[ctx.message.author_id]:
+            await self._queue_scrolls(ctx, scroll_type, count, channel)
+
+    async def _queue_scrolls(self, ctx: CommandEvent, scroll_type: str, count: int, channel: RFChannel):
         scroll_type = scroll_type.lower()
         cost = 0
         scroll_size = 0

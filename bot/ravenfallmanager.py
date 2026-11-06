@@ -46,6 +46,7 @@ class RFChannelManager:
         self.middleman_processor_server_client_count = 0
         self.game_updater = RFGameUpdater(self)
         self.town_shutdown = RFTownShutdown(self)
+        self.started = False
         self.load_channels()
 
         self.global_resync_lock = asyncio.Lock()
@@ -83,8 +84,10 @@ class RFChannelManager:
         self.ram_usage_alert_monitor = RAMUsageAlertMonitor(self)
         await self.item_alert_monitor.start()
         await self.ram_usage_alert_monitor.start()
+        self.started = True
 
     async def stop(self):
+        self.started = False
         for channel in self.channels:
             await channel.stop()
         self.mult_check_routine.cancel()
@@ -95,6 +98,8 @@ class RFChannelManager:
         await self.ram_usage_alert_monitor.stop()
 
     async def event_twitch_message(self, message: ChatMessage):
+        if not self.started:
+            return
         for channel in self.channels:
             if channel.channel_id == message.room.room_id:
                 await channel.event_twitch_message(message)
@@ -123,6 +128,8 @@ class RFChannelManager:
                 break
         else:
             logger.error(f"Unknown connection id: {metadata.connection_id}")
+        if out_message is None or out_message.get('block') is True:
+            return {"block": True}
         return {"message": out_message}
 
     async def on_processor_connect(self, client_info: ClientInfo):
@@ -137,6 +144,7 @@ class RFChannelManager:
         self.middleman_processor_server_client_count -= 1
         if self.middleman_processor_server_client_count <= 0:
             self.middleman_enabled = False
+            self.middleman_connected = False
 
     def get_channel(self, *, channel_id: str | None = None, channel_name: str | None = None) -> RFChannel | None:
         if channel_id:
@@ -219,12 +227,13 @@ class RFChannelManager:
     async def get_desync_info(self) -> Dict[str, float]:
         ch_desyncs: Dict[str, float] = {}
         data = await get_desync_info()
+        if data['status'] != 200:
+            logger.error(f"Failed to fetch desync info: {data.get('error')}")
+            return ch_desyncs
+
         if time.time() - data['data']['last_updated'] > 300:
             return ch_desyncs
 
-        if data['status'] != 200:
-            logger.error(f"Failed to fetch desync info: {data['error']}")
-            return ch_desyncs
         for channel_id in self.channel_id_to_channel.keys():
             if channel_id in data['data']['towns']:
                 channel_name = self.channel_id_to_channel[channel_id].channel_name

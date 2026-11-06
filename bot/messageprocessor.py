@@ -137,6 +137,14 @@ class MessageProcessor:
         """Register a callback for client disconnections."""
         self.disconnection_callbacks.append(callback)
     
+    @staticmethod
+    def _correlation_keys(metadata: MessageMetadata) -> Dict[str, str]:
+        """The middleman uses correlationId. Builds from before March 2026 want correlation_id."""
+        return {
+            "correlationId": metadata.correlation_id,
+            "correlation_id": metadata.correlation_id,
+        }
+
     async def process_message(self, message: str, client_info: ClientInfo) -> str:
         """
         Processes an incoming message and returns a response.
@@ -158,9 +166,9 @@ class MessageProcessor:
                 # Create message metadata
                 metadata = MessageMetadata(
                     source=message_data.pop('source', 'unknown'),
-                    connection_id=message_data.pop('connection_id', 'unknown'),
-                    correlation_id=message_data.pop('correlation_id', ''),
-                    is_api=message_data.pop('is_api', False),
+                    connection_id=message_data.pop('connectionId', message_data.pop('connection_id', 'unknown')),
+                    correlation_id=message_data.pop('correlationId', message_data.pop('correlation_id', '')),
+                    is_api=message_data.pop('isApi', message_data.pop('is_api', False)),
                     custom_metadata=message_data.pop('custom_metadata', {})
                 )
                 
@@ -201,7 +209,7 @@ class MessageProcessor:
                         logger.debug(f"Message blocked by callback for connection {metadata.connection_id}")
                         return json.dumps({
                             "block": True,
-                            "correlation_id": metadata.correlation_id
+                            **self._correlation_keys(metadata)
                         }) + '\n'
                         
                     # Update message content if provided
@@ -212,7 +220,7 @@ class MessageProcessor:
                     if 'error' in result and result['error']:
                         processor_response = {
                             'error': str(result['error']),
-                            'correlation_id': metadata.correlation_id
+                            **self._correlation_keys(metadata)
                         }
                         
                 except Exception as e:
@@ -220,7 +228,7 @@ class MessageProcessor:
                     logger.error(error_msg, exc_info=True)
                     processor_response = {
                         'error': error_msg,
-                        'correlation_id': metadata.correlation_id
+                        **self._correlation_keys(metadata)
                     }
                     break
                     
@@ -231,7 +239,7 @@ class MessageProcessor:
             # Prepare response with metadata
             response = {
                 "message": message_content,  # Include all message data
-                "correlation_id": metadata.correlation_id,
+                **self._correlation_keys(metadata),
                 "status": "processed"
             }
             

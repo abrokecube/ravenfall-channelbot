@@ -94,7 +94,7 @@ async def track_coin_use(
     user_name: str,
     amount: int,
 ) -> Dict[str, Any]:
-    url = f"{BASE_URL}/track_item_use"
+    url = f"{BASE_URL}/track_coin_use"
     payload = {
         "user_name": user_name,
         "amount": amount
