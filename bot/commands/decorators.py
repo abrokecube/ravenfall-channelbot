@@ -146,7 +146,7 @@ def checks(*predicates: CheckFunc | BaseCheck | Type[BaseCheck]):
         *predicates: One or more functions or Check classes/instances.
     """
     def decorator(func):
-        if not hasattr(func, '_command_checks'):
+        if not hasattr(func, '_listener_command_checks'):
             func._listener_command_checks = []
         
         processed_checks = []
