@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from twitchAPI.chat import ChatMessage
 
 from bot import multichat_command, ravenfallchannel
 from bot.clients import query
@@ -230,6 +231,29 @@ class ChatHandling(unittest.IsolatedAsyncioTestCase):
             mock.patch("asyncio.sleep", mock.AsyncMock()),
         ):
             await town.monitor_ravenfall_command(message=chat_message("!join"))
+
+    async def test_command_during_dungeon_preparation_gets_a_loading_reply(self):
+        town = make_town()
+        del town.monitor_ravenfall_command
+        town.monitor_ravenbot_response = mock.Mock()
+        town.sub_event = RFChannelSubEvent.DUNGEON_PREPARE
+        town.dungeon = {"enemies": 12}
+        chat = SimpleNamespace(
+            room_cache={"town": SimpleNamespace(name="town")},
+            _get_message_bucket=lambda _room: SimpleNamespace(put=mock.AsyncMock()),
+            send_raw_irc_message=mock.AsyncMock(),
+        )
+        message = ChatMessage(chat, {
+            "parameters": "!join",
+            "tags": {"id": "message-id", "tmi-sent-ts": "0"},
+            "command": {"channel": "#town"},
+        })
+        with mock.patch("asyncio.sleep", mock.AsyncMock()):
+            await town.event_twitch_message(message)
+        sent = chat.send_raw_irc_message.await_args.args[0]
+        self.assertTrue(sent.startswith("@reply-parent-msg-id=message-id PRIVMSG #town :(Loading)"))
+        self.assertIn("(12/49)", sent)
+        town.monitor_ravenbot_response.assert_not_called()
 
 
 class Watchdog(unittest.IsolatedAsyncioTestCase):
