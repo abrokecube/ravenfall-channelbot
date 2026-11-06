@@ -878,7 +878,7 @@ class RFChannel:
     async def scroll_queue_routine(self):
         if self.update_events_routine_first_iteration:
             return
-        if self.manager.game_updater.holding_scrolls:
+        if self.manager.game_updater.holding_scrolls or self.manager.town_shutdown.active:
             return
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
@@ -1015,6 +1015,8 @@ class RFChannel:
 
     @routine(delta=timedelta(seconds=20), max_attempts=99999)
     async def auto_restart_routine(self):
+        if self.manager.town_shutdown.active:
+            return
         if self.channel_restart_lock.locked():
             async with self.channel_restart_lock:
                 return
@@ -1149,6 +1151,12 @@ class RFChannel:
         logger.info(f"Restarted Ravenfall for {self.channel_name}")
         return True
 
+    async def _stop_ravenfall(self):
+        async with self.channel_restart_lock:
+            logger.info(f"Shutting down Ravenfall for {self.channel_name}")
+            await self.send_chat_message("Shutting down Ravenfall...", ignore_error=True)
+            await stop_process(self.sandboxie_box, "Ravenfall.exe")
+
     async def _ravenfall_post_restart(self):
         # Wait for the game to start rejoining players
         start_time = time.time()
@@ -1217,7 +1225,7 @@ class RFChannel:
         If no response, restart RavenBot up to MAX_RETRIES times.
         If still unresponsive after MAX_RETRIES, restart Ravenfall.
         """
-        if self.monitoring_paused or self.is_monitoring or self.manager.game_updater.holding_restarts:
+        if self.monitoring_paused or self.is_monitoring or self.manager.game_updater.holding_restarts or self.manager.town_shutdown.active:
             return
 
         self.is_monitoring = True
@@ -1312,7 +1320,10 @@ class RFChannel:
         if self.manager.game_updater.holding_restarts and reason != RestartReason.GAME_UPDATE:
             logger.info(f"Not queuing restart for {self.channel_name} because a game update is in progress.")
             return
-        if self.monitoring_paused and reason not in (RestartReason.USER, RestartReason.GAME_UPDATE):
+        if self.manager.town_shutdown.active and reason != RestartReason.SHUTDOWN:
+            logger.info(f"Not queuing restart for {self.channel_name} because the towns are shut down.")
+            return
+        if self.monitoring_paused and reason not in (RestartReason.USER, RestartReason.GAME_UPDATE, RestartReason.SHUTDOWN):
             logger.error(f"Not queuing restart for {self.channel_name} because monitoring is paused.", exc_info=True)
             return
         allow_overwrite = True

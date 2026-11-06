@@ -22,6 +22,7 @@ class RestartReason(Enum):
     ITEM_DESYNC = "item_desync"
     MEMORY_USE = "memory_use"
     GAME_UPDATE = "game_update"
+    SHUTDOWN = "shutdown"
     
 
 class PreRestartEvent(Enum):
@@ -72,6 +73,9 @@ class RFRestartTask:
         self.label: str = label
         self.reason: RestartReason | None = reason
         self.force: bool = force
+        # Stops the game without starting it again
+        self.shutting_down: bool = reason == RestartReason.SHUTDOWN
+        self.pre_restart_done = False
         # Runs when the countdown is over, and can hold back the restart
         self.before_stop: Callable[[], Awaitable[None]] | None = None
         # Runs once the game has been stopped, before it gets started again
@@ -126,12 +130,13 @@ class RFRestartTask:
                 if new_warning_idx >= 0 and new_warning_idx > warning_idx:
                     for i in range(warning_idx + 1, new_warning_idx + 1):
                         if WARNING_MSG_TIMES[i][1] == PreRestartEvent.PRE_RESTART:
+                            self.pre_restart_done = True
                             try:
                                 await self.channel._ravenfall_pre_restart()
                             except Exception as e:
                                 logger.error(f"Failed to run pre restart for {self.channel.channel_name}: {e}", exc_info=True)
                     if WARNING_MSG_TIMES[new_warning_idx][1] == PreRestartEvent.WARNING and time_left > 7 and not self.mute_countdown:
-                        msg = f"Restarting Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
+                        msg = f"{self._verb()} Ravenfall in {format_seconds(time_left, TimeSize.LONG, 2, False)}!"
                         if (not self.sent_reason) and self.label:
                             msg += f" Reason: {self.label}"
                             
@@ -152,14 +157,15 @@ class RFRestartTask:
 
     async def _event_watcher(self):
         event_type = ""
+        action = "Shutdown" if self.shutting_down else "Restart"
         messages = {
-            "server_down": "Restart postponed due to server being offline.",
-            "updater_down": "Restart postponed due to update check failing.",
-            "dungeon": "Restart postponed due to dungeon.",
-            "dungeon_prep": "Restart postponed due to dungeon being prepared.",
-            "raid": "Restart postponed due to raid.",
-            "error": "Restart postponed due to an error while checking Ravenfall status.",
-            "peer_busy": "Restart postponed; waiting for another town to be ready.",
+            "server_down": f"{action} postponed due to server being offline.",
+            "updater_down": f"{action} postponed due to update check failing.",
+            "dungeon": f"{action} postponed due to dungeon.",
+            "dungeon_prep": f"{action} postponed due to dungeon being prepared.",
+            "raid": f"{action} postponed due to raid.",
+            "error": f"{action} postponed due to an error while checking Ravenfall status.",
+            "peer_busy": f"{action} postponed; waiting for another town to be ready.",
         }
         names = {
             "server_down": "server offline",
@@ -189,10 +195,12 @@ class RFRestartTask:
                         event_type = "dungeon"
                     elif self.channel.event == RFChannelEvent.RAID and self.channel.raid["players"] > 0:
                         event_type = "raid"
-                    if not self.manager.ravennest_is_online:
-                        event_type = "server_down"
-                    if time_left < 35 and not await self.manager.check_update_endpoint():
-                        event_type = "updater_down"
+                    # These only matter to a game that has to log back in
+                    if not self.shutting_down:
+                        if not self.manager.ravennest_is_online:
+                            event_type = "server_down"
+                        if time_left < 35 and not await self.manager.check_update_endpoint():
+                            event_type = "updater_down"
 
                     self.own_event = event_type
                     if not event_type and any(peer.own_event for peer in self.peers):
@@ -217,7 +225,7 @@ class RFRestartTask:
                             self.time_to_restart += 60 - time_left
                             time_left = self.get_time_left()
                         await self.channel.send_announcement(
-                            f"Resuming restart. Restarting in {format_seconds(time_left, TimeSize.LONG, 2, False)}.",
+                            f"Resuming {action.lower()}. {self._verb()} in {format_seconds(time_left, TimeSize.LONG, 2, False)}.",
                         )
                 else:
                     if (not self._paused) or old_event_type != event_type:
@@ -231,16 +239,22 @@ class RFRestartTask:
         self.event_watch_task.cancel()
         self._status = RestartStatus.RESTARTING
         try:
-            await self.channel._restart_ravenfall(
-                run_pre_restart=False,
-                run_post_restart=True,
-                restart_task=self,
-                before_start=self.before_start
-            )
+            if self.shutting_down:
+                await self.channel._stop_ravenfall()
+            else:
+                await self.channel._restart_ravenfall(
+                    run_pre_restart=False,
+                    run_post_restart=True,
+                    restart_task=self,
+                    before_start=self.before_start
+                )
         except Exception as e:
             logger.error(f"Failed to restart Ravenfall for {self.channel.channel_name}: {e}", exc_info=True)
         self.done = True
         self._status = RestartStatus.FINISHED
+
+    def _verb(self):
+        return "Shutting down" if self.shutting_down else "Restarting"
 
     def finished(self):
         return self.done

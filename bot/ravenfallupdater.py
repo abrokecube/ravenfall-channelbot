@@ -473,7 +473,7 @@ class RFGameUpdater:
 
         self.status = "waiting for towns"
         self.holding_restarts = True
-        await self._finish_running_restarts()
+        await self.finish_running_restarts()
 
         gate = TownGate(install)
         tasks = self._queue_restarts(release, seconds, gate)
@@ -516,7 +516,7 @@ class RFGameUpdater:
                 return
             await asyncio.sleep(EVENT_POLL_INTERVAL)
 
-    async def _finish_running_restarts(self) -> None:
+    async def finish_running_restarts(self) -> None:
         running: list[RFRestartTask] = []
         for channel in self.manager.channels:
             task = channel.restart_task

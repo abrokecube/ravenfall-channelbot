@@ -15,6 +15,7 @@ from datetime import timedelta, datetime, timezone
 import time
 from .ravenfallrestarttask import RestartReason
 from .ravenfallupdater import RFGameUpdater
+from .ravenfallshutdown import RFTownShutdown
 from .prometheus import get_prometheus_instant
 from utils.alert_monitor import BatchAlertMonitor
 from utils.runshell import runshell
@@ -44,6 +45,7 @@ class RFChannelManager:
         self.middleman_connected = False
         self.middleman_processor_server_client_count = 0
         self.game_updater = RFGameUpdater(self)
+        self.town_shutdown = RFTownShutdown(self)
         self.load_channels()
 
         self.global_resync_lock = asyncio.Lock()

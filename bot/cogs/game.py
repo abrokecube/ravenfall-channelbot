@@ -22,6 +22,7 @@ from ..ravenfallchannel import RFChannel
 from ..ravenfallmanager import RFChannelManager
 from ..ravenfallrestarttask import RestartReason
 from ..ravenfallupdater import fetch_latest_release
+from ..ravenfallshutdown import MIN_COUNTDOWN
 
 from utils.format_time import format_seconds, TimeSize
 from utils.utils import pl, pl2
@@ -190,6 +191,9 @@ class GameCog(Cog):
         if self.global_context.ravenfall_manager.game_updater.holding_restarts:
             await ctx.message.reply("A game update is in progress, use rfupdate --cancel instead.")
             return
+        if self.global_context.ravenfall_manager.town_shutdown.active:
+            await ctx.message.reply("The towns are shut down, use rfstartall instead.")
+            return
         if not channel.cancel_restart():
             await ctx.message.reply("No restart task found.")
             return
@@ -275,6 +279,9 @@ class GameCog(Cog):
         if updater.in_progress:
             await ctx.message.reply(f"A game update is already running ({updater.status}).")
             return
+        if self.global_context.ravenfall_manager.town_shutdown.active:
+            await ctx.message.reply("The towns are shut down, use rfstartall first.")
+            return
 
         try:
             release = await fetch_latest_release()
@@ -297,6 +304,57 @@ class GameCog(Cog):
 
         if updater.start(release, seconds, ctx.message.reply):
             await ctx.message.reply(f"{status} Preparing the update...")
+
+    @command(
+        name="rfstopall",
+        aliases=[
+            'rf stop all',
+            'rfshutdown',
+            'rf shutdown',
+        ]
+    )
+    @parameter("force", aliases=["f"])
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfstopall(self, ctx: CommandEvent, seconds: int = 120, *, force: bool = False):
+        """Shuts down Ravenfall in every town, and keeps it down until rfstartall.
+
+        Args:
+            seconds: Shutdown countdown, at least 25 seconds.
+            force: Shut down even during dungeons and raids.
+        """
+        manager = self.global_context.ravenfall_manager
+        if manager.game_updater.in_progress:
+            await ctx.message.reply(f"A game update is running ({manager.game_updater.status}).")
+            return
+        seconds = max(seconds, MIN_COUNTDOWN)
+        if not manager.town_shutdown.stop(seconds, force, ctx.message.reply):
+            await ctx.message.reply("The towns are already shut down.")
+            return
+        msg = f"Shutting down all towns in {seconds}s."
+        if force:
+            msg += " (forced)"
+        await ctx.message.reply(f"{msg} Use rfstartall to cancel.")
+
+    @command(
+        name="rfstartall",
+        aliases=[
+            'rf start all',
+            'rfstartup',
+            'rf startup',
+        ]
+    )
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfstartall(self, ctx: CommandEvent):
+        """Cancels a shutdown still in progress, and starts every town that isn't running."""
+        manager = self.global_context.ravenfall_manager
+        if manager.game_updater.in_progress:
+            await ctx.message.reply(f"A game update is running ({manager.game_updater.status}).")
+            return
+        towns = await manager.town_shutdown.start()
+        if towns:
+            await ctx.message.reply(f"Starting {', '.join(town.channel_name for town in towns)}...")
+        else:
+            await ctx.message.reply("There are no towns to start.")
 
     @command(
         name="rfbotrestart",

@@ -28,6 +28,7 @@ from bot import ravenfallupdater as updater
 from bot.models import RFChannelEvent, RFChannelSubEvent
 from bot.ravenfallchannel import RFChannel
 from bot.ravenfallrestarttask import RestartReason
+from bot.ravenfallshutdown import RFTownShutdown
 from bot.ravenfallupdater import GameRelease, ReleaseAsset, RFGameUpdater, TownGate
 
 
@@ -255,6 +256,7 @@ class FakeManager:
         self.middleman_power_saving = False
         self.middleman_connected = False
         self.game_updater = RFGameUpdater(self)
+        self.town_shutdown = RFTownShutdown(self)
 
     async def check_update_endpoint(self):
         return True
