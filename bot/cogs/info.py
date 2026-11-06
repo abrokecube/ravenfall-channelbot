@@ -152,6 +152,9 @@ class InfoCog(Cog):
                 if pid in processes:
                     processes_named[name] = processes[pid]
                     break
+        if (not processes_named) if all_ else (channel.channel_name not in processes_named):
+            await ctx.message.reply("Could not get data")
+            return
         out_str = []
         if all_:
             for name, (bytes_used, change, series) in processes_named.items():

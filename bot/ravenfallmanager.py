@@ -64,7 +64,7 @@ class RFChannelManager:
             for channel in self.channels
         ))
         return {
-            channel.channel_name: output.splitlines()
+            channel.channel_name: (output or "").splitlines()
             for channel, (_code, output) in zip(self.channels, responses)
         }
 

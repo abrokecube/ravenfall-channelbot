@@ -302,7 +302,7 @@ class PreRestart(unittest.IsolatedAsyncioTestCase):
         town.multichat.assert_not_awaited()
 
     async def test_a_reply_that_is_not_a_list_skips_the_rest(self):
-        for reply in ({"id": "a", "training": "None"}, "Failed to parse the query"):
+        for reply in ("Failed to parse the query",):
             with self.subTest(reply):
                 town = self.town(reply)
                 await town._ravenfall_pre_restart()

@@ -402,3 +402,77 @@ class Credits(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def fake_db(rows=()):
+    """A stand-in for get_async_session whose queries find `rows`."""
+    result = mock.MagicMock()
+    result.scalars.return_value.all.return_value = list(rows)
+    session = mock.MagicMock()
+    session.execute = mock.AsyncMock(return_value=result)
+    session.__aenter__ = mock.AsyncMock(return_value=session)
+    session.__aexit__ = mock.AsyncMock(return_value=False)
+    return mock.Mock(return_value=session), session
+
+
+ONE_PLAYER = {"id": "c1", "name": "solo", "training": "None", "island": "Home", "sailing": False}
+
+
+class PlayerList(unittest.IsolatedAsyncioTestCase):
+    async def players(self, reply):
+        town = make_town()
+        town.get_query = mock.AsyncMock(return_value=reply)
+        return await town.get_players()
+
+    async def test_one_player_comes_back_as_a_list(self):
+        self.assertEqual(await self.players(ONE_PLAYER), [ONE_PLAYER])
+
+    async def test_empty_town_is_an_empty_list(self):
+        self.assertEqual(await self.players({}), [])
+        self.assertEqual(await self.players([]), [])
+
+    async def test_failed_or_garbled_query_is_none(self):
+        self.assertIsNone(await self.players(None))
+        self.assertIsNone(await self.players("bad query"))
+
+    async def test_many_players_are_unchanged(self):
+        both = [ONE_PLAYER, dict(ONE_PLAYER, id="c2")]
+        self.assertEqual(await self.players(both), both)
+
+    async def run_restorers(self, reply):
+        town = make_town()
+        town.channel_name = "town"
+        town.get_query = mock.AsyncMock(return_value=reply)
+        factory, _session = fake_db()
+        with mock.patch.object(ravenfallchannel, "get_async_session", factory):
+            await town.fetch_auto_raids()
+            await town.restore_auto_raids()
+            await town.restore_sailors()
+
+    async def test_one_player_town_does_not_crash_the_restorers(self):
+        await self.run_restorers(ONE_PLAYER)
+
+    async def test_failed_query_does_not_crash_the_restorers(self):
+        await self.run_restorers(None)
+
+    async def test_pre_restart_in_a_one_player_town_sends_randleave(self):
+        town = make_town()
+        town.get_query = mock.AsyncMock(return_value=ONE_PLAYER)
+        town.multichat = mock.AsyncMock()
+        factory, _session = fake_db()
+        with mock.patch.object(ravenfallchannel, "get_async_session", factory):
+            await town._ravenfall_pre_restart()
+        town.multichat.assert_awaited_once_with("?randleave")
+
+
+class BoxPids(unittest.IsolatedAsyncioTestCase):
+    async def test_empty_listpids_output_means_no_pids(self):
+        manager = Manager().make_manager(SimpleNamespace(channel_name="town", sandboxie_box="box"))
+        for output in (None, ""):
+            with mock.patch("bot.ravenfallmanager.runshell", mock.AsyncMock(return_value=(0, output))):
+                self.assertEqual(await manager.list_box_pids(), {"town": []})
+
+    async def test_pids_are_split_by_line(self):
+        manager = Manager().make_manager(SimpleNamespace(channel_name="town", sandboxie_box="box"))
+        with mock.patch("bot.ravenfallmanager.runshell", mock.AsyncMock(return_value=(0, "12\n34\n"))):
+            self.assertEqual(await manager.list_box_pids(), {"town": ["12", "34"]})

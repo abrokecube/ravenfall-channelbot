@@ -588,6 +588,20 @@ class RFChannel:
         """The player with this name, or something falsy if they aren't in the town."""
         return await self.get_query(f"select * from players where name = '{name}'")
 
+    async def get_players(self) -> List[Player] | None:
+        """Every player in town as a list, or None if the query failed.
+
+        The game sends {} for no players, a bare object for one and a string for a bad query.
+        """
+        chars = await self.get_query("select * from players")
+        if chars is None:
+            return None
+        if isinstance(chars, dict):
+            return [chars] if chars else []
+        if isinstance(chars, list):
+            return chars
+        return None
+
     async def get_query(self, query: str, timeout: int = 5, suppress_timeout_error: bool = False) -> Any:
         return await self.query_client.get(query, timeout, suppress_timeout_error)
 
@@ -1446,7 +1460,10 @@ class RFChannel:
     async def fetch_auto_raids(self):
         if not self.manager.middleman_connected:
             return
-        chars: List[Player] = await self.get_query("select * from players")
+        chars = await self.get_players()
+        if chars is None:
+            logger.warning(f"{self.channel_name}: could not get players, skipping fetch_auto_raids")
+            return
         char_id_to_player = {char['id']: char for char in chars}
         
         async with get_async_session() as session:
@@ -1483,7 +1500,10 @@ class RFChannel:
         if not self.manager.middleman_connected:
             return
             
-        chars: List[Player] = await self.get_query("select * from players")
+        chars = await self.get_players()
+        if chars is None:
+            logger.warning(f"{self.channel_name}: could not get players, skipping restore_auto_raids")
+            return
         char_id_to_player = {char['id']: char for char in chars}
         logging.debug(f"Restoring auto raids for {len(char_id_to_player)} characters")
         
@@ -1536,7 +1556,10 @@ class RFChannel:
     async def restore_sailors(self):
         if not self.manager.middleman_connected:
             return
-        chars: List[Player] = await self.get_query("select * from players")
+        chars = await self.get_players()
+        if chars is None:
+            logger.warning(f"{self.channel_name}: could not get players, skipping restore_sailors")
+            return
         char_id_to_player = {char['id']: char for char in chars}
 
         logging.debug(f"Restoring sailors for {len(chars)} characters")
@@ -1592,9 +1615,8 @@ class RFChannel:
         """Records what each player is training. Returns False if the game gave no player list."""
         if not self.manager.middleman_connected:
             return True
-        chars: List[Player] = await self.get_query("select * from players")
-        # The game sends {} for no players, a bare object for one, and a string for a bad query
-        if chars is None or (chars and not isinstance(chars, list)):
+        chars = await self.get_players()
+        if chars is None:
             return False
         char_id_to_player = {char['id']: char for char in chars}
         
