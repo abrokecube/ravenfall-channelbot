@@ -5,7 +5,7 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
 
-from .enums import EventCategory, EventSource, UserRole, TwitchCustomRewardRedemptionStatus
+from .enums import BucketType, EventCategory, EventSource, UserRole, TwitchCustomRewardRedemptionStatus
 from .modals import ChatRoomCapabilities
 from twitchAPI.type import TwitchResourceNotFound
 from utils.strutils import split_by_utf16_bytes
@@ -33,6 +33,14 @@ class MessageEvent(BaseEvent):
     bot_user_name: str
     bot_user_id: str
 
+    def get_bucket_key(self, bucket: BucketType) -> str:
+        if bucket == BucketType.USER:
+            return self.author_id
+        # Twitch has no guilds, so a room is the closest thing to one.
+        if bucket in (BucketType.CHANNEL, BucketType.GUILD):
+            return self.room_id
+        return "global"
+
     async def send(self, text: str, **kwargs):
         pass
     
@@ -59,6 +67,9 @@ class CommandEvent:
     parsed_args: CommandArgs
     parameters_text: str
     specified_parameters: set[str] = field(default_factory=set)
+
+    def get_bucket_key(self, bucket: BucketType) -> str:
+        return self.message.get_bucket_key(bucket)
 
 if TYPE_CHECKING:
     from twitchAPI.object.eventsub import ChannelPointsCustomRewardRedemptionData
