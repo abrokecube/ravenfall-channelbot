@@ -92,8 +92,8 @@ The code is in `bot/cogs/redeem_rf.py`, with storage in `database/models.py`
 - **Buying items**: `credits buy` goes through `_buy_item`, which deducts only after
   `send_items` succeeds, and a partial send pays only for `items_sent`.
 - **Prices**: `ITEM_VALUES_PATH`, by default `data/item_values.json`. A price of 0
-  means not redeemable, and soulbound items are refused. `script_baseitemvalues.py`
-  and `script_itemcreditprice.py` generate the price data.
+  means not redeemable, and soulbound items are refused. `scripts/baseitemvalues.py`
+  and `scripts/itemcreditprice.py` generate the price data.
 - **Sending stock**: `send_items` and `send_coins` gather stock across the town's
   characters through `get_char_items` and `get_char_coins`, send
   `RavenBotTemplates.gift_item` through `send_ravenfall`, and report it with

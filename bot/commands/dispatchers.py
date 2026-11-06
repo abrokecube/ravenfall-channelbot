@@ -40,16 +40,6 @@ from .cooldown import Cooldown
 
 LOGGER = logging.getLogger(__name__)
 
-TEXT_REPLACEMENTS = {
-    "\U000e0000": None,
-    "\u034f": None
-}
-TEXT_TRANS = str.maketrans(TEXT_REPLACEMENTS)
-def filter_text(text: str):
-    text = text.translate(TEXT_REPLACEMENTS)
-    text = text.strip()
-    return text
-
 class BaseDispatcher:
     def __init__(self):
         self._id: Dispatcher = Dispatcher.Base

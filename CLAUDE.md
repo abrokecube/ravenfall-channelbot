@@ -38,7 +38,7 @@ import. In a worktree with no `.venv`, add
 | `ravenpy/` | RavenNest API client, shared with `ravenhelper-bot` |
 | `utils/` | Sandboxie process control (`runshell.py`), routines, alert monitors, helpers |
 | `tests/` | `test_channel_bugfixes.py`, `test_command_framework.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py` |
-| `script_*.py` | One-off scripts run by hand |
+| `scripts/` | One-off scripts, run from the repo root with `python -m scripts.<name>` (e.g. `python -m scripts.itemcreditprice`) |
 
 Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multichat`,
 `ravenfall-webops`, `watchdog`, `ravenhelper-bot`.
