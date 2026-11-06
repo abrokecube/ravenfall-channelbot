@@ -1,7 +1,8 @@
 import asyncio
 import subprocess
-import os
 import logging
+
+from bot.config import get_settings
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ def runshell_detached(cmd):
 
 async def stop_process(box_name, process_name):
     shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
+        f"\"{get_settings().sandboxie_start_path}\" /box:{box_name} /silent /wait "
         f"taskkill /f /im {process_name}"
     )
     await runshell(shellcmd)
@@ -41,7 +42,7 @@ async def stop_process(box_name, process_name):
 
 async def start_process(box_name, startup_command: str):
     shellcmd = (
-        f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{box_name} /silent /wait "
+        f"\"{get_settings().sandboxie_start_path}\" /box:{box_name} /silent /wait "
         f"cmd /c \"{startup_command.replace("\"", "\\\"")}\""
     )
     return await runshell(shellcmd)

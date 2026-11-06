@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Iterable, Iterator
 
 import aiohttp
 
+from .clients.session import get_session
 from .models import RFChannelEvent
 from .ravenfallrestarttask import RestartReason, RestartStatus, RFRestartTask
 
@@ -109,21 +110,22 @@ class GameRelease:
 
 async def fetch_latest_release() -> GameRelease:
     """Looks up the release that game clients are being told to install."""
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
-        async with session.get(VERSION_URL) as response:
-            response.raise_for_status()
-            latest = await response.json()
+    session = get_session()
+    timeout = aiohttp.ClientTimeout(total=20)
+    async with session.get(VERSION_URL, timeout=timeout) as response:
+        response.raise_for_status()
+        latest = await response.json()
 
-        url: str = latest["downloadUrl"]
-        if not url.startswith(DOWNLOAD_URL_PREFIX) or not url.endswith(f"/{GAME_ASSET}"):
-            raise GameUpdateError(f"Unexpected download url: {url}")
-        tag = url.split("/")[-2]
+    url: str = latest["downloadUrl"]
+    if not url.startswith(DOWNLOAD_URL_PREFIX) or not url.endswith(f"/{GAME_ASSET}"):
+        raise GameUpdateError(f"Unexpected download url: {url}")
+    tag = url.split("/")[-2]
 
-        release_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{tag}"
-        headers = {"Accept": "application/vnd.github+json"}
-        async with session.get(release_url, headers=headers) as response:
-            response.raise_for_status()
-            release = await response.json()
+    release_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{tag}"
+    headers = {"Accept": "application/vnd.github+json"}
+    async with session.get(release_url, headers=headers, timeout=timeout) as response:
+        response.raise_for_status()
+        release = await response.json()
 
     return GameRelease(
         version=latest["version"],
@@ -145,13 +147,12 @@ def find_asset(release: dict, tag: str, name: str) -> ReleaseAsset:
 async def download_asset(asset: ReleaseAsset, destination: Path) -> None:
     timeout = aiohttp.ClientTimeout(total=None, sock_read=60)
     checksum = hashlib.sha256()
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(asset.url) as response:
-            response.raise_for_status()
-            with destination.open("wb") as file:
-                async for chunk in response.content.iter_chunked(1024 * 1024):
-                    checksum.update(chunk)
-                    await asyncio.to_thread(file.write, chunk)
+    async with get_session().get(asset.url, timeout=timeout) as response:
+        response.raise_for_status()
+        with destination.open("wb") as file:
+            async for chunk in response.content.iter_chunked(1024 * 1024):
+                checksum.update(chunk)
+                await asyncio.to_thread(file.write, chunk)
     if checksum.hexdigest() != asset.sha256:
         raise GameUpdateError(f"Checksum mismatch on {asset.name}, the download is corrupt")
 

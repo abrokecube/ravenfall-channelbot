@@ -1,7 +1,9 @@
 from typing import List, Dict
+from .clients.session import get_session
+from .config import ChannelConfig, get_settings
 from .ravenfallchannel import RFChannel
 from .models import GameMultiplier, RFMiddlemanMessage, RFChannelEvent, Village
-from .multichat_command import send_multichat_command, get_desync_info, get_total_item_count
+from .multichat_command import get_desync_info, get_total_item_count
 from . import middleman
 from .messageprocessor import MessageProcessor, RavenMessage, MessageMetadata, ClientInfo
 from twitchAPI.chat import Chat, ChatMessage, Twitch
@@ -21,12 +23,12 @@ from utils.alert_monitor import BatchAlertMonitor
 from utils.runshell import runshell
 from async_lru import alru_cache
 
-import os
-
 logger = logging.getLogger(__name__)
 
+RAVENNEST_TIMEOUT = aiohttp.ClientTimeout(total=5)
+
 class RFChannelManager:
-    def __init__(self, config: dict, chat: Chat, rfapi: RavenNest, twitches: dict[str, Twitch]):
+    def __init__(self, config: List[ChannelConfig], chat: Chat, rfapi: RavenNest, twitches: dict[str, Twitch]):
         self.config = config
         self.rfapi = rfapi
         self.chat = chat
@@ -54,6 +56,18 @@ class RFChannelManager:
         self.ram_usage_alert_monitor: RAMUsageAlertMonitor = None
 
 
+    async def list_box_pids(self) -> Dict[str, List[str]]:
+        """The process ids running in each town's Sandboxie box, by channel name."""
+        start_path = get_settings().sandboxie_start_path
+        responses = await asyncio.gather(*(
+            runshell(f"\"{start_path}\" /box:{channel.sandboxie_box} /silent /listpids")
+            for channel in self.channels
+        ))
+        return {
+            channel.channel_name: output.splitlines()
+            for channel, (_code, output) in zip(self.channels, responses)
+        }
+
     def load_channels(self):
         for channel in self.config:
             self.channels.append(RFChannel(channel, self))
@@ -67,8 +81,9 @@ class RFChannelManager:
         self.mult_check_routine.start()
         self.resync_routine.start()
         self.update_boosts_routine.start()
-        msg_processor_host = os.getenv("RF_MIDDLEMAN_PROCESSOR_HOST", None)
-        msg_processor_port = os.getenv("RF_MIDDLEMAN_PROCESSOR_PORT", None)
+        settings = get_settings()
+        msg_processor_host = settings.rf_middleman_processor_host
+        msg_processor_port = settings.rf_middleman_processor_port
         if msg_processor_host and msg_processor_port:
             self.rf_message_processor = MessageProcessor(
                 host=msg_processor_host,
@@ -163,19 +178,18 @@ class RFChannelManager:
         multiplier: ExpMult | None = None
         attempts = 3
         while attempts > 0:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                try:
-                    async with session.get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False) as response:
-                        data: GameMultiplier = await response.json()
-                        if data:
-                            is_online = True
-                            if data["multiplier"] != self.global_multiplier:
-                                self.global_multiplier = data["multiplier"]
-                                self.global_multiplier_last_change = now
-                            multiplier = ExpMult(**data)
-                        break
-                except Exception as e:
-                    logger.error(f"Can't connect to Ravenfall API: {e}")
+            try:
+                async with get_session().get(f"https://www.ravenfall.stream/api/game/exp-multiplier", ssl=False, timeout=RAVENNEST_TIMEOUT) as response:
+                    data: GameMultiplier = await response.json()
+                    if data:
+                        is_online = True
+                        if data["multiplier"] != self.global_multiplier:
+                            self.global_multiplier = data["multiplier"]
+                            self.global_multiplier_last_change = now
+                        multiplier = ExpMult(**data)
+                    break
+            except Exception as e:
+                logger.error(f"Can't connect to Ravenfall API: {e}")
             attempts -= 1
         self.ravennest_is_online = is_online
         
@@ -202,27 +216,18 @@ class RFChannelManager:
                 logger.debug(f"Multiplier mismatch for {channel.channel_name}: {channel.multiplier['multiplier']} != {self.global_multiplier}")
                 if channel.restart_task and channel.restart_task.get_time_left() > 120:
                     channel.queue_restart(90, label="Town is desynced; multiplier is not updating", reason=RestartReason.MULTIPLIER_DESYNC)
-                r = await send_multichat_command(
-                    text=f"?say {channel.ravenbot_prefixes[0]}multiplier",
-                    user_id=channel.channel_id,
-                    user_name=channel.channel_name,
-                    channel_id=channel.channel_id,
-                    channel_name=channel.channel_name
-                )
-                if r['status'] != 200:
-                    await channel.send_chat_message(f"?say {channel.ravenbot_prefixes[0]}multiplier")
+                await channel.multichat(f"?say {channel.ravenbot_prefixes[0]}multiplier")
     
     @alru_cache(ttl=10)
     async def check_update_endpoint(self):
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-            try:
-                async with session.get(f"https://www.ravenfall.stream/api/version/check", ssl=False) as response:
-                    __ = await response.text()
-                    if response.status == 200:  
-                        return True
-                    return False
-            except Exception:
+        try:
+            async with get_session().get(f"https://www.ravenfall.stream/api/version/check", ssl=False, timeout=RAVENNEST_TIMEOUT) as response:
+                __ = await response.text()
+                if response.status == 200:  
+                    return True
                 return False
+        except Exception:
+            return False
 
     async def get_desync_info(self) -> Dict[str, float]:
         ch_desyncs: Dict[str, float] = {}
@@ -259,15 +264,7 @@ class RFChannelManager:
         
         async def resync_task(channel: RFChannel):
             async with self.global_resync_lock:
-                r = await send_multichat_command(
-                    text="?resync",
-                    user_id=channel.channel_id,
-                    user_name=channel.channel_name,
-                    channel_id=channel.channel_id,
-                    channel_name=channel.channel_name
-                )
-                if r['status'] != 200:
-                    await channel.send_chat_message("?resync")
+                await channel.multichat("?resync")
                 await asyncio.sleep(60)
                 
         tasks = []                
@@ -338,19 +335,7 @@ class RAMUsageAlertMonitor(BatchAlertMonitor):
 
     async def check_condition(self):
         working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
-        tasks = []
-        for ch in self.rfmanager.channels:
-            shellcmd = (
-                f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
-            )
-            tasks.append(runshell(shellcmd))
-        responses: List[str | None] = await asyncio.gather(*tasks)
-        if None in responses:
-            return {}
-        pid_lists = [x.splitlines() for code, x in responses]
-        box_pids = {}
-        for i in range(len(self.rfmanager.channels)):
-            box_pids[self.rfmanager.channels[i].channel_name] = pid_lists[i]
+        box_pids = await self.rfmanager.list_box_pids()
         processes: Dict[str, List[float]] = {}
         total_bytes = 0
         for metric in working_set:
@@ -366,8 +351,9 @@ class RAMUsageAlertMonitor(BatchAlertMonitor):
                     processes_named[name] = processes[pid]
                     break
         alerts = {}
-        maximum_total_ravenfall_bytes = int(os.getenv("MAX_RAVENFALL_TOTAL_MIB", "10240")) * 1024 * 1024
-        maximum_single_ravenfall_bytes = int(os.getenv("MAX_RAVENFALL_MIB", "5120")) * 1024 * 1024
+        settings = get_settings()
+        maximum_total_ravenfall_bytes = settings.max_ravenfall_total_mib * 1024 * 1024
+        maximum_single_ravenfall_bytes = settings.max_ravenfall_mib * 1024 * 1024
         over_bytes = max(0, total_bytes - maximum_total_ravenfall_bytes)
         logger.debug(f"[RAMUsageAlertMonitor] Total usage: {total_bytes / 1024 / 1024} MiB ({over_bytes / 1024 / 1024} MiB over)")
         for name, bytes_used in sorted(processes_named.items(), key=lambda x: x[1], reverse=True):

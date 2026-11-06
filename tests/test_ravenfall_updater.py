@@ -17,14 +17,10 @@ from collections import deque
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("MULTICHAT_COMMAND_SERVER_HOST", "127.0.0.1")
-os.environ.setdefault("MULTICHAT_COMMAND_SERVER_PORT", "7200")
-os.environ.setdefault("RF_MIDDLEMAN_HOST", "127.0.0.1")
-os.environ.setdefault("RF_MIDDLEMAN_PORT", "7101")
-
 from aiohttp import web
 
 from bot import ravenfallupdater as updater
+from bot.clients.session import close_session
 from bot.models import RFChannelEvent, RFChannelSubEvent
 from bot.ravenfallchannel import RFChannel
 from bot.ravenfallrestarttask import RestartReason
@@ -236,6 +232,7 @@ class FindAssetTests(unittest.TestCase):
 
 class FetchReleaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_rejects_download_from_elsewhere(self):
+        self.addAsyncCleanup(close_session)
         class Response:
             status = 200
             def raise_for_status(self): pass

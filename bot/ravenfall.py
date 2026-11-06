@@ -7,6 +7,8 @@ import aiohttp
 import logging
 from typing import Any
 
+from .clients.session import get_session
+
 # Configure logger for this module
 logger = logging.getLogger(__name__)
 
@@ -150,14 +152,12 @@ class Character:
         return self._skill_dict[skill]
 
 async def get_ravenfall_query(url: str, query: str, timeout: int = 5) -> Any | None:
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
-        try:
-            r = await session.get(f"{url}/{query}")
-        except aiohttp.ClientConnectorError as e:
-            logger.error(f"Error fetching Ravenfall query from {url}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Error fetching Ravenfall query from {url}: {e}", exc_info=True)
-            return None
-        data = await r.json()
-    return data
+    try:
+        r = await get_session().get(f"{url}/{query}", timeout=aiohttp.ClientTimeout(total=timeout))
+    except aiohttp.ClientConnectorError as e:
+        logger.error(f"Error fetching Ravenfall query from {url}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching Ravenfall query from {url}: {e}", exc_info=True)
+        return None
+    return await r.json()

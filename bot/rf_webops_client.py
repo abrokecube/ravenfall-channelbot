@@ -2,6 +2,10 @@ import aiohttp
 import asyncio
 from typing import List, Dict, Any
 
+from .clients.session import get_session
+
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60*15)
+
 class WebOpsClient:
     def __init__(self, base_url: str = "http://127.0.0.1:7102"):
         self.base_url = base_url.rstrip("/")
@@ -17,12 +21,11 @@ class WebOpsClient:
             "quantity": quantity,
             "characters": characters
         }
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60*15)) as session:
-            async with session.post(url, json=payload) as response:
-                if response.status != 200:
-                    text = await response.text()
-                    raise Exception(f"Redemption failed: {response.status} - {text}")
-                return await response.json()
+        async with get_session().post(url, json=payload, timeout=REQUEST_TIMEOUT) as response:
+            if response.status != 200:
+                text = await response.text()
+                raise Exception(f"Redemption failed: {response.status} - {text}")
+            return await response.json()
 
     async def get_total_loyalty_points(self, usernames: List[str]) -> Dict[str, Any]:
         """
@@ -32,10 +35,9 @@ class WebOpsClient:
         payload = {
             "usernames": usernames
         }
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60*15)) as session:
-            async with session.post(url, json=payload) as response:
-                if response.status != 200:
-                    text = await response.text()
-                    raise Exception(f"Failed to get points: {response.status} - {text}")
-                return await response.json()
+        async with get_session().post(url, json=payload, timeout=REQUEST_TIMEOUT) as response:
+            if response.status != 200:
+                text = await response.text()
+                raise Exception(f"Failed to get points: {response.status} - {text}")
+            return await response.json()
 

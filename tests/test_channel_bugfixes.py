@@ -14,14 +14,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-os.environ.setdefault("MULTICHAT_COMMAND_SERVER_HOST", "127.0.0.1")
-os.environ.setdefault("MULTICHAT_COMMAND_SERVER_PORT", "7200")
-os.environ.setdefault("RF_MIDDLEMAN_HOST", "127.0.0.1")
-os.environ.setdefault("RF_MIDDLEMAN_PORT", "7101")
-
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from bot import multichat_command, ravenfallchannel
+from bot.clients import query
+from bot.clients.query import QueryClient
+from bot.config import get_settings
 from bot.messageprocessor import MessageMetadata, MessageProcessor
 from bot.models import QueuedScroll, RFChannelSubEvent, ScrollType
 from bot.ravenfallchannel import RFChannel
@@ -35,6 +33,15 @@ real_sleep = asyncio.sleep
 
 async def fast_sleep(_seconds: float):
     await real_sleep(0.001)
+
+
+def set_env(test: unittest.TestCase, **values: str):
+    """Sets environment variables for one test, with settings to match."""
+    patcher = mock.patch.dict(os.environ, values)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    test.addCleanup(get_settings.cache_clear)
+    get_settings.cache_clear()
 
 
 def make_town() -> RFChannel:
@@ -338,8 +345,8 @@ class GameQueries(unittest.IsolatedAsyncioTestCase):
         session.__aexit__ = mock.AsyncMock(return_value=False)
         session.get.return_value = response
         town = make_town()
-        town.rf_query_url = "http://game"
-        with mock.patch.object(ravenfallchannel.aiohttp, "ClientSession", return_value=session):
+        town.query_client = QueryClient("http://game")
+        with mock.patch.object(query, "get_session", return_value=session):
             self.assertIsNone(await town.get_query("select * from session"))
 
 
@@ -353,7 +360,8 @@ class CoinTracking(unittest.IsolatedAsyncioTestCase):
         session.__aenter__ = mock.AsyncMock(return_value=session)
         session.__aexit__ = mock.AsyncMock(return_value=False)
         session.post.return_value = response
-        with mock.patch.object(multichat_command.aiohttp, "ClientSession", return_value=session):
+        set_env(self, MULTICHAT_COMMAND_SERVER_HOST="127.0.0.1", MULTICHAT_COMMAND_SERVER_PORT="7200")
+        with mock.patch.object(multichat_command, "get_session", return_value=session):
             await multichat_command.track_coin_use("viewer", 100)
         self.assertTrue(session.post.call_args.args[0].endswith("/track_coin_use"))
 

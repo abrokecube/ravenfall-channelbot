@@ -22,7 +22,8 @@ injected through the middleman's HTTP API and did not come from either process.
 
 `main.py` loads `.env`, writes a `pid` file, configures one log file per logger
 (`middleman.log`, `rfmsgproc.log`, `rfchannels.log`, `commands.log` and so on), and
-reads `channels.json` at import. `run()` then does this in order:
+reads `channels.json` at import. `run()` stops at once if multichat's address isn't
+set, then does this in order:
 
 1. `update_schema()` creates missing tables and adds missing columns. It never
    drops or alters anything.
@@ -108,13 +109,20 @@ String keys live in `data/definitions.yaml`. Per-town translations are at the
 | Route | Used through |
 | --- | --- |
 | Chat message, read by RavenBot | `RFChannel.send_chat_message`, which also starts the watchdog |
-| `?` commands through multichat | `send_multichat_command` |
+| `?` commands through multichat | `RFChannel.multichat`, which falls back to chat, or `send_multichat_command` |
 | Middleman, to the game | `send_to_server`, `send_to_server_and_wait_response`, and `send_ravenfall` in `bot/cogs/redeem_rf.py` |
 | Middleman, to RavenBot | `send_to_client`, `RFChannel.send_message_as_ravenbot` |
-| Game HTTP query API | `RFChannel.get_query`, for `GET {rf_query_url}/select * from session` and similar. Tables include `session`, `village`, `multiplier`, `dungeon`, `raid`, `players` |
+| Game HTTP query API | `RFChannel.get_query` through `QueryClient` (`bot/clients/query.py`), for `GET {rf_query_url}/select * from session` and similar. Returns `None` on every failure. `RFChannel.get_player` looks up one player. Tables include `session`, `village`, `multiplier`, `dungeon`, `raid`, `players` |
 
 The middleman routes are defined in `ravenfall-middleman/middleman/main.go` and
 described in its `API.md`.
+
+HTTP calls in `bot/` share one session from `get_session()` in
+`bot/clients/session.py`, which `main.py` closes at shutdown. Each request still
+opens its own connection, because the game's query server hasn't been tested with
+reused connections, and there's no connection limit, so the middleman isn't
+throttled. `utils/utils.py` (pastebins), `utils/websocket_client.py` and `ravenpy/`
+keep their own sessions.
 
 ## Town state
 
@@ -150,7 +158,11 @@ databases. Changing or removing a column needs a manual migration.
 
 Secrets and hosts come from environment variables, all listed in `.env.example`.
 `main` reads the older names, not those in the local `.env` and `config.toml`.
+`get_settings()` in `bot/config.py` reads them into one `Settings` object on its
+first call and keeps it. Nothing reads them at import, except that `main.py` calls
+it after `load_dotenv()`. `bot/ravenfallupdater.py` still reads its own.
 
-Towns are defined in `channels.json`, ignored by git. `Channel` in `bot/models.py`
-is its schema, and `RFChannel.__init__` shows how each key is read. The
-`command_prefix` key is unused: the prefix is the global `BOT_COMMAND_PREFIX`.
+Towns are defined in `channels.json`, ignored by git. `ChannelConfig` in
+`bot/config.py` is its schema, with each key's default. Keys it doesn't know are
+ignored. The `command_prefix` key is unused: the prefix is the global
+`BOT_COMMAND_PREFIX`.

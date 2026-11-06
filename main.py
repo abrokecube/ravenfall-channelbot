@@ -13,7 +13,6 @@ load_dotenv()
 
 import os
 import asyncio
-import json
 from typing import List, Tuple
 import logging
 
@@ -24,6 +23,8 @@ from bot.commands.event_sources import TwitchAPIEventSource
 from bot.commands.event_manager import EventManager
 from bot.commands.dispatchers import CommandDispatcher, TwitchRedeemDispatcher
 
+from bot.clients.session import close_session
+from bot.config import get_settings, load_channels
 from bot.models import *
 from bot.ravenfallmanager import RFChannelManager
 from database.models import update_schema
@@ -94,6 +95,10 @@ logger_config = {
         'filename': 'rfchannels.log',
         'console_level': logging.INFO,
     },
+    'bot.clients': {
+        'filename': 'rfchannels.log',
+        'console_level': logging.INFO,
+    },
     'bot.commands': {
         'filename': 'commands.log',
         'console_level': logging.INFO,
@@ -107,7 +112,8 @@ logging_level_strs = {
     "error": logging.ERROR,
     "critical": logging.CRITICAL
 }
-log_level = os.getenv("LOG_LEVEL", "info")
+settings = get_settings()
+log_level = settings.log_level
 default_console_logging_level = logging_level_strs.get(log_level.lower(), "info")
 setup_logging(level=default_console_logging_level, loggers_config=logger_config)
 
@@ -115,13 +121,7 @@ logger = logging.getLogger(__name__)
 if not log_level.lower() in logging_level_strs:
     logger.warning(f"Invalid logging level '{log_level}'")
 
-with open("channels.json", "r") as f:
-    channels: List[Channel] = json.load(f)
-for channel in channels:
-    channel["rf_query_url"] = channel["rf_query_url"].rstrip("/")
-    # Set default command prefix if not specified
-    if 'command_prefix' not in channel:
-        channel['command_prefix'] = '!'
+channels = load_channels("channels.json")
 
 async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
     async def get_twitch_auth_instance(user_id: int | str, user_name: Optional[str] = None, scopes: List[AuthScope] = TWITCH_CHANNEL_SCOPES) -> Twitch:
@@ -132,7 +132,7 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
                 save_new_tokens = False
 
         while True:
-            twitch = await Twitch(os.getenv("TWITCH_APP_ID", ""), os.getenv("TWITCH_APP_SECRET"), target_app_auth_scope=TWITCH_APP_SCOPES)
+            twitch = await Twitch(settings.twitch_app_id, settings.twitch_app_secret, target_app_auth_scope=TWITCH_APP_SCOPES)
             if access_token is None:
                 auth = UserAuthenticator(twitch, scopes, True)
                 print(f"Auth scopes: {', '.join([x.value for x in scopes])}")
@@ -183,16 +183,16 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
                 return twitch
                 
     logger.info("Getting twitch info")
-    twitch = await get_twitch_auth_instance(os.getenv("BOT_USER_ID", ""), scopes=TWITCH_BOT_USER_SCOPES)
+    twitch = await get_twitch_auth_instance(settings.bot_user_id or "", scopes=TWITCH_BOT_USER_SCOPES)
 
     logger.info("Initializing twitch chat instance")
-    chat = await Chat(twitch, initial_channel=[x['channel_name'] for x in channels])
+    chat = await Chat(twitch, initial_channel=[x.channel_name for x in channels])
     twitch_user = await helper.first(twitch.get_users())
     
     global_ctx.bot_twitch = twitch
     global_ctx.twitch_chat = chat
     
-    twitch_admin_uids = set((os.getenv("BOT_USER_ID"), os.getenv("OWNER_TWITCH_ID")))
+    twitch_admin_uids = set((settings.bot_user_id, settings.owner_twitch_id))
     twitch_source = TwitchAPIEventSource(chat, twitch, {}, twitch_user, twitch_admin_uids)
     event_manager.add_event_source(twitch_source)
     
@@ -226,20 +226,20 @@ async def setup_twitch(global_ctx: GlobalContext, event_manager: EventManager):
     
     logger.info("Subscribing to twitch eventsub")
     for channel in channels:
-        if channel.get("channel_points_redeems", False):
-            channel_twitch = await get_twitch_auth_instance(channel['channel_id'], channel['channel_name'], TWITCH_CHANNEL_SCOPES)
-            twitches[channel['channel_id']] = channel_twitch
+        if channel.channel_points_redeems:
+            channel_twitch = await get_twitch_auth_instance(channel.channel_id, channel.channel_name, TWITCH_CHANNEL_SCOPES)
+            twitches[channel.channel_id] = channel_twitch
             eventsub = EventSubWebsocket(channel_twitch)
             eventsub.start()
             try:
                 await eventsub.listen_channel_points_custom_reward_redemption_add(
-                    channel['channel_id'],
+                    channel.channel_id,
                     redemption_callback,
                 )
-                logger.info(f"Listening for redeems in {channel['channel_name']}")
+                logger.info(f"Listening for redeems in {channel.channel_name}")
                 twitch_eventsubs.append(eventsub)
             except Exception as e:
-                logger.error(f"Error listening for redeems in {channel['channel_name']}: {e}", exc_info=True)
+                logger.error(f"Error listening for redeems in {channel.channel_name}: {e}", exc_info=True)
                 await eventsub.stop()    
 
 class MyCmdDispatcher(CommandDispatcher):
@@ -247,11 +247,13 @@ class MyCmdDispatcher(CommandDispatcher):
         super().__init__()
         
     async def get_prefix(self, global_context, event):
-        return os.getenv("BOT_COMMAND_PREFIX", "!")
+        return settings.bot_command_prefix
 
 async def run():
     def handle_loop_exception(loop, context):
         logger.error("Caught async exception: %s", context["exception"], exc_info=True)
+
+    settings.multichat_url  # The bot can't run without multichat, so stop here if it isn't set
 
     logger.info("Setting up loop")
     loop = asyncio.get_event_loop()
@@ -260,7 +262,7 @@ async def run():
     logger.info("Checking db")
     await update_schema()
         
-    rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
+    rf = ravenpy.RavenNest(settings.ravenfall_api_user, settings.ravenfall_api_pass)
     asyncio.create_task(rf.login())
     
     # internal_chat = ChatManager()
@@ -278,7 +280,7 @@ async def run():
     from bot.cogs.help import HelpCog
     await event_manager.add_cog(HelpCog)
     
-    if os.getenv("COMMAND_TESTING") == "1":
+    if settings.command_testing:
         from bot.cogs.example import ExampleCog
         await event_manager.add_cog(ExampleCog)
     from bot.cogs.testing import TestingCog
@@ -287,26 +289,24 @@ async def run():
     await event_manager.add_cog(RedeemCog)
     from bot.cogs.redeem_rf import RedeemRFCog
     await event_manager.add_cog(RedeemRFCog)
-    rfwebops = os.getenv("WEBOPS_URL", "http://pc2-mobile:7102")
     from bot.cogs.game import GameCog
-    await event_manager.add_cog(GameCog, rf_webops_url=rfwebops)
+    await event_manager.add_cog(GameCog, rf_webops_url=settings.webops_url)
     from bot.cogs.info import InfoCog
     await event_manager.add_cog(InfoCog)
     from bot.cogs.bot import BotStuffCog
-    watchers = os.getenv("WATCHER_URLS", "http://127.0.0.1:8110").split(",")
-    await event_manager.add_cog(BotStuffCog, watcher_urls=watchers)
+    await event_manager.add_cog(BotStuffCog, watcher_urls=settings.watcher_urls)
     from bot.cogs.debug import DebugCog
     await event_manager.add_cog(DebugCog)
 
     await setup_twitch(global_ctx, event_manager)
 
     rf_manager = RFChannelManager(channels, global_ctx.twitch_chat, rf, global_ctx.channel_twitches)
-    if not os.getenv("DISABLE_RAVENFALL_INTEGRATION", "").lower() in ("1", "true"):
+    if not settings.disable_ravenfall_integration:
         await rf_manager.start()
 
     global_ctx.ravenfall_manager = rf_manager
 
-    server = SomeEndpoints(rf_manager, None, os.getenv("PRIVATE_SERVER_HOST", "0.0.0.0"), int(os.getenv("PRIVATE_SERVER_PORT", 8080)))
+    server = SomeEndpoints(rf_manager, None, settings.private_server_host, settings.private_server_port)
     await server.start()
 
     try:
@@ -323,10 +323,13 @@ async def run():
         tasks.append(rf_manager.stop())
         tasks.append(global_ctx.bot_twitch.close())
         tasks.append(event_manager.stop_all())
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for r in results:
-            if isinstance(r, Exception):
-                logging.error(f"Error occurred while shutting down: {r}")
+        try:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for r in results:
+                if isinstance(r, Exception):
+                    logging.error(f"Error occurred while shutting down: {r}")
+        finally:
+            await close_session()
 
 if __name__ == "__main__":
     asyncio.run(run())

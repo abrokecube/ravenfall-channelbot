@@ -27,6 +27,7 @@ from ..middleman import send_to_server_and_wait_response, send_to_client, send_t
 from ..ravenfallloc import pl
 from ..exceptions import OutOfStockError
 from ..models import ScrollType, RFChannelEvent
+from bot.config import get_settings
 from bot.multichat_command import get_char_coins, get_char_items, track_item_use, track_coin_use
 from bot.message_templates import RavenBotTemplates
 from database.session import get_async_session
@@ -479,7 +480,7 @@ class RedeemRFCog(Cog):
     def __init__(self, event_manager):
         super().__init__(event_manager)
         self.item_price_dict = {}
-        item_values_path = os.getenv("ITEM_VALUES_PATH", "data/item_values.json")
+        item_values_path = get_settings().item_values_path
         if os.path.exists(item_values_path):
             item_price_json = json.load(open(item_values_path))
             self.item_price_dict = {item_name.lower(): price for item_name, price in item_price_json.items()}
@@ -599,7 +600,7 @@ class RedeemRFCog(Cog):
             return
         except PartialSendError as e:
             logger.error(f"Partial send error in coin redeem: {e}")
-            await ctx.send(f"❌ {e}. pinging @{os.getenv("OWNER_TWITCH_USERNAME")}")
+            await ctx.send(f"❌ {e}. pinging @{get_settings().owner_twitch_username}")
             return
         except Exception as e:
             await ctx.cancel()

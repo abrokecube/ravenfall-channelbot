@@ -1,16 +1,12 @@
 import asyncio
 import json
 import logging
-import os
-import aiohttp
 from urllib.parse import quote
 from typing import Dict, Optional, Tuple, Any, TypedDict
 from dataclasses import dataclass
+from .clients.session import get_session
+from .config import get_settings
 from .messageprocessor import RavenfallMessage
-
-# Configuration
-MIDDLEMAN_API_HOST = os.getenv('RF_MIDDLEMAN_HOST', None)
-MIDDLEMAN_API_PORT = os.getenv('RF_MIDDLEMAN_PORT', None)
 
 # Configure logging
 logger = logging.getLogger('middleman')
@@ -25,21 +21,21 @@ def handle_sigint():
 
 async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional[Dict] = None) -> Tuple[Dict, int]:
     """Make an API call to the middleman server."""
-    url = f"http://{MIDDLEMAN_API_HOST.rstrip('/')}:{MIDDLEMAN_API_PORT}/{endpoint.lstrip('/')}"
     headers = {'Content-Type': 'application/json'}
     
     try:
-        async with aiohttp.ClientSession() as session:
-            if method.upper() == 'GET':
-                async with session.get(url, headers=headers) as response:
-                    response_data = await response.json()
-                    # logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data)}")
-                    return response_data, response.status
-            else:
-                async with session.post(url, json=data, headers=headers) as response:
-                    response_data = await response.json()
-                    # logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data)}")
-                    return response_data, response.status
+        url = f"{get_settings().middleman_url}/{endpoint.lstrip('/')}"
+        session = get_session()
+        if method.upper() == 'GET':
+            async with session.get(url, headers=headers) as response:
+                response_data = await response.json()
+                # logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data)}")
+                return response_data, response.status
+        else:
+            async with session.post(url, json=data, headers=headers) as response:
+                response_data = await response.json()
+                # logger.debug(f"API Response (Status: {response.status}): {json.dumps(response_data)}")
+                return response_data, response.status
     except Exception as e:
         logger.error(f"Error calling middleman API: {str(e)}", exc_info=True)
         return {"success": False, "error": f"Failed to connect to middleman API: {str(e)}"}, 500

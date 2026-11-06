@@ -11,12 +11,11 @@ From the repo root, in the background or with a timeout of at least 400000 ms
 (the suite takes about 4 minutes):
 
 ```bash
-MULTICHAT_COMMAND_SERVER_HOST=127.0.0.1 MULTICHAT_COMMAND_SERVER_PORT=7200 RF_MIDDLEMAN_HOST=127.0.0.1 RF_MIDDLEMAN_PORT=7101 PYTHONDONTWRITEBYTECODE=1 uv run --no-sync python -m unittest discover -s tests -p "test_*.py"
+PYTHONDONTWRITEBYTECODE=1 uv run --no-sync python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Use `-s tests` without `-t .`: `tests` is not a package. The env vars are
-required because `bot/multichat_command.py` and `bot/middleman.py` read them at
-import. In a worktree with no `.venv`, add
+Use `-s tests` without `-t .`: `tests` is not a package. In a worktree with no
+`.venv`, add
 `UV_PROJECT_ENVIRONMENT="../../../.venv"` to use the main checkout's.
 
 ## Where things live
@@ -30,14 +29,16 @@ import. In a worktree with no `.venv`, add
 | `bot/ravenfallupdater.py` | `RFGameUpdater`: game and RavenBot updates |
 | `bot/ravenfallshutdown.py` | `RFTownShutdown`: stop and start all towns |
 | `bot/messageprocessor.py` | Websocket server the middleman forwards each message to |
-| `bot/middleman.py`, `bot/multichat_command.py` | HTTP clients for the middleman and ravenfall-multichat |
+| `bot/config.py` | `get_settings()` for environment variables, `ChannelConfig` and `load_channels()` for `channels.json` |
+| `bot/clients/` | The shared HTTP session (`session.py`) and the game query client (`query.py`) |
+| `bot/middleman.py`, `bot/multichat_command.py` | HTTP clients for the middleman and ravenfall-multichat, on the shared session |
 | `bot/ravenfallloc.py`, `data/definitions.yaml` | Game string identification and translation |
 | `bot/commands/` | Command framework: events, dispatchers, listeners, decorators, checks, converters |
 | `bot/cogs/` | Commands and redeems. `redeem_rf.py` holds credits and the scroll commands, `game.py` the admin commands |
 | `database/` | Tables in `models.py`, helpers in `utils.py`, session in `session.py` |
 | `ravenpy/` | RavenNest API client, shared with `ravenhelper-bot` |
 | `utils/` | Sandboxie process control (`runshell.py`), routines, alert monitors, helpers |
-| `tests/` | `test_channel_bugfixes.py`, `test_command_framework.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py` |
+| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py` |
 | `script_*.py` | One-off scripts run by hand |
 
 Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multichat`,
@@ -67,8 +68,14 @@ Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multi
 ## Gotchas
 
 - Local `.env` and `config.toml` belong to the rewrite. `main` reads older
-  variables (see `.env.example`), so importing `bot.ravenfallchannel` needs env
-  vars set, and `main.py` needs `channels.json`.
+  variables (see `.env.example`), and `main.py` needs `channels.json`.
+- `get_settings()` is cached after its first call, so `load_dotenv()` must come
+  first and nothing should call it at import. A test that changes the environment
+  uses `set_env` from `tests/test_channel_bugfixes.py`. `bot/ravenfallupdater.py`
+  still reads its own variables with `os.getenv`.
+- HTTP calls in `bot/` go through `get_session()` from `bot/clients/session.py`,
+  not a new `ClientSession`. It closes each connection after its request and has
+  no connection limit, on purpose (see that file).
 - Live towns run on `pc3-server` (`rf_query_url`s, middleman `pc3-server:7101`,
   multichat `pc3-server:7200`), not this PC. Local logs and game files say nothing
   about live behaviour.

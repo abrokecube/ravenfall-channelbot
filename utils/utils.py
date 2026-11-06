@@ -3,7 +3,6 @@ import string
 from typing import Iterable, Dict, List, Tuple
 
 import thefuzz.process
-import os
 import thefuzz
 
 import ravenpy
@@ -12,6 +11,8 @@ import re
 from enum import Enum
 from math import inf
 import aiohttp
+
+from bot.config import get_settings
 
 
 
@@ -334,7 +335,7 @@ def is_twitch_username(text: str):
 
 
 async def upload_to_bin(text: str):
-    provider = os.getenv("PASTEBIN_PROVIDER", "pastes").lower()
+    provider = get_settings().pastebin_provider
     if provider == "pastes":
         return await upload_to_pastes(text)
     elif provider == "borkedbin":
@@ -359,9 +360,9 @@ async def upload_to_pastes(text: str):
 async def upload_to_borkedbin(text: str):
     async with aiohttp.ClientSession() as s:
         r = await s.post(
-            f"{os.getenv('BORKEDBIN_HOST', 'https://bin.borkedcube.moe').strip('/')}/api/add/text",
+            f"{get_settings().borkedbin_host}/api/add/text",
             headers={
-                "X-Api-Key": os.getenv("BORKEDBIN_API_KEY", "")
+                "X-Api-Key": get_settings().borkedbin_api_key
             },
             json={"content": text}
         )

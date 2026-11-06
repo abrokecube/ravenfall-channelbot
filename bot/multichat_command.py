@@ -1,21 +1,31 @@
 """
-Example client for sending commands to the Ravenfall MultiChat server via HTTP.
+Client for the Ravenfall MultiChat server's HTTP API.
 
-This script demonstrates how to send commands to the chat bot using the HTTP endpoint.
-Make sure the server is running and the COMMAND_SERVER_HOST and COMMAND_SERVER_PORT
-environment variables are properly set.
+The server is set by MULTICHAT_COMMAND_SERVER_HOST and MULTICHAT_COMMAND_SERVER_PORT.
 """
-import aiohttp
-import os
 from typing import Dict, Any, List, TypedDict, Optional
 import logging
 
+from .clients.session import get_session
+from .config import get_settings
+
 logger = logging.getLogger(__name__)
 
-# Configuration - Update these values to match your setup
-COMMAND_SERVER_HOST = os.getenv("MULTICHAT_COMMAND_SERVER_HOST", None)
-COMMAND_SERVER_PORT = int(os.getenv("MULTICHAT_COMMAND_SERVER_PORT", None))
-BASE_URL = f"http://{COMMAND_SERVER_HOST}:{COMMAND_SERVER_PORT}"
+async def _post(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with get_session().post(f"{get_settings().multichat_url}/{path}", json=payload) as response:
+        response_data = await response.json()
+        return {
+            "status": response.status,
+            "data": response_data
+        }
+
+async def _get(path: str) -> Dict[str, Any]:
+    async with get_session().get(f"{get_settings().multichat_url}/{path}") as response:
+        response_data = await response.json()
+        return {
+            "status": response.status,
+            "data": response_data
+        }
 
 async def send_multichat_command(
     text: str,
@@ -37,7 +47,6 @@ async def send_multichat_command(
     Returns:
         dict: The JSON response from the server
     """
-    url = f"{BASE_URL}/command"
     payload = {
         "text": text,
         "user_id": user_id,
@@ -47,14 +56,9 @@ async def send_multichat_command(
     }
     
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                response_data = await response.json()
-                logger.debug(f"Sent command to multichat: {text}, {user_name}, {user_id}, {channel_name}, {channel_id}")
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
+        result = await _post("command", payload)
+        logger.debug(f"Sent command to multichat: {text}, {user_name}, {user_id}, {channel_name}, {channel_id}")
+        return result
     except Exception as e:
         logger.error(f"Failed to send command: {str(e)}", exc_info=True)
         return {
@@ -68,7 +72,6 @@ async def track_item_use(
     item_id: str,
     amount: int,
 ) -> Dict[str, Any]:
-    url = f"{BASE_URL}/track_item_use"
     payload = {
         "user_name": user_name,
         "char_index": char_index,
@@ -76,13 +79,7 @@ async def track_item_use(
         "amount": amount
     }
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
+        return await _post("track_item_use", payload)
     except Exception as e:
         logger.error(f"Failed to send command: {str(e)}", exc_info=True)
         return {
@@ -94,19 +91,12 @@ async def track_coin_use(
     user_name: str,
     amount: int,
 ) -> Dict[str, Any]:
-    url = f"{BASE_URL}/track_coin_use"
     payload = {
         "user_name": user_name,
         "amount": amount
     }
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
+        return await _post("track_coin_use", payload)
     except Exception as e:
         logger.error(f"Failed to send command: {str(e)}", exc_info=True)
         return {
@@ -198,16 +188,12 @@ async def get_desync_info() -> DesyncResponse:
     Returns:
         dict: The JSON response containing desync information
     """
-    url = f"{BASE_URL}/get_desync"
-    
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
+        result = await _get("get_desync")
+        return {
+            "status": result["status"],
+            "data": result["data"]["data"]
+        }
     except Exception as e:
         return {
             "status": 500,
@@ -220,16 +206,12 @@ async def get_total_item_count() -> TotalItemCountResponse:
     Returns:
         dict: The JSON response containing desync information
     """
-    url = f"{BASE_URL}/get_total_item_count"
-    
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
+        result = await _get("get_total_item_count")
+        return {
+            "status": result["status"],
+            "data": result["data"]["data"]
+        }
     except Exception as e:
         return {
             "status": 500,
@@ -237,16 +219,12 @@ async def get_total_item_count() -> TotalItemCountResponse:
         }
 
 async def get_char_info() -> CharInfoResponse:
-    url = f"{BASE_URL}/get_char_data"
-    
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
+        result = await _get("get_char_data")
+        return {
+            "status": result["status"],
+            "data": result["data"]["data"]
+        }
     except Exception as e:
         return {
             "status": 500,
@@ -254,16 +232,12 @@ async def get_char_info() -> CharInfoResponse:
         }
 
 async def get_char_items(channel_id: str) -> CharItemsResponse:
-    url = f"{BASE_URL}/get_char_items/{channel_id}"
-    
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
+        result = await _get(f"get_char_items/{channel_id}")
+        return {
+            "status": result["status"],
+            "data": result["data"]["data"]
+        }
     except Exception as e:
         return {
             "status": 500,
@@ -271,16 +245,12 @@ async def get_char_items(channel_id: str) -> CharItemsResponse:
         }
 
 async def get_char_coins(channel_id: str) -> CharCoinsResponse:
-    url = f"{BASE_URL}/get_char_coins/{channel_id}"
-    
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data['data']
-                }
+        result = await _get(f"get_char_coins/{channel_id}")
+        return {
+            "status": result["status"],
+            "data": result["data"]["data"]
+        }
     except Exception as e:
         return {
             "status": 500,
@@ -288,16 +258,8 @@ async def get_char_coins(channel_id: str) -> CharCoinsResponse:
         }
 
 async def get_scroll_counts(channel_id: str) -> ScrollsResponse:
-    url = f"{BASE_URL}/get_scrolls/{channel_id}"
-    
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                response_data = await response.json()
-                return {
-                    "status": response.status,
-                    "data": response_data
-                }
+        return await _get(f"get_scrolls/{channel_id}")
     except Exception as e:
         return {
             "status": 500,

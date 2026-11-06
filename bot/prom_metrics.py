@@ -98,9 +98,7 @@ from typing import TYPE_CHECKING, List
 if TYPE_CHECKING:
     from .ravenfallmanager import RFChannelManager
 import psutil
-import os
 import asyncio
-from utils.runshell import runshell
 
 class MetricsManager:
     def __init__(self, rf_manager: 'RFChannelManager'):
@@ -142,17 +140,7 @@ class MetricsManager:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
                 
-        tasks = []
-        for ch in self.rf_manager.channels:
-            shellcmd = (
-                f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
-            )
-            tasks.append(runshell(shellcmd))
-        responses: List[str | None] = await asyncio.gather(*tasks)
-        pid_lists = [x.splitlines() for code, x in responses]
-        box_pids = {}
-        for i in range(len(self.rf_manager.channels)):
-            box_pids[self.rf_manager.channels[i].channel_name] = pid_lists[i]
+        box_pids = await self.rf_manager.list_box_pids()
 
         m.add_def("rf_ext_ravenfall_info", "Information about ravenfall", MetricType.GAUGE)
         for ch in self.rf_manager.channels:

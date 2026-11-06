@@ -5,20 +5,15 @@ ravenfall-middleman 7e5d659 (types.go, socketproxy.go, processor_connector.go).
 """
 
 import json
-import os
 import unittest
 from unittest import mock
 
-os.environ.setdefault("MULTICHAT_COMMAND_SERVER_HOST", "127.0.0.1")
-os.environ.setdefault("MULTICHAT_COMMAND_SERVER_PORT", "7200")
-os.environ.setdefault("RF_MIDDLEMAN_HOST", "127.0.0.1")
-os.environ.setdefault("RF_MIDDLEMAN_PORT", "7101")
-
 from bot import middleman, ravenfallchannel
+from bot.clients.session import close_session
 from bot.message_templates import RavenBotTemplates
 from bot.messageprocessor import MessageProcessor
 from bot.ravenfallmanager import RFChannelManager
-from tests.test_channel_bugfixes import chat_message, make_town
+from tests.test_channel_bugfixes import chat_message, make_town, set_env
 
 
 # Fields of APIRequest in types.go. The Go decoder ignores anything else.
@@ -52,9 +47,9 @@ class Requests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(api.await_args.args[0], "/api/connection-status?connectionId=town%261%20%23a")
 
     async def test_failed_request_can_be_read_like_a_middleman_error(self):
-        with mock.patch.object(middleman, "MIDDLEMAN_API_HOST", "127.0.0.1"), \
-                mock.patch.object(middleman, "MIDDLEMAN_API_PORT", "1"), \
-                self.assertLogs("middleman", "ERROR"):
+        self.addAsyncCleanup(close_session)
+        set_env(self, RF_MIDDLEMAN_HOST="127.0.0.1", RF_MIDDLEMAN_PORT="1")
+        with self.assertLogs("middleman", "ERROR"):
             response = await middleman.send_to_server_and_wait_response("rf_town", "{}")
         self.assertIs(response["success"], False)
         self.assertIn("error", response)

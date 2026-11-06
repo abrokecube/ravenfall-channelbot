@@ -11,7 +11,6 @@ from utils.format_time import seconds_to_dhms, format_seconds, format_timedelta,
 from utils.is_twitch_username import is_twitch_username
 from utils.bytes_to_human_readable import bytes_to_human_readable
 from utils.filter_username import filter_username
-from utils.runshell import runshell
 from utils import (
     strutils, utils
 )
@@ -25,7 +24,7 @@ from ..commands.converters import Glob, RFChannelConverter, TwitchUsername, RFSk
 from ..prometheus import get_prometheus_instant, get_prometheus_series
 
 from ..ravenfallmanager import RFChannelManager
-from ..models import Village, GameSession, GameMultiplier
+from ..models import Village, GameSession, GameMultiplier, parse_boost
 from .. import braille
 from ..ravenfall import Character, Skills
 
@@ -39,7 +38,6 @@ from datetime import timezone, timedelta, datetime
 import psutil
 import asyncio
 import time
-import os
 from collections import defaultdict
 
 from numerize.numerize import numerize
@@ -58,10 +56,9 @@ class InfoCog(Cog):
             village: Village = await channel.get_query('select * from village')
             if not isinstance(village, dict):
                 continue
-            if len(village['boost'].strip()) > 0:
-                split = village['boost'].split()
-                boost_stat = split[0]
-                boost_value = float(split[1].rstrip("%"))
+            boost = parse_boost(village['boost'])
+            if boost is not None:
+                boost_stat, boost_value = boost
                 asdf = f"Town #{idx+1}: @{channel.channel_name} - {boost_stat} {int(round(boost_value))}%"
             else:
                 asdf = f"Town #{idx+1}: @{channel.channel_name} - No boost"
@@ -133,20 +130,7 @@ class InfoCog(Cog):
         working_set = await get_prometheus_instant("windows_process_working_set_private_bytes{process='Ravenfall'}")
         change_over_time = await get_prometheus_instant("deriv(windows_process_working_set_private_bytes{process='Ravenfall'}[3m])")
         working_set_series = await get_prometheus_series("windows_process_working_set_private_bytes{process='Ravenfall'}", 60*10)
-        tasks = []
-        for ch in self.global_context.ravenfall_manager.channels:
-            shellcmd = (
-                f"\"{os.getenv('SANDBOXIE_START_PATH')}\" /box:{ch.sandboxie_box} /silent /listpids"
-            )
-            tasks.append(runshell(shellcmd))
-        responses: List[str | None] = await asyncio.gather(*tasks)
-        if None in responses:
-            await ctx.message.reply("Could not get data")
-            return
-        pid_lists = [x.splitlines() for code, x in responses]
-        box_pids = {}
-        for i in range(len(self.global_context.ravenfall_manager.channels)):
-            box_pids[self.global_context.ravenfall_manager.channels[i].channel_name] = pid_lists[i]
+        box_pids = await self.global_context.ravenfall_manager.list_box_pids()
         for metric in working_set:
             m = metric['metric']
             name = m['process_id']
@@ -230,7 +214,7 @@ class InfoCog(Cog):
         if not target_user:
             target_user = ctx.message.author_login        
 
-        player_info = await channel.get_query("select * from players where name = \'%s\'" % target_user)
+        player_info = await channel.get_player(target_user)
         if isinstance(player_info, dict) and player_info:
             char = Character(player_info)
         else:

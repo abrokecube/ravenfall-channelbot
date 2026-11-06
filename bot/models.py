@@ -8,26 +8,12 @@ class TownBoost(NamedTuple):
     skill: str
     multiplier: float
 
-class Channel(TypedDict):
-    channel_id: str
-    channel_name: str
-    rf_query_url: str
-    custom_town_msg: str
-    ravenbot_prefix: str | list | tuple
-    welcome_message: str
-    receive_global_alerts: bool
-    sandboxie_box: str
-    ravenfall_start_script: str
-    auto_restart: bool
-    event_notifications: bool
-    auto_end_ravebridge: bool
-    restart_period: int
-    middleman_connection_id: str
-    ravenfall_loc_strings_path: str
-    auto_restore_raids: bool
-    restart_timeout: int
-    town_level_notifications: bool
-    command_prefix: str
+def parse_boost(boost: str) -> tuple[str, float] | None:
+    """Reads a village boost such as `Attack 50%` as (skill, percent). None if there isn't one."""
+    parts = boost.split()
+    if len(parts) < 2:
+        return None
+    return parts[0], float(parts[1].rstrip("%"))
 
 class GameSession(TypedDict):
     authenticated: bool
