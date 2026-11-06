@@ -20,7 +20,9 @@ injected through the middleman's HTTP API and did not come from either process.
 
 ## Startup
 
-`main.py` loads `.env`, writes a `pid` file, configures one log file per logger
+`main.py` loads `.env`, exits if another copy of the bot is already running on this
+machine (`utils/single_instance.py`, a named Windows mutex that covers every checkout
+but not other PCs), writes a `pid` file, configures one log file per logger
 (`middleman.log`, `rfmsgproc.log`, `rfchannels.log`, `commands.log` and so on), and
 reads `channels.json` at import. `run()` stops at once if multichat's address isn't
 set, then does this in order:

@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import sys
 import asyncio
 from typing import List, Tuple
 import logging
@@ -33,6 +34,11 @@ from bot.server import SomeEndpoints
 # from bot.chat_system import ChatManager
 import database.utils as db_utils
 from database.session import get_async_session
+from utils.single_instance import acquire_single_instance
+
+# Comes before the pid file, because the watchdog stops whichever pid is in it
+if not acquire_single_instance("ravenfall-channelbot"):
+    sys.exit("The bot is already running on this machine")
 
 with open('pid', 'w') as f:
     f.write(str(os.getpid()))
