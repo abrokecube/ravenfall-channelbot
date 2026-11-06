@@ -119,8 +119,10 @@ String keys live in `data/definitions.yaml`. Per-town translations are at the
 The middleman routes are defined in `ravenfall-middleman/middleman/main.go` and
 described in its `API.md`.
 
-HTTP calls in `bot/` share one session from `get_session()` in
-`bot/clients/session.py`, which `main.py` closes at shutdown. Each request still
+HTTP calls in `bot/` share a session from `get_session()` in
+`bot/clients/session.py`, which `main.py` closes at shutdown. There's one per
+event loop, because twitchAPI runs chat and each EventSub websocket on its own
+thread and loop, and commands run on those loops. Each request still
 opens its own connection, because the game's query server hasn't been tested with
 reused connections, and there's no connection limit, so the middleman isn't
 throttled. `utils/utils.py` (pastebins), `utils/websocket_client.py` and `ravenpy/`

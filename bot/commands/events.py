@@ -97,8 +97,10 @@ class TwitchMessageEvent(MessageEvent):
             self.room_id, self.bot_user_id, text, reply_id
         )
     async def _send(self, text: str, *, use_http: bool = True, reply_id: str = None):
-        methods = []
-        if use_http:
+        # Only channels with channel point redeems have their own Twitch client
+        if self.channel_twitch is None:
+            methods = [self._send_irc]
+        elif use_http:
             methods = [self._send_http, self._send_irc]
         else:
             methods = [self._send_irc, self._send_http]

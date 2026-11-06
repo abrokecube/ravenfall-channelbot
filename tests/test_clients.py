@@ -40,6 +40,15 @@ class ClientTestCase(unittest.IsolatedAsyncioTestCase):
         return server
 
 
+async def session_on_another_loop():
+    """Gets a session the way a twitchAPI callback does, from its own thread and loop."""
+
+    async def fetch():
+        return get_session()
+
+    return await asyncio.to_thread(asyncio.run, fetch())
+
+
 class SharedSession(ClientTestCase):
     async def test_same_session_until_closed(self):
         session = get_session()
@@ -76,10 +85,41 @@ class SharedSession(ClientTestCase):
         await client.get("first")
         self.assertEqual(await client.get("second"), {"cookies": {}})
 
-    async def test_session_from_a_finished_loop_is_replaced(self):
+    async def test_each_loop_has_its_own_session(self):
         session = get_session()
-        with mock.patch.object(session_module, "_session_loop", object()):
-            self.assertIsNot(get_session(), session)
+        other = await session_on_another_loop()
+        self.assertIsNot(other, session)
+        self.assertFalse(session.closed)
+        self.assertIs(get_session(), session)
+
+    async def test_another_loop_does_not_break_a_request_in_flight(self):
+        async def handler(request):
+            return web.json_response({"ok": True})
+
+        server = await self.serve(handler)
+        connector = get_session().connector
+        connect = connector.connect
+
+        async def connect_while_another_loop_runs(*args, **kwargs):
+            await session_on_another_loop()
+            return await connect(*args, **kwargs)
+
+        with mock.patch.object(connector, "connect", connect_while_another_loop_runs):
+            client = QueryClient(str(server.make_url("")))
+            self.assertEqual(await client.get("select * from session"), {"ok": True})
+
+    async def test_close_detaches_sessions_from_other_loops(self):
+        other = await session_on_another_loop()
+        get_session()
+        await close_session()
+        self.assertTrue(other.closed)
+        self.assertEqual(session_module._sessions, {})
+
+    async def test_session_from_a_finished_loop_is_dropped(self):
+        other = await session_on_another_loop()
+        get_session()
+        self.assertTrue(other.closed)
+        self.assertEqual(len(session_module._sessions), 1)
 
 
 class Queries(ClientTestCase):

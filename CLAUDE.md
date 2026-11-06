@@ -76,6 +76,9 @@ Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multi
 - HTTP calls in `bot/` go through `get_session()` from `bot/clients/session.py`,
   not a new `ClientSession`. It closes each connection after its request and has
   no connection limit, on purpose (see that file).
+- The bot runs on several event loops. twitchAPI gives chat and each EventSub
+  websocket their own thread and loop, and commands run on those, not the main
+  loop. `get_session()` keeps one session per loop for this reason.
 - Live towns run on `pc3-server` (`rf_query_url`s, middleman `pc3-server:7101`,
   multichat `pc3-server:7200`), not this PC. Local logs and game files say nothing
   about live behaviour.

@@ -1,6 +1,9 @@
-"""The one aiohttp session behind the bot's HTTP clients.
+"""The aiohttp sessions behind the bot's HTTP clients.
 
-It is created on first use and `close_session()` ends it at shutdown.
+There is one session per event loop, because a session can only be used on the
+loop it was made on. The bot has several: twitchAPI runs chat and each EventSub
+websocket on its own thread and loop, and commands run on those loops. Sessions
+are created on first use and `close_session()` ends them at shutdown.
 
 Each request still gets its own connection (`force_close`). The game's query server
 hasn't been tested with reused connections, and a failed query can restart a town.
@@ -17,29 +20,36 @@ import asyncio
 
 import aiohttp
 
-_session: aiohttp.ClientSession | None = None
-_session_loop: asyncio.AbstractEventLoop | None = None
+_sessions: dict[asyncio.AbstractEventLoop, aiohttp.ClientSession] = {}
 
 
 def get_session() -> aiohttp.ClientSession:
-    """Returns the shared session. Must be called from a running event loop."""
-    global _session, _session_loop
+    """Returns this event loop's session. Must be called from a running event loop."""
     loop = asyncio.get_running_loop()
-    if _session is not None and not _session.closed and _session_loop is loop:
-        return _session
-    if _session is not None and not _session.closed:
-        # Left by another event loop, which can't close it any more
-        _session.detach()
-    _session = aiohttp.ClientSession(
+    session = _sessions.get(loop)
+    if session is not None and not session.closed:
+        return session
+    for other_loop in list(_sessions):
+        if other_loop.is_closed():
+            _sessions.pop(other_loop).detach()
+    session = aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(limit=0, force_close=True),
         cookie_jar=aiohttp.DummyCookieJar(),
     )
-    _session_loop = loop
-    return _session
+    _sessions[loop] = session
+    return session
 
 
 async def close_session() -> None:
-    global _session, _session_loop
-    session, _session, _session_loop = _session, None, None
-    if session is not None:
-        await session.close()
+    """Ends every session. Call it once the other loops have stopped.
+
+    A session can't be closed from another loop, so theirs are only detached.
+    """
+    loop = asyncio.get_running_loop()
+    sessions = list(_sessions.items())
+    _sessions.clear()
+    for session_loop, session in sessions:
+        if session_loop is loop:
+            await session.close()
+        else:
+            session.detach()
