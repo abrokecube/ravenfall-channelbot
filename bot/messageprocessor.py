@@ -158,6 +158,7 @@ class MessageProcessor:
         Returns:
             str: The processed message as a JSON string with a trailing newline.
         """
+        metadata: Optional[MessageMetadata] = None
         try:
             # Parse the message as JSON
             try:
@@ -169,8 +170,12 @@ class MessageProcessor:
                     connection_id=message_data.pop('connectionId', message_data.pop('connection_id', 'unknown')),
                     correlation_id=message_data.pop('correlationId', message_data.pop('correlation_id', '')),
                     is_api=message_data.pop('isApi', message_data.pop('is_api', False)),
-                    custom_metadata=message_data.pop('custom_metadata', {})
+                    custom_metadata=message_data.pop('custom_metadata', {}),
+                    client_addr=message_data.pop('clientAddr', message_data.pop('client_addr', '')),
+                    server_addr=message_data.pop('serverAddr', message_data.pop('server_addr', '')),
                 )
+                if 'timestamp' in message_data:
+                    metadata.timestamp = message_data.pop('timestamp')
                 
                 # The remaining data is the actual message content
                 message_content: RavenMessage = message_data.pop('message', {})
@@ -261,7 +266,10 @@ class MessageProcessor:
         except Exception as e:
             error_msg = f"Error processing message: {str(e)}"
             logger.error(error_msg, exc_info=True)
-            return json.dumps({"error": error_msg, "original_message": message}) + '\n'
+            response = {"error": error_msg, "original_message": message}
+            if metadata:
+                response.update(self._correlation_keys(metadata))
+            return json.dumps(response) + '\n'
     
     async def _handle_client(self, websocket: WebSocketServer) -> None:
         """Handle a new WebSocket client connection.

@@ -60,7 +60,7 @@ See [`channels_example.json`](/channels_example.json) for an example file. This 
 `auto_restart`               | Bot will auto restart the game periodically. Period is configured in `restart_period`
 `restart_period`             | If `auto_restart` is enabled, this determines how long the game should be alive before it needs a restart. Accepts a value in seconds.
 `event_notifications`        | Sends dungeon/raid information when a dungeon/raid starts. (ex. "`DUNGEON – Boss HP: 175,662 – Enemies: 49 – Players: 13`")
-`middleman_connection_id`    | ID used to identify message sources from the middleman. In the format `<client ip>_<client port>_<server port>`
+`middleman_connection_id`    | ID used to identify message sources from the middleman. Must equal the `connectionId` of this town's entry in the middleman's `proxyMappings`
 `ravenfall_loc_strings_path` | Path to a `.yaml` containing translation strings. See [definitions.yaml](data/definitions.yaml) for a list of keys, and [example_translation_strings.yaml](data/example_translation_strings.yaml) for example translations.
 `auto_restore_raids`         | Do not use this. Sends `!auto raid on` on behalf of users in the town that have already enabled auto raids. Was used when auto raid status was broken and didn't get restored on game restart.
 `channel_points_redeems`     | Listen for channel point redeems. Setting this to `false` will stop the bot from responding to redeems.

@@ -179,9 +179,9 @@ class RFChannelSubEvent(Enum):
 
 class RFMiddlemanMessage(TypedDict):
     source: str
-    client_addr: str
-    server_addr: str
-    connection_id: str
+    clientAddr: str
+    serverAddr: str
+    connectionId: str
     timestamp: str
     message: RavenfallMessage | RavenBotMessage
     

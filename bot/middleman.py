@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import aiohttp
+from urllib.parse import quote
 from typing import Dict, Optional, Tuple, Any, TypedDict
 from dataclasses import dataclass
 from .messageprocessor import RavenfallMessage
@@ -41,7 +42,7 @@ async def _call_middleman_api(endpoint: str, method: str = 'GET', data: Optional
                     return response_data, response.status
     except Exception as e:
         logger.error(f"Error calling middleman API: {str(e)}", exc_info=True)
-        return {"error": f"Failed to connect to middleman API: {str(e)}"}, 500
+        return {"success": False, "error": f"Failed to connect to middleman API: {str(e)}"}, 500
 
 async def force_reconnect(connection_id: str, timeout: int = 0) -> Dict:
     """Force a reconnection for the specified connection."""
@@ -84,14 +85,15 @@ class SendAndWaitResult(TypedDict, total=False):
     error: str  # Optional error message
 
 
-async def send_to_server_and_wait_response(connection_id: str, message: str, correlation_id: str = "", timeout: int = 30) -> SendAndWaitResult:
+async def send_to_server_and_wait_response(connection_id: str, message: str, timeout: int = 30) -> SendAndWaitResult:
     """
-    Send a message to the server and wait for a response with the given correlation ID.
+    Send a message to the server and wait for the response to it.
+
+    The response is matched by the CorrelationId inside `message`.
     
     Args:
         connection_id: The connection ID to send the message through
         message: The message to send to the server
-        correlation_id: Optional correlation ID to match the response. If not provided, one will be generated.
         timeout: Maximum time in seconds to wait for a response (default: 30)
         
     Returns:
@@ -102,10 +104,7 @@ async def send_to_server_and_wait_response(connection_id: str, message: str, cor
         "data": message,
         "timeout": timeout
     }
-    logger.debug(f"Sending message to server and waiting for response: {message}")    
-    if correlation_id:
-        data["correlationId"] = correlation_id
-        
+    logger.debug(f"Sending message to server and waiting for response: {message}")
     response, status = await _call_middleman_api('/api/send-and-wait-response', 'POST', data)
     logger.debug(f"Response from server: {response}")
     return response
@@ -147,7 +146,7 @@ async def get_connection_status(connection_id: str) -> tuple[ConnectionStatus | 
         Tuple of (ConnectionStatus, error_message). If successful, error_message is None.
         On error, ConnectionStatus is None and error_message contains the error.
     """
-    response, status = await _call_middleman_api(f'/api/connection-status?connectionId={connection_id}', 'GET')
+    response, status = await _call_middleman_api(f'/api/connection-status?connectionId={quote(connection_id, safe="")}', 'GET')
     
     if status != 200:
         return None, response.get('error', 'Unknown error')
@@ -172,8 +171,9 @@ class ServerConfig(TypedDict):
     defaultTimeoutSeconds: int
     noIdentifierTimeoutSeconds: int
     apiPort: int
-    identifier_timeouts: dict[str, int]
-    proxy_mappings: list[dict[str, Any]]
+    maxWriteRetries: int
+    identifierTimeouts: dict[str, int]
+    proxyMappings: list[dict[str, Any]]
     messageProcessor: dict[str, Any]
 
 

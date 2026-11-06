@@ -285,8 +285,8 @@ class RFChannel:
                 self.middleman_connection_id,
                 RavenBotTemplates.inspect(
                     username=arguments[0] if arguments else message.user.name,
+                    correlation_id=message.id,
                 ),
-                message.id,
                 timeout=3
             )
             if response.get('responses'):
