@@ -15,12 +15,17 @@ from bot.cogs.game import GameCog
 from bot.message_templates import RavenBotTemplates
 from bot.ravenfallchannel import RFChannel
 from bot.ravenfallloc import RavenfallLocalization
+from bot.models import QueuedScroll, ScrollType
 from bot.streamquests import (
+    RunningQuest,
     TownActivity,
     completion_ratio,
+    faster_offer,
     is_working,
+    natural_wait_minutes,
     parse_offer,
     parse_offers,
+    parse_running,
     pick_offer,
 )
 
@@ -30,6 +35,10 @@ RUNNING_FORMAT = "Stream quest: {quest} ({progress}/{amount}), {minutes} minutes
 
 def offers_reply(text: str) -> dict:
     return {"Format": OFFERS_FORMAT, "Args": [text]}
+
+
+def running_reply(text: str = "Win 3 raids", progress: str = "0", amount: str = "3") -> dict:
+    return {"Format": RUNNING_FORMAT, "Args": [text, progress, amount, 100, 5, "some coins"]}
 
 
 def player(training: str = "None", name: str = "a", **state) -> dict:
@@ -76,6 +85,12 @@ class ParseOffers(unittest.TestCase):
     def test_a_running_quest_has_no_offers(self):
         self.assertEqual(parse_offers({"Format": RUNNING_FORMAT, "Args": ["Chop 300 wood", "5", "300"]}), [])
 
+    def test_a_running_quest_is_read_from_its_status(self):
+        self.assertEqual(
+            parse_running(running_reply("Defeat 1,200 enemies", "1,050", "1,200")),
+            RunningQuest("Defeat 1,200 enemies", "kill", 1200, 1050),
+        )
+
     def test_no_offers_left(self):
         self.assertEqual(parse_offers(offers_reply("none left today")), [])
 
@@ -107,11 +122,29 @@ class Estimates(unittest.TestCase):
         offer = parse_offer(1, "Gain 12 levels", 120)
         self.assertEqual(completion_ratio(offer, TownActivity(players=[player()], levels_per_minute=0.2)), 2)
 
-    def test_queued_scrolls_count_towards_events(self):
-        offer = parse_offer(1, "Win 3 raids", 120)
+    def added_by_scrolls(self, text: str, **activity) -> float:
+        offer = parse_offer(1, text, 120)
         without = completion_ratio(offer, TownActivity(players=[player()]))
-        with_scrolls = completion_ratio(offer, TownActivity(players=[player()], raid_scrolls=3))
-        self.assertAlmostEqual(with_scrolls - without, 1)
+        return (completion_ratio(offer, TownActivity(players=[player()], **activity)) - without) * offer.amount
+
+    def test_queued_scrolls_count_towards_events(self):
+        self.assertAlmostEqual(self.added_by_scrolls("Win 3 raids", raid_scrolls=3, raids_queued=3), 3)
+
+    def test_scrolls_nobody_uses_count_for_nothing(self):
+        self.assertAlmostEqual(self.added_by_scrolls("Win 3 raids", raid_scrolls=50), 0)
+
+    def test_the_rest_of_the_stock_goes_at_the_recent_pace(self):
+        self.assertAlmostEqual(self.added_by_scrolls("Win 9 raids", raid_scrolls=50, scroll_uses=1), 8)
+
+    def test_the_stock_caps_the_pace(self):
+        self.assertAlmostEqual(self.added_by_scrolls("Win 3 raids", raid_scrolls=2, raids_queued=1, scroll_uses=9), 2)
+
+    def test_queued_scrolls_beyond_the_stock_do_not_count(self):
+        self.assertAlmostEqual(self.added_by_scrolls("Win 3 raids", raid_scrolls=1, raids_queued=3), 1)
+
+    def test_each_kind_uses_its_own_stock(self):
+        self.assertAlmostEqual(self.added_by_scrolls("Clear 2 dungeons", raid_scrolls=5, scroll_uses=9), 0)
+        self.assertAlmostEqual(self.added_by_scrolls("Clear 2 dungeons", dungeon_scrolls=2, scroll_uses=9), 2)
 
     def test_items_and_hero_waves_never_progress_by_themselves(self):
         town = TownActivity(players=[player("Crafting"), player("Cooking")])
@@ -143,6 +176,59 @@ class Picking(unittest.TestCase):
     def test_an_offer_that_finishes_just_in_time_is_picked(self):
         offer = parse_offer(1, "Catch 360 fish", 60)
         self.assertEqual(pick_offer([offer], TownActivity(players=[player("Fishing")])), offer)
+
+
+    def test_natural_events_are_a_last_resort(self):
+        raid = parse_offer(1, "Win a raid", 120)
+        fish = parse_offer(2, "Catch 300 fish", 60)
+        town = TownActivity(players=[player("Fishing")])
+        self.assertGreater(completion_ratio(raid, town), completion_ratio(fish, town))
+        self.assertEqual(pick_offer([raid, fish], town), fish)
+
+    def test_natural_events_are_picked_when_nothing_else_would_finish(self):
+        raid = parse_offer(1, "Win a raid", 120)
+        fish = parse_offer(2, "Catch 900 fish", 60)
+        self.assertEqual(pick_offer([raid, fish], TownActivity(players=[player("Fishing")])), raid)
+
+    def test_recent_uses_or_a_queued_scroll_rank_it_normally(self):
+        raid = parse_offer(1, "Win a raid", 120)
+        fish = parse_offer(2, "Catch 300 fish", 60)
+        fishers = [player("Fishing")]
+        self.assertEqual(pick_offer([raid, fish], TownActivity(players=fishers, scroll_uses=1)), raid)
+        self.assertEqual(pick_offer([raid, fish], TownActivity(players=fishers, raid_scrolls=1, raids_queued=1)), raid)
+
+
+class FasterOffer(unittest.TestCase):
+    QUEST = RunningQuest("Win 2 raids", "raid", 2, 0)
+
+    def test_the_wait_counts_only_what_is_left(self):
+        self.assertAlmostEqual(natural_wait_minutes(self.QUEST), 2 * 4750 / 60)
+        self.assertAlmostEqual(natural_wait_minutes(RunningQuest("Clear 2 dungeons", "dungeon", 2, 1)), 5250 / 60)
+
+    def test_an_offer_that_finishes_sooner_wins(self):
+        offer = parse_offer(1, "Catch 300 fish", 60)
+        self.assertEqual(faster_offer([offer], self.QUEST, TownActivity(players=[player("Fishing")])), offer)
+
+    def test_the_soonest_of_several_wins(self):
+        slow = parse_offer(1, "Catch 300 fish", 60)
+        fast = parse_offer(2, "Chop 60 wood", 60)
+        town = TownActivity(players=[player("Fishing"), player("Woodcutting")])
+        self.assertEqual(faster_offer([slow, fast], self.QUEST, town), fast)
+
+    def test_nothing_finishable_keeps_the_quest(self):
+        offer = parse_offer(1, "Catch 900 fish", 60)
+        self.assertIsNone(faster_offer([offer], self.QUEST, TownActivity(players=[player("Fishing")])))
+
+    def test_an_offer_slower_than_the_wait_keeps_the_quest(self):
+        quest = RunningQuest("Win 2 raids", "raid", 2, 1)
+        offer = parse_offer(1, "Catch 700 fish", 120)
+        town = TownActivity(players=[player("Fishing")])
+        self.assertEqual(pick_offer([offer], town), offer)
+        self.assertIsNone(faster_offer([offer], quest, town))
+
+    def test_the_same_kind_or_natural_events_are_not_an_alternative(self):
+        offers = [parse_offer(1, "Win a raid", 120), parse_offer(2, "Clear a dungeon", 120)]
+        self.assertIsNone(faster_offer(offers, RunningQuest("Win 3 raids", "raid", 3, 0), TownActivity(players=[player()])))
 
 
 class LevelRate(unittest.IsolatedAsyncioTestCase):
@@ -179,6 +265,12 @@ class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
         town.channel_restart_lock = mock.Mock(locked=mock.Mock(return_value=False))
         town.restart_task = None
         town.next_stream_quest_check = 0
+        town.rfloc = RavenfallLocalization("data/definitions.yaml")
+        town.scroll_uses = deque()
+        town.saved_stream_quest_offers = []
+        town.saved_stream_quest_offers_day = None
+        town.watched_stream_quest = None
+        town.watched_stream_quest_answered_at = 0
         town.ravenbot_prefixes = ("!",)
         town.scroll_queue = deque()
         town.send_chat_message = mock.AsyncMock()
@@ -218,7 +310,7 @@ class QuestRoutine(RoutineTestCase):
 
     async def test_nothing_is_said_while_a_quest_runs(self):
         town = self.make_town([player("Fishing")])
-        await self.tick(town, {"success": True, "responses": [{"Format": RUNNING_FORMAT, "Args": []}]})
+        await self.tick(town, {"success": True, "responses": [running_reply()]})
         town.send_chat_message.assert_not_awaited()
 
     async def test_nothing_is_said_when_the_game_does_not_answer(self):
@@ -260,12 +352,26 @@ class QuestRoutine(RoutineTestCase):
 
     async def test_scrolls_in_stock_reach_the_estimate(self):
         town = self.make_town([player()])
+        town.scroll_uses.append(ravenfallchannel.time.time())
         await self.tick(
             town,
             self.offers("1. Clear 2 dungeons (120 min), 2. Win 3 raids (120 min)"),
             self.scroll_counts(raid=5),
         )
         town.send_chat_message.assert_awaited_once_with("!quest stream start 2")
+
+    async def test_old_uses_and_the_queue_reach_the_estimate(self):
+        town = self.make_town([player()])
+        now = ravenfallchannel.time.time()
+        town.scroll_uses.extend([now - 16 * 60, now - 60, now - 30])
+        town.scroll_queue.append(QueuedScroll(ScrollType.DUNGEON, None, None, "1", 0))
+        self.assertEqual(town.count_scroll_uses(), 2)
+        await self.tick(
+            town,
+            self.offers("1. Clear 2 dungeons (120 min)"),
+            self.scroll_counts(dungeon=1),
+        )
+        town.send_chat_message.assert_awaited_once_with("!quest stream start 1")
 
     async def test_skips_a_town_that_is_turned_off_or_restarting(self):
         town = self.make_town([player("Fishing")])
@@ -296,6 +402,85 @@ class QuestRoutine(RoutineTestCase):
         )
 
 
+class UnansweredQuest(RoutineTestCase):
+    FISH = "1. Catch 300 fish (60 min), 2. Win 3 raids (120 min)"
+
+    async def town_with_saved_offers(self, offers: str = FISH) -> RFChannel:
+        """A town that saved its offers, then started quest 2 sixteen minutes ago."""
+        town = self.make_town([player("Fishing")])
+        town.scroll_uses.append(ravenfallchannel.time.time())
+        await self.tick(town, self.offers(offers))
+        town.send_chat_message.reset_mock()
+        town.scroll_uses.clear()
+        await self.check(town)
+        town.watched_stream_quest_answered_at -= 16 * 60
+        return town
+
+    async def check(self, town: RFChannel, reply: dict | None = None):
+        await self.tick(town, {"success": True, "responses": [reply or running_reply()]})
+
+    async def test_stops_for_an_offer_that_is_faster(self):
+        town = await self.town_with_saved_offers()
+        await self.check(town)
+        town.send_chat_message.assert_awaited_once_with("!quest stream stop")
+
+    async def test_keeps_the_quest_when_nothing_is_faster(self):
+        town = await self.town_with_saved_offers("1. Catch 900 fish (60 min), 2. Win 3 raids (120 min)")
+        await self.check(town)
+        town.send_chat_message.assert_not_awaited()
+
+    async def test_the_quest_gets_fifteen_minutes_first(self):
+        town = await self.town_with_saved_offers()
+        town.watched_stream_quest_answered_at += 2 * 60
+        await self.check(town)
+        town.send_chat_message.assert_not_awaited()
+
+    async def test_a_scroll_use_answers_it(self):
+        town = await self.town_with_saved_offers()
+        town.scroll_uses.append(ravenfallchannel.time.time() - 60)
+        await self.check(town)
+        town.send_chat_message.assert_not_awaited()
+
+    async def test_progress_answers_it(self):
+        town = await self.town_with_saved_offers()
+        await self.check(town, running_reply(progress="1"))
+        town.send_chat_message.assert_not_awaited()
+
+    async def test_a_different_quest_starts_its_own_wait(self):
+        town = await self.town_with_saved_offers()
+        await self.check(town, running_reply("Clear a dungeon", amount="1"))
+        town.send_chat_message.assert_not_awaited()
+
+    async def test_other_quests_are_left_alone(self):
+        town = await self.town_with_saved_offers()
+        await self.check(town, running_reply("Chop 300 wood", amount="300"))
+        town.send_chat_message.assert_not_awaited()
+        self.assertIsNone(town.watched_stream_quest)
+
+    async def test_no_saved_offers_keeps_the_quest(self):
+        town = await self.town_with_saved_offers()
+        town.saved_stream_quest_offers = []
+        await self.check(town)
+        town.send_chat_message.assert_not_awaited()
+
+    async def test_yesterdays_offers_keep_the_quest(self):
+        town = await self.town_with_saved_offers()
+        town.saved_stream_quest_offers_day = ravenfallchannel.datetime(2000, 1, 1).date()
+        await self.check(town)
+        town.send_chat_message.assert_not_awaited()
+
+    async def test_the_log_says_why_it_stayed_or_stopped(self):
+        town = await self.town_with_saved_offers("1. Catch 900 fish (60 min), 2. Win 3 raids (120 min)")
+        with self.assertLogs("bot.streamquests", level="INFO") as logs:
+            await self.check(town)
+        self.assertIn("kept the quest, Win 3 raids needs about 238 min more", "\n".join(logs.output))
+
+        town = await self.town_with_saved_offers()
+        with self.assertLogs("bot.streamquests", level="INFO") as logs:
+            await self.check(town)
+        self.assertIn("stopping the quest, Win 3 raids needs about 238 min more, 1 is faster", "\n".join(logs.output))
+
+
 class QuestLog(RoutineTestCase):
     """Every check says what it decided in the log."""
 
@@ -318,7 +503,7 @@ class QuestLog(RoutineTestCase):
 
     async def test_a_running_quest_is_quoted(self):
         town = self.make_town([player()])
-        reply = {"success": True, "responses": [{"Format": RUNNING_FORMAT, "Args": ["Chop 300 wood"]}]}
+        reply = {"success": True, "responses": [running_reply("Chop 300 wood", amount="300")]}
         self.assertIn("Chop 300 wood", await self.logged(town, reply))
 
     async def test_no_reply_is_logged(self):
@@ -371,6 +556,8 @@ class QuestEnd(unittest.IsolatedAsyncioTestCase):
         town.auto_end_ravebridge = False
         town.ravenfall_loc_strings_path = None
         town.next_stream_quest_check = ravenfallchannel.time.time() + 45
+        town.scroll_uses = deque()
+        town.watched_stream_quest = RunningQuest("Win 3 raids", "raid", 3, 0)
         return town
 
     async def announce(self, town: RFChannel, message_format: str):
@@ -389,6 +576,7 @@ class QuestEnd(unittest.IsolatedAsyncioTestCase):
                 await self.announce(town, message_format)
                 left = town.next_stream_quest_check - ravenfallchannel.time.time()
                 self.assertAlmostEqual(left, 1, delta=0.5)
+                self.assertIsNone(town.watched_stream_quest)
 
     async def test_a_quest_starting_or_running_does_not(self):
         town = self.make_town()
@@ -397,6 +585,17 @@ class QuestEnd(unittest.IsolatedAsyncioTestCase):
         await self.announce(town, OFFERS_FORMAT)
         await self.announce(town, "Stream quest! {quest} within {minutes} minutes, all of us together. Reward: {reward}. Just play to help!")
         self.assertEqual(town.next_stream_quest_check, check)
+
+    async def test_every_scroll_use_is_recorded(self):
+        town = self.make_town()
+        for message_format in (
+            "You have used a Raid Scroll.",
+            "You have used a Raid Scroll and joined the raid. Good luck!",
+            "You have used a Dungeon Scroll.",
+            "You have used a Dungeon Scroll and joined the dungeon. Good luck!",
+        ):
+            await self.announce(town, message_format)
+        self.assertEqual(len(town.scroll_uses), 4)
 
 
 class QuestToggle(unittest.IsolatedAsyncioTestCase):

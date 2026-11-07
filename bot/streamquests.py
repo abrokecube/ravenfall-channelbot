@@ -35,6 +35,10 @@ KILLS_PER_MINUTE = 10
 SECONDS_BETWEEN_RAIDS = 4750
 SECONDS_BETWEEN_DUNGEONS = 5250
 
+# Scroll uses are read over this long, and a raid or dungeon quest this long without
+# an answer is compared with the other offers
+SCROLL_USE_WINDOW_SECONDS = 15 * 60
+
 # What `training` says for each fighter. "Melee" is train all
 FIGHTING = frozenset({"attack", "defense", "strength", "health", "melee", "all", "magic", "ranged"})
 
@@ -42,6 +46,13 @@ _OFFER = re.compile(r"(\d+)\.\s+(.+?)\s+\((\d+)\s+min\)")
 
 # The keys in `data/definitions.yaml` of the game saying a stream quest is over
 QUEST_END_KEYS = frozenset({"stream_quest_done", "stream_quest_out_of_time", "stream_quest_stopped"})
+QUEST_STATUS_KEY = "stream_quest_info"
+SCROLL_USE_KEYS = frozenset({
+    "raid_scroll_used",
+    "raid_scroll_used_joined",
+    "dungeon_scroll_used",
+    "dungeon_scroll_used_joined",
+})
 
 _NUMBER = r"([\d,]+)"
 _OFFER_TEXTS: tuple[tuple[re.Pattern[str], str, Optional[str]], ...] = (
@@ -74,6 +85,14 @@ class StreamQuestOffer:
 
 
 @dataclass(frozen=True)
+class RunningQuest:
+    text: str
+    objective: Optional[str]
+    amount: int
+    progress: int
+
+
+@dataclass(frozen=True)
 class TownActivity:
     """What the town is doing now, which is taken to carry on for the whole quest."""
 
@@ -82,6 +101,11 @@ class TownActivity:
     raid_scrolls: int = 0
     """Raid scrolls the town has in stock, whether or not any are queued."""
     dungeon_scrolls: int = 0
+    raids_queued: int = 0
+    dungeons_queued: int = 0
+    scroll_uses: int = 0
+    """Raid and dungeon scrolls used together in the last `SCROLL_USE_WINDOW_SECONDS`.
+    Either kind says someone is in chat to use more."""
 
 
 def parse_offer(slot: int, text: str, minutes: int) -> StreamQuestOffer:
@@ -108,6 +132,17 @@ def parse_offers(message: Mapping[str, Any]) -> list[StreamQuestOffer]:
     ]
 
 
+def parse_running(message: Mapping[str, Any]) -> RunningQuest:
+    """The quest in a `stream_quest_info` reply. Its args are the quest, progress and amount, then the rest."""
+    text, progress, amount = message["Args"][:3]
+    offer = parse_offer(0, text, 0)
+    return RunningQuest(text, offer.objective, _number(amount), _number(progress))
+
+
+def _number(text: Any) -> int:
+    return int(str(text).replace(",", ""))
+
+
 def is_working(player: Mapping[str, Any]) -> bool:
     """Whether the player is at their training, which is where quest progress comes from."""
     if player.get("training") in (None, "", "None") or player.get("island") in (None, "", "None"):
@@ -126,6 +161,27 @@ def _workers(players: Iterable[Mapping[str, Any]], trained: Iterable[str]) -> in
     )
 
 
+def _queued_and_stock(offer: StreamQuestOffer, town: TownActivity) -> tuple[int, int]:
+    if offer.objective == RAID:
+        return town.raids_queued, town.raid_scrolls
+    return town.dungeons_queued, town.dungeon_scrolls
+
+
+def _scrolls_expected(offer: StreamQuestOffer, town: TownActivity) -> float:
+    """Queued scrolls will be used. The rest of the stock goes at the recent pace."""
+    queued, stock = _queued_and_stock(offer, town)
+    queued = min(queued, stock)
+    paced = town.scroll_uses * offer.minutes * 60 / SCROLL_USE_WINDOW_SECONDS
+    return queued + min(stock - queued, paced)
+
+
+def waits_on_natural_events(offer: StreamQuestOffer, town: TownActivity) -> bool:
+    """Whether only the game's own timers would move this offer: nobody is using scrolls."""
+    if offer.objective not in (RAID, DUNGEON):
+        return False
+    return town.scroll_uses == 0 and _queued_and_stock(offer, town)[0] == 0
+
+
 def expected_progress(offer: StreamQuestOffer, town: TownActivity) -> float:
     """How far the town should get on this offer within its time limit."""
     if not town.players:
@@ -137,9 +193,9 @@ def expected_progress(offer: StreamQuestOffer, town: TownActivity) -> float:
     if offer.objective == LEVELS:
         return town.levels_per_minute * offer.minutes
     if offer.objective == RAID:
-        return town.raid_scrolls + offer.minutes * 60 / SECONDS_BETWEEN_RAIDS
+        return _scrolls_expected(offer, town) + offer.minutes * 60 / SECONDS_BETWEEN_RAIDS
     if offer.objective == DUNGEON:
-        return town.dungeon_scrolls + offer.minutes * 60 / SECONDS_BETWEEN_DUNGEONS
+        return _scrolls_expected(offer, town) + offer.minutes * 60 / SECONDS_BETWEEN_DUNGEONS
     # Items only count from !craft, !cook and !brew, never from training, and
     # hero waves need the streamer playing their hero
     return 0
@@ -153,9 +209,41 @@ def completion_ratio(offer: StreamQuestOffer, town: TownActivity) -> float:
 
 
 def pick_offer(offers: Iterable[StreamQuestOffer], town: TownActivity) -> Optional[StreamQuestOffer]:
-    """The offer the town is most likely to finish, or None if it should finish none in time."""
-    best = max(offers, key=lambda offer: completion_ratio(offer, town), default=None)
-    if best is None or completion_ratio(best, town) < 1:
+    """The offer the town is most likely to finish, or None if it should finish none in time.
+
+    An offer waiting on natural raids or dungeons is a last resort.
+    """
+    finishable = [offer for offer in offers if completion_ratio(offer, town) >= 1]
+    return max(
+        finishable,
+        key=lambda offer: (not waits_on_natural_events(offer, town), completion_ratio(offer, town)),
+        default=None,
+    )
+
+
+def natural_wait_minutes(quest: RunningQuest) -> float:
+    """How long the rest of a raid or dungeon quest takes on the game's own timers."""
+    seconds = SECONDS_BETWEEN_RAIDS if quest.objective == RAID else SECONDS_BETWEEN_DUNGEONS
+    return (quest.amount - quest.progress) * seconds / 60
+
+
+def faster_offer(
+    offers: Iterable[StreamQuestOffer], quest: RunningQuest, town: TownActivity
+) -> Optional[StreamQuestOffer]:
+    """The offer that should finish soonest, if that beats waiting out the running quest."""
+    candidates = [
+        offer for offer in offers
+        if offer.objective != quest.objective
+        and completion_ratio(offer, town) >= 1
+        and not waits_on_natural_events(offer, town)
+    ]
+
+    def finish_minutes(offer: StreamQuestOffer) -> float:
+        # Progress is taken to be even over the offer's time limit
+        return offer.minutes / completion_ratio(offer, town)
+
+    best = min(candidates, key=finish_minutes, default=None)
+    if best is None or finish_minutes(best) >= natural_wait_minutes(quest):
         return None
     return best
 

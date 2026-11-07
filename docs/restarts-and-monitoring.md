@@ -116,7 +116,19 @@ middleman to read the offers, which keeps `!quest stream` out of chat. Then
 share of its target. If no offer should reach its target within its time limit, it
 picks none and the routine tries again on the next check. Otherwise the routine sends
 `!quest stream start <n>` in chat, so the bot account must be a moderator. A start the
-game refuses is sent again on the next check. Setting `auto_stream_quests` to false in a town's
+game refuses is sent again on the next check. A raid or dungeon offer that only the
+game's own timers would move, with no scrolls queued for it and none of either kind
+used in the last 15 minutes, is a last resort: it's picked only if no other offer should
+finish in time.
+
+While a raid or dungeon quest runs, the routine watches for an answer: a raid or
+dungeon scroll used, or progress on the quest. After 15 minutes without one it compares
+the quest with the offers it saved that day, because the game doesn't name them while a
+quest runs. It compares them against how long the rest of the quest would take on the
+game's own timers, and sends `!quest stream stop` if an offer should finish sooner.
+Otherwise the quest stays up to its time limit. With no offers saved that day, after a
+bot restart for example, the quest stays too. This covers any raid or dungeon quest,
+whoever started it. Setting `auto_stream_quests` to false in a town's
 `channels.json` entry turns it off, and moderators can toggle it with `!rfquesttoggle`
 until the bot restarts. Each check writes what it decided and why to
 `logs/streamquests.log`, with every offer's expected share of its target.
@@ -128,7 +140,7 @@ The estimate assumes the town keeps doing what it's doing now:
 | Gathering | Players working that skill, 6 rounds a minute each |
 | Kills | Fighters at 10 kills a minute each (`KILLS_PER_MINUTE`), measured from one quest in a high-level town |
 | Levels | The town's level gain, measured from two player lists 60 seconds apart |
-| Raids, dungeons | Queued scrolls plus the game's average spawn timer |
+| Raids, dungeons | Queued scrolls, plus the rest of the stock at the pace raid and dungeon scrolls together were used over the last 15 minutes, plus the game's average spawn timer |
 | Items, hero waves | None, so they're never started: they need `!craft`, `!cook` and `!brew`, or the streamer's hero |
 
 ## Updater

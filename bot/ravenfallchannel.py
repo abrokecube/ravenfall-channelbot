@@ -24,11 +24,21 @@ from .ravenfallloc import RavenfallLocalization, round_skill_bonuses
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from .streamquests import (
+    DUNGEON,
+    LEVELS,
     QUEST_END_KEYS,
+    QUEST_STATUS_KEY,
+    RAID,
+    SCROLL_USE_KEYS,
+    SCROLL_USE_WINDOW_SECONDS,
+    RunningQuest,
     StreamQuestOffer,
     TownActivity,
     describe_offers,
+    faster_offer,
+    natural_wait_minutes,
     parse_offers,
+    parse_running,
     pick_offer,
 )
 from .streamquests import logger as quest_logger
@@ -186,6 +196,11 @@ class RFChannel:
         self.scroll_queue: deque[QueuedScroll] = deque()
         self.scroll_queue_failures = 0
         self.next_stream_quest_check: float = time.time() + STREAM_QUEST_CHECK_SECONDS
+        self.scroll_uses: deque[float] = deque(maxlen=200)
+        self.saved_stream_quest_offers: list[StreamQuestOffer] = []
+        self.saved_stream_quest_offers_day = None
+        self.watched_stream_quest: RunningQuest | None = None
+        self.watched_stream_quest_answered_at: float = 0
 
     async def save_scroll_queue(self):
         encoded = []
@@ -389,7 +404,10 @@ class RFChannel:
         if match is not None:
             key = match.key
         if key in QUEST_END_KEYS:
+            self.watched_stream_quest = None
             self.next_stream_quest_check = time.time() + STREAM_QUEST_END_DELAY_SECONDS
+        elif key in SCROLL_USE_KEYS:
+            self.scroll_uses.append(time.time())
         if key == "not_playing" and message['CorrelationId'] in self.named_observes:
             return {'block': True}
         message_args = message['Args']
@@ -914,8 +932,8 @@ class RFChannel:
         await self.send_chat_message(welcome_msg)
         cd.update_rate_limit()
         
-    async def get_stream_quest_offers(self) -> list[StreamQuestOffer]:
-        """Today's stream quests, or nothing if one is running or the game didn't answer.
+    async def get_stream_quest_reply(self) -> dict | None:
+        """The game's reply to `!quest stream`, or None if it didn't answer.
 
         The reply goes to the bot alone, so this doesn't show in chat.
         """
@@ -931,12 +949,23 @@ class RFChannel:
         )
         if not response.get('responses'):
             quest_logger.info(f"{self.channel_name}: no reply from the game: {response}")
+            return None
+        return response['responses'][0]
+
+    def save_stream_quest_offers(self, offers: list[StreamQuestOffer]):
+        """The game won't name the offers while a quest runs, so the town keeps today's."""
+        self.saved_stream_quest_offers = offers
+        self.saved_stream_quest_offers_day = datetime.now(timezone.utc).date()
+
+    def get_saved_stream_quest_offers(self) -> list[StreamQuestOffer]:
+        if self.saved_stream_quest_offers_day != datetime.now(timezone.utc).date():
             return []
-        reply = response['responses'][0]
-        offers = parse_offers(reply)
-        if not offers:
-            quest_logger.info(f"{self.channel_name}: no offers to start: {reply.get('Format')} {reply.get('Args')}")
-        return offers
+        return self.saved_stream_quest_offers
+
+    def count_scroll_uses(self) -> int:
+        """Raid and dungeon scrolls used in the town over the last 15 minutes."""
+        since = time.time() - SCROLL_USE_WINDOW_SECONDS
+        return sum(1 for used in list(self.scroll_uses) if used >= since)
 
     async def measure_levels_per_minute(self) -> float | None:
         """The levels the town gained per minute over the last hour, read back from Prometheus.
@@ -988,11 +1017,30 @@ class RFChannel:
             )
         if self.channel_restart_lock.locked() or self._restart_is_imminent():
             return skip("the town is restarting")
-        offers = await self.get_stream_quest_offers()
-        if not offers:
+        reply = await self.get_stream_quest_reply()
+        if reply is None:
             return
+        offers = parse_offers(reply)
+        if not offers:
+            quest_logger.info(f"{self.channel_name}: no offers to start: {reply.get('Format')} {reply.get('Args')}")
+            match = self.rfloc.identify_string(reply.get('Format') or '')
+            if match is not None and match.key == QUEST_STATUS_KEY:
+                await self.review_running_quest(parse_running(reply), skip)
+            return
+        self.save_stream_quest_offers(offers)
+        town = await self.read_town_activity(offers, skip)
+        if town is None:
+            return
+        best = pick_offer(offers, town)
+        if best is None:
+            return skip(f"no offer should finish in time: {describe_offers(offers, town)}")
+        quest_logger.info(f"{self.channel_name}: starting {best.slot}: {describe_offers(offers, town)}")
+        await self.send_chat_message(f"{self.ravenbot_prefixes[0]}quest stream start {best.slot}")
+
+    async def read_town_activity(self, offers: list[StreamQuestOffer], skip) -> TownActivity | None:
+        """What the estimates need for these offers. If some of it isn't available, `skip` says so."""
         rate = 0
-        if any(offer.objective == "levels" for offer in offers):
+        if any(offer.objective == LEVELS for offer in offers):
             rate = await self.measure_levels_per_minute()
             if rate is None:
                 return skip("Prometheus had no level history to measure levels")
@@ -1000,23 +1048,52 @@ class RFChannel:
         if not players:
             return skip("the town has no players or the player list wasn't available")
         raid_scrolls = dungeon_scrolls = 0
-        if any(offer.objective in ("raid", "dungeon") for offer in offers):
+        if any(offer.objective in (RAID, DUNGEON) for offer in offers):
             scrolls = await get_scroll_counts(self.channel_id)
             if scrolls['status'] != 200:
                 return skip(f"the scroll counts weren't available: {scrolls.get('error')}")
             raid_scrolls = scrolls['data']['channel']['Raid Scroll']
             dungeon_scrolls = scrolls['data']['channel']['Dungeon Scroll']
-        town = TownActivity(
+        queue = list(self.scroll_queue)
+        return TownActivity(
             players=players,
             levels_per_minute=rate,
             raid_scrolls=raid_scrolls,
             dungeon_scrolls=dungeon_scrolls,
+            raids_queued=sum(1 for item in queue if item.scroll == ScrollType.RAID),
+            dungeons_queued=sum(1 for item in queue if item.scroll == ScrollType.DUNGEON),
+            scroll_uses=self.count_scroll_uses(),
         )
-        best = pick_offer(offers, town)
-        if best is None:
-            return skip(f"no offer should finish in time: {describe_offers(offers, town)}")
-        quest_logger.info(f"{self.channel_name}: starting {best.slot}: {describe_offers(offers, town)}")
-        await self.send_chat_message(f"{self.ravenbot_prefixes[0]}quest stream start {best.slot}")
+
+    async def review_running_quest(self, quest: RunningQuest, skip):
+        """Stops a raid or dungeon quest nobody has answered for 15 minutes, if another offer would finish sooner.
+
+        Otherwise it stays up to its time limit, for the game's own raids and dungeons.
+        """
+        if quest.objective not in (RAID, DUNGEON):
+            self.watched_stream_quest = None
+            return
+        now = time.time()
+        watched = self.watched_stream_quest
+        if watched is None or watched.text != quest.text or quest.progress > watched.progress:
+            self.watched_stream_quest_answered_at = now
+        self.watched_stream_quest = quest
+        uses = list(self.scroll_uses)
+        answered_at = max(self.watched_stream_quest_answered_at, uses[-1] if uses else 0)
+        if now - answered_at <= SCROLL_USE_WINDOW_SECONDS:
+            return
+        offers = self.get_saved_stream_quest_offers()
+        if not offers:
+            return skip("kept the quest, no offers saved today to compare it with")
+        town = await self.read_town_activity(offers, skip)
+        if town is None:
+            return
+        waiting = f"{quest.text} needs about {natural_wait_minutes(quest):.0f} min more"
+        faster = faster_offer(offers, quest, town)
+        if faster is None:
+            return skip(f"kept the quest, {waiting}, nothing beats that: {describe_offers(offers, town)}")
+        quest_logger.info(f"{self.channel_name}: stopping the quest, {waiting}, {faster.slot} is faster: {describe_offers(offers, town)}")
+        await self.send_chat_message(f"{self.ravenbot_prefixes[0]}quest stream stop")
 
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def scroll_queue_routine(self):
