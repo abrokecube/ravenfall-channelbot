@@ -564,6 +564,7 @@ class InfoCog(Cog):
             f"{"STATUS".ljust(7)}  "
             f"{"ISLAND".ljust(8)}  "
             f"{"RstTIME".ljust(7)}  "
+            f"{"COINS".rjust(15)}  "
             f"{"XP RATE".rjust(13)} "
             f"GRAPH (10min) -- "
             f"TRAINING SKILL  ", 
@@ -641,6 +642,7 @@ class InfoCog(Cog):
                     f"{where.ljust(7)}  "
                     f"{where_island.ljust(8)}  "
                     f"{rest_time.ljust(7)}  "
+                    f"{f"{char.coins:,}".rjust(15)}  "
                     f"{(numerize(series[-1][1]) + " exp/h").rjust(13)} "
                     f"{graph} "
                     f"{what}  ", 
