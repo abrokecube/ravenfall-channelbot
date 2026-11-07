@@ -14,6 +14,7 @@
         "middleman_connection_id": "127.0.0.1_8040_4040",
         "ravenfall_loc_strings_path": "C:/Users/borkedcube/stuff/rf_strings/strings-abrokecube.yaml",
         "auto_restore_raids": false,
+        "auto_stream_quests": true,
         "channel_points_redeems": true,
         "pause_monitoring": false
     },
@@ -32,6 +33,7 @@
         "middleman_connection_id": "127.0.0.1_8041_4041",
         "ravenfall_loc_strings_path": "C:/Users/borkedcube/stuff/rf_strings/strings1.yaml",
         "auto_restore_raids": false,
+        "auto_stream_quests": true,
         "pause_monitoring": false
     },
     {
@@ -49,6 +51,7 @@
         "middleman_connection_id": "127.0.0.1_8042_4042",
         "ravenfall_loc_strings_path": "C:/Users/borkedcube/stuff/rf_strings/strings1.yaml",
         "auto_restore_raids": false,
+        "auto_stream_quests": true,
         "pause_monitoring": false
     },
     {
@@ -66,6 +69,7 @@
         "middleman_connection_id": "127.0.0.1_8043_4043",
         "ravenfall_loc_strings_path": "C:/Users/borkedcube/stuff/rf_strings/strings1.yaml",
         "auto_restore_raids": false,
+        "auto_stream_quests": true,
         "pause_monitoring": false
     }
 ]

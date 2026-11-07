@@ -23,6 +23,7 @@ from .messageprocessor import RavenMessage, MessageMetadata
 from .ravenfallloc import RavenfallLocalization, round_skill_bonuses
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
+from .streamquests import StreamQuestOffer, TownActivity, levels_per_minute, parse_offers, pick_offer
 from .exceptions import OutOfStockError
 from .commands.events import TwitchRedemptionEvent
 from .commands.enums import TwitchCustomRewardRedemptionStatus
@@ -58,6 +59,9 @@ RETRY_WINDOW = 3 * 60  # Number of seconds to wait before resetting attempt coun
 MAX_DUNGEON_LENGTH = 15 * 60
 MAX_SCROLL_QUEUE_FAILURES = 5  # Consecutive failed scroll uses before the whole queue is refunded
 
+STREAM_QUEST_EXP_SAMPLE_SECONDS = 60
+STREAM_QUEST_RETRY_SECONDS = 30 * 60
+
 # Command timeout values in seconds for monitored commands
 COMMAND_TIMEOUTS = {
     'coins': 5, 'count': 5, 'damage': 5, 'dmg': 5, 'dps': 5, 'effects': 5, 'ferry': 5, 'items': 5,
@@ -85,6 +89,7 @@ class RFChannel:
             - auto_restart (bool, optional): Whether to auto-restart. Defaults to False
             - event_notifications (bool, optional): Whether to send event notifications. Defaults to False
             - auto_end_ravebridge (bool, optional): Whether to end Ravebridge as soon as it starts. Defaults to True
+            - auto_stream_quests (bool, optional): Whether to start stream quests. Defaults to True
             - restart_period (int, optional): Restart period in seconds. Defaults to 3600
             - sandboxie_box (str, optional): Sandboxie box name. Defaults to ''
             - ravenfall_start_script (str, optional): Path to Ravenfall start script. Defaults to ''
@@ -114,6 +119,7 @@ class RFChannel:
         self.auto_restart: bool = config.auto_restart
         self.event_notifications: bool = config.event_notifications
         self.auto_end_ravebridge: bool = config.auto_end_ravebridge
+        self.auto_stream_quests: bool = config.auto_stream_quests
         self.restart_period: int = config.restart_period
         self.sandboxie_box: str = config.sandboxie_box
         self.ravenfall_start_script: str = config.ravenfall_start_script
@@ -166,6 +172,7 @@ class RFChannel:
         self.update_events_routine_first_iteration = True
         self.scroll_queue: deque[QueuedScroll] = deque()
         self.scroll_queue_failures = 0
+        self.next_stream_quest_attempt: float = 0
 
     async def save_scroll_queue(self):
         encoded = []
@@ -211,6 +218,7 @@ class RFChannel:
         self.town_level_notification_routine.start()
         self.island_arrival_grouping_routine.start()
         self.scroll_queue_routine.start()
+        self.stream_quest_routine.start()
 
     async def stop(self):
         self.update_mult_routine.cancel()
@@ -222,6 +230,7 @@ class RFChannel:
         self.town_level_notification_routine.cancel()
         self.island_arrival_grouping_routine.cancel()
         self.scroll_queue_routine.cancel()
+        self.stream_quest_routine.cancel()
 
     async def multichat(self, text: str) -> None:
         """Sends a command through multichat as the town, or to chat if multichat fails."""
@@ -886,6 +895,66 @@ class RFChannel:
         await self.send_chat_message(welcome_msg)
         cd.update_rate_limit()
         
+    async def get_stream_quest_offers(self) -> list[StreamQuestOffer]:
+        """Today's stream quests, or nothing if one is running or the game didn't answer.
+
+        The reply goes to the bot alone, so this doesn't show in chat.
+        """
+        sender = SenderBuilder(
+            username=self.channel_name,
+            platform_id=self.channel_id,
+            is_broadcaster=True,
+        ).build()
+        response = await send_to_server_and_wait_response(
+            self.middleman_connection_id,
+            RavenBotTemplates.stream_quest_status(sender),
+            timeout=10,
+        )
+        if not response.get('responses'):
+            return []
+        return parse_offers(response['responses'][0])
+
+    async def measure_levels_per_minute(self) -> float | None:
+        before = await self.get_players()
+        await asyncio.sleep(STREAM_QUEST_EXP_SAMPLE_SECONDS)
+        after = await self.get_players()
+        if before is None or after is None:
+            return None
+        return levels_per_minute(before, after, STREAM_QUEST_EXP_SAMPLE_SECONDS)
+
+    @routine(delta=timedelta(minutes=1), wait_first=True, max_attempts=99999)
+    async def stream_quest_routine(self):
+        """Starts the offer the town is most likely to finish, if it should finish one in time."""
+        if not self.auto_stream_quests or not self.manager.middleman_connected or self._ravenbot_is_muted():
+            return
+        if self.channel_restart_lock.locked() or (self.restart_task and not self.restart_task.finished()):
+            return
+        if time.time() < self.next_stream_quest_attempt:
+            return
+        offers = await self.get_stream_quest_offers()
+        if not offers:
+            return
+        rate = 0
+        if any(offer.objective == "levels" for offer in offers):
+            rate = await self.measure_levels_per_minute()
+            if rate is None:
+                return
+        players = await self.get_players()
+        if not players:
+            return
+        best = pick_offer(offers, TownActivity(
+            players=players,
+            levels_per_minute=rate,
+            queued_raids=sum(1 for item in self.scroll_queue if item.scroll == ScrollType.RAID),
+            queued_dungeons=sum(1 for item in self.scroll_queue if item.scroll == ScrollType.DUNGEON),
+        ))
+        if best is None:
+            return
+        logger.info(f"{self.channel_name}: starting stream quest {best.slot} of {offers}")
+        # If the game turns it down (the bot isn't a moderator, say), don't repeat it in chat every tick
+        self.next_stream_quest_attempt = time.time() + STREAM_QUEST_RETRY_SECONDS
+        await self.send_chat_message(f"{self.ravenbot_prefixes[0]}quest stream start {best.slot}")
+
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
     async def scroll_queue_routine(self):
         if self.update_events_routine_first_iteration:

@@ -102,6 +102,7 @@ class Channels(unittest.TestCase):
         self.assertIs(config.auto_restart, False)
         self.assertIs(config.auto_end_ravebridge, True)
         self.assertIs(config.town_level_notifications, True)
+        self.assertIs(config.auto_stream_quests, True)
         self.assertIs(config.channel_points_redeems, False)
         self.assertIsNone(config.ravenfall_loc_strings_path)
         self.assertEqual(config.command_prefix, "!")

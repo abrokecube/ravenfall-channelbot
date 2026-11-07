@@ -39,6 +39,18 @@ class RavenBotTemplates:
         ).build()
     
     @staticmethod
+    def stream_quest_status(
+        sender: Dict[str, Any],
+        correlation_id: Optional[Union[str, UUID]] = None
+    ) -> str:
+        return RavenBotMessageBuilder(
+            sender=sender,
+            content="stream",
+            identifier="quest_command",
+            correlation_id=correlation_id
+        ).build()
+
+    @staticmethod
     def sail(
         sender: Dict[str, Any],
         correlation_id: Optional[Union[str, UUID]] = None

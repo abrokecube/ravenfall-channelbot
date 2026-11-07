@@ -33,12 +33,13 @@ Use `-s tests` without `-t .`: `tests` is not a package. In a worktree with no
 | `bot/clients/` | The shared HTTP session (`session.py`) and the game query client (`query.py`) |
 | `bot/middleman.py`, `bot/multichat_command.py` | HTTP clients for the middleman and ravenfall-multichat, on the shared session |
 | `bot/ravenfallloc.py`, `data/definitions.yaml` | Game string identification and translation |
+| `bot/streamquests.py` | Reads stream quest offers and picks the one a town is most likely to finish |
 | `bot/commands/` | Command framework: events, dispatchers, listeners, decorators, checks, converters |
 | `bot/cogs/` | Commands and redeems. `redeem_rf.py` holds credits and the scroll commands, `game.py` the admin commands |
 | `database/` | Tables in `models.py`, helpers in `utils.py`, session in `session.py` |
 | `ravenpy/` | RavenNest API client, shared with `ravenhelper-bot` |
 | `utils/` | Sandboxie process control (`runshell.py`), routines, alert monitors, helpers |
-| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py`, `test_single_instance.py` |
+| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py`, `test_single_instance.py`, `test_stream_quests.py` |
 | `scripts/` | One-off scripts, run from the repo root with `python -m scripts.<name>` (e.g. `python -m scripts.itemcreditprice`) |
 
 Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multichat`,
@@ -86,7 +87,8 @@ Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multi
   in progress, so `bot/messageprocessor.py` accepts both key styles
   (`correlation_id` and `correlationId`). Keep both until that's finished. The HEAD
   of the middleman repo isn't what's live.
-- The local game source is stale. Use upstream `zerratar/Ravenfall-Legacy`.
+- The `-master` game sources in `C:\Users\borkedcube\sof ware\ravenfall src` are stale. Use the snapshots
+  beside them (`Ravenfall-Legacy`, `RavenBot`, `RavenNest`, no git history) or upstream `zerratar/Ravenfall-Legacy`.
 - `bot/ravenfallchannel.py` is very large and due to be split. Search it rather
   than reading it whole.
 - Middleman "client" means RavenBot and "server" means Ravenfall.

@@ -148,6 +148,7 @@ class ChannelConfig:
     auto_restart: bool = False
     event_notifications: bool = False
     auto_end_ravebridge: bool = True
+    auto_stream_quests: bool = True
     restart_period: int = 3600
     middleman_connection_id: str = ""
     ravenfall_loc_strings_path: str | None = None
@@ -175,6 +176,7 @@ class ChannelConfig:
             auto_restart=bool(raw.get("auto_restart", defaults.auto_restart)),
             event_notifications=bool(raw.get("event_notifications", defaults.event_notifications)),
             auto_end_ravebridge=bool(raw.get("auto_end_ravebridge", defaults.auto_end_ravebridge)),
+            auto_stream_quests=bool(raw.get("auto_stream_quests", defaults.auto_stream_quests)),
             restart_period=int(raw.get("restart_period", defaults.restart_period)),
             middleman_connection_id=raw.get("middleman_connection_id", defaults.middleman_connection_id),
             ravenfall_loc_strings_path=raw.get("ravenfall_loc_strings_path", defaults.ravenfall_loc_strings_path),
