@@ -254,9 +254,21 @@ class QuestRoutine(RoutineTestCase):
         self.send.assert_not_awaited()
 
         town = self.make_town([player("Fishing")])
-        town.restart_task = mock.Mock(finished=mock.Mock(return_value=False))
+        town.restart_task = self.restart_in(60)
         await self.tick(town, self.offers("1. Catch 300 fish (60 min)"))
         self.send.assert_not_awaited()
+
+    async def test_a_scheduled_restart_days_away_does_not_stop_it(self):
+        town = self.make_town([player("Fishing")])
+        town.restart_task = self.restart_in(3 * 24 * 60 * 60)
+        await self.tick(town, self.offers("1. Catch 300 fish (60 min)"))
+        town.send_chat_message.assert_awaited_once_with("!quest stream start 1")
+
+    def restart_in(self, seconds: int):
+        return mock.Mock(
+            finished=mock.Mock(return_value=False),
+            get_time_left=mock.Mock(return_value=seconds),
+        )
 
 
 class QuestLog(RoutineTestCase):

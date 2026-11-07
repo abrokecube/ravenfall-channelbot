@@ -108,7 +108,7 @@ Other routines in `RFChannel`: `dungeon_killswitch_routine` stops dungeons longe
 than `MAX_DUNGEON_LENGTH`, and `backup_state_data_routine` backs up `state-data.json`
 from the sandboxed folder.
 
-`stream_quest_routine` runs every minute, skips towns that are restarting, and
+`stream_quest_routine` runs every minute, skips towns restarting within 2 minutes, and
 starts a stream quest when none is running. It sends `quest_command` through the
 middleman to read the offers, which keeps `!quest stream` out of chat. Then
 `pick_offer` in `bot/streamquests.py` picks the offer with the highest expected

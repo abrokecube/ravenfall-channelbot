@@ -957,7 +957,7 @@ class RFChannel:
                 f"connection {self.middleman_connection_id} has no game connected: "
                 f"{self.middleman_connection_status}"
             )
-        if self.channel_restart_lock.locked() or (self.restart_task and not self.restart_task.finished()):
+        if self.channel_restart_lock.locked() or self._restart_is_imminent():
             return skip("the town is restarting")
         wait = self.next_stream_quest_attempt - time.time()
         if wait > 0:
@@ -1001,7 +1001,7 @@ class RFChannel:
             async with self.channel_post_restart_lock:
                 pass
             return
-        if self.restart_task and (not self.restart_task.finished()) and (self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5):
+        if self._restart_is_imminent():
             return
         if self.event != RFChannelEvent.NONE:
             return
@@ -1076,6 +1076,18 @@ class RFChannel:
     
     def is_restarting(self):
         return self.channel_restart_lock.locked()
+
+    def _restart_is_imminent(self) -> bool:
+        """Whether the restart warnings have begun.
+
+        `restart_task` alone doesn't say this: the next scheduled restart is queued
+        as soon as the last one is over, up to `restart_period` ahead.
+        """
+        return bool(
+            self.restart_task
+            and not self.restart_task.finished()
+            and self.restart_task.get_time_left() < WARNING_MSG_TIMES[0][0] + 5
+        )
         
     def get_scroll_queue_length(self):
         return len(self.scroll_queue)
