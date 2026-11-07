@@ -27,7 +27,6 @@ from .streamquests import (
     StreamQuestOffer,
     TownActivity,
     describe_offers,
-    levels_per_minute,
     parse_offers,
     pick_offer,
 )
@@ -38,6 +37,7 @@ from .commands.enums import TwitchCustomRewardRedemptionStatus
 from bot import middleman
 from .clients.query import QueryClient
 from .config import ChannelConfig, get_settings
+from .prometheus import get_prometheus_instant
 from database.session import get_async_session
 from database.models import AutoRaidStatus, Character, User
 import database.utils as db_utils
@@ -67,7 +67,7 @@ RETRY_WINDOW = 3 * 60  # Number of seconds to wait before resetting attempt coun
 MAX_DUNGEON_LENGTH = 15 * 60
 MAX_SCROLL_QUEUE_FAILURES = 5  # Consecutive failed scroll uses before the whole queue is refunded
 
-STREAM_QUEST_EXP_SAMPLE_SECONDS = 60
+STREAM_QUEST_LEVEL_WINDOW_SECONDS = 60 * 60
 STREAM_QUEST_RETRY_SECONDS = 30 * 60
 
 # Command timeout values in seconds for monitored commands
@@ -935,12 +935,24 @@ class RFChannel:
         return offers
 
     async def measure_levels_per_minute(self) -> float | None:
-        before = await self.get_players()
-        await asyncio.sleep(STREAM_QUEST_EXP_SAMPLE_SECONDS)
-        after = await self.get_players()
-        if before is None or after is None:
+        """The levels the town gained per minute over the last hour, read back from Prometheus.
+
+        Only whole levels count: the exporter has no experience towards the next one.
+        """
+        query = 'sum(increase(rf_player_stat_base_level{session="%s"}[%ds]))' % (
+            self.channel_name, STREAM_QUEST_LEVEL_WINDOW_SECONDS,
+        )
+        try:
+            result = await get_prometheus_instant(query)
+            if not result:
+                return None
+            gained = float(result[0]["value"][1])
+        except Exception as e:
+            quest_logger.info(f"{self.channel_name}: couldn't read levels from Prometheus: {e!r}")
             return None
-        return levels_per_minute(before, after, STREAM_QUEST_EXP_SAMPLE_SECONDS)
+        if gained != gained:  # NaN
+            return None
+        return max(0.0, gained) * 60 / STREAM_QUEST_LEVEL_WINDOW_SECONDS
 
     @routine(delta=timedelta(minutes=1), wait_first=True, max_attempts=99999)
     async def stream_quest_routine(self):
@@ -976,7 +988,7 @@ class RFChannel:
         if any(offer.objective == "levels" for offer in offers):
             rate = await self.measure_levels_per_minute()
             if rate is None:
-                return skip("the player list wasn't available to measure levels")
+                return skip("Prometheus had no level history to measure levels")
         players = await self.get_players()
         if not players:
             return skip("the town has no players or the player list wasn't available")

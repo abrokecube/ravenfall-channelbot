@@ -17,12 +17,10 @@ from bot.streamquests import (
     TownActivity,
     completion_ratio,
     is_working,
-    levels_per_minute,
     parse_offer,
     parse_offers,
     pick_offer,
 )
-from ravenpy import experience_for_level
 
 OFFERS_FORMAT = "No stream quest running. Today's: {offers}. The streamer or a mod starts one with !quest stream start 1."
 RUNNING_FORMAT = "Stream quest: {quest} ({progress}/{amount}), {minutes} minutes left, {helpers} helping so far. Reward: {reward}."
@@ -145,29 +143,27 @@ class Picking(unittest.TestCase):
         self.assertEqual(pick_offer([offer], TownActivity(players=[player("Fishing")])), offer)
 
 
-class LevelRate(unittest.TestCase):
-    def stats(self, level: int, experience: float) -> dict:
-        return {"combatlevel": 5, "mining": {"level": level, "experience": experience, "maxlevel": level, "currentvalue": level}}
+class LevelRate(unittest.IsolatedAsyncioTestCase):
+    async def rate(self, result=None, error=None) -> float | None:
+        town = RFChannel.__new__(RFChannel)
+        town.channel_name = "town"
+        query = mock.AsyncMock(return_value=result, side_effect=error)
+        with mock.patch.object(ravenfallchannel, "get_prometheus_instant", query):
+            rate = await town.measure_levels_per_minute()
+        self.query = query.await_args.args[0]
+        return rate
 
-    def test_a_tenth_of_a_level_in_a_minute(self):
-        needed = experience_for_level(51)
-        before = [{"id": "a", "stats": self.stats(50, 0)}]
-        after = [{"id": "a", "stats": self.stats(50, needed / 10)}]
-        self.assertAlmostEqual(levels_per_minute(before, after, 60), 0.1)
+    async def test_levels_over_the_last_hour_become_a_rate_per_minute(self):
+        rate = await self.rate([{"metric": {}, "value": [1, "12"]}])
+        self.assertAlmostEqual(rate, 0.2)
+        self.assertIn('session="town"', self.query)
+        self.assertIn("[3600s]", self.query)
 
-    def test_a_level_up_between_the_samples(self):
-        before = [{"id": "a", "stats": self.stats(50, experience_for_level(51) * 0.9)}]
-        after = [{"id": "a", "stats": self.stats(51, experience_for_level(52) * 0.1)}]
-        self.assertAlmostEqual(levels_per_minute(before, after, 60), 0.2)
+    async def test_no_history_is_not_a_rate_of_zero(self):
+        self.assertIsNone(await self.rate([]))
 
-    def test_players_who_joined_or_left_are_ignored(self):
-        before = [{"id": "a", "stats": self.stats(50, 0)}]
-        after = [{"id": "b", "stats": self.stats(60, 0)}]
-        self.assertEqual(levels_per_minute(before, after, 60), 0)
-
-    def test_the_top_level_does_not_crash(self):
-        before = [{"id": "a", "stats": self.stats(999, 5)}]
-        self.assertEqual(levels_per_minute(before, before, 60), 0)
+    async def test_prometheus_being_down_is_not_a_rate_of_zero(self):
+        self.assertIsNone(await self.rate(error=OSError("down")))
 
 
 class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
@@ -187,6 +183,9 @@ class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
         town.get_players = mock.AsyncMock(return_value=players)
         return town
 
+    def setUp(self):
+        self.prometheus = mock.AsyncMock(return_value=[{"metric": {}, "value": [1, "0"]}])
+
     def scroll_counts(self, raid: int = 0, dungeon: int = 0):
         data = {"channel": {"Raid Scroll": raid, "Dungeon Scroll": dungeon}}
         return mock.AsyncMock(return_value={"status": 200, "data": data})
@@ -195,6 +194,7 @@ class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
         self.send = mock.AsyncMock(return_value=reply)
         with (
             mock.patch.object(ravenfallchannel, "get_scroll_counts", scrolls or self.scroll_counts()),
+            mock.patch.object(ravenfallchannel, "get_prometheus_instant", self.prometheus),
             mock.patch.object(ravenfallchannel, "send_to_server_and_wait_response", self.send),
             mock.patch.object(ravenfallchannel.asyncio, "sleep", mock.AsyncMock()),
         ):
@@ -233,11 +233,11 @@ class QuestRoutine(RoutineTestCase):
     async def test_measures_levels_only_when_offered(self):
         town = self.make_town([player("Fishing")])
         await self.tick(town, self.offers("1. Catch 300 fish (60 min)"))
-        self.assertEqual(town.get_players.await_count, 1)
+        self.prometheus.assert_not_awaited()
 
         town = self.make_town([player("Fishing")])
         await self.tick(town, self.offers("1. Catch 300 fish (60 min), 2. Gain 10 levels (120 min)"))
-        self.assertEqual(town.get_players.await_count, 3)
+        self.prometheus.assert_awaited_once()
         town.send_chat_message.assert_awaited_once_with("!quest stream start 1")
 
     async def test_scrolls_in_stock_reach_the_estimate(self):

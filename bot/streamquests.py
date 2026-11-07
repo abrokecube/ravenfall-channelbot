@@ -14,8 +14,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional
 
-from ravenpy import experience_for_level
-
 logger = logging.getLogger(__name__)
 
 GATHER = "gather"
@@ -165,34 +163,3 @@ def describe_offers(offers: Iterable[StreamQuestOffer], town: TownActivity) -> s
         f"{offer.slot}. {offer.text} ({completion_ratio(offer, town):.0%})"
         for offer in offers
     )
-
-
-def _skill_levels(player: Mapping[str, Any]) -> dict[str, float]:
-    """Each skill's level, with the experience towards the next one as a fraction."""
-    levels = {}
-    for name, stat in (player.get("stats") or {}).items():
-        if not isinstance(stat, Mapping):
-            continue
-        needed = experience_for_level(stat["level"] + 1)
-        levels[name] = stat["level"] + (stat["experience"] / needed if needed else 0)
-    return levels
-
-
-def levels_per_minute(
-    before: Iterable[Mapping[str, Any]],
-    after: Iterable[Mapping[str, Any]],
-    seconds: float,
-) -> float:
-    """The levels the town gains per minute, from two player lists `seconds` apart.
-
-    All skills count, and only players in both lists.
-    """
-    earlier = {player["id"]: _skill_levels(player) for player in before}
-    gained = 0.0
-    for player in after:
-        if player["id"] not in earlier:
-            continue
-        old = earlier[player["id"]]
-        for name, level in _skill_levels(player).items():
-            gained += max(0.0, level - old.get(name, level))
-    return gained * 60 / seconds
