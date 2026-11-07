@@ -18,12 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from twitchAPI.chat import ChatMessage
 
 from bot import multichat_command, ravenfallchannel
+from bot.cogs import info
 from bot.clients import query
 from bot.clients.query import QueryClient
 from bot.config import get_settings
 from bot.messageprocessor import MessageMetadata, MessageProcessor
 from bot.models import QueuedScroll, RFChannelSubEvent, ScrollType
 from bot.ravenfallchannel import RFChannel
+from bot.ravenfallloc import RavenfallLocalization
 from bot.ravenfallmanager import RFChannelManager
 from database import utils as db_utils
 from database.models import Base
@@ -500,3 +502,70 @@ class BoxPids(unittest.IsolatedAsyncioTestCase):
         manager = Manager().make_manager(SimpleNamespace(channel_name="town", sandboxie_box="box"))
         with mock.patch("bot.ravenfallmanager.runshell", mock.AsyncMock(return_value=(0, "12\n34\n"))):
             self.assertEqual(await manager.list_box_pids(), {"town": ["12", "34"]})
+
+
+class ShowCommand(unittest.IsolatedAsyncioTestCase):
+    NOT_PLAYING = "You are not currently playing. Use !join to start playing!"
+
+    async def run_character(self, invoked_with: str, target: str | None, player=None):
+        town = make_town()
+        town.get_player = mock.AsyncMock(return_value=player)
+        ctx = SimpleNamespace(
+            invoked_with=invoked_with,
+            message=SimpleNamespace(author_login="viewer", reply=mock.AsyncMock()),
+        )
+        with mock.patch.object(info, "send_to_server", mock.AsyncMock()) as to_server:
+            await info.InfoCog.character(SimpleNamespace(), ctx, target, channel=town)
+        return ctx.message.reply, to_server
+
+    def game_reply(self, correlation_id: str) -> dict:
+        return {
+            "Identifier": "message",
+            "Format": self.NOT_PLAYING,
+            "Args": [],
+            "CorrelationId": correlation_id,
+            "Recipent": {"Platform": "system", "PlatformUserName": ""},
+        }
+
+    def show_town(self) -> RFChannel:
+        town = make_town()
+        town.named_observes = deque(maxlen=50)
+        town.rfloc = RavenfallLocalization("data/definitions.yaml")
+        town.auto_end_ravebridge = False
+        town.ravenfall_loc_strings_path = None
+        town.get_sender_data = mock.AsyncMock(return_value={"PlatformId": None, "Username": "absent"})
+        return town
+
+    async def test_show_moves_the_camera_for_anyone(self):
+        _, to_server = await self.run_character("Show", "someone")
+        to_server.assert_awaited_once()
+        sent = json.loads(to_server.await_args.args[1])
+        self.assertEqual(sent["Identifier"], "observe")
+        self.assertEqual(sent["Sender"]["Username"], "someone")
+
+    async def test_show_without_a_target_is_left_to_ravenbot(self):
+        _, to_server = await self.run_character("show", None)
+        to_server.assert_not_awaited()
+
+    async def test_character_does_not_move_the_camera(self):
+        _, to_server = await self.run_character("char", "someone")
+        to_server.assert_not_awaited()
+
+    async def test_absent_target_gets_no_reply(self):
+        reply, _ = await self.run_character("show", "someone")
+        reply.assert_not_awaited()
+
+    async def test_game_reply_to_a_named_observe_is_blocked(self):
+        town = self.show_town()
+        observe = {
+            "Identifier": "observe",
+            "CorrelationId": "abc",
+            "Sender": {"PlatformId": "", "Username": "absent"},
+        }
+        await town.process_ravenbot_message(observe, None)
+        self.assertEqual(await town.process_ravenfall_message(self.game_reply("abc"), None), {"block": True})
+
+    async def test_game_reply_to_someone_else_is_kept(self):
+        town = self.show_town()
+        message = self.game_reply("other")
+        self.assertIs(await town.process_ravenfall_message(message, None), message)

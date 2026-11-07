@@ -29,6 +29,8 @@ from .. import braille
 from ..ravenfall import Character, Skills
 
 from ..ravenfallchannel import RFChannel
+from ..message_templates import RavenBotTemplates
+from ..middleman import send_to_server
 from ..models import Player
 import re
 
@@ -216,13 +218,14 @@ class InfoCog(Cog):
         """
         if not target_user:
             target_user = ctx.message.author_login        
+        elif ctx.invoked_with.lower() == "show":
+            # RavenBot only moves the camera to another player for moderators.
+            await send_to_server(channel.middleman_connection_id, RavenBotTemplates.observe(username=target_user))
 
         player_info = await channel.get_player(target_user)
-        if isinstance(player_info, dict) and player_info:
-            char = Character(player_info)
-        else:
-            await ctx.message.reply("You are not currently playing.")
+        if not (isinstance(player_info, dict) and player_info):
             return
+        char = Character(player_info)
         ferry_info = await channel.get_query("select * from ferry")
 
         where = ""

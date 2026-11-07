@@ -93,7 +93,9 @@ against `RFChannel.middleman_connection_id`, which comes from the
 
 `process_ravenbot_message` (RavenBot to game) records users and senders, tracks
 training for `task` and `leave`, blocks `inspect` because the bot handles it, and
-swaps the sender on `observe` and `travel`.
+swaps the sender on `observe` and `travel`. An `observe` aimed at a name is also
+remembered, so the game's `not_playing` reply to it isn't sent to chat: the game
+means the target there, but the text speaks to whoever asked.
 
 `process_ravenfall_message` (game to RavenBot) rounds skill bonuses, identifies the
 string with `RavenfallLocalization.identify_string`, ends Ravebridge when configured,

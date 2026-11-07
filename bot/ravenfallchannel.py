@@ -137,6 +137,9 @@ class RFChannel:
         self.restart_timeout: int = config.restart_timeout
         self.town_level_notifications: bool = config.town_level_notifications
 
+        # Correlation ids of observes aimed at a name, whose not_playing reply is wrong
+        self.named_observes: deque[str] = deque(maxlen=50)
+
         self.raid: Raid | None = None
         self.dungeon: Dungeon | None = None
         self.multiplier: GameMultiplier | None = None
@@ -341,6 +344,8 @@ class RFChannel:
     async def process_ravenbot_message(self, message: RavenBotMessage, metadata: MessageMetadata):
         platform_id = message['Sender']['PlatformId']
         if not platform_id:
+            if message['Identifier'] == 'observe':
+                self.named_observes.append(message['CorrelationId'])
             if message['Identifier'] in ('observe', 'travel'):
                 message['Sender'] = await self.get_sender_data(message['Sender']['Username'].lower())
                 if message['Sender']['PlatformId'] is not None:
@@ -381,6 +386,8 @@ class RFChannel:
         key = ""
         if match is not None:
             key = match.key
+        if key == "not_playing" and message['CorrelationId'] in self.named_observes:
+            return {'block': True}
         message_args = message['Args']
         additional_args = {}
         is_ravebridge_start = key == "ravebridge_start" or (
