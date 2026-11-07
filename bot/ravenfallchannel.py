@@ -23,7 +23,15 @@ from .messageprocessor import RavenMessage, MessageMetadata
 from .ravenfallloc import RavenfallLocalization, round_skill_bonuses
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
-from .streamquests import StreamQuestOffer, TownActivity, levels_per_minute, parse_offers, pick_offer
+from .streamquests import (
+    StreamQuestOffer,
+    TownActivity,
+    describe_offers,
+    levels_per_minute,
+    parse_offers,
+    pick_offer,
+)
+from .streamquests import logger as quest_logger
 from .exceptions import OutOfStockError
 from .commands.events import TwitchRedemptionEvent
 from .commands.enums import TwitchCustomRewardRedemptionStatus
@@ -911,8 +919,13 @@ class RFChannel:
             timeout=10,
         )
         if not response.get('responses'):
+            quest_logger.info(f"{self.channel_name}: no reply from the game: {response}")
             return []
-        return parse_offers(response['responses'][0])
+        reply = response['responses'][0]
+        offers = parse_offers(reply)
+        if not offers:
+            quest_logger.info(f"{self.channel_name}: no offers to start: {reply.get('Format')} {reply.get('Args')}")
+        return offers
 
     async def measure_levels_per_minute(self) -> float | None:
         before = await self.get_players()
@@ -925,12 +938,30 @@ class RFChannel:
     @routine(delta=timedelta(minutes=1), wait_first=True, max_attempts=99999)
     async def stream_quest_routine(self):
         """Starts the offer the town is most likely to finish, if it should finish one in time."""
-        if not self.auto_stream_quests or not self.manager.middleman_connected or self._ravenbot_is_muted():
-            return
+        try:
+            await self.check_stream_quest()
+        except Exception:
+            quest_logger.exception(f"{self.channel_name}: stream quest check failed")
+
+    async def check_stream_quest(self):
+        """One check. `logs/streamquests.log` gets a line saying what it decided and why."""
+        def skip(reason: str):
+            quest_logger.info(f"{self.channel_name}: skipped, {reason}")
+
+        if not self.auto_stream_quests:
+            return skip("auto_stream_quests is off")
+        if not self.manager.middleman_connected:
+            return skip("the middleman isn't connected")
+        if self._ravenbot_is_muted():
+            return skip(
+                f"connection {self.middleman_connection_id} has no game connected: "
+                f"{self.middleman_connection_status}"
+            )
         if self.channel_restart_lock.locked() or (self.restart_task and not self.restart_task.finished()):
-            return
-        if time.time() < self.next_stream_quest_attempt:
-            return
+            return skip("the town is restarting")
+        wait = self.next_stream_quest_attempt - time.time()
+        if wait > 0:
+            return skip(f"tried to start one recently, next try in {wait:.0f} s")
         offers = await self.get_stream_quest_offers()
         if not offers:
             return
@@ -938,19 +969,20 @@ class RFChannel:
         if any(offer.objective == "levels" for offer in offers):
             rate = await self.measure_levels_per_minute()
             if rate is None:
-                return
+                return skip("the player list wasn't available to measure levels")
         players = await self.get_players()
         if not players:
-            return
-        best = pick_offer(offers, TownActivity(
+            return skip("the town has no players or the player list wasn't available")
+        town = TownActivity(
             players=players,
             levels_per_minute=rate,
             queued_raids=sum(1 for item in self.scroll_queue if item.scroll == ScrollType.RAID),
             queued_dungeons=sum(1 for item in self.scroll_queue if item.scroll == ScrollType.DUNGEON),
-        ))
+        )
+        best = pick_offer(offers, town)
         if best is None:
-            return
-        logger.info(f"{self.channel_name}: starting stream quest {best.slot} of {offers}")
+            return skip(f"no offer should finish in time: {describe_offers(offers, town)}")
+        quest_logger.info(f"{self.channel_name}: starting {best.slot}: {describe_offers(offers, town)}")
         # If the game turns it down (the bot isn't a moderator, say), don't repeat it in chat every tick
         self.next_stream_quest_attempt = time.time() + STREAM_QUEST_RETRY_SECONDS
         await self.send_chat_message(f"{self.ravenbot_prefixes[0]}quest stream start {best.slot}")

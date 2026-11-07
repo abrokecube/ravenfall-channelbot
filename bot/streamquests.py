@@ -9,11 +9,14 @@ quest is counted: see `StreamQuestManager` and `QuestTracker` in RavenNest.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional
 
 from ravenpy import experience_for_level
+
+logger = logging.getLogger(__name__)
 
 GATHER = "gather"
 KILL = "kill"
@@ -153,6 +156,14 @@ def pick_offer(offers: Iterable[StreamQuestOffer], town: TownActivity) -> Option
     if best is None or completion_ratio(best, town) < 1:
         return None
     return best
+
+
+def describe_offers(offers: Iterable[StreamQuestOffer], town: TownActivity) -> str:
+    """Each offer with its expected share of the target, for the log."""
+    return ", ".join(
+        f"{offer.slot}. {offer.text} ({completion_ratio(offer, town):.0%})"
+        for offer in offers
+    )
 
 
 def _skill_levels(player: Mapping[str, Any]) -> dict[str, float]:

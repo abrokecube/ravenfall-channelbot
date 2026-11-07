@@ -171,7 +171,7 @@ class LevelRate(unittest.TestCase):
         self.assertEqual(levels_per_minute(before, before, 60), 0)
 
 
-class QuestRoutine(unittest.IsolatedAsyncioTestCase):
+class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
     def make_town(self, players: list[dict]) -> RFChannel:
         town = RFChannel.__new__(RFChannel)
         town.channel_name = "town"
@@ -199,6 +199,8 @@ class QuestRoutine(unittest.IsolatedAsyncioTestCase):
     def offers(self, text: str) -> dict:
         return {"success": True, "responses": [offers_reply(text)]}
 
+
+class QuestRoutine(RoutineTestCase):
     async def test_starts_the_best_offer_in_chat(self):
         town = self.make_town([player("Fishing")])
         await self.tick(town, self.offers("1. Chop 300 wood (60 min), 2. Catch 300 fish (60 min)"))
@@ -255,6 +257,69 @@ class QuestRoutine(unittest.IsolatedAsyncioTestCase):
         town.restart_task = mock.Mock(finished=mock.Mock(return_value=False))
         await self.tick(town, self.offers("1. Catch 300 fish (60 min)"))
         self.send.assert_not_awaited()
+
+
+class QuestLog(RoutineTestCase):
+    """Every check says what it decided in the log."""
+
+    LOGGER = "bot.streamquests"
+
+    async def logged(self, town: RFChannel, reply: dict) -> str:
+        with self.assertLogs(self.LOGGER, level="INFO") as logs:
+            await self.tick(town, reply)
+        return "\n".join(logs.output)
+
+    async def test_a_start_shows_each_offer_and_its_share(self):
+        town = self.make_town([player("Fishing")])
+        text = await self.logged(town, self.offers("1. Chop 300 wood (60 min), 2. Catch 300 fish (60 min)"))
+        self.assertIn("town: starting 2: 1. Chop 300 wood (0%), 2. Catch 300 fish (120%)", text)
+
+    async def test_no_finishable_offer_shows_the_shares(self):
+        town = self.make_town([player("Fishing")])
+        text = await self.logged(town, self.offers("1. Win 3 raids (120 min)"))
+        self.assertIn("no offer should finish in time: 1. Win 3 raids (51%)", text)
+
+    async def test_a_running_quest_is_quoted(self):
+        town = self.make_town([player()])
+        reply = {"success": True, "responses": [{"Format": RUNNING_FORMAT, "Args": ["Chop 300 wood"]}]}
+        self.assertIn("Chop 300 wood", await self.logged(town, reply))
+
+    async def test_no_reply_is_logged(self):
+        town = self.make_town([player()])
+        text = await self.logged(town, {"success": True, "timeout": True, "responses": []})
+        self.assertIn("no reply from the game", text)
+
+    async def test_a_muted_town_names_its_connection(self):
+        town = self.make_town([player()])
+        town.manager.middleman_enabled = True
+        town.middleman_connection_status = SimpleNamespace(server_connected=False)
+        text = await self.logged(town, self.offers("1. Catch 300 fish (60 min)"))
+        self.assertIn("connection conn has no game connected", text)
+        self.send.assert_not_awaited()
+
+    async def test_each_other_skip_has_a_reason(self):
+        town = self.make_town([player()])
+        town.auto_stream_quests = False
+        self.assertIn("auto_stream_quests is off", await self.logged(town, {}))
+
+        town = self.make_town([player()])
+        town.manager.middleman_connected = False
+        self.assertIn("middleman isn't connected", await self.logged(town, {}))
+
+        town = self.make_town([player()])
+        town.channel_restart_lock.locked.return_value = True
+        self.assertIn("restarting", await self.logged(town, {}))
+
+        town = self.make_town([player()])
+        town.next_stream_quest_attempt = ravenfallchannel.time.time() + 600
+        self.assertIn("next try in", await self.logged(town, {}))
+
+    async def test_a_crash_is_logged_and_the_routine_lives_on(self):
+        town = self.make_town([player()])
+        town.get_players = mock.AsyncMock(side_effect=ValueError("bad player"))
+        text = await self.logged(town, self.offers("1. Catch 300 fish (60 min)"))
+        self.assertIn("stream quest check failed", text)
+        self.assertIn("bad player", text)
 
 
 class Template(unittest.TestCase):

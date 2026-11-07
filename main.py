@@ -105,6 +105,10 @@ logger_config = {
         'filename': 'rfchannels.log',
         'console_level': logging.INFO,
     },
+    'bot.streamquests': {
+        'filename': 'streamquests.log',
+        'console_level': logging.WARNING,
+    },
     'bot.commands': {
         'filename': 'commands.log',
         'console_level': logging.INFO,

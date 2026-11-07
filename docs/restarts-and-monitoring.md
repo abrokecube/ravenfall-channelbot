@@ -115,7 +115,8 @@ middleman to read the offers, which keeps `!quest stream` out of chat. Then
 share of its target. If no offer should reach its target within its time limit, it
 picks none and the routine tries again on the next tick. Otherwise the routine sends
 `!quest stream start <n>` in chat, so the bot account must be a moderator. Setting `auto_stream_quests` to false in a town's
-`channels.json` entry turns it off.
+`channels.json` entry turns it off. Each check writes what it decided and why to
+`logs/streamquests.log`, with every offer's expected share of its target.
 
 The estimate assumes the town keeps doing what it's doing now:
 
