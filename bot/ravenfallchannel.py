@@ -980,11 +980,18 @@ class RFChannel:
         players = await self.get_players()
         if not players:
             return skip("the town has no players or the player list wasn't available")
+        raid_scrolls = dungeon_scrolls = 0
+        if any(offer.objective in ("raid", "dungeon") for offer in offers):
+            scrolls = await get_scroll_counts(self.channel_id)
+            if scrolls['status'] != 200:
+                return skip(f"the scroll counts weren't available: {scrolls.get('error')}")
+            raid_scrolls = scrolls['data']['channel']['Raid Scroll']
+            dungeon_scrolls = scrolls['data']['channel']['Dungeon Scroll']
         town = TownActivity(
             players=players,
             levels_per_minute=rate,
-            queued_raids=sum(1 for item in self.scroll_queue if item.scroll == ScrollType.RAID),
-            queued_dungeons=sum(1 for item in self.scroll_queue if item.scroll == ScrollType.DUNGEON),
+            raid_scrolls=raid_scrolls,
+            dungeon_scrolls=dungeon_scrolls,
         )
         best = pick_offer(offers, town)
         if best is None:

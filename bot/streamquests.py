@@ -78,8 +78,9 @@ class TownActivity:
 
     players: list[Mapping[str, Any]]
     levels_per_minute: float = 0
-    queued_raids: int = 0
-    queued_dungeons: int = 0
+    raid_scrolls: int = 0
+    """Raid scrolls the town has in stock, whether or not any are queued."""
+    dungeon_scrolls: int = 0
 
 
 def parse_offer(slot: int, text: str, minutes: int) -> StreamQuestOffer:
@@ -135,9 +136,9 @@ def expected_progress(offer: StreamQuestOffer, town: TownActivity) -> float:
     if offer.objective == LEVELS:
         return town.levels_per_minute * offer.minutes
     if offer.objective == RAID:
-        return town.queued_raids + offer.minutes * 60 / SECONDS_BETWEEN_RAIDS
+        return town.raid_scrolls + offer.minutes * 60 / SECONDS_BETWEEN_RAIDS
     if offer.objective == DUNGEON:
-        return town.queued_dungeons + offer.minutes * 60 / SECONDS_BETWEEN_DUNGEONS
+        return town.dungeon_scrolls + offer.minutes * 60 / SECONDS_BETWEEN_DUNGEONS
     # Items only count from !craft, !cook and !brew, never from training, and
     # hero waves need the streamer playing their hero
     return 0

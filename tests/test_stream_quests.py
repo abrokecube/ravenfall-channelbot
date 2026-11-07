@@ -12,7 +12,6 @@ from unittest import mock
 
 from bot import ravenfallchannel
 from bot.message_templates import RavenBotTemplates
-from bot.models import QueuedScroll, ScrollType
 from bot.ravenfallchannel import RFChannel
 from bot.streamquests import (
     TownActivity,
@@ -111,7 +110,7 @@ class Estimates(unittest.TestCase):
     def test_queued_scrolls_count_towards_events(self):
         offer = parse_offer(1, "Win 3 raids", 120)
         without = completion_ratio(offer, TownActivity(players=[player()]))
-        with_scrolls = completion_ratio(offer, TownActivity(players=[player()], queued_raids=3))
+        with_scrolls = completion_ratio(offer, TownActivity(players=[player()], raid_scrolls=3))
         self.assertAlmostEqual(with_scrolls - without, 1)
 
     def test_items_and_hero_waves_never_progress_by_themselves(self):
@@ -188,9 +187,14 @@ class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
         town.get_players = mock.AsyncMock(return_value=players)
         return town
 
-    async def tick(self, town: RFChannel, reply: dict):
+    def scroll_counts(self, raid: int = 0, dungeon: int = 0):
+        data = {"channel": {"Raid Scroll": raid, "Dungeon Scroll": dungeon}}
+        return mock.AsyncMock(return_value={"status": 200, "data": data})
+
+    async def tick(self, town: RFChannel, reply: dict, scrolls=None):
         self.send = mock.AsyncMock(return_value=reply)
         with (
+            mock.patch.object(ravenfallchannel, "get_scroll_counts", scrolls or self.scroll_counts()),
             mock.patch.object(ravenfallchannel, "send_to_server_and_wait_response", self.send),
             mock.patch.object(ravenfallchannel.asyncio, "sleep", mock.AsyncMock()),
         ):
@@ -236,10 +240,13 @@ class QuestRoutine(RoutineTestCase):
         self.assertEqual(town.get_players.await_count, 3)
         town.send_chat_message.assert_awaited_once_with("!quest stream start 1")
 
-    async def test_queued_scrolls_reach_the_estimate(self):
+    async def test_scrolls_in_stock_reach_the_estimate(self):
         town = self.make_town([player()])
-        town.scroll_queue.extend(QueuedScroll(ScrollType.RAID, None, None, "5", 1) for _ in range(5))
-        await self.tick(town, self.offers("1. Clear 2 dungeons (120 min), 2. Win 3 raids (120 min)"))
+        await self.tick(
+            town,
+            self.offers("1. Clear 2 dungeons (120 min), 2. Win 3 raids (120 min)"),
+            self.scroll_counts(raid=5),
+        )
         town.send_chat_message.assert_awaited_once_with("!quest stream start 2")
 
     async def test_skips_a_town_that_is_turned_off_or_restarting(self):
