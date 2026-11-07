@@ -27,7 +27,7 @@ Use `-s tests` without `-t .`: `tests` is not a package. In a worktree with no
 | `bot/ravenfallchannel.py` | `RFChannel`: one town. Message handling, watchdog, restarts, scroll queue, auto raids |
 | `bot/ravenfallrestarttask.py` | `RFRestartTask`: countdown, event pausing, `RestartReason` |
 | `bot/ravenfallupdater.py` | `RFGameUpdater`: game and RavenBot updates |
-| `bot/ravenfallshutdown.py` | `RFTownShutdown`: stop and start all towns |
+| `bot/ravenfallshutdown.py` | `RFTownShutdown`: stop and start towns |
 | `bot/messageprocessor.py` | Websocket server the middleman forwards each message to |
 | `bot/config.py` | `get_settings()` for environment variables, `ChannelConfig` and `load_channels()` for `channels.json` |
 | `bot/clients/` | The shared HTTP session (`session.py`) and the game query client (`query.py`) |

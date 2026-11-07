@@ -68,7 +68,7 @@ Added in this order in `main.py`:
 | `TestingCog` | `bot/cogs/testing.py` | Framework test commands |
 | `RedeemCog` | `bot/cogs/redeem.py` | `createreward` |
 | `RedeemRFCog` | `bot/cogs/redeem_rf.py` | Redeems, credits, stock, scroll queue |
-| `GameCog` | `bot/cogs/game.py` | Restarts, `rfupdate`, `rfstopall`, `rfstartall`, scroll admin, backups |
+| `GameCog` | `bot/cogs/game.py` | Restarts, `rfupdate`, `rfshutdown`, `rfstart`, scroll admin, backups |
 | `InfoCog` | `bot/cogs/info.py` | Towns, events, uptime, system info, character stats |
 | `BotStuffCog` | `bot/cogs/bot.py` | `reload_strings`, `pausemon`, `resumemon`, watchdog process control |
 | `DebugCog` | `bot/cogs/debug.py` | `debug`, `eval`, `translate` |

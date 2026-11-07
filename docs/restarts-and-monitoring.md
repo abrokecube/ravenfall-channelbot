@@ -17,7 +17,7 @@ starts `_monitor_ravenbot_response_task`, which does nothing when any of these h
 - `monitoring_paused` is set
 - a check is already running (`is_monitoring`)
 - the updater is holding restarts (`holding_restarts`)
-- `town_shutdown.active` is set
+- the town is in `town_shutdown.held`
 - a restart is in progress (`_restart_in_progress`)
 
 `_await_ravenbot_response` decides what counts as a reply. It keeps waiting while a
@@ -48,7 +48,7 @@ differently. `pausemon` and `resumemon` stop and start the whole `RFChannel`, wh
 `bot/ravenfallrestarttask.py`. It refuses and returns nothing in these cases:
 
 - `holding_restarts` is set, except for `GAME_UPDATE`
-- `town_shutdown.active` is set, except for `SHUTDOWN`
+- the town is in `town_shutdown.held`, except for `SHUTDOWN`
 - `monitoring_paused` is set, except for `USER`, `GAME_UPDATE` and `SHUTDOWN`
 - a task with the same reason exists and `overwrite_same_reason` is false
 
@@ -139,9 +139,17 @@ faked game and Sandboxie, so they show the expected order.
 
 ## Town shutdown
 
-`RFTownShutdown` in `bot/ravenfallshutdown.py` (`rfstopall`, `rfstartall`) queues a
-`SHUTDOWN` task for every town, which stops instead of restarting. `active` blocks
-the watchdog, other restarts and the scroll queue. `MIN_COUNTDOWN` keeps the countdown
-longer than the pre-restart step.
+`RFTownShutdown` in `bot/ravenfallshutdown.py` queues a `SHUTDOWN` task, which stops
+instead of restarting. `rfshutdown`, `rfshutdown cancel` and `rfstart` act on the
+current town (or `--channel`), and `--all`, `rfstopall` and `rfstartall` act on every
+town. A town in
+`held` has its watchdog, other restarts and scroll queue blocked, and `active` means
+any town is held, which blocks `rfupdate`. `MIN_COUNTDOWN` keeps the countdown longer
+than the pre-restart step.
+
+`rfshutdown cancel` calls off a shutdown that hasn't finished and leaves towns already
+down alone. A cancelled town keeps running, unless the pre-restart step already sent
+its players away, in which case it restarts. `rfstart` does the same, and also starts
+towns that are down.
 
 The hold lives only in memory, so restarting the bot brings the towns back.

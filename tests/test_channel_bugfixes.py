@@ -50,7 +50,7 @@ def make_town() -> RFChannel:
     town.manager = SimpleNamespace(
         middleman_connected=True,
         game_updater=SimpleNamespace(holding_restarts=False, holding_scrolls=False),
-        town_shutdown=SimpleNamespace(active=False),
+        town_shutdown=SimpleNamespace(held=set()),
     )
     town.channel_name = "town"
     town.channel_id = "1"

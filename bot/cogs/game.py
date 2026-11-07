@@ -45,6 +45,10 @@ from typing import Dict
 import re
 
 
+def town_names(towns: list[RFChannel]) -> str:
+    return ', '.join(town.channel_name for town in towns)
+
+
 class GameCog(Cog):
     """Cog providing game control commands.
 
@@ -193,8 +197,8 @@ class GameCog(Cog):
         if self.global_context.ravenfall_manager.game_updater.holding_restarts:
             await ctx.message.reply("A game update is in progress, use rfupdate --cancel instead.")
             return
-        if self.global_context.ravenfall_manager.town_shutdown.active:
-            await ctx.message.reply("The towns are shut down, use rfstartall instead.")
+        if channel in self.global_context.ravenfall_manager.town_shutdown.held:
+            await ctx.message.reply(f"{channel.channel_name} is shut down, use rfshutdown cancel or rfstart instead.")
             return
         if not channel.cancel_restart():
             await ctx.message.reply("No restart task found.")
@@ -231,20 +235,29 @@ class GameCog(Cog):
         ]
     )
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("all_", display_name="all", aliases=["a"])
     @parameter("reason", aliases=["r"])
     @parameter("force", aliases=["f"])
     @checks(MinPermissionLevel(UserRole.MODERATOR))
-    async def rfrestart(self, ctx: CommandEvent, seconds: int = 30, *, reason: str = "User restart", channel: RFChannel = 'this', force: bool = False):
+    async def rfrestart(self, ctx: CommandEvent, seconds: int = 30, *, reason: str = "User restart", channel: RFChannel = 'this', all_: bool = False, force: bool = False):
         """Creates a new restart task.
-        
+
         Args:
             channel: Target channel.
+            all_: Restart every town.
             force: Force the restart even during dungeons, raids, or server issues.
         """
-        if not channel.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True, force=force):
+        towns = self.global_context.ravenfall_manager.channels if all_ else [channel]
+        queued = [
+            town for town in towns
+            if town.queue_restart(seconds, label=reason, reason=RestartReason.USER, overwrite_same_reason=True, force=force)
+        ]
+        if not queued:
             await ctx.message.reply("Can't queue a restart right now.")
             return
         msg = f"Restart queued. Restarting in {seconds}s."
+        if all_:
+            msg = f"Restart queued for {town_names(queued)}. Restarting in {seconds}s."
         if force:
             msg += " (forced)"
         await ctx.message.reply(msg)
@@ -282,7 +295,7 @@ class GameCog(Cog):
             await ctx.message.reply(f"A game update is already running ({updater.status}).")
             return
         if self.global_context.ravenfall_manager.town_shutdown.active:
-            await ctx.message.reply("The towns are shut down, use rfstartall first.")
+            await ctx.message.reply("Some towns are shut down, use rfstartall first.")
             return
 
         try:
@@ -308,11 +321,34 @@ class GameCog(Cog):
             await ctx.message.reply(f"{status} Preparing the update...")
 
     @command(
+        name="rfshutdown",
+        aliases=[
+            'rf shutdown',
+            'rfstop',
+            'rf stop',
+        ]
+    )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("all_", display_name="all", aliases=["a"])
+    @parameter("force", aliases=["f"])
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfshutdown(self, ctx: CommandEvent, seconds: int = 120, *, channel: RFChannel = 'this', all_: bool = False, force: bool = False):
+        """Shuts down Ravenfall in this town, and keeps it down until rfstart.
+
+        Args:
+            seconds: Shutdown countdown, at least 25 seconds.
+            channel: Target channel.
+            all_: Shut down every town.
+            force: Shut down even during dungeons and raids.
+        """
+        await self._stop_towns(ctx, None if all_ else channel, seconds, force)
+
+    @command(
         name="rfstopall",
         aliases=[
             'rf stop all',
-            'rfshutdown',
-            'rf shutdown',
+            'rfshutdown all',
+            'rf shutdown all',
         ]
     )
     @parameter("force", aliases=["f"])
@@ -324,39 +360,94 @@ class GameCog(Cog):
             seconds: Shutdown countdown, at least 25 seconds.
             force: Shut down even during dungeons and raids.
         """
+        await self._stop_towns(ctx, None, seconds, force)
+
+    @command(
+        name="rfshutdowncancel",
+        aliases=[
+            'rfshutdown cancel',
+            'rf shutdown cancel',
+        ]
+    )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("all_", display_name="all", aliases=["a"])
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfshutdowncancel(self, ctx: CommandEvent, *, channel: RFChannel = 'this', all_: bool = False):
+        """Cancels a shutdown that hasn't finished yet. Towns already down stay down.
+
+        Args:
+            channel: Target channel.
+            all_: Cancel for every town.
+        """
         manager = self.global_context.ravenfall_manager
-        if manager.game_updater.in_progress:
-            await ctx.message.reply(f"A game update is running ({manager.game_updater.status}).")
+        pending = manager.town_shutdown.pending(manager.channels if all_ else [channel])
+        if not pending:
+            await ctx.message.reply("There is no shutdown to cancel.")
             return
-        seconds = max(seconds, MIN_COUNTDOWN)
-        if not manager.town_shutdown.stop(seconds, force, ctx.message.reply):
-            await ctx.message.reply("The towns are already shut down.")
-            return
-        msg = f"Shutting down all towns in {seconds}s."
-        if force:
-            msg += " (forced)"
-        await ctx.message.reply(f"{msg} Use rfstartall to cancel.")
+        await self._start_towns(ctx, pending)
+
+    @command(
+        name="rfstart",
+        aliases=[
+            'rf start',
+            'rfstartup',
+            'rf startup',
+        ]
+    )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @parameter("all_", display_name="all", aliases=["a"])
+    @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
+    async def rfstart(self, ctx: CommandEvent, *, channel: RFChannel = 'this', all_: bool = False):
+        """Starts this town if it isn't running, and lifts its shutdown.
+
+        Args:
+            channel: Target channel.
+            all_: Start every town.
+        """
+        manager = self.global_context.ravenfall_manager
+        await self._start_towns(ctx, manager.channels if all_ else [channel])
 
     @command(
         name="rfstartall",
         aliases=[
             'rf start all',
-            'rfstartup',
-            'rf startup',
+            'rfstartup all',
+            'rf startup all',
         ]
     )
     @checks(MinPermissionLevel(UserRole.ADMINISTRATOR))
     async def rfstartall(self, ctx: CommandEvent):
-        """Cancels a shutdown still in progress, and starts every town that isn't running."""
+        """Starts every town that isn't running, and lifts any shutdown."""
+        await self._start_towns(ctx, self.global_context.ravenfall_manager.channels)
+
+    async def _stop_towns(self, ctx: CommandEvent, channel: RFChannel | None, seconds: int, force: bool):
+        """Shuts down one town, or every town if channel is None."""
         manager = self.global_context.ravenfall_manager
         if manager.game_updater.in_progress:
             await ctx.message.reply(f"A game update is running ({manager.game_updater.status}).")
             return
-        towns = await manager.town_shutdown.start()
-        if towns:
-            await ctx.message.reply(f"Starting {', '.join(town.channel_name for town in towns)}...")
-        else:
-            await ctx.message.reply("There are no towns to start.")
+        seconds = max(seconds, MIN_COUNTDOWN)
+        towns = manager.town_shutdown.stop(manager.channels if channel is None else [channel], seconds, force, ctx.message.reply)
+        if not towns:
+            await ctx.message.reply("The towns are already shut down." if channel is None else f"{channel.channel_name} is already shut down.")
+            return
+        msg = f"Shutting down {'all towns' if len(towns) == len(manager.channels) else town_names(towns)} in {seconds}s."
+        if force:
+            msg += " (forced)"
+        await ctx.message.reply(f"{msg} Use {'rfshutdown cancel --all' if channel is None else 'rfshutdown cancel'} to cancel.")
+
+    async def _start_towns(self, ctx: CommandEvent, towns: list[RFChannel]):
+        manager = self.global_context.ravenfall_manager
+        if manager.game_updater.in_progress:
+            await ctx.message.reply(f"A game update is running ({manager.game_updater.status}).")
+            return
+        cancelled, starting = await manager.town_shutdown.start(towns)
+        parts = []
+        if cancelled:
+            parts.append(f"Shutdown cancelled for {town_names(cancelled)}.")
+        if starting:
+            parts.append(f"Starting {town_names(starting)}...")
+        await ctx.message.reply(" ".join(parts) or "There are no towns to start.")
 
     @command(
         name="rfbotrestart",

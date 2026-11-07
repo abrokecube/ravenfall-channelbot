@@ -1,9 +1,9 @@
-"""Shuts every town down, and brings them back up, on command.
+"""Shuts towns down, and brings them back up, on command.
 
 Each town goes down through its normal restart task (countdown, pre restart, and
 waiting for dungeons and raids), except that the game is not started again. From
-the moment a shutdown is asked for until the towns are started again, restarts are
-held, otherwise the bot would see the towns as crashed and bring them right back.
+the moment a shutdown is asked for until the town is started again, its restarts
+are held, otherwise the bot would see it as crashed and bring it right back.
 
 The hold only lives in memory, so restarting the bot brings the towns back too.
 """
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable, NamedTuple
 
 from .ravenfallrestarttask import RestartReason, RestartStatus, RFRestartTask, WARNING_MSG_TIMES
 
@@ -28,48 +28,66 @@ MIN_COUNTDOWN = WARNING_MSG_TIMES[-1][0] + 5
 Report = Callable[[str], Awaitable[None]]
 
 
+class StartResult(NamedTuple):
+    # Towns whose shutdown was called off before anything happened to them
+    cancelled: list[RFChannel]
+    starting: list[RFChannel]
+
+
 class RFTownShutdown:
     def __init__(self, manager: RFChannelManager):
         self.manager = manager
-        self.active = False
-        self._tasks: list[RFRestartTask] = []
-        self._run_task: asyncio.Task | None = None
+        # Towns going down or being kept down
+        self.held: set[RFChannel] = set()
+        self._tasks: dict[RFChannel, RFRestartTask] = {}
+        self._run_tasks: set[asyncio.Task] = set()
 
-    def stop(self, seconds: int, force: bool, report: Report) -> bool:
-        """Shuts down every town in the background. Returns False if already shut down."""
-        if self.active:
-            return False
-        self.active = True
-        self._run_task = asyncio.create_task(self._run(seconds, force, report))
-        return True
+    @property
+    def active(self) -> bool:
+        return bool(self.held)
 
-    async def start(self) -> list[RFChannel]:
-        """Cancels a shutdown still in progress, and starts every town that needs it.
+    def stop(self, channels: list[RFChannel], seconds: int, force: bool, report: Report) -> list[RFChannel]:
+        """Shuts down towns in the background. Returns those not already shut down."""
+        towns = [channel for channel in channels if channel not in self.held]
+        if towns:
+            self.held.update(towns)
+            run_task = asyncio.create_task(self._run(towns, seconds, force, report))
+            self._run_tasks.add(run_task)
+            run_task.add_done_callback(self._run_tasks.discard)
+        return towns
 
-        Returns the towns that are being started.
-        """
-        if self._run_task and not self._run_task.done():
-            self._run_task.cancel()
-            await asyncio.wait([self._run_task])
+    def pending(self, channels: list[RFChannel]) -> list[RFChannel]:
+        """The towns among these that are held but have not gone down yet."""
+        return [
+            channel for channel in channels
+            if channel in self.held and (channel not in self._tasks or not self._tasks[channel].finished())
+        ]
+
+    async def start(self, channels: list[RFChannel]) -> StartResult:
+        """Cancels any shutdown still in progress for these towns, and starts those that need it."""
+        tasks = {channel: self._tasks.pop(channel) for channel in channels if channel in self._tasks}
 
         stopping = [
-            task.waiting_task for task in self._tasks
+            task.waiting_task for task in tasks.values()
             if not task.finished() and task.get_status() == RestartStatus.RESTARTING
         ]
         if stopping:
             await asyncio.wait(stopping)
 
+        called_off = [
+            channel for channel in channels
+            if channel in self.held and (channel not in tasks or not tasks[channel].finished())
+        ]
         # These are still up, but their players were already sent away
-        restart_anyway = [task.channel for task in self._tasks if task.pre_restart_done and not task.finished()]
-        for task in self._tasks:
+        restart_anyway = [channel for channel, task in tasks.items() if task.pre_restart_done and not task.finished()]
+        for task in tasks.values():
             if not task.finished():
                 task.cancel()
-        self._tasks = []
 
-        versions = await self.manager.game_updater.installed_versions()
-        self.active = False
-        return [
-            channel for channel in self.manager.channels
+        versions = await self.manager.game_updater.installed_versions(channels)
+        self.held.difference_update(channels)
+        starting = [
+            channel for channel in channels
             if (channel in restart_anyway or not versions[channel.channel_name])
             and not channel.is_restarting()
             and channel.queue_restart(
@@ -81,30 +99,39 @@ class RFTownShutdown:
                 force=True,
             )
         ]
+        return StartResult([channel for channel in called_off if channel not in starting], starting)
 
-    async def _run(self, seconds: int, force: bool, report: Report) -> None:
+    async def _run(self, towns: list[RFChannel], seconds: int, force: bool, report: Report) -> None:
         try:
-            await self.manager.game_updater.finish_running_restarts()
-            self._tasks = [
-                channel.queue_restart(
+            await self.manager.game_updater.finish_running_restarts(towns)
+            queued = {
+                channel: channel.queue_restart(
                     seconds,
                     label="Shutting down",
                     reason=RestartReason.SHUTDOWN,
                     overwrite_same_reason=True,
                     force=force,
                 )
-                for channel in self.manager.channels
-            ]
-            await asyncio.wait([task.waiting_task for task in self._tasks])
+                for channel in towns
+                if channel in self.held
+            }
+            if not queued:
+                return
+            self._tasks.update(queued)
+            await asyncio.wait([task.waiting_task for task in queued.values()])
 
-            versions = await self.manager.game_updater.installed_versions()
+            # A town that was started again has been reported on already
+            remaining = [channel for channel, task in queued.items() if self._tasks.get(channel) is task]
+            if not remaining:
+                return
+            versions = await self.manager.game_updater.installed_versions(remaining)
             still_up = [name for name, version in versions.items() if version]
             if still_up:
                 await report(f"These towns are still running: {', '.join(still_up)}")
-            else:
+            elif len(remaining) == len(self.manager.channels):
                 await report("All towns have been shut down.")
-        except asyncio.CancelledError:
-            logger.info("Town shutdown cancelled")
+            else:
+                await report(f"Shut down {', '.join(channel.channel_name for channel in remaining)}.")
         except Exception as e:
             logger.error(f"Town shutdown failed: {e}", exc_info=True)
             await report(f"Shutdown failed: {e}")

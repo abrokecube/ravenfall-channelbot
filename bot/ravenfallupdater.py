@@ -347,9 +347,9 @@ class RFGameUpdater:
     def in_progress(self) -> bool:
         return self._run_task is not None and not self._run_task.done()
 
-    async def installed_versions(self) -> dict[str, str | None]:
-        """Asks each town what it is running. Towns that are offline map to None."""
-        channels = self.manager.channels
+    async def installed_versions(self, channels: list[RFChannel] | None = None) -> dict[str, str | None]:
+        """Asks each town, or only these, what it is running. Towns that are offline map to None."""
+        channels = self.manager.channels if channels is None else channels
         sessions = await asyncio.gather(
             *(channel.get_query("select * from session", 5, suppress_timeout_error=True) for channel in channels),
             return_exceptions=True,
@@ -517,9 +517,9 @@ class RFGameUpdater:
                 return
             await asyncio.sleep(EVENT_POLL_INTERVAL)
 
-    async def finish_running_restarts(self) -> None:
+    async def finish_running_restarts(self, channels: list[RFChannel] | None = None) -> None:
         running: list[RFRestartTask] = []
-        for channel in self.manager.channels:
+        for channel in self.manager.channels if channels is None else channels:
             task = channel.restart_task
             if task is None or task.finished():
                 continue
