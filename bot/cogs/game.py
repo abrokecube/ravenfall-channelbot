@@ -180,6 +180,29 @@ class GameCog(Cog):
         )
 
     @command(
+        name="rfquesttoggle",
+        aliases=[
+            'questtoggle',
+            'rf quest toggle',
+            'rfquest auto',
+            'rf quest auto',
+        ]
+    )
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @checks(MinPermissionLevel(UserRole.MODERATOR))
+    async def rfquesttoggle(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
+        """Toggles automatically starting stream quests, until the bot restarts.
+
+        Args:
+            channel: Target channel, e.g. --channel=borkedcube.
+        """
+        channel.auto_stream_quests = not channel.auto_stream_quests
+        await ctx.message.reply(
+            f"Auto stream quests are now {'enabled' if channel.auto_stream_quests else 'disabled'} "
+            f"for {channel.channel_name}."
+        )
+
+    @command(
         name="rfrestartcancel",
         aliases=[
             'rf restart cancel',

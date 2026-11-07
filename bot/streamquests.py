@@ -40,6 +40,9 @@ FIGHTING = frozenset({"attack", "defense", "strength", "health", "melee", "all",
 
 _OFFER = re.compile(r"(\d+)\.\s+(.+?)\s+\((\d+)\s+min\)")
 
+# The keys in `data/definitions.yaml` of the game saying a stream quest is over
+QUEST_END_KEYS = frozenset({"stream_quest_done", "stream_quest_out_of_time", "stream_quest_stopped"})
+
 _NUMBER = r"([\d,]+)"
 _OFFER_TEXTS: tuple[tuple[re.Pattern[str], str, Optional[str]], ...] = (
     (re.compile(rf"^Chop {_NUMBER} wood$"), GATHER, "woodcutting"),

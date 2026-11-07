@@ -108,14 +108,17 @@ Other routines in `RFChannel`: `dungeon_killswitch_routine` stops dungeons longe
 than `MAX_DUNGEON_LENGTH`, and `backup_state_data_routine` backs up `state-data.json`
 from the sandboxed folder.
 
-`stream_quest_routine` runs every minute, skips towns restarting within 2 minutes, and
-starts a stream quest when none is running. It sends `quest_command` through the
+`stream_quest_routine` checks every minute and a second after the game announces
+that a quest ended (done, out of time or stopped), skips towns restarting within 2
+minutes, and starts a stream quest when none is running. It sends `quest_command` through the
 middleman to read the offers, which keeps `!quest stream` out of chat. Then
 `pick_offer` in `bot/streamquests.py` picks the offer with the highest expected
 share of its target. If no offer should reach its target within its time limit, it
-picks none and the routine tries again on the next tick. Otherwise the routine sends
-`!quest stream start <n>` in chat, so the bot account must be a moderator. Setting `auto_stream_quests` to false in a town's
-`channels.json` entry turns it off. Each check writes what it decided and why to
+picks none and the routine tries again on the next check. Otherwise the routine sends
+`!quest stream start <n>` in chat, so the bot account must be a moderator. A start the
+game refuses is sent again on the next check. Setting `auto_stream_quests` to false in a town's
+`channels.json` entry turns it off, and moderators can toggle it with `!rfquesttoggle`
+until the bot restarts. Each check writes what it decided and why to
 `logs/streamquests.log`, with every offer's expected share of its target.
 
 The estimate assumes the town keeps doing what it's doing now:

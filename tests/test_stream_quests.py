@@ -11,8 +11,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 from bot import ravenfallchannel
+from bot.cogs.game import GameCog
 from bot.message_templates import RavenBotTemplates
 from bot.ravenfallchannel import RFChannel
+from bot.ravenfallloc import RavenfallLocalization
 from bot.streamquests import (
     TownActivity,
     completion_ratio,
@@ -176,7 +178,7 @@ class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
         town.manager = SimpleNamespace(middleman_connected=True, middleman_enabled=False)
         town.channel_restart_lock = mock.Mock(locked=mock.Mock(return_value=False))
         town.restart_task = None
-        town.next_stream_quest_attempt = 0
+        town.next_stream_quest_check = 0
         town.ravenbot_prefixes = ("!",)
         town.scroll_queue = deque()
         town.send_chat_message = mock.AsyncMock()
@@ -198,6 +200,7 @@ class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
             mock.patch.object(ravenfallchannel, "send_to_server_and_wait_response", self.send),
             mock.patch.object(ravenfallchannel.asyncio, "sleep", mock.AsyncMock()),
         ):
+            town.next_stream_quest_check = 0
             await town.stream_quest_routine._coro(town)
 
     def offers(self, text: str) -> dict:
@@ -223,12 +226,27 @@ class QuestRoutine(RoutineTestCase):
         await self.tick(town, {"success": True, "timeout": True, "responses": []})
         town.send_chat_message.assert_not_awaited()
 
-    async def test_a_refused_start_is_not_repeated_on_the_next_tick(self):
+    async def test_a_refused_start_is_tried_again_on_the_next_check(self):
         town = self.make_town([player("Fishing")])
         reply = self.offers("1. Catch 300 fish (60 min)")
         await self.tick(town, reply)
         await self.tick(town, reply)
-        town.send_chat_message.assert_awaited_once()
+        self.assertEqual(town.send_chat_message.await_count, 2)
+
+    async def test_waits_for_the_next_check(self):
+        town = self.make_town([player("Fishing")])
+        town.next_stream_quest_check = ravenfallchannel.time.time() + 30
+        town.check_stream_quest = mock.AsyncMock()
+        await town.stream_quest_routine._coro(town)
+        town.check_stream_quest.assert_not_awaited()
+
+    async def test_a_check_books_the_next_one_a_minute_later(self):
+        town = self.make_town([player("Fishing")])
+        town.check_stream_quest = mock.AsyncMock()
+        await town.stream_quest_routine._coro(town)
+        town.check_stream_quest.assert_awaited_once()
+        left = town.next_stream_quest_check - ravenfallchannel.time.time()
+        self.assertAlmostEqual(left, 60, delta=5)
 
     async def test_measures_levels_only_when_offered(self):
         town = self.make_town([player("Fishing")])
@@ -329,16 +347,70 @@ class QuestLog(RoutineTestCase):
         town.channel_restart_lock.locked.return_value = True
         self.assertIn("restarting", await self.logged(town, {}))
 
-        town = self.make_town([player()])
-        town.next_stream_quest_attempt = ravenfallchannel.time.time() + 600
-        self.assertIn("next try in", await self.logged(town, {}))
-
     async def test_a_crash_is_logged_and_the_routine_lives_on(self):
         town = self.make_town([player()])
         town.get_players = mock.AsyncMock(side_effect=ValueError("bad player"))
         text = await self.logged(town, self.offers("1. Catch 300 fish (60 min)"))
         self.assertIn("stream quest check failed", text)
         self.assertIn("bad player", text)
+
+
+class QuestEnd(unittest.IsolatedAsyncioTestCase):
+    """The formats are `MSG_STREAM_QUEST_DONE`, `_OUT_OF_TIME` and `_STOPPED`, which the game sends without their meta."""
+
+    ENDED = (
+        "Stream quest done: {quest}! The village got {village}, and {helpers} helpers shared {coins} coins. Top helpers: {top}.",
+        "Time ran out for the stream quest: {quest} ({progress}/{amount}). So close! Next time.",
+        "The stream quest was stopped: {quest}.",
+    )
+
+    def make_town(self) -> RFChannel:
+        town = RFChannel.__new__(RFChannel)
+        town.rfloc = RavenfallLocalization("data/definitions.yaml")
+        town.named_observes = deque()
+        town.auto_end_ravebridge = False
+        town.ravenfall_loc_strings_path = None
+        town.next_stream_quest_check = ravenfallchannel.time.time() + 45
+        return town
+
+    async def announce(self, town: RFChannel, message_format: str):
+        await town.process_ravenfall_message({
+            "Identifier": "message",
+            "Format": message_format,
+            "Args": [],
+            "CorrelationId": "",
+            "Recipent": {"Platform": "system", "PlatformUserName": ""},
+        }, None)
+
+    async def test_each_ending_brings_the_check_to_a_second_away(self):
+        for message_format in self.ENDED:
+            with self.subTest(message_format):
+                town = self.make_town()
+                await self.announce(town, message_format)
+                left = town.next_stream_quest_check - ravenfallchannel.time.time()
+                self.assertAlmostEqual(left, 1, delta=0.5)
+
+    async def test_a_quest_starting_or_running_does_not(self):
+        town = self.make_town()
+        check = town.next_stream_quest_check
+        await self.announce(town, RUNNING_FORMAT)
+        await self.announce(town, OFFERS_FORMAT)
+        await self.announce(town, "Stream quest! {quest} within {minutes} minutes, all of us together. Reward: {reward}. Just play to help!")
+        self.assertEqual(town.next_stream_quest_check, check)
+
+
+class QuestToggle(unittest.IsolatedAsyncioTestCase):
+    async def test_toggles_the_town_and_says_which_way(self):
+        cog = GameCog.__new__(GameCog)
+        ctx = SimpleNamespace(message=SimpleNamespace(reply=mock.AsyncMock()))
+        town = SimpleNamespace(auto_stream_quests=True, channel_name="town")
+
+        await cog.rfquesttoggle(ctx, channel=town)
+        self.assertIs(town.auto_stream_quests, False)
+        ctx.message.reply.assert_awaited_once_with("Auto stream quests are now disabled for town.")
+
+        await cog.rfquesttoggle(ctx, channel=town)
+        self.assertIs(town.auto_stream_quests, True)
 
 
 class Template(unittest.TestCase):

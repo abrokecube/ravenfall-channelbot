@@ -541,3 +541,6 @@ ferry_info_destination_players_boost: "The ferry is currently sailing towards {{
 ferry_info_destination_players_captain: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing."
 ferry_info_destination_players_captain_boost: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
 loot: "{{loot:([0-9a-zA-Z ]+ - from (raid|dungeon) ([0-9]+[dhms] )+ago\\.)+}} "
+stream_quest_done: "Stream quest done: {quest}! The village got {village}, and {helpers} helpers shared {coins} coins. Top helpers: {top}."
+stream_quest_out_of_time: "Time ran out for the stream quest: {quest} ({progress}/{amount}). So close! Next time."
+stream_quest_stopped: "The stream quest was stopped: {quest}."

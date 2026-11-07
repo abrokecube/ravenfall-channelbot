@@ -24,6 +24,7 @@ from .ravenfallloc import RavenfallLocalization, round_skill_bonuses
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from .streamquests import (
+    QUEST_END_KEYS,
     StreamQuestOffer,
     TownActivity,
     describe_offers,
@@ -68,7 +69,8 @@ MAX_DUNGEON_LENGTH = 15 * 60
 MAX_SCROLL_QUEUE_FAILURES = 5  # Consecutive failed scroll uses before the whole queue is refunded
 
 STREAM_QUEST_LEVEL_WINDOW_SECONDS = 60 * 60
-STREAM_QUEST_RETRY_SECONDS = 30 * 60
+STREAM_QUEST_CHECK_SECONDS = 60
+STREAM_QUEST_END_DELAY_SECONDS = 1
 
 # Command timeout values in seconds for monitored commands
 COMMAND_TIMEOUTS = {
@@ -183,7 +185,7 @@ class RFChannel:
         self.update_events_routine_first_iteration = True
         self.scroll_queue: deque[QueuedScroll] = deque()
         self.scroll_queue_failures = 0
-        self.next_stream_quest_attempt: float = 0
+        self.next_stream_quest_check: float = time.time() + STREAM_QUEST_CHECK_SECONDS
 
     async def save_scroll_queue(self):
         encoded = []
@@ -386,6 +388,8 @@ class RFChannel:
         key = ""
         if match is not None:
             key = match.key
+        if key in QUEST_END_KEYS:
+            self.next_stream_quest_check = time.time() + STREAM_QUEST_END_DELAY_SECONDS
         if key == "not_playing" and message['CorrelationId'] in self.named_observes:
             return {'block': True}
         message_args = message['Args']
@@ -954,9 +958,15 @@ class RFChannel:
             return None
         return max(0.0, gained) * 60 / STREAM_QUEST_LEVEL_WINDOW_SECONDS
 
-    @routine(delta=timedelta(minutes=1), wait_first=True, max_attempts=99999)
+    @routine(delta=timedelta(seconds=1), wait_first=True, max_attempts=99999)
     async def stream_quest_routine(self):
-        """Starts the offer the town is most likely to finish, if it should finish one in time."""
+        """Starts the offer the town is most likely to finish, if it should finish one in time.
+
+        It checks once a minute, and a second after the game announces a quest's end.
+        """
+        if time.time() < self.next_stream_quest_check:
+            return
+        self.next_stream_quest_check = time.time() + STREAM_QUEST_CHECK_SECONDS
         try:
             await self.check_stream_quest()
         except Exception:
@@ -978,9 +988,6 @@ class RFChannel:
             )
         if self.channel_restart_lock.locked() or self._restart_is_imminent():
             return skip("the town is restarting")
-        wait = self.next_stream_quest_attempt - time.time()
-        if wait > 0:
-            return skip(f"tried to start one recently, next try in {wait:.0f} s")
         offers = await self.get_stream_quest_offers()
         if not offers:
             return
@@ -1009,8 +1016,6 @@ class RFChannel:
         if best is None:
             return skip(f"no offer should finish in time: {describe_offers(offers, town)}")
         quest_logger.info(f"{self.channel_name}: starting {best.slot}: {describe_offers(offers, town)}")
-        # If the game turns it down (the bot isn't a moderator, say), don't repeat it in chat every tick
-        self.next_stream_quest_attempt = time.time() + STREAM_QUEST_RETRY_SECONDS
         await self.send_chat_message(f"{self.ravenbot_prefixes[0]}quest stream start {best.slot}")
 
     @routine(delta=timedelta(seconds=1), max_attempts=99999)
