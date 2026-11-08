@@ -89,16 +89,28 @@ base_item_values: dict[str, int] = {}
 with open("data/base_item_values.json", "r", encoding="utf-8") as f:
     base_item_values = json.load(f)
 
+# Optional {"Item Name": final_credit_price} overrides, applied after the value curve
+OVERRIDES_PATH = os.path.join("data", "item_value_overrides.json")
+item_value_overrides: dict[str, int] = {}
+if os.path.exists(OVERRIDES_PATH):
+    with open(OVERRIDES_PATH, "r", encoding="utf-8") as f:
+        item_value_overrides = json.load(f)
+
 async def main():
     rf = ravenpy.RavenNest(os.getenv("RAVENFALL_API_USER"), os.getenv("RAVENFALL_API_PASS"))
     await rf.login()
     await rf.refresh_items()
     # Compute values for craftable items: 95% of the sum of ingredient sell prices
     item_values: dict[str, int] = {}
+    zero_items: set[str] = set()
     for item in ravenpy.get_all_items():
         # Only consider items that have crafting ingredients
         sell_price = base_item_values.get(item.name, item.sell_price)
         item_values[item.name] = sell_price
+        if item.name in base_item_values and base_item_values[item.name] == 0:
+            # Explicit 0 in base_item_values means not redeemable, so it stays 0
+            zero_items.add(item.name)
+            continue
         if not getattr(item, "craft_ingredients", None):
             continue
         if not item.craft_ingredients:
@@ -116,9 +128,21 @@ async def main():
             item_values[item.name] = total_ingredient_value
 
     # Apply the value curve to all items
+    # (the curve maps 0 to 1, so items fixed at 0 are skipped)
     for item in item_values:
+        if item in zero_items:
+            continue
         item_values[item] = int(VALUE_CURVE(item_values[item]))
-    
+
+    # Apply overrides to the final credit price
+    for name, new_value in item_value_overrides.items():
+        if name not in item_values:
+            print(f"Override for unknown item {name!r} ignored")
+            continue
+        original = item_values[name]
+        item_values[name] = int(new_value)
+        print(f"{name}: {original} -> {item_values[name]}")
+
     out_path = os.path.join("data", f"item_values.json")
 
     # Write JSON with compact formatting
