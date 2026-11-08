@@ -841,6 +841,8 @@ class RedeemRFCog(Cog):
         warning = ""
         if item.soulbound:
             warning = " (This item cannot be redeemed.)"
+        elif not self.item_price_dict.get(item.name.lower(), 0):
+            warning = " (This item cannot be redeemed because it has no price.)"
         _, count = await get_item_count(channel, item.name)
         await ctx.message.reply(
             f"There {pl(count, 'is', 'are')} currently {count:,}× {item.name}{pl(count, '', '(s)')} in stock.{warning}"
@@ -888,6 +890,8 @@ class RedeemRFCog(Cog):
             warning = ""
             if item.soulbound:
                 warning = " (Cannot be redeemed.)"
+            elif not self.item_price_dict.get(item.name.lower(), 0):
+                warning = " (Cannot be redeemed: no price.)"
             item_str = f"{item.name.ljust(item_cols)} {str(count).rjust(max(0, min(num_cols, (item_cols+6) - len(item.name) )))}"
             item_str = fill_whitespace(item_str, ".")
             item_str = f"  {item_str}{warning}"
