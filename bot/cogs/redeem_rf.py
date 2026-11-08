@@ -897,9 +897,9 @@ class RedeemRFCog(Cog):
             elif not price:
                 warning = " (Cannot be redeemed: no price.)"
             price_str = f"{price:,}" if price and not item.soulbound else "-"
-            item_str = f"{item.name.ljust(item_cols)} {str(count).rjust(max(0, min(num_cols, (item_cols+6) - len(item.name) )))}"
+            item_str = f"{item.name.ljust(item_cols)} {str(count).rjust(max(0, min(num_cols, (item_cols+6) - len(item.name) )))}  {price_str.rjust(price_cols)}"
             item_str = fill_whitespace(item_str, ".")
-            item_str = f"  {item_str}  {price_str.rjust(price_cols)}{warning}"
+            item_str = f"  {item_str}{warning}"
             if item.category == ravenpy.ItemCategory.Resource and len(item.used_in) > 0:
                 if not item.craft_ingredients:
                     categories["Raw Materials"].append(item_str)
