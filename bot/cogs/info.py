@@ -609,7 +609,7 @@ class InfoCog(Cog):
         out_str.append(utils.fill_whitespace(
             f"A "
             f"{"USER NAME".ljust(24)}  "
-            f"{"C.LEVEL".ljust(7)}  "
+            f"{"C.LEVEL".rjust(7)}  "
             f"{"STATUS".ljust(7)}  "
             f"{"ISLAND".ljust(8)}  "
             f"{"RstTIME".ljust(7)}  "
@@ -666,10 +666,11 @@ class InfoCog(Cog):
                 elif char.is_sailing:
                     where_island = "Sailing"
                     
-                rest_time = "0s"
+                # Right-align the time; the +/- suffix keeps its own last column.
+                rest_time = "0s".rjust(6) + " "
                 if char.rested_time.total_seconds() > 0:
-                    s = TimeSize.SMALL 
-                    rest_time = format_seconds(char.rested_time.total_seconds(),s,2)
+                    s = TimeSize.SMALL
+                    rest_time = format_seconds(char.rested_time.total_seconds(),s,2).rjust(6)
                     if char.in_onsen:
                         rest_time += "+"
                     else:
@@ -687,7 +688,7 @@ class InfoCog(Cog):
                 out_str.append(utils.fill_whitespace(
                     f"{char_action} "
                     f"{char.user_name.ljust(24)}  "
-                    f"Lv.{str(char.combat_level).ljust(4)}  "
+                    f"{str(char.combat_level).rjust(7)}  "
                     f"{where.ljust(7)}  "
                     f"{where_island.ljust(8)}  "
                     f"{rest_time.ljust(7)}  "
