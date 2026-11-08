@@ -410,7 +410,17 @@ class InfoCog(Cog):
             await ctx.message.reply(f"{joined} have level {top_level} {skill}!")
     
     @command(name='playerlist', aliases=['player list', 'players'])
-    @parameter("sort_by", aliases=['s'], converter=Choice(['name', 'combatlevel', 'none']))
+    @parameter("sort_by", aliases=['s'], converter=Choice({
+        'name': ['n', 'username'],
+        'combatlevel': ['cl', 'combat', 'level', 'lv'],
+        'exprate': ['exp', 'xp', 'xprate', 'exph', 'rate'],
+        'coins': ['coin', 'money', 'gold'],
+        'resttime': ['rest', 'rested', 'rt'],
+        'island': ['isl', 'location'],
+        'training': ['skill', 'train'],
+        'status': ['activity', 'where'],
+        'none': [],
+    }))
     @parameter("group_by", aliases=['g'], converter=Choice(['training', 'island', 'none']))
     @parameter("channel", aliases=["c"], converter=RFChannelConverter)
     @parameter("name_glob", aliases=['filter', 'f', "glob"],  converter=Glob)
@@ -463,11 +473,47 @@ class InfoCog(Cog):
         for series in char_exprate_series:
             char_exprates[id_to_username[series['metric']['player_id']]] = [[x, float(y)] for x, y in series['values']]
         
+        def exp_rate(c: Character) -> float:
+            series = char_exprates.get(c.user_name)
+            return series[-1][1] if series else 0.0
+
+        def status_rank(c: Character) -> int:
+            # Same precedence as the STATUS column below: later checks win there.
+            for rank, flag in enumerate((c.in_onsen, c.in_dungeon, c.in_duel, c.in_arena, c.in_raid)):
+                if flag:
+                    return rank
+            return 5
+
+        def training_key(c: Character):
+            if not c.training:
+                return (1, "", 0)
+            top_level = max((s.level for s in c.training_stats), default=0)
+            return (0, c.training.name, -top_level)
+
+        def island_key(c: Character):
+            if c.island:
+                return (0, c.island.value)
+            if c.is_sailing:
+                return (1, 0)
+            return (2, 0)
+
         match sort_by:
             case "name":
-                players_parsed.sort(key=lambda x: x.user_name)
+                players_parsed.sort(key=lambda x: x.user_name.lower())
             case "combatlevel":
-                players_parsed.sort(key=lambda x: x.combat_level, reverse=True)
+                players_parsed.sort(key=lambda x: (-x.combat_level, x.user_name.lower()))
+            case "exprate":
+                players_parsed.sort(key=lambda x: (-exp_rate(x), x.user_name.lower()))
+            case "coins":
+                players_parsed.sort(key=lambda x: (-x.coins, x.user_name.lower()))
+            case "resttime":
+                players_parsed.sort(key=lambda x: (-x.rested_time.total_seconds(), x.user_name.lower()))
+            case "island":
+                players_parsed.sort(key=lambda x: (island_key(x), x.user_name.lower()))
+            case "training":
+                players_parsed.sort(key=lambda x: (training_key(x), x.user_name.lower()))
+            case "status":
+                players_parsed.sort(key=lambda x: (status_rank(x), x.user_name.lower()))
                 
         players_grouped: Dict[str, List[Character]] = defaultdict(list)
         
@@ -568,7 +614,7 @@ class InfoCog(Cog):
             f"{"ISLAND".ljust(8)}  "
             f"{"RstTIME".ljust(7)}  "
             f"{"COINS".rjust(15)}  "
-            f"{"XP RATE".rjust(13)} "
+            f"{"XP RATE".rjust(17)} "
             f"GRAPH (10min) -- "
             f"TRAINING SKILL  ", 
             "-"
@@ -646,7 +692,7 @@ class InfoCog(Cog):
                     f"{where_island.ljust(8)}  "
                     f"{rest_time.ljust(7)}  "
                     f"{f"{char.coins:,}".rjust(15)}  "
-                    f"{(numerize(series[-1][1]) + " exp/h").rjust(13)} "
+                    f"{f"{round(series[-1][1]):,} exp/h".rjust(17)} "
                     f"{graph} "
                     f"{what}  ", 
                     "."
