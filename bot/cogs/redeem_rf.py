@@ -882,19 +882,24 @@ class RedeemRFCog(Cog):
         item_counts_list = sorted(item_counts_list, key=lambda x: x[1] > 0, reverse=True)
         item_cols = 27
         num_cols = 6
+        price_cols = 7
+        out_str.append(f"  {'Item'.ljust(item_cols)} {'Stock'.rjust(num_cols)}  {'Price'.rjust(price_cols)}")
+        out_str.append("")
         for item_name, count in item_counts_list:
             item = ravenpy._items_name_data[item_name]
             count = 0
             if item.name in item_counts:
                 count = item_counts[item.name]
+            price = self.item_price_dict.get(item.name.lower(), 0)
             warning = ""
             if item.soulbound:
                 warning = " (Cannot be redeemed.)"
-            elif not self.item_price_dict.get(item.name.lower(), 0):
+            elif not price:
                 warning = " (Cannot be redeemed: no price.)"
+            price_str = f"{price:,}" if price and not item.soulbound else "-"
             item_str = f"{item.name.ljust(item_cols)} {str(count).rjust(max(0, min(num_cols, (item_cols+6) - len(item.name) )))}"
             item_str = fill_whitespace(item_str, ".")
-            item_str = f"  {item_str}{warning}"
+            item_str = f"  {item_str}  {price_str.rjust(price_cols)}{warning}"
             if item.category == ravenpy.ItemCategory.Resource and len(item.used_in) > 0:
                 if not item.craft_ingredients:
                     categories["Raw Materials"].append(item_str)
