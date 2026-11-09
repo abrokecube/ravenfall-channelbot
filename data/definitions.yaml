@@ -565,19 +565,17 @@ twitch_subscription: "Welcome to the {streamerDisplayName} crew! You will now ga
 permanently_suspended: "You have been permanently suspended from playing. Contact the staff for more information."
 command_restricted: "Only the Broadcaster and Moderators can use this command."
 ferry_scroll_used:
- - "The ferry will now move faster for {{duration}}."
- - "The ferry will now move faster for {{duration}}. "
+ - "The ferry will now move faster for {boostTime}."
+ - "The ferry will now move faster for {time}. "
 scroll_query: "You have {{scrolls:(\\{tokenAmount\\d\\} \\{tokenName\\d\\}\\(s\\)(, | and |.$))+}}"
 
 # holy fuck
-ferry_info_players: "The ferry is currently sailing with {{playerCount:\\d+}} players on board."
-ferry_info_players_boost: "The ferry is currently sailing with {{playerCount:\\d+}} players on board. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
-ferry_info_destination_players: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board."
-ferry_info_destination_players_boost: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
-ferry_info_destination_players_captain:
- - "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing."
- - "The ferry is currently sailing towards {destination} with {playerCount} players on board. {captainName} is the captain with {sailingLevel} sailing."
-ferry_info_destination_players_captain_boost: "The ferry is currently sailing towards {{islandName}} with {{playerCount:\\d+}} players on board. {{ferryCaptain}} is the captain with {{captainLevel}} sailing. There is an active ferry boost giving {{ferryBoost:\\d+}}x the speed, boost ends in {{ferryBoostDuration}}."
+ferry_info_players: "The ferry is currently sailing with {playerCount} players on board."
+ferry_info_players_boost: "The ferry is currently sailing with {playerCount} players on board. There is an active ferry boost giving 5x the speed, boost ends in {timeLeft}."
+ferry_info_destination_players: "The ferry is currently sailing towards {destination} with {playerCount} players on board."
+ferry_info_destination_players_boost: "The ferry is currently sailing towards {destination} with {playerCount} players on board. There is an active ferry boost giving 5x the speed, boost ends in {timeLeft}."
+ferry_info_destination_players_captain: "The ferry is currently sailing towards {destination} with {playerCount} players on board. {captainName} is the captain with {sailingLevel} sailing."
+ferry_info_destination_players_captain_boost: "The ferry is currently sailing towards {destination} with {playerCount} players on board. {captainName} is the captain with {sailingLevel} sailing. There is an active ferry boost giving 5x the speed, boost ends in {timeLeft}."
 loot: "{{loot:([0-9a-zA-Z ]+ - from (raid|dungeon) ([0-9]+[dhms] )+ago\\.)+}} "
 stream_quest_info: "Stream quest: {quest} ({progress}/{amount}), {minutes} minutes left, {helpers} helping so far. Reward: {reward}."
 stream_quest_done: "Stream quest done: {quest}! The village got {village}, and {helpers} helpers shared {coins} coins. Top helpers: {top}."
