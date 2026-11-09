@@ -310,7 +310,7 @@ class Match:
                     self.arguments.append(
                         StringArg(value, StringArgType.GIVEN)
                     )
-                    regex_str_build.append(re.escape(value))
+                    regex_str_build.append(re.escape("{%s}" % value))
                     orig_str_build.append("{%s}" % value)
                 case _:
                     logger.error("Unexpected match group in string pattern")

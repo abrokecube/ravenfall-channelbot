@@ -2,7 +2,7 @@
 
 import unittest
 
-from bot.ravenfallloc import round_skill_bonuses
+from bot.ravenfallloc import Match, RavenfallLocalization, round_skill_bonuses
 
 
 class RoundSkillBonusesTest(unittest.TestCase):
@@ -25,6 +25,25 @@ class RoundSkillBonusesTest(unittest.TestCase):
     def test_leaves_whole_bonuses_and_other_text_alone(self):
         for text in ("Mining 608 [+36] (37%)", "Cost 1.23456 coins", "[+abc]"):
             self.assertEqual(round_skill_bonuses(text), text)
+
+
+class DefinitionMatchingTest(unittest.TestCase):
+    def test_placeholder_braces_are_kept_in_regex_definitions(self):
+        match = Match("k", "You have successfully {{term}} {quantity} {itemName}")
+        self.assertIsNotNone(
+            match.regex.match("You have successfully crafted {quantity} {itemName}")
+        )
+
+    def test_logged_strings_are_identified(self):
+        loc = RavenfallLocalization("data/definitions.yaml")
+        for text, key in [
+            ("Victorious!! The dungeon boss was slain and yielded {itemCount} item treasures!", "dungeon_finished_with_treasure"),
+            ("You have successfully cooked {quantity} {itemName}", "produce_success"),
+            ("Quest taken: {quest}. Reward: {reward}.", "quest_taken"),
+            ("Increased Healing Power +40% (00:09:55), Increased Experience Gain +12% (00:02:49)", "stat_boosts"),
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual(loc.identify_string(text).key, key)
 
 
 if __name__ == "__main__":
