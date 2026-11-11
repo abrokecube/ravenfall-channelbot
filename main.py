@@ -305,6 +305,8 @@ async def run():
     await event_manager.add_cog(InfoCog)
     from bot.cogs.bot import BotStuffCog
     await event_manager.add_cog(BotStuffCog, watcher_urls=settings.watcher_urls)
+    from bot.cogs.music import MusicCog
+    await event_manager.add_cog(MusicCog)
     from bot.cogs.debug import DebugCog
     await event_manager.add_cog(DebugCog)
 

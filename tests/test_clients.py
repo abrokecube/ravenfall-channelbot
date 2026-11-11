@@ -12,9 +12,12 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 
 from bot import middleman, multichat_command, ravenfallchannel, ravenfallmanager
+from bot.clients import beefweb
 from bot.clients import session as session_module
 from bot.clients.query import QueryClient
 from bot.clients.session import close_session, get_session
+from bot.cogs.music import format_now_playing
+from bot.config import ConfigError
 from bot.models import parse_boost
 from bot.process_watchdog_client import ProcessWatcherClient
 from bot.ravenfallmanager import RFChannelManager
@@ -393,3 +396,44 @@ class BoxPids(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(ravenfallmanager, "runshell", mock.AsyncMock(side_effect=runshell)) as shell:
             self.assertEqual(await manager.list_box_pids(), {"a": ["2", "11", "12"], "b": ["1", "21"]})
         shell.assert_any_await('"C:/Start.exe" /box:Box0 /silent /listpids')
+
+
+class Beefweb(ClientTestCase):
+    async def serve_player(self, player: dict) -> None:
+        async def handler(request):
+            return web.json_response({"player": player})
+
+        server = await self.serve(handler)
+        set_env(self, BEEFWEB_URL=str(server.make_url("")).rstrip("/"))
+
+    async def test_playing_song(self):
+        await self.serve_player({
+            "playbackState": "playing",
+            "activeItem": {
+                "playlistId": "p1", "index": 3, "position": 83.6, "duration": 225.2,
+                "columns": ["Song", "Band", "Record"],
+            },
+        })
+        np = await beefweb.get_now_playing()
+        self.assertEqual(np, beefweb.NowPlaying("playing", "Song", "Band", "Record", 83.6, 225.2))
+        self.assertEqual(self.requests[0].path, "/api/player")
+        self.assertEqual(self.requests[0].query["columns"], "%title%,%artist%,%album%")
+        self.assertEqual(format_now_playing(np), "Now playing: Song by Band from Record [1:23 / 3:45]")
+
+    async def test_stopped(self):
+        await self.serve_player({
+            "playbackState": "stopped",
+            "activeItem": {"playlistId": "", "index": -1, "position": 0, "duration": 0, "columns": []},
+        })
+        np = await beefweb.get_now_playing()
+        self.assertEqual(np.state, "stopped")
+        self.assertEqual(format_now_playing(np), "Nothing is playing right now.")
+
+    async def test_not_configured(self):
+        set_env(self, BEEFWEB_URL="")
+        with self.assertRaises(ConfigError):
+            await beefweb.get_now_playing()
+
+    def test_format_paused_stream_without_tags(self):
+        np = beefweb.NowPlaying("paused", "", "", "", 3725, 0)
+        self.assertEqual(format_now_playing(np), "Now playing: Unknown title [1:02:05] (paused)")

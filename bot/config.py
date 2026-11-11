@@ -58,6 +58,7 @@ class Settings:
     rf_middleman_port: str | None = None
     watcher_urls: tuple[str, ...] = ("http://127.0.0.1:8110",)
     webops_url: str = "http://pc2-mobile:7102"
+    beefweb_url: str | None = None
 
     pastebin_provider: str = "pastes"
     borkedbin_host: str = "https://bin.borkedcube.moe"
@@ -101,6 +102,7 @@ class Settings:
             rf_middleman_port=env.get("RF_MIDDLEMAN_PORT"),
             watcher_urls=tuple(watcher_urls.split(",")) if watcher_urls is not None else defaults.watcher_urls,
             webops_url=env.get("WEBOPS_URL", defaults.webops_url),
+            beefweb_url=env.get("BEEFWEB_URL", "").strip().rstrip("/") or None,
             pastebin_provider=env.get("PASTEBIN_PROVIDER", defaults.pastebin_provider).lower(),
             borkedbin_host=env.get("BORKEDBIN_HOST", defaults.borkedbin_host).strip("/"),
             borkedbin_api_key=env.get("BORKEDBIN_API_KEY", defaults.borkedbin_api_key),
