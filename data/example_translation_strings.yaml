@@ -87,12 +87,12 @@ dungeon_broken: null
 #   - Your Mom's Basement is available. Type !dungeon to join. ( GOODONE )
 
 ferry_info_players: "The ferry is currently sailing with {playerCount} {{pl(playerCount, 'player', 'players')}} on board."
-ferry_info_destination_players: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board."
-ferry_info_destination_players_captain: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. {{unping(ferryCaptain)}} is the captain with {captainLevel} sailing."
+ferry_info_destination_players: "The ferry is currently sailing towards {destination} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board."
+ferry_info_destination_players_captain: "The ferry is currently sailing towards {destination} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. {{unping(captainName)}} is the captain with {sailingLevel} sailing."
 
-ferry_info_players_boost: "The ferry is currently sailing with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. A {ferryBoost}x boost is active, ending in {ferryBoostDuration}."
-ferry_info_destination_players_boost: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. A {ferryBoost}x boost is active, ending in {ferryBoostDuration}."
-ferry_info_destination_players_captain_boost: "The ferry is currently sailing towards {{islandName}} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. {{unping(ferryCaptain)}} is the captain with {captainLevel} sailing. A {ferryBoost}x boost is active, ending in {ferryBoostDuration}."
+ferry_info_players_boost: "The ferry is currently sailing with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. A 5x boost is active, ending in {timeLeft}."
+ferry_info_destination_players_boost: "The ferry is currently sailing towards {destination} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. A 5x boost is active, ending in {timeLeft}."
+ferry_info_destination_players_captain_boost: "The ferry is currently sailing towards {destination} with {playerCount} {{pl(playerCount, 'player', 'players')}} on board. {{unping(captainName)}} is the captain with {sailingLevel} sailing. A 5x boost is active, ending in {timeLeft}."
 
 huts_info: "{{unping(fill(hutsInfo))}}"
 highest_skill: "{{unping(player)}} has the highest level {skillName} with level {level}."
