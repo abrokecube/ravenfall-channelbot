@@ -26,7 +26,7 @@ from ..ravenfallmanager import RFChannelManager
 from ..middleman import send_to_server_and_wait_response, send_to_client, send_to_server
 from ..ravenfallloc import pl
 from ..exceptions import OutOfStockError
-from ..models import ScrollType, RFChannelEvent
+from ..models import ScrollType, RFChannelEvent, RFChannelSubEvent
 from bot.config import get_settings
 from bot.multichat_command import get_char_coins, get_char_items, track_item_use, track_coin_use
 from bot.message_templates import RavenBotTemplates
@@ -61,6 +61,8 @@ RAID_SCROLL_SIZE = 1
 DUNGEON_SCROLL_SIZE = 6
 MAX_QUEUE_SIZE = 25
 NON_MOD_MAX_BATCH_SCROLLS = 99
+# How long a gift waits for the game to finish preparing a dungeon
+DUNGEON_PREP_MAX_WAIT = 300
 
 # Held from checking a balance until it is deducted, so that a user can't spend it twice
 credit_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -187,6 +189,32 @@ async def wait_for_message(channel: RFChannel, check, timeout: int = 15):
         formatted_response = formatted_response
     )
 
+async def wait_while_dungeon_prepares(channel: RFChannel, on_wait=None, max_wait: float = DUNGEON_PREP_MAX_WAIT) -> bool:
+    """Wait until the game has finished preparing a dungeon.
+
+    The game doesn't answer commands while it prepares one, so a gift sent then
+    times out. `on_wait` is awaited once if there is anything to wait for.
+    Returns whether it waited.
+
+    Raises:
+        TimeoutError: If the dungeon is still being prepared after `max_wait` seconds.
+    """
+    if channel.sub_event != RFChannelSubEvent.DUNGEON_PREPARE:
+        return False
+    logger.info(f"Waiting for {channel.channel_name} to finish preparing a dungeon before gifting")
+    if on_wait is not None:
+        try:
+            await on_wait()
+        except Exception:
+            logger.warning("Could not say that the gift is waiting for the dungeon", exc_info=True)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max_wait
+    while channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
+        if loop.time() >= deadline:
+            raise TimeoutError("The game is still preparing a dungeon")
+        await asyncio.sleep(1)
+    return True
+
 async def get_coins_count(channel: RFChannel):
     """Return total coins available across characters in `channel`."""
     char_coins = await get_char_coins(channel.channel_id)
@@ -240,8 +268,10 @@ async def get_all_item_count(channel: RFChannel) -> Dict[str, int]:
     return total_items
 
 channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
-async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
+async def send_coins(target_user_name: str, channel: RFChannel, amount: int, on_busy=None):
     """Send coins to `target_user_name` by aggregating coins from other characters.
+
+    Waits out dungeon preparation before each gift, awaiting `on_busy` the first time.
 
     Raises:
         OutOfItemsError: If there are not enough coins.
@@ -283,7 +313,10 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
             coins_to_send = min(coins_remaining, user["coins"])
 
             logger.info(f"Sending {coins_to_send} coins to {target_user_name} from {user['user_name']}")
-            
+
+            if await wait_while_dungeon_prepares(channel, on_busy):
+                on_busy = None
+
             if not one_coin_successful:
                 try:
                     await send_ravenfall(
@@ -338,8 +371,10 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int):
             raise PartialSendError(f"Ran out of coins ({coins_remaining} remaining)", total_coins - coins_remaining)
 
 channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
-async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int):
+async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int, on_busy=None):
     """Send `amount` of `item_name` to `target_user_name` from available stock in `channel`.
+
+    Waits out dungeon preparation before each gift, awaiting `on_busy` the first time.
 
     Raises:
         ItemNotFoundError, OutOfItemsError, RecipientNotFoundError, PartialSendError
@@ -391,7 +426,10 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
             items_to_send = min(items_remaining, user_item["amount"])
 
             logger.info(f"Sending {items_to_send}x {item.name} to {target_user_name} from {user_item['user_name']}")
-            
+
+            if await wait_while_dungeon_prepares(channel, on_busy):
+                on_busy = None
+
             send_exception = None
             def no_recipient_check(msg: RavenfallMessage):
                 bad_messages = (
@@ -581,7 +619,10 @@ class RedeemRFCog(Cog):
             return
         await ctx.send(f"Sending {amount:,} coins to {ctx.data.user_login}...")
         try:
-            await send_coins(ctx.data.user_login, channel, amount)
+            await send_coins(
+                ctx.data.user_login, channel, amount,
+                on_busy=lambda: ctx.send("The game is preparing a dungeon. Your coins will be sent once it's ready."),
+            )
         except OutOfItemsError as e:
             await ctx.cancel()
             logger.error(f"Error in coin redeem: {e}")
@@ -750,7 +791,10 @@ class RedeemRFCog(Cog):
 
         await ctx.message.reply(f"Sending you {count}× {item.name}{pl(count, "", "(s)")}...")
         try:
-            await send_items(ctx.message.author_login, channel, item.name, count)
+            await send_items(
+                ctx.message.author_login, channel, item.name, count,
+                on_busy=lambda: ctx.message.reply("The game is preparing a dungeon. Your items will be sent once it's ready."),
+            )
         except OutOfItemsError as e:
             logger.error(f"Error in item redeem: {e}")
             await ctx.message.send(
@@ -950,11 +994,12 @@ class RedeemRFCog(Cog):
         if count == 0:
             count = 1
         
+        on_busy = lambda: ctx.message.reply("The game is preparing a dungeon. Gifting once it's ready...")
         try:
             if item_name.lower() == "coins":
-                await send_coins(recipient_name, channel, count)
+                await send_coins(recipient_name, channel, count, on_busy=on_busy)
             else:
-                await send_items(recipient_name, channel, item_name, count)
+                await send_items(recipient_name, channel, item_name, count, on_busy=on_busy)
         except OutOfItemsError as e:
             logger.error(f"Error in item redeem: {e}")
             await ctx.message.send(f"There are not enough items in stock.")
