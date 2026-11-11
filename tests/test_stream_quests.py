@@ -15,7 +15,6 @@ from bot.cogs.game import GameCog
 from bot.cogs.info import InfoCog
 from bot.message_templates import RavenBotTemplates
 from bot.ravenfallchannel import RFChannel
-from bot.ravenfallloc import RavenfallLocalization
 from bot.models import QueuedScroll, ScrollType
 from bot.streamquests import (
     RunningQuest,
@@ -30,6 +29,7 @@ from bot.streamquests import (
     parse_running,
     pick_offer,
 )
+from tests.shared_loc import shared_localization
 
 OFFERS_FORMAT = "No stream quest running. Today's: {offers}. The streamer or a mod starts one with !quest stream start 1."
 RUNNING_FORMAT = "Stream quest: {quest} ({progress}/{amount}), {minutes} minutes left, {helpers} helping so far. Reward: {reward}."
@@ -267,7 +267,7 @@ class RoutineTestCase(unittest.IsolatedAsyncioTestCase):
         town.channel_restart_lock = mock.Mock(locked=mock.Mock(return_value=False))
         town.restart_task = None
         town.next_stream_quest_check = 0
-        town.rfloc = RavenfallLocalization("data/definitions.yaml")
+        town.rfloc = shared_localization()
         town.scroll_uses = deque()
         town.saved_stream_quest_offers = []
         town.saved_stream_quest_offers_day = None
@@ -553,7 +553,7 @@ class QuestEnd(unittest.IsolatedAsyncioTestCase):
 
     def make_town(self) -> RFChannel:
         town = RFChannel.__new__(RFChannel)
-        town.rfloc = RavenfallLocalization("data/definitions.yaml")
+        town.rfloc = shared_localization()
         town.named_observes = deque()
         town.auto_end_ravebridge = False
         town.ravenfall_loc_strings_path = None

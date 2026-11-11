@@ -7,8 +7,8 @@ scroll queue. Python 3.13, asyncio, SQLAlchemy async over `data.db`.
 
 ## Running the tests
 
-From the repo root, in the background or with a timeout of at least 400000 ms
-(the suite takes about 4 minutes):
+From the repo root, with a timeout of at least 180000 ms (the suite takes
+about 40 seconds):
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 uv run --no-sync python -m unittest discover -s tests -p "test_*.py"
@@ -39,7 +39,7 @@ Use `-s tests` without `-t .`: `tests` is not a package. In a worktree with no
 | `database/` | Tables in `models.py`, helpers in `utils.py`, session in `session.py` |
 | `ravenpy/` | RavenNest API client, shared with `ravenhelper-bot` |
 | `utils/` | Sandboxie process control (`runshell.py`), routines, alert monitors, helpers |
-| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py`, `test_single_instance.py`, `test_stream_quests.py` |
+| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_gifting.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py`, `test_single_instance.py`, `test_stream_quests.py`. Helpers: `fastclock.py` (sped-up time for tests that run real restarts and updates), `shared_loc.py` (one loaded `definitions.yaml`) |
 | `scripts/` | One-off scripts, run from the repo root with `python -m scripts.<name>` (e.g. `python -m scripts.itemcreditprice`) |
 
 Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multichat`,

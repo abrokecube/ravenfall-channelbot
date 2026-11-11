@@ -25,10 +25,10 @@ from bot.config import get_settings
 from bot.messageprocessor import MessageMetadata, MessageProcessor
 from bot.models import QueuedScroll, RFChannelSubEvent, ScrollType
 from bot.ravenfallchannel import RFChannel
-from bot.ravenfallloc import RavenfallLocalization
 from bot.ravenfallmanager import RFChannelManager
 from database import utils as db_utils
 from database.models import Base
+from tests.shared_loc import shared_localization
 
 
 real_sleep = asyncio.sleep
@@ -530,7 +530,7 @@ class ShowCommand(unittest.IsolatedAsyncioTestCase):
     def show_town(self) -> RFChannel:
         town = make_town()
         town.named_observes = deque(maxlen=50)
-        town.rfloc = RavenfallLocalization("data/definitions.yaml")
+        town.rfloc = shared_localization()
         town.auto_end_ravebridge = False
         town.ravenfall_loc_strings_path = None
         town.get_sender_data = mock.AsyncMock(return_value={"PlatformId": None, "Username": "absent"})

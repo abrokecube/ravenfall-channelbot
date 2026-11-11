@@ -26,6 +26,7 @@ from bot.ravenfallchannel import RFChannel
 from bot.ravenfallrestarttask import RestartReason
 from bot.ravenfallshutdown import RFTownShutdown
 from bot.ravenfallupdater import GameRelease, ReleaseAsset, RFGameUpdater, TownGate
+from tests.fastclock import speed_up_time
 
 
 def write(path: Path, text: str = "x") -> Path:
@@ -305,6 +306,7 @@ def make_town(manager: FakeManager, name: str, version: str, log: list, auth_fai
 
 class UpdateFlowTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        speed_up_time(self)
         self.log: list[str] = []
         self.manager = FakeManager()
         self.game_updater = self.manager.game_updater

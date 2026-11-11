@@ -12,11 +12,13 @@ from unittest import mock
 from bot.cogs.game import GameCog
 from bot.models import RFChannelEvent
 from bot.ravenfallrestarttask import PreRestartEvent, RestartReason
+from tests.fastclock import speed_up_time
 from tests.test_ravenfall_updater import FakeManager, make_town
 
 
 class TownTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        speed_up_time(self)
         self.log: list[str] = []
         self.reports: list[str] = []
         self.manager = FakeManager()
