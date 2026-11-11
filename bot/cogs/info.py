@@ -96,6 +96,54 @@ class InfoCog(Cog):
         """
         await ctx.message.reply(channel.event_text)
 
+    @command(name="eventcount", aliases=["eventstats", "monthlyevents"])
+    @parameter("all_", display_name="all", aliases=["a"])
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @cooldown(1, 10, [BucketType.CHANNEL])
+    async def eventcount(self, ctx: CommandEvent, *, channel: RFChannel = 'this', all_: bool = False):
+        """Show how many dungeons and raids a town finished this month (UTC).
+
+        Args:
+            channel: Target channel.
+            all_: Show counts for all channels.
+        """
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        seconds = max(1, int((now - month_start).total_seconds()))
+        month_year = f"{now.strftime('%b')}. {now.year}"
+
+        async def counts_by_session(metric: str) -> Dict[str, int]:
+            result = await get_prometheus_instant(
+                f"sum by (session) (increase({metric}[{seconds}s]))"
+            )
+            counts = {}
+            for item in result or []:
+                value = float(item['value'][1])
+                if value == value:  # skip NaN
+                    counts[item['metric'].get('session', '')] = int(round(value))
+            return counts
+
+        try:
+            dungeons, raids = await asyncio.gather(
+                counts_by_session("rf_dungeons_total"),
+                counts_by_session("rf_raid_total"),
+            )
+        except Exception:
+            await ctx.message.reply("Could not get data")
+            return
+
+        def describe(name: str) -> str:
+            return f"{utils.pl(dungeons.get(name, 0), 'dungeon')}, {utils.pl(raids.get(name, 0), 'raid')}"
+
+        if all_:
+            names = [c.channel_name for c in self.global_context.ravenfall_manager.channels]
+            out_str = [f"{name} - {describe(name)}" for name in dict.fromkeys(names)]
+            await ctx.message.reply(f"Events finished in {month_year}: {' • '.join(out_str)}")
+        else:
+            await ctx.message.reply(
+                f"@{channel.channel_name} has finished {describe(channel.channel_name)} in {month_year}"
+            )
+
     @command(name="uptime")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
     async def uptime(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
