@@ -29,6 +29,7 @@ from .. import braille
 from ..ravenfall import Character, Skills
 
 from ..ravenfallchannel import RFChannel
+from ..streamquests import format_quest_list
 from ..message_templates import RavenBotTemplates
 from ..middleman import send_to_server
 from ..models import Player
@@ -69,6 +70,21 @@ class InfoCog(Cog):
             out_str.append(asdf)
         out_str.append("Other Ravenfall towns - https://www.ravenfall.stream/towns")
         await ctx.message.reply(' ✦ '.join(out_str))
+
+    @command(name="streamquests", aliases=["squests", "stream quests", "quests"])
+    @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
+    @cooldown(1, 10, [BucketType.CHANNEL])
+    async def streamquests(self, ctx: CommandEvent, *, channel: RFChannel = 'this'):
+        """Lists today's stream quests to choose from, and the one running.
+
+        Args:
+            channel: Target channel.
+        """
+        quests = await channel.read_stream_quests()
+        if quests is None:
+            await ctx.message.reply("The game didn't answer. Try again in a bit.")
+            return
+        await ctx.message.reply(format_quest_list(*quests))
 
     @command(name="event")
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)

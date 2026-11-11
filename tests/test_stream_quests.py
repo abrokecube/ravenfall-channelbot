@@ -12,6 +12,7 @@ from unittest import mock
 
 from bot import ravenfallchannel
 from bot.cogs.game import GameCog
+from bot.cogs.info import InfoCog
 from bot.message_templates import RavenBotTemplates
 from bot.ravenfallchannel import RFChannel
 from bot.ravenfallloc import RavenfallLocalization
@@ -21,6 +22,7 @@ from bot.streamquests import (
     TownActivity,
     completion_ratio,
     faster_offer,
+    format_quest_list,
     is_working,
     natural_wait_minutes,
     parse_offer,
@@ -88,7 +90,7 @@ class ParseOffers(unittest.TestCase):
     def test_a_running_quest_is_read_from_its_status(self):
         self.assertEqual(
             parse_running(running_reply("Defeat 1,200 enemies", "1,050", "1,200")),
-            RunningQuest("Defeat 1,200 enemies", "kill", 1200, 1050),
+            RunningQuest("Defeat 1,200 enemies", "kill", 1200, 1050, 100),
         )
 
     def test_no_offers_left(self):
@@ -610,6 +612,56 @@ class QuestToggle(unittest.IsolatedAsyncioTestCase):
 
         await cog.rfquesttoggle(ctx, channel=town)
         self.assertIs(town.auto_stream_quests, True)
+
+
+class QuestList(RoutineTestCase):
+    async def read(self, town: RFChannel, reply: dict | None):
+        response = {"success": True, "responses": [reply] if reply else []}
+        with mock.patch.object(ravenfallchannel, "send_to_server_and_wait_response", mock.AsyncMock(return_value=response)):
+            return await town.read_stream_quests()
+
+    async def test_lists_the_offers_on_one_line_and_saves_them(self):
+        town = self.make_town([])
+        quests = await self.read(town, offers_reply("1. Chop 1,200 wood (60 min), 2. Win 3 raids (120 min)"))
+        self.assertEqual(
+            format_quest_list(*quests),
+            "Today's stream quests: 1. Chop 1,200 wood (60 min) ✦ 2. Win 3 raids (120 min)",
+        )
+        self.assertEqual(len(town.get_saved_stream_quest_offers()), 2)
+
+    async def test_running_quest_uses_the_offers_saved_today(self):
+        town = self.make_town([])
+        await self.read(town, offers_reply("1. Chop 1,200 wood (60 min), 2. Win 3 raids (120 min)"))
+        quests = await self.read(town, running_reply("Win 3 raids", "1", "3"))
+        text = format_quest_list(*quests)
+        self.assertNotIn("\n", text)
+        self.assertEqual(
+            text,
+            "Today's stream quests: 1. Chop 1,200 wood (60 min) ✦ 2. Win 3 raids (120 min)"
+            " ✦ Running now: Win 3 raids (1/3), 100 min left",
+        )
+
+    async def test_running_quest_with_nothing_saved_says_so(self):
+        town = self.make_town([])
+        text = format_quest_list(*await self.read(town, running_reply()))
+        self.assertTrue(text.startswith("The game doesn't list"))
+        self.assertTrue(text.endswith(" ✦ Running now: Win 3 raids (0/3), 100 min left"))
+
+    async def test_no_offers_left(self):
+        town = self.make_town([])
+        town.saved_stream_quest_offers = parse_offers(offers_reply("1. Chop 1,200 wood (60 min)"))
+        town.saved_stream_quest_offers_day = ravenfallchannel.datetime.now(ravenfallchannel.timezone.utc).date()
+        self.assertEqual(format_quest_list(*await self.read(town, offers_reply(""))), "No stream quests left today")
+
+    async def test_no_answer(self):
+        self.assertIsNone(await self.read(self.make_town([]), None))
+
+    async def test_command_replies(self):
+        cog = InfoCog.__new__(InfoCog)
+        ctx = SimpleNamespace(message=SimpleNamespace(reply=mock.AsyncMock()))
+        town = SimpleNamespace(read_stream_quests=mock.AsyncMock(return_value=None))
+        await cog.streamquests(ctx, channel=town)
+        ctx.message.reply.assert_awaited_once_with("The game didn't answer. Try again in a bit.")
 
 
 class Template(unittest.TestCase):

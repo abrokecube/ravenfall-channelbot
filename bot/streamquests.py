@@ -90,6 +90,7 @@ class RunningQuest:
     objective: Optional[str]
     amount: int
     progress: int
+    minutes_left: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -134,9 +135,11 @@ def parse_offers(message: Mapping[str, Any]) -> list[StreamQuestOffer]:
 
 def parse_running(message: Mapping[str, Any]) -> RunningQuest:
     """The quest in a `stream_quest_info` reply. Its args are the quest, progress and amount, then the rest."""
-    text, progress, amount = message["Args"][:3]
+    args = message["Args"]
+    text, progress, amount = args[:3]
     offer = parse_offer(0, text, 0)
-    return RunningQuest(text, offer.objective, _number(amount), _number(progress))
+    minutes_left = _number(args[3]) if len(args) > 3 else None
+    return RunningQuest(text, offer.objective, _number(amount), _number(progress), minutes_left)
 
 
 def _number(text: Any) -> int:
@@ -254,3 +257,27 @@ def describe_offers(offers: Iterable[StreamQuestOffer], town: TownActivity) -> s
         f"{offer.slot}. {offer.text} ({completion_ratio(offer, town):.0%})"
         for offer in offers
     )
+
+
+QUEST_LIST_SEPARATOR = " ✦ "
+
+
+def describe_running(quest: RunningQuest) -> str:
+    text = f"Running now: {quest.text} ({quest.progress:,}/{quest.amount:,})"
+    if quest.minutes_left is not None:
+        text += f", {quest.minutes_left} min left"
+    return text
+
+
+def format_quest_list(offers: Iterable[StreamQuestOffer], running: Optional[RunningQuest] = None) -> str:
+    """Today's offers for chat, on one line, with the running quest after them."""
+    parts = [f"{offer.slot}. {offer.text} ({offer.minutes} min)" for offer in offers]
+    if parts:
+        parts[0] = f"Today's stream quests: {parts[0]}"
+    elif running is not None:
+        parts.append("The game doesn't list today's stream quests while one is running, and I haven't seen them today")
+    else:
+        parts.append("No stream quests left today")
+    if running is not None:
+        parts.append(describe_running(running))
+    return QUEST_LIST_SEPARATOR.join(parts)

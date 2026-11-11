@@ -962,6 +962,28 @@ class RFChannel:
             return []
         return self.saved_stream_quest_offers
 
+    async def read_stream_quests(self) -> tuple[list[StreamQuestOffer], RunningQuest | None] | None:
+        """Today's offers and the running quest, or None if the game didn't answer.
+
+        While a quest runs the game names only that quest, so the offers are the ones
+        saved earlier today, if any.
+        """
+        reply = await self.get_stream_quest_reply()
+        if reply is None:
+            return None
+        offers = parse_offers(reply)
+        if offers:
+            self.save_stream_quest_offers(offers)
+            return offers, None
+        running = None
+        match = self.rfloc.identify_string(reply.get('Format') or '')
+        if match is not None and match.key == QUEST_STATUS_KEY:
+            running = parse_running(reply)
+        if running is None and "{offers}" in (reply.get('Format') or ''):
+            # The game has no offers left today
+            return [], None
+        return self.get_saved_stream_quest_offers(), running
+
     def count_scroll_uses(self) -> int:
         """Raid and dungeon scrolls used in the town over the last 15 minutes."""
         since = time.time() - SCROLL_USE_WINDOW_SECONDS
