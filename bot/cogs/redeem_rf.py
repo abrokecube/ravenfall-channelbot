@@ -1181,10 +1181,10 @@ class RedeemRFCog(Cog):
         scroll_size = 0
         
         if scroll_type == 'dungeon':
-            cost = 20
+            cost = 80
             scroll_size = DUNGEON_SCROLL_SIZE
         elif scroll_type == 'raid':
-            cost = 12
+            cost = 80
             scroll_size = RAID_SCROLL_SIZE
             
         queue_size = 0
