@@ -57,9 +57,9 @@ from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
-RAID_SCROLL_SIZE = 1
-DUNGEON_SCROLL_SIZE = 6
-MAX_QUEUE_SIZE = 25
+RAID_SCROLL_SIZE = 3
+DUNGEON_SCROLL_SIZE = 5
+MAX_QUEUE_SIZE = 20
 NON_MOD_MAX_BATCH_SCROLLS = 99
 # How long a gift waits for the game to finish preparing a dungeon
 DUNGEON_PREP_MAX_WAIT = 300
