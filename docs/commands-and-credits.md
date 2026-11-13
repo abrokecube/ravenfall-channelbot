@@ -131,3 +131,9 @@ already holds all the town's stock.
 
 `_refund_scroll` cancels the redemption if there is one and returns credits with
 `add_credits`.
+
+`!qs refund` calls `RFChannel.refund_user_scrolls`, which removes and refunds every
+entry whose `user_id` is the caller. It skips `scroll_in_use`, the head entry the
+routine is using at that moment, so the routine's later `popleft` still removes the
+correct entry. Free scrolls and channel point redeems have no `user_id`, so this
+command never removes them.

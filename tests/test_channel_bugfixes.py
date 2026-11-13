@@ -67,6 +67,7 @@ def make_town() -> RFChannel:
     town.ravenbot_prefixes = ("!",)
     town.sub_event = RFChannelSubEvent.NONE
     town.scroll_queue = deque()
+    town.scroll_in_use = None
     town.send_chat_message = mock.AsyncMock()
     town.restart_ravenbot = mock.AsyncMock()
     town.save_scroll_queue = mock.AsyncMock()
@@ -358,6 +359,35 @@ class ScrollQueue(unittest.IsolatedAsyncioTestCase):
         town = self.make_town(QueuedScroll(ScrollType.RAID, None, None, "5", 12))
         await self.tick(town, mock.AsyncMock(return_value={"status": 500, "error": "down"}))
         self.assertEqual(len(town.scroll_queue), 1)
+
+    async def test_user_refund_removes_only_their_scrolls(self):
+        free = QueuedScroll(ScrollType.DUNGEON, None, None, None, 0)
+        mine_in_use = QueuedScroll(ScrollType.RAID, None, None, "5", 12)
+        other = QueuedScroll(ScrollType.RAID, None, None, "6", 12)
+        mine_a = QueuedScroll(ScrollType.DUNGEON, None, None, "5", 20)
+        mine_b = QueuedScroll(ScrollType.RAID, None, None, "5", 12)
+        town = self.make_town(mine_in_use)
+        town.scroll_queue.extend([free, other, mine_a, mine_b])
+        town.scroll_in_use = mine_in_use
+        add_credits = mock.AsyncMock()
+        with (
+            mock.patch.object(ravenfallchannel.db_utils, "add_credits", add_credits),
+            mock.patch.object(ravenfallchannel, "get_async_session", mock.MagicMock()),
+        ):
+            removed = await town.refund_user_scrolls(5)
+        self.assertEqual(len(removed), 2)
+        self.assertTrue(removed[0] is mine_a and removed[1] is mine_b)
+        self.assertEqual(list(town.scroll_queue), [mine_in_use, free, other])
+        self.assertEqual(
+            [c.args[1:3] for c in add_credits.await_args_list], [("5", 20), ("5", 12)]
+        )
+        town.save_scroll_queue.assert_awaited()
+
+    async def test_user_refund_with_nothing_queued(self):
+        town = self.make_town(QueuedScroll(ScrollType.RAID, None, None, "6", 12))
+        self.assertEqual(await town.refund_user_scrolls("5"), [])
+        self.assertEqual(len(town.scroll_queue), 1)
+        town.save_scroll_queue.assert_not_awaited()
 
 
 class GameQueries(unittest.IsolatedAsyncioTestCase):

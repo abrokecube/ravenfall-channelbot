@@ -195,6 +195,7 @@ class RFChannel:
         self.update_events_routine_first_iteration = True
         self.scroll_queue: deque[QueuedScroll] = deque()
         self.scroll_queue_failures = 0
+        self.scroll_in_use: QueuedScroll | None = None  # Queue head the routine is currently trying to use
         self.next_stream_quest_check: float = time.time() + STREAM_QUEST_CHECK_SECONDS
         self.scroll_uses: deque[float] = deque(maxlen=200)
         self.saved_stream_quest_offers: list[StreamQuestOffer] = []
@@ -1170,21 +1171,25 @@ class RFChannel:
                 ignore_error=True
             )
             return
-        await send_multichat_command(command, "0", self.channel_name, self.channel_id, self.channel_name)
-        for _ in range(10):
-            await asyncio.sleep(1)
-            if self.event == expected_event:
-                self.scroll_queue_failures = 0
-                self.scroll_queue.popleft()
-                await self.save_scroll_queue()
-                if next_scroll.reward_id:
-                    await self.twitch.update_redemption_status(
-                        self.channel_id,
-                        next_scroll.reward_id,
-                        next_scroll.reward_redemption_id,
-                        TwitchCustomRewardRedemptionStatus.FULFILLED
-                    )
-                return
+        self.scroll_in_use = next_scroll
+        try:
+            await send_multichat_command(command, "0", self.channel_name, self.channel_id, self.channel_name)
+            for _ in range(10):
+                await asyncio.sleep(1)
+                if self.event == expected_event:
+                    self.scroll_queue_failures = 0
+                    self.scroll_queue.popleft()
+                    await self.save_scroll_queue()
+                    if next_scroll.reward_id:
+                        await self.twitch.update_redemption_status(
+                            self.channel_id,
+                            next_scroll.reward_id,
+                            next_scroll.reward_redemption_id,
+                            TwitchCustomRewardRedemptionStatus.FULFILLED
+                        )
+                    return
+        finally:
+            self.scroll_in_use = None
         self.scroll_queue_failures += 1
         logger.warning(
             f"Scroll queue: Expected event {expected_event} did not occur "
@@ -1262,6 +1267,28 @@ class RFChannel:
         while len(self.scroll_queue) > start_pos:
             await self._refund_scroll(self.scroll_queue.pop())
         await self.save_scroll_queue()
+
+    async def refund_user_scrolls(self, user_id: str) -> list[QueuedScroll]:
+        """Removes and refunds every queued scroll that `user_id` paid for.
+
+        The scroll the queue routine is currently using is left alone.
+        Returns the removed scrolls.
+        """
+        user_id = str(user_id)
+        removed = [
+            item for item in self.scroll_queue
+            if item.user_id is not None and str(item.user_id) == user_id
+            and item is not self.scroll_in_use
+        ]
+        if not removed:
+            return []
+        kept = [item for item in self.scroll_queue if not any(item is r for r in removed)]
+        self.scroll_queue.clear()
+        self.scroll_queue.extend(kept)
+        await self.save_scroll_queue()
+        for item in removed:
+            await self._refund_scroll(item)
+        return removed
 
     async def _refund_scroll(self, item: QueuedScroll):
         try:

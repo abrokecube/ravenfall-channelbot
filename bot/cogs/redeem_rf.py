@@ -1140,12 +1140,12 @@ class RedeemRFCog(Cog):
             
     @command(aliases=['queue_scroll', 'qs', 'queuescrolls', 'queue_scrolls'])
     @parameter("channel", aliases=["channel", "c"], converter=RFChannelConverter)
-    @parameter("scroll_type", aliases=["type", "t"], converter=Choice(['dungeon', 'raid']))
+    @parameter("scroll_type", aliases=["type", "t"], converter=Choice(['dungeon', 'raid', 'refund']))
     async def queuescroll(self, ctx: CommandEvent, scroll_type: str, count: int = 1, *, channel: RFChannel = 'this'):
-        """Queue one or more scrolls to be used
+        """Queue one or more scrolls to be used, or use "refund" to refund your queued scrolls
         
         Args:
-            scroll_type: The type of scroll to queue
+            scroll_type: The type of scroll to queue, or "refund"
             channel: The channel to queue the scroll in
         """
         if channel is None:
@@ -1153,7 +1153,27 @@ class RedeemRFCog(Cog):
             return
 
         async with credit_locks[ctx.message.author_id]:
-            await self._queue_scrolls(ctx, scroll_type, count, channel)
+            if scroll_type == 'refund':
+                await self._refund_queued_scrolls(ctx, channel)
+            else:
+                await self._queue_scrolls(ctx, scroll_type, count, channel)
+
+    async def _refund_queued_scrolls(self, ctx: CommandEvent, channel: RFChannel):
+        removed = await channel.refund_user_scrolls(ctx.message.author_id)
+        if not removed:
+            raise CommandError("You have no refundable scrolls in the queue.")
+        dungeons = sum(1 for x in removed if x.scroll == ScrollType.DUNGEON)
+        raids = sum(1 for x in removed if x.scroll == ScrollType.RAID)
+        refunded_credits = sum(x.credits_spent for x in removed)
+        parts = []
+        if dungeons:
+            parts.append(f"{dungeons} Dungeon {pl(dungeons, 'Scroll', 'Scrolls')}")
+        if raids:
+            parts.append(f"{raids} Raid {pl(raids, 'Scroll', 'Scrolls')}")
+        await ctx.message.reply(
+            f"Removed {' and '.join(parts)} from the queue. "
+            f"{refunded_credits:,} item {pl(refunded_credits, 'credit', 'credits')} {pl(refunded_credits, 'was', 'were')} refunded."
+        )
 
     async def _queue_scrolls(self, ctx: CommandEvent, scroll_type: str, count: int, channel: RFChannel):
         scroll_type = scroll_type.lower()
