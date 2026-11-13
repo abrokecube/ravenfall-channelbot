@@ -1256,7 +1256,7 @@ class RedeemRFCog(Cog):
         msg = f"Added {added_count} {scroll_type.capitalize()} {pl(added_count, 'Scroll', 'Scrolls')} to the queue."
         
         if final_cost > 0:
-            msg += f" {final_cost} item credits were deducted. (ID: {trans_id})"
+            msg += f" {final_cost} item credits were deducted. Refund with !qs refund. (ID: {trans_id})"
         else:
             msg += f" No item credits were deducted."
             
