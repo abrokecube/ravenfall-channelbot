@@ -21,6 +21,7 @@ from .cooldown import Cooldown, CooldownBucket
 from .multichat_command import send_multichat_command, get_scroll_counts
 from .messageprocessor import RavenMessage, MessageMetadata
 from .ravenfallloc import RavenfallLocalization, round_skill_bonuses
+from .ravenbotfallback import RavenBotChatFallback
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from .streamquests import (
@@ -152,6 +153,20 @@ class RFChannel:
         # Correlation ids of observes aimed at a name, whose not_playing reply is wrong
         self.named_observes: deque[str] = deque(maxlen=50)
 
+        # Sends the game messages RavenBot drops at its chat limit. It needs RavenBot's own account to tell its messages apart
+        self.ravenbot_fallback: RavenBotChatFallback | None = None
+        settings = get_settings()
+        if config.resend_dropped_ravenbot_messages:
+            if not settings.ravenbot_user_id or settings.ravenbot_user_id == settings.bot_user_id:
+                logger.warning(
+                    f"[{self.channel_name}] Not resending dropped RavenBot messages: "
+                    "RAVENBOT_USER_ID is unset or the same as BOT_USER_ID"
+                )
+            else:
+                self.ravenbot_fallback = RavenBotChatFallback(
+                    self.send_fallback_chat, self.ravenbot_prefixes, name=self.channel_name
+                )
+
         self.raid: Raid | None = None
         self.dungeon: Dungeon | None = None
         self.multiplier: GameMultiplier | None = None
@@ -250,6 +265,8 @@ class RFChannel:
         self.island_arrival_grouping_routine.start()
         self.scroll_queue_routine.start()
         self.stream_quest_routine.start()
+        if self.ravenbot_fallback is not None:
+            self.ravenbot_fallback_routine.start()
 
     async def stop(self):
         self.update_mult_routine.cancel()
@@ -262,6 +279,7 @@ class RFChannel:
         self.island_arrival_grouping_routine.cancel()
         self.scroll_queue_routine.cancel()
         self.stream_quest_routine.cancel()
+        self.ravenbot_fallback_routine.cancel()
 
     async def multichat(self, text: str) -> None:
         """Sends a command through multichat as the town, or to chat if multichat fails."""
@@ -310,7 +328,23 @@ class RFChannel:
         }
         await send_to_client(self.middleman_connection_id, json.dumps(message))
 
+    async def send_fallback_chat(self, text: str, reply_id: Optional[str]):
+        """Posts a message RavenBot dropped. Not through send_chat_message: it is no command to watch."""
+        await self.chat.send_message(self.channel_name, text, reply_id=reply_id)
+
+    def expect_ravenbot_chat(self, message: RavenfallMessage):
+        """A game message the middleman is passing on to RavenBot, to resend if RavenBot drops it."""
+        if self.ravenbot_fallback is not None:
+            self.ravenbot_fallback.expect(message)
+
+    @routine(delta=timedelta(seconds=0.25), max_attempts=99999)
+    async def ravenbot_fallback_routine(self):
+        if self.ravenbot_fallback is not None:
+            await self.ravenbot_fallback.flush()
+
     async def event_twitch_message(self, message: ChatMessage):
+        if self.ravenbot_fallback is not None and message.user.id == get_settings().ravenbot_user_id:
+            self.ravenbot_fallback.seen(message.text)
         await self.twitch_message_waiter.process_message(message)
         if not self.monitoring_paused:
             await self.monitor_ravenfall_command(message=message)

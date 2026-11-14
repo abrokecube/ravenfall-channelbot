@@ -140,6 +140,15 @@ class RFChannelManager:
                     pass
                 else:
                     logger.error(f"Unknown source: {metadata.source}")
+                if (
+                    metadata.source.lower() in ("server", "api-server")
+                    and isinstance(out_message, dict)
+                    and out_message.get('block') is not True
+                ):
+                    try:
+                        channel.expect_ravenbot_chat(out_message)
+                    except Exception:
+                        logger.warning("Failed to track a message for RavenBot", exc_info=True)
                 break
         else:
             logger.error(f"Unknown connection id: {metadata.connection_id}")

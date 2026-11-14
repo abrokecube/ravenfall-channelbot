@@ -160,6 +160,7 @@ class ChannelConfig:
     channel_points_redeems: bool = False
     pause_monitoring: bool = False
     command_prefix: str = "!"
+    resend_dropped_ravenbot_messages: bool = True
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> ChannelConfig:
@@ -188,6 +189,8 @@ class ChannelConfig:
             channel_points_redeems=bool(raw.get("channel_points_redeems", defaults.channel_points_redeems)),
             pause_monitoring=bool(raw.get("pause_monitoring", defaults.pause_monitoring)),
             command_prefix=raw.get("command_prefix", defaults.command_prefix),
+            resend_dropped_ravenbot_messages=bool(raw.get(
+                "resend_dropped_ravenbot_messages", defaults.resend_dropped_ravenbot_messages)),
         )
 
 

@@ -36,11 +36,12 @@ Use `-s tests` without `-t .`: `tests` is not a package. In a worktree with no
 | `bot/streamquests.py` | Reads stream quest offers and picks the one a town is most likely to finish |
 | `bot/commands/` | Command framework: events, dispatchers, listeners, decorators, checks, converters |
 | `bot/cogs/` | Commands and redeems. `redeem_rf.py` holds credits and the scroll commands, `exchange.py` the `!exchange` item exchange, `game.py` the admin commands |
+| `bot/ravenbotfallback.py` | Posts the game messages RavenBot drops at its chat limit: pending messages from `handle_processor_message`, cleared by RavenBot's chat (`RAVENBOT_USER_ID`) |
 | `bot/exchange_log.py` | `bot.exchange` logger: session IDs, saving lines to the database, the 60-day purge |
 | `database/` | Tables in `models.py`, helpers in `utils.py`, session in `session.py` |
 | `ravenpy/` | RavenNest API client, shared with `ravenhelper-bot` |
 | `utils/` | Sandboxie process control (`runshell.py`), routines, alert monitors, helpers |
-| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_gifting.py`, `test_item_exchange.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py`, `test_single_instance.py`, `test_stream_quests.py`. Helpers: `fastclock.py` (sped-up time for tests that run real restarts and updates), `shared_loc.py` (one loaded `definitions.yaml`) |
+| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_gifting.py`, `test_item_exchange.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py`, `test_ravenbot_fallback.py`, `test_single_instance.py`, `test_stream_quests.py`. Helpers: `fastclock.py` (sped-up time for tests that run real restarts and updates), `shared_loc.py` (one loaded `definitions.yaml`) |
 | `scripts/` | One-off scripts, run from the repo root with `python -m scripts.<name>` (e.g. `python -m scripts.itemcreditprice`) |
 
 Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multichat`,
@@ -60,8 +61,10 @@ Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multi
 - Work on `main` and refactor incrementally. Don't revive the rewrite branches
   (`modularize-compartment` and others). They and the README are stale.
 - New work goes in its own session.
-- Don't throttle `bot/middleman.py`. RavenBot's chat limit is 20 messages per
-  30 seconds per channel, and the user chose not to work around it.
+- Don't throttle `bot/middleman.py`. RavenBot (LocalBot) sends at most 20 chat
+  messages in a 30 second window and throws away the rest without queueing them.
+  `bot/ravenbotfallback.py` works around that: it posts from the bot's account
+  each game message RavenBot hasn't posted within 1.5 s.
 - `ravenpy/` is shared with `ravenhelper-bot`, so don't change it casually.
 - Leave the vendored `twitchAPI/` and `utils/routines.py` alone.
 - Commit messages are short and lowercase and end with
@@ -93,7 +96,8 @@ Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multi
 - `bot/ravenfallchannel.py` is very large and due to be split. Search it rather
   than reading it whole.
 - Middleman "client" means RavenBot and "server" means Ravenfall.
-- RavenBot lost replies come from its chat limit, not the game. To probe the
+- RavenBot lost replies come from its chat limit, not the game (the bot now resends
+  game messages, but not RavenBot's own replies). To probe the
   middleman use `player_count`: `ping` doesn't come back through
   `/api/send-and-wait-response`.
 - The game message field is spelled `Recipent` on the wire.

@@ -108,6 +108,35 @@ String keys live in `data/definitions.yaml`. Per-town translations are at the
 `ravenfall_loc_strings_path` channel config key, and
 `data/example_translation_strings.yaml` shows the format.
 
+### Dropped RavenBot messages
+
+The towns' RavenBot (LocalBot) sends chat through TwitchLib with its default
+limit: 20 messages in a 30 second window that starts with the first one. Anything
+over that is thrown away, not queued. `bot/ravenbotfallback.py` posts those
+messages from the bot's account instead:
+
+1. `handle_processor_message` passes every game message headed for RavenBot (source
+   `server` or `api-server`, not blocked) to `RFChannel.expect_ravenbot_chat`. The
+   `RavenBotChatFallback` renders it as RavenBot would, with the same template
+   rules, the `@user, ` mention, and parts split at 499 characters. Each part is
+   kept as pending.
+2. `RFChannel.event_twitch_message` passes each chat message from
+   `RAVENBOT_USER_ID` to `seen`. That clears the matching pending part, ignoring
+   case, spacing and a leading mention. Long texts also match if their first 40
+   characters are the same.
+3. `ravenbot_fallback_routine` (every 0.25 s) sends whatever is still pending
+   1.5 s later. It threads replies to the correlation ID when that is a Twitch
+   message ID, otherwise it adds a mention. Parts older than 60 s are let go, and
+   so is plain text starting with a command prefix, which RavenBot would run as a
+   command.
+
+When RavenBot posts a message the bot already resent, the bot logs it at info
+level, which is the sign the delay is too short. The feature is skipped when
+`RAVENBOT_USER_ID` isn't set or equals `BOT_USER_ID`, and each town can turn it
+off with `resend_dropped_ravenbot_messages`. RavenBot's own replies (help,
+cooldowns) never pass the middleman, so they still use up its limit and still
+aren't resent.
+
 ### The bot to the game and RavenBot
 
 | Route | Used through |

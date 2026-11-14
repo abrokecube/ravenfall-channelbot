@@ -68,6 +68,7 @@ def make_town() -> RFChannel:
     town.sub_event = RFChannelSubEvent.NONE
     town.scroll_queue = deque()
     town.scroll_in_use = None
+    town.ravenbot_fallback = None
     town.send_chat_message = mock.AsyncMock()
     town.restart_ravenbot = mock.AsyncMock()
     town.save_scroll_queue = mock.AsyncMock()

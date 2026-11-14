@@ -16,7 +16,8 @@
         "auto_restore_raids": false,
         "auto_stream_quests": true,
         "channel_points_redeems": true,
-        "pause_monitoring": false
+        "pause_monitoring": false,
+        "resend_dropped_ravenbot_messages": true
     },
     {
         "channel_id": "1253884011",

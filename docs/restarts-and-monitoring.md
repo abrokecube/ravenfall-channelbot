@@ -36,7 +36,9 @@ The count resets once `RETRY_WINDOW` passes. Commands the bot sent itself set
 their own.
 
 A missed reply can also mean RavenBot hit its chat limit of 20 messages per 30
-seconds per channel. The game has nothing to do with that case.
+seconds per channel. The game has nothing to do with that case. The bot posts game
+messages RavenBot dropped (see [architecture.md](architecture.md#dropped-ravenbot-messages)),
+and that doesn't touch the watchdog, which watches commands going from RavenBot to the game.
 
 `pausemon`, `resumemon` and `togglebotmonitor` all use `monitoring_paused`, but
 differently. `pausemon` and `resumemon` stop and start the whole `RFChannel`, while

@@ -77,7 +77,7 @@ Code outside `RFChannel` also reaches into its locks and flags in 44 places, and
 - **`ravenfallupdater.py` and `ravenfallshutdown.py`:** they're new and have the most test coverage.
 - **`bot/commands/` framework:** it works, and only needs the small deletions above.
 - **`ravenpy`:** it's shared with `ravenhelper-bot`, so don't change it as part of this. Add public getters there separately to replace the 15 private `_items_*` uses.
-- **Chat throttling:** no phase adds any, as decided on 2026-11-06.
+- **Chat throttling:** no phase adds any, as decided on 2026-11-06. Since 2026-11-14, `bot/ravenbotfallback.py` resends what RavenBot drops instead.
 - **`bot/messageprocessor.py` key handling:** keep both key styles until the middleman switch is finished.
 
 ## Verifying the work
