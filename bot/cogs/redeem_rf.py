@@ -292,6 +292,7 @@ async def get_all_item_count(channel: RFChannel) -> Dict[str, int]:
 
 NO_SENDER_ID = "00000000-0000-0000-0000-000000000000"
 ITEM_NOT_OWNED_IDS = ("item_not_owned", "set_pet_not_owned")
+ITEM_NOT_IN_INVENTORY_IDS = ("item_not_found", "item_not_found_suggest")
 
 async def query_player_item_count(channel: RFChannel, user_name: str, item: Item, timeout: int = 10, log=None) -> int | None:
     """Ask the game how many of `item` a player has, as that player, without posting the reply in chat.
@@ -333,6 +334,14 @@ async def query_player_item_count(channel: RFChannel, user_name: str, item: Item
             return None
     if response.response_id in ITEM_NOT_OWNED_IDS:
         return 0
+    if response.response_id in ITEM_NOT_IN_INVENTORY_IDS:
+        # !count only searches the player's own items, so an item they don't have
+        # comes back as not found, often with suggestions from their inventory.
+        # It's only a 0 if it's about the exact name asked for.
+        if args and str(args[0]).strip().lower() == item.name.lower():
+            return 0
+        log.warning(f"!count {item.name} as {user_name}: not found for query {args[:1]!r}")
+        return None
     if response.response_id == "not_playing":
         raise RecipientNotFoundError(f"{user_name} is not in the game")
     return None

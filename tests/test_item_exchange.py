@@ -722,6 +722,26 @@ class SendItemsVerificationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await redeem_rf.query_player_item_count(town, "viewer", ITEM), 4)
         self.assertFalse(send.await_args.kwargs["forward"])
 
+    async def count_reply(self, response_id, args):
+        town = SimpleNamespace(channel_id="v", channel_name="v")
+        reply = RavenfallResponse(response={"Args": args}, response_id=response_id, formatted_response="")
+        sender = {"Id": redeem_rf.NO_SENDER_ID, "PlatformId": "1"}
+        with (
+            mock.patch.object(redeem_rf, "get_sender_str", mock.AsyncMock(return_value=sender)),
+            mock.patch.object(redeem_rf, "send_ravenfall", mock.AsyncMock(return_value=reply)),
+        ):
+            return await redeem_rf.query_player_item_count(town, "viewer", ITEM)
+
+    async def test_item_missing_from_inventory_counts_as_zero(self):
+        # What the game sends when the player has none: it searches their inventory and suggests
+        suggestions = "Atlarus Bar, Atlarus Katana, Atlarus Staff of Strength +90"
+        self.assertEqual(await self.count_reply("item_not_found_suggest", [ITEM.name, suggestions]), 0)
+        self.assertEqual(await self.count_reply("item_not_found", [ITEM.name.upper()]), 0)
+        self.assertEqual(await self.count_reply("item_not_owned", [ITEM.name]), 0)
+
+    async def test_not_found_for_another_name_is_no_answer(self):
+        self.assertIsNone(await self.count_reply("item_not_found_suggest", ["something else", ITEM.name]))
+
     async def test_count_query_works_with_an_empty_sender_id(self):
         # RavenBot leaves Id empty for nearly every user; the game finds them by PlatformId
         town = SimpleNamespace(channel_id="v", channel_name="v")
