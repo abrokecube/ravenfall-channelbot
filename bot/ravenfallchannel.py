@@ -1805,6 +1805,12 @@ class RFChannel:
                 response = await send_to_server_and_wait_response(self.middleman_connection_id, msg)
                 if response['success'] and response['responses']:
                     match = self.rfloc.identify_string(response['responses'][0]['Format'])
+                    if match is None:
+                        logger.warning(
+                            f"{self.channel_name}: unrecognized auto raid status response: "
+                            f"{response['responses'][0]['Format']!r}"
+                        )
+                        continue
                     await self.process_auto_raid(session, response['responses'][0], match.key)
     
     async def restore_auto_raids(self):

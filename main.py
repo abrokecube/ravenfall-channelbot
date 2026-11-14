@@ -265,7 +265,11 @@ class MyCmdDispatcher(CommandDispatcher):
 
 async def run():
     def handle_loop_exception(loop, context):
-        logger.error("Caught async exception: %s", context["exception"], exc_info=True)
+        exc = context.get("exception")
+        if exc is None:
+            logger.error("Caught async error: %s", context.get("message"))
+            return
+        logger.error("Caught async exception: %s (%s)", exc, context.get("message"), exc_info=exc)
 
     settings.multichat_url  # The bot can't run without multichat, so stop here if it isn't set
 
