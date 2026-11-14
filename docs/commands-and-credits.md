@@ -68,6 +68,7 @@ Added in this order in `main.py`:
 | `TestingCog` | `bot/cogs/testing.py` | Framework test commands |
 | `RedeemCog` | `bot/cogs/redeem.py` | `createreward` |
 | `RedeemRFCog` | `bot/cogs/redeem_rf.py` | Redeems, credits, stock, scroll queue |
+| `ExchangeCog` | `bot/cogs/exchange.py` | `exchange` (craft, uncraft, cancel, pending, log) |
 | `GameCog` | `bot/cogs/game.py` | Restarts, `rfupdate`, `rfshutdown`, `rfstart`, scroll admin, backups |
 | `InfoCog` | `bot/cogs/info.py` | Towns, events, uptime, system info, character stats |
 | `BotStuffCog` | `bot/cogs/bot.py` | `reload_strings`, `pausemon`, `resumemon`, watchdog process control |
@@ -98,9 +99,43 @@ The code is in `bot/cogs/redeem_rf.py`, with storage in `database/models.py`
   characters through `get_char_items` and `get_char_coins`, send
   `RavenBotTemplates.gift_item` through `send_ravenfall`, and report it with
   `track_item_use` and `track_coin_use`. `channel_item_gift_locks` serialises this
-  per town.
+  per town. With `verify_recipient=True`, `send_items` counts the recipient's items
+  (`query_player_item_count`, a `!count` sent as them with `forward=False` so it stays
+  out of chat) before each gift, and settles a gift that got no reply by counting
+  again instead of treating it as failed. When that can't be settled it raises
+  `UnconfirmedSendError`, and nothing should be resent or refunded for it.
 
 Keep the deduct-after-success order for anything else that spends credits.
+
+## Item exchange
+
+`bot/cogs/exchange.py`, logging in `bot/exchange_log.py`.
+
+- `!exchange craft <item> [count]`: the user gifts the recipe's ingredients and gets
+  the crafted item. `!exchange uncraft` is the reverse. Only existing, sendable stock is
+  given, nothing is crafted. `!exchange <item>` shows the recipe and stock,
+  `!exchange cancel` stops and returns what arrived, and `!exchange pending` lists what
+  is owed. Admins have `!exchange log <EX-id>` and `!exchange log user <name>`.
+- **Fee**: `FEE` (10) credits per command, checked at the start and taken only when
+  the user's side has all been delivered or saved for them.
+- **Sessions** (`ExchangeRun`) run on the main event loop, where game messages arrive,
+  whatever loop the command came in on. `RFChannel.ravenfall_message_listeners` feeds
+  them each game message. A gift counts if it's the user's `gift` reply, to any stock
+  account in the town (login or display name), for an item still owed.
+- **Before the instructions**, the user's inventory is checked with `!count` sent as
+  them. These counts are also the baseline for the end, where a gift whose reply was
+  lost is counted only if the user's count and the stock both moved.
+- **Timer**: `GIFT_WINDOW` (2 minutes) runs only while the user and a stock account
+  are in the town and no dungeon is being prepared. `MAX_SESSION` (30 minutes) covers
+  everything. Leaving never cancels an exchange.
+- **Owed items**: whatever can't be gifted because the user left is saved in
+  `pending_exchange_deliveries` and gifted by `deliver_pending` once they're back.
+  Sessions still open when the bot stopped are settled by `recover_interrupted` at
+  startup. A session that was mid-send is marked `interrupted_sending` for the owner.
+- **Logs**: `bot.exchange` writes to `logs/exchange.log`. Lines from a
+  `SessionLogAdapter` carry the session ID (`EX-…`, also shown to the user) and are
+  saved to `exchange_log_entries` in batches. Sessions older than 60 days are purged
+  daily, except ones that still owe something.
 
 ## Scroll queue
 

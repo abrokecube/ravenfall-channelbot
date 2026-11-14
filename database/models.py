@@ -131,6 +131,69 @@ class ChatMessage(Base):
     reply_to = relationship("ChatMessage", remote_side=[id], backref="replies")
     
 
+class ExchangeSession(Base):
+    """One !exchange request, from the command to its last delivery. Purged after 60 days."""
+    __tablename__ = 'exchange_sessions'
+
+    id = Column(String, primary_key=True)  # EX-7F3A9C
+    twitch_user_id = Column(String, nullable=False)
+    user_login = Column(String, nullable=False)
+    channel_id = Column(String, nullable=False)
+    channel_name = Column(String)
+    direction = Column(String, nullable=False)  # craft / uncraft
+    item_id = Column(String)
+    item_name = Column(String)
+    count = Column(Integer)
+    status = Column(String, nullable=False)
+    # {item name: count}
+    required = Column(JSON, default={})
+    received = Column(JSON, default={})
+    sent = Column(JSON, default={})
+    returned = Column(JSON, default={})
+    pending = Column(JSON, default={})
+    baseline = Column(JSON, default={})
+    suggested_account = Column(String)
+    fee_trans_id = Column(Integer)
+    refund_trans_id = Column(Integer)
+    paused_seconds = Column(Float, default=0)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime)
+    ended_at = Column(DateTime)
+
+
+class ExchangeLogEntry(Base):
+    """A line from the bot.exchange logger that belongs to a session."""
+    __tablename__ = 'exchange_log_entries'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String, ForeignKey('exchange_sessions.id', ondelete='CASCADE'), index=True, nullable=False)
+    timestamp = Column(DateTime, nullable=False)
+    level = Column(String)
+    message = Column(String)
+    exc_text = Column(String)
+
+
+class PendingExchangeDelivery(Base):
+    """Items an exchange owes a user that could not be gifted yet, usually because they left."""
+    __tablename__ = 'pending_exchange_deliveries'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String, index=True)
+    twitch_user_id = Column(String, nullable=False)
+    user_login = Column(String, nullable=False)
+    channel_id = Column(String, nullable=False)
+    item_id = Column(String, nullable=False)
+    item_name = Column(String)
+    count = Column(Integer, nullable=False)
+    kind = Column(String, nullable=False)  # output / refund
+    reason = Column(String)
+    # A gift whose result is unknown: checked against the user's count of the item when they return
+    unconfirmed = Column(Boolean, default=False)
+    baseline = Column(Integer)
+    trans_id = Column(Integer)
+    created_at = Column(DateTime, nullable=False)
+
+
 async def create_all_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

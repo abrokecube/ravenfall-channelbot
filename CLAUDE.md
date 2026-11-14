@@ -8,7 +8,7 @@ scroll queue. Python 3.13, asyncio, SQLAlchemy async over `data.db`.
 ## Running the tests
 
 From the repo root, with a timeout of at least 180000 ms (the suite takes
-about 40 seconds):
+about 75 seconds):
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 uv run --no-sync python -m unittest discover -s tests -p "test_*.py"
@@ -35,11 +35,12 @@ Use `-s tests` without `-t .`: `tests` is not a package. In a worktree with no
 | `bot/ravenfallloc.py`, `data/definitions.yaml` | Game string identification and translation |
 | `bot/streamquests.py` | Reads stream quest offers and picks the one a town is most likely to finish |
 | `bot/commands/` | Command framework: events, dispatchers, listeners, decorators, checks, converters |
-| `bot/cogs/` | Commands and redeems. `redeem_rf.py` holds credits and the scroll commands, `game.py` the admin commands |
+| `bot/cogs/` | Commands and redeems. `redeem_rf.py` holds credits and the scroll commands, `exchange.py` the `!exchange` item exchange, `game.py` the admin commands |
+| `bot/exchange_log.py` | `bot.exchange` logger: session IDs, saving lines to the database, the 60-day purge |
 | `database/` | Tables in `models.py`, helpers in `utils.py`, session in `session.py` |
 | `ravenpy/` | RavenNest API client, shared with `ravenhelper-bot` |
 | `utils/` | Sandboxie process control (`runshell.py`), routines, alert monitors, helpers |
-| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_gifting.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py`, `test_single_instance.py`, `test_stream_quests.py`. Helpers: `fastclock.py` (sped-up time for tests that run real restarts and updates), `shared_loc.py` (one loaded `definitions.yaml`) |
+| `tests/` | `test_channel_bugfixes.py`, `test_clients.py`, `test_command_framework.py`, `test_config.py`, `test_gifting.py`, `test_item_exchange.py`, `test_middleman_api.py`, `test_ravenfall_updater.py`, `test_ravenfall_shutdown.py`, `test_ravenfall_loc.py`, `test_single_instance.py`, `test_stream_quests.py`. Helpers: `fastclock.py` (sped-up time for tests that run real restarts and updates), `shared_loc.py` (one loaded `definitions.yaml`) |
 | `scripts/` | One-off scripts, run from the repo root with `python -m scripts.<name>` (e.g. `python -m scripts.itemcreditprice`) |
 
 Sibling repos in the parent folder: `ravenfall-middleman` (Go), `ravenfall-multichat`,

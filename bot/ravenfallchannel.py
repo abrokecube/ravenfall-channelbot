@@ -164,6 +164,8 @@ class RFChannel:
         self.twitch_message_waiter: MessageWaiter = MessageWaiter()
         self.ravenbot_waiter: RavenBotMessageWaiter = RavenBotMessageWaiter()
         self.ravenfall_waiter: RavenfallMessageWaiter = RavenfallMessageWaiter()
+        # Plain callbacks for every game message. They must not block: see bot/cogs/exchange.py
+        self.ravenfall_message_listeners: List[Callable[[RavenfallMessage], None]] = []
         
         self.rfloc = RavenfallLocalization('data/definitions.yaml', self.ravenfall_loc_strings_path)
 
@@ -356,6 +358,11 @@ class RFChannel:
         await self.ravenbot_waiter.process_message(message)
 
     async def event_ravenfall_message(self, message: RavenfallMessage):
+        for listener in list(self.ravenfall_message_listeners):
+            try:
+                listener(message)
+            except Exception:
+                logger.warning("A game message listener failed", exc_info=True)
         await self.ravenfall_waiter.process_message(message)
 
     # Messages from ravenbot

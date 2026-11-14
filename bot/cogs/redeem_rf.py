@@ -103,6 +103,25 @@ class ItemNotFoundError(BaseItemSendException):
 class RecipientNotFoundError(BaseItemSendException):
     pass
 
+class UnconfirmedSendError(BaseItemSendException):
+    """A gift got no reply and checking the recipient's inventory could not settle whether it arrived.
+
+    `items_sent` is what was confirmed before it. `unconfirmed` items may or may not
+    have arrived, so they must be neither resent nor refunded automatically.
+    `recipient_absent` means the recipient left, so their count can be checked when
+    they return, against `baseline`.
+    """
+    def __init__(self, message: str, items_sent: int = 0, unconfirmed: int = 0,
+                 baseline: int | None = None, recipient_absent: bool = False):
+        super().__init__(message, items_sent)
+        self.unconfirmed = unconfirmed
+        self.baseline = baseline
+        self.recipient_absent = recipient_absent
+
+# Seconds between the checks of a recipient's inventory after a gift got no reply
+VERIFY_RETRY_DELAY = 3
+VERIFY_ATTEMPTS = 3
+
 def fill_whitespace(text: str, pattern: str = ". "):
     """
     Replace whitespace runs with a repeated pattern, keeping a single real space
@@ -131,8 +150,11 @@ async def get_sender_str(channel: RFChannel, sender_username: str):
         sender = await get_formatted_sender_data(session, channel.channel_id, sender_username)
     return sender
 
-async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15):
+async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15, forward: bool = True):
     """Send a command to Ravenfall and return a parsed RavenfallResponse.
+
+    With `forward` the game's reply is passed on to RavenBot, which posts it in
+    chat. Turn it off for checks the user doesn't need to see.
 
     Raises:
         CouldNotSendMessageError: If communication failed.
@@ -152,7 +174,8 @@ async def send_ravenfall(channel: RFChannel, message: str, timeout: int = 15):
     edited_response["CorrelationId"] = None
     edited_response["Format"] = formatted_response
     edited_response["Args"] = []
-    await send_to_client(channel.middleman_connection_id, json.dumps(edited_response))
+    if forward:
+        await send_to_client(channel.middleman_connection_id, json.dumps(edited_response))
 
     response_id = None
     if match is not None:
@@ -267,6 +290,83 @@ async def get_all_item_count(channel: RFChannel) -> Dict[str, int]:
                 total_items[item.name] = user_item["amount"]
     return total_items
 
+NO_SENDER_ID = "00000000-0000-0000-0000-000000000000"
+ITEM_NOT_OWNED_IDS = ("item_not_owned", "set_pet_not_owned")
+
+async def query_player_item_count(channel: RFChannel, user_name: str, item: Item, timeout: int = 10, log=None) -> int | None:
+    """Ask the game how many of `item` a player has, as that player, without posting the reply in chat.
+
+    Returns None if the game gave no usable answer.
+
+    Raises:
+        RecipientNotFoundError: If the player is not in the game, or the bot has never
+            seen them in this town and so can't speak for them.
+    """
+    log = log or logger
+    sender = await get_sender_str(channel, user_name)
+    if sender.get("Id") == NO_SENDER_ID or not sender.get("PlatformId"):
+        raise RecipientNotFoundError(f"No sender data for {user_name}")
+    try:
+        response = await send_ravenfall(
+            channel,
+            RavenBotTemplates.query_item_count(sender=sender, item_name=item.name),
+            timeout=timeout,
+            forward=False,
+        )
+    except (TimeoutError, CouldNotSendMessageError) as e:
+        log.info(f"!count {item.name} as {user_name}: no answer ({e})")
+        return None
+    args = response.response.get("Args") or []
+    log.debug(
+        f"!count {item.name} as {user_name}: {response.response_id} "
+        f"format={response.response.get('Format')!r} args={args!r}"
+    )
+    if response.response_id == "item_count":
+        try:
+            if len(args) > 1 and str(args[1]).lower() != item.name.lower():
+                log.warning(f"!count {item.name} as {user_name} answered for {args[1]}")
+                return None
+            return int(args[0])
+        except (ValueError, TypeError, IndexError):
+            return None
+    if response.response_id in ITEM_NOT_OWNED_IDS:
+        return 0
+    if response.response_id == "not_playing":
+        raise RecipientNotFoundError(f"{user_name} is not in the game")
+    return None
+
+async def verify_gift(channel: RFChannel, user_name: str, item: Item, baseline: int | None, sent: int, log=None) -> int | None:
+    """After a gift got no reply, work out how many of it arrived from the recipient's count.
+
+    Returns the number delivered (0 to `sent`), or None if it couldn't be found out.
+
+    Raises:
+        RecipientNotFoundError: If the recipient has left.
+    """
+    log = log or logger
+    if baseline is None:
+        log.warning(f"Can't check the gift of {sent}x {item.name} to {user_name}: no count from before it")
+        return None
+    attempts = 0
+    while attempts < VERIFY_ATTEMPTS:
+        # The game doesn't answer while it prepares a dungeon, so that time doesn't use up a try
+        await wait_while_dungeon_prepares(channel)
+        await asyncio.sleep(VERIFY_RETRY_DELAY)
+        if channel.sub_event == RFChannelSubEvent.DUNGEON_PREPARE:
+            continue
+        attempts += 1
+        count = await query_player_item_count(channel, user_name, item, log=log)
+        if count is None:
+            log.info(f"Check {attempts}/{VERIFY_ATTEMPTS} of the gift of {sent}x {item.name} to {user_name}: no answer")
+            continue
+        delivered = max(0, min(sent, count - baseline))
+        log.info(
+            f"Check of the gift of {sent}x {item.name} to {user_name}: {baseline} before, {count} now, "
+            f"counted as {delivered} delivered" + (" (capped)" if delivered != count - baseline else "")
+        )
+        return delivered
+    return None
+
 channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
 async def send_coins(target_user_name: str, channel: RFChannel, amount: int, on_busy=None):
     """Send coins to `target_user_name` by aggregating coins from other characters.
@@ -371,14 +471,21 @@ async def send_coins(target_user_name: str, channel: RFChannel, amount: int, on_
             raise PartialSendError(f"Ran out of coins ({coins_remaining} remaining)", total_coins - coins_remaining)
 
 channel_item_gift_locks: Dict[str, asyncio.Lock] = {}
-async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int, on_busy=None):
+async def send_items(target_user_name: str, channel: RFChannel, item_name: str, amount: int, on_busy=None,
+                     verify_recipient: bool = False, log=None):
     """Send `amount` of `item_name` to `target_user_name` from available stock in `channel`.
 
     Waits out dungeon preparation before each gift, awaiting `on_busy` the first time.
 
+    With `verify_recipient`, the recipient's count of the item is taken before each
+    gift, and a gift that gets no reply is settled by counting again instead of being
+    treated as failed. `log` is the logger to write to (e.g. an exchange session's).
+
     Raises:
-        ItemNotFoundError, OutOfItemsError, RecipientNotFoundError, PartialSendError
+        ItemNotFoundError, OutOfItemsError, RecipientNotFoundError, PartialSendError,
+        UnconfirmedSendError (only with verify_recipient)
     """
+    log = log or logger
     if channel.channel_id in channel_item_gift_locks:
         lock = channel_item_gift_locks[channel.channel_id]
     else:
@@ -419,16 +526,23 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
             items_remaining = amount
         else:
             items_remaining = total_items
+        to_send_total = items_remaining
         one_item_successful = False
         for user_item in user_items:
             if items_remaining <= 0:
                 break
             items_to_send = min(items_remaining, user_item["amount"])
 
-            logger.info(f"Sending {items_to_send}x {item.name} to {target_user_name} from {user_item['user_name']}")
+            log.info(f"Sending {items_to_send}x {item.name} to {target_user_name} from {user_item['user_name']}")
 
             if await wait_while_dungeon_prepares(channel, on_busy):
                 on_busy = None
+
+            baseline = None
+            if verify_recipient:
+                # RecipientNotFoundError goes to the caller: nothing has been sent in this chunk
+                baseline = await query_player_item_count(channel, target_user_name, item, log=log)
+                log.info(f"{target_user_name} has {baseline if baseline is not None else '?'}x {item.name} before the gift")
 
             send_exception = None
             def no_recipient_check(msg: RavenfallMessage):
@@ -450,10 +564,11 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                             sender = await get_sender_str(channel, user_item["user_name"]),
                             item_name=item.name
                         ),
-                        timeout=2
+                        timeout=2,
+                        forward=not verify_recipient,
                     )
                 except Exception as e:
-                    logger.info(f"Warmup failed: {e}")
+                    log.info(f"Warmup failed: {e}")
             task1 = asyncio.create_task(wait_for_message(channel, no_recipient_check, timeout=15))
             task2 = asyncio.create_task(send_ravenfall(
                 channel, RavenBotTemplates.gift_item(
@@ -469,13 +584,44 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 timeout=15
             )
             try:
+                if not done:
+                    raise TimeoutError("Timed out waiting for response")
                 response = done.pop().result()
             except Exception as e:
-                logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {send_exception}", exc_info=True)
+                log.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {e!r}", exc_info=True)
                 response = None
                 send_exception = e
             for p in pending:
                 p.cancel()
+
+            if send_exception is not None and verify_recipient:
+                # The gift may have gone through without a reply: count what the recipient has now
+                sent_so_far = to_send_total - items_remaining
+                try:
+                    delivered = await verify_gift(channel, target_user_name, item, baseline, items_to_send, log=log)
+                except RecipientNotFoundError:
+                    log.warning(f"{target_user_name} left before the gift of {items_to_send}x {item.name} could be checked")
+                    raise UnconfirmedSendError(
+                        "Recipient left before the gift could be checked", sent_so_far,
+                        unconfirmed=items_to_send, baseline=baseline, recipient_absent=True,
+                    )
+                except Exception as e:
+                    log.warning(f"Checking the gift of {items_to_send}x {item.name} failed: {e!r}", exc_info=True)
+                    delivered = None
+                if delivered is None:
+                    log.error(f"Could not confirm the gift of {items_to_send}x {item.name} to {target_user_name}")
+                    raise UnconfirmedSendError(
+                        "Could not confirm the gift", sent_so_far,
+                        unconfirmed=items_to_send, baseline=baseline,
+                    )
+                if delivered > 0:
+                    try:
+                        await track_item_use(user_item['user_name'], user_item['char_index'], item.id, delivered)
+                    except Exception:
+                        log.warning(f"Could not track item use: {user_item['user_name']}:{user_item['char_index']} - {delivered}x {item.name}")
+                items_remaining -= delivered
+                one_item_successful = True
+                continue
 
             if send_exception is not None:
                 if not one_item_successful:
@@ -483,10 +629,14 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 else:
                     continue
 
+            log.debug(
+                f"Gift reply: {response.response_id} format={response.response.get('Format')!r} "
+                f"args={response.response.get('Args')!r}"
+            )
             if response.response_id not in ("gift", "gift_item_not_owned"):
-                logger.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")
+                log.info(f"Failed to send {item.name} to {target_user_name} from {user_item['user_name']}: {response.response_id}")
                 if response.response_id in ("gift_player_not_found", "send_player_not_found", "gift_fail_target_missing"):
-                    raise RecipientNotFoundError("Recipient is not in the game")
+                    raise RecipientNotFoundError("Recipient is not in the game", to_send_total - items_remaining)
                 if not one_item_successful:
                     raise CouldNotSendItemsError("Failed to send items")
 
@@ -502,12 +652,12 @@ async def send_items(target_user_name: str, channel: RFChannel, item_name: str, 
                 try:
                     await track_item_use(user_item['user_name'], user_item['char_index'], item.id, items_sent)
                 except Exception as e:
-                    logger.warning(f"Could not track item use: {user_item['user_name']}:{user_item['char_index']} - {items_sent}x {item.name}")
+                    log.warning(f"Could not track item use: {user_item['user_name']}:{user_item['char_index']} - {items_sent}x {item.name}")
             items_remaining -= items_sent
             one_item_successful = True
 
         if amount != -1 and items_remaining > 0:
-            raise PartialSendError(f"Ran out of items ({items_remaining} remaining)", total_items - items_remaining)
+            raise PartialSendError(f"Ran out of items ({items_remaining} remaining)", amount - items_remaining)
 
 
 class RedeemRFCog(Cog):

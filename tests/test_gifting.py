@@ -70,7 +70,7 @@ class SendItemsDuringDungeonPreparationTests(unittest.IsolatedAsyncioTestCase):
         ]}
         sent_during = []
 
-        async def send_ravenfall(channel, message, timeout=15):
+        async def send_ravenfall(channel, message, timeout=15, forward=True):
             sent_during.append(channel.sub_event)
             return RavenfallResponse(response={"Args": [2]}, response_id="gift", formatted_response="")
 

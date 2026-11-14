@@ -112,7 +112,11 @@ logger_config = {
     'bot.commands': {
         'filename': 'commands.log',
         'console_level': logging.INFO,
-    }
+    },
+    'bot.exchange': {
+        'filename': 'exchange.log',
+        'console_level': logging.INFO,
+    },
 }
 logging_level_strs = {
     "debug": logging.DEBUG,
@@ -299,6 +303,8 @@ async def run():
     await event_manager.add_cog(RedeemCog)
     from bot.cogs.redeem_rf import RedeemRFCog
     await event_manager.add_cog(RedeemRFCog)
+    from bot.cogs.exchange import ExchangeCog
+    await event_manager.add_cog(ExchangeCog)
     from bot.cogs.game import GameCog
     await event_manager.add_cog(GameCog, rf_webops_url=settings.webops_url)
     from bot.cogs.info import InfoCog
