@@ -8,6 +8,9 @@ when its stock is below its target:
 Only redeemable items (craftable, not soulbound, priced in item_values.json) get a
 target. Ingredients already in stock are used before crafting more of them.
 
+When resources run out, the report also lists the raw materials still missing to
+bring every item up to its target (also written to OUT_MISSING).
+
 Purchases come from the "Shop purchase: <item> x<count>" rows in the bot's
 user_credit_transaction table. That table has no channel column, so every
 channel's purchases count. The database is opened read-only.
@@ -69,6 +72,7 @@ EXCLUDE_ITEMS: set[str] = set()
 
 OUT_REPORT = Path("./output/planned_crafts_demand.txt")
 OUT_REQUIRED = Path("./output/required_items_demand.json")
+OUT_MISSING = Path("./output/missing_items_demand.json")
 
 PURCHASE_RE = re.compile(r"^Shop purchase: (.+) x(\d+)$")
 
@@ -91,6 +95,7 @@ class Target:
     reason: str
     crafted: int = 0
     not_craftable: bool = False
+    missing: dict[str, int] = field(default_factory=dict)  # raw materials short
 
 
 @dataclass
@@ -241,13 +246,14 @@ def try_craft(plan: Plan, item: ravenpy.Item, amount: int) -> Plan | None:
     return trial if _craft(trial, item, amount) else None
 
 
+def priority(t: Target):
+    if t.reason == "sales":
+        return (0, -t.sales.orders, t.stock / max(1, t.sales.largest), t.item.name)
+    return (1, 0, t.stock / max(1, t.target), t.item.name)
+
+
 def plan_crafts(targets: list[Target], plan: Plan) -> Plan:
     """Fills each target's need, as far as resources allow, in priority order."""
-    def priority(t: Target):
-        if t.reason == "sales":
-            return (0, -t.sales.orders, t.stock / max(1, t.sales.largest), t.item.name)
-        return (1, 0, t.stock / max(1, t.target), t.item.name)
-
     for t in sorted(targets, key=priority):
         if t.need <= 0 or t.not_craftable:
             continue
@@ -263,6 +269,45 @@ def plan_crafts(targets: list[Target], plan: Plan) -> Plan:
         if best is not None:
             t.crafted, plan = best
     return plan
+
+
+def find_shortfall(targets: list[Target], plan: Plan) -> dict[str, int]:
+    """Raw materials still needed to bring every target up to its stock target.
+
+    Picks up where plan_crafts stopped: whatever it left in `available` is used
+    first, and anything that runs out is recorded as missing instead of failing.
+    Each target's own missing materials are stored on `Target.missing`.
+    """
+    available = dict(plan.available)
+    total: defaultdict[str, int] = defaultdict(int)
+
+    def consume(item: ravenpy.Item, amount: int, missing: dict[str, int], depth: int) -> None:
+        take = min(available.get(item.name, 0), amount)
+        if take:
+            available[item.name] -= take
+            amount -= take
+        if amount == 0:
+            return
+        if not item.craft_ingredients or depth > 20:
+            missing[item.name] = missing.get(item.name, 0) + amount
+            return
+        for ing in item.craft_ingredients:
+            consume(ing.item, ing.amount * amount, missing, depth + 1)
+
+    for t in sorted(targets, key=priority):
+        remaining = t.need - t.crafted
+        if remaining <= 0:
+            continue
+        missing: dict[str, int] = {}
+        if t.not_craftable:
+            missing[t.item.name] = remaining
+        else:
+            for ing in t.item.craft_ingredients:
+                consume(ing.item, ing.amount * remaining, missing, 1)
+        t.missing = missing
+        for name, amount in missing.items():
+            total[name] += amount
+    return dict(total)
 
 
 def ordered_commands(crafts: dict[str, int]) -> list[str]:
@@ -294,7 +339,9 @@ def ordered_commands(crafts: dict[str, int]) -> list[str]:
     ]
 
 
-def report(targets: list[Target], plan: Plan) -> list[str]:
+def report(
+    targets: list[Target], plan: Plan, shortfall: dict[str, int], stock: dict[str, int]
+) -> list[str]:
     rows = sorted(targets, key=lambda t: (t.reason != "sales", -t.sales.orders, t.item.name))
     rows = [t for t in rows if t.need > 0 or t.sales.orders > 0]
     name_w = max([len(t.item.name) for t in rows] + [4])
@@ -310,7 +357,8 @@ def report(targets: list[Target], plan: Plan) -> list[str]:
         if t.not_craftable and t.need > 0:
             notes.append("not craftable, gather it")
         elif t.crafted < t.need:
-            notes.append(f"short {t.need - t.crafted} (resources)")
+            lacking = ", ".join(sorted(t.missing))
+            notes.append(f"short {t.need - t.crafted}, needs {lacking}")
         lines.append(
             f"{t.item.name.ljust(name_w)}  {t.sales.orders:>6}  {t.sales.largest:>7}  "
             f"{t.stock:>7}  {t.minimum:>5}  {t.target:>7}  {t.crafted:>6}  {', '.join(notes)}"
@@ -320,6 +368,20 @@ def report(targets: list[Target], plan: Plan) -> list[str]:
     mat_w = max([len(n) for n in plan.taken] + [4])
     for name, amount in sorted(plan.taken.items()):
         lines.append(f"{name.ljust(mat_w)}  {amount:>8}")
+    lines.append("")
+    if shortfall:
+        lines.append(
+            "Missing materials (gather these to reach every target; 'Usable' is "
+            f"{INGREDIENT_USE_PERCENTAGE:.0%} of stock for raw resources):"
+        )
+        miss_w = max([len(n) for n in shortfall] + [4])
+        lines.append(f"{'Item'.ljust(miss_w)}  {'Missing':>8}  {'Stock':>8}  {'Usable':>8}")
+        for name, amount in sorted(shortfall.items(), key=lambda kv: (-kv[1], kv[0])):
+            have = stock.get(name, 0)
+            usable = math.floor(have * INGREDIENT_USE_PERCENTAGE)
+            lines.append(f"{name.ljust(miss_w)}  {amount:>8}  {have:>8}  {usable:>8}")
+    else:
+        lines.append("Missing materials: none, every target can be met.")
     lines.append("")
     lines.append("Commands:")
     lines.extend(ordered_commands(plan.crafts))
@@ -349,11 +411,13 @@ async def main() -> int:
 
     targets = build_targets(stock, sales, prices)
     plan = plan_crafts(targets, Plan(available=starting_available(stock, targets)))
-    lines = report(targets, plan)
+    shortfall = find_shortfall(targets, plan)
+    lines = report(targets, plan, shortfall, stock)
 
     OUT_REPORT.parent.mkdir(parents=True, exist_ok=True)
     OUT_REPORT.write_text("\n".join(lines), encoding="utf-8")
     OUT_REQUIRED.write_text(json.dumps(dict(sorted(plan.taken.items())), indent=4), encoding="utf-8")
+    OUT_MISSING.write_text(json.dumps(dict(sorted(shortfall.items())), indent=4), encoding="utf-8")
 
     needing = [t for t in targets if t.need > 0]
     print("\n".join(lines))
@@ -363,6 +427,7 @@ async def main() -> int:
     )
     print(f"Report written to {OUT_REPORT.resolve()}")
     print(f"Materials written to {OUT_REQUIRED.resolve()}")
+    print(f"Missing materials written to {OUT_MISSING.resolve()}")
     return 0
 
 
