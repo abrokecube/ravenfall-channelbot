@@ -722,6 +722,17 @@ class SendItemsVerificationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await redeem_rf.query_player_item_count(town, "viewer", ITEM), 4)
         self.assertFalse(send.await_args.kwargs["forward"])
 
+    async def test_count_query_works_with_an_empty_sender_id(self):
+        # RavenBot leaves Id empty for nearly every user; the game finds them by PlatformId
+        town = SimpleNamespace(channel_id="v", channel_name="v")
+        reply = RavenfallResponse(response={"Args": [3, ITEM.name]}, response_id="item_count", formatted_response="")
+        sender = {"Id": redeem_rf.NO_SENDER_ID, "PlatformId": "1300710657"}
+        with (
+            mock.patch.object(redeem_rf, "get_sender_str", mock.AsyncMock(return_value=sender)),
+            mock.patch.object(redeem_rf, "send_ravenfall", mock.AsyncMock(return_value=reply)),
+        ):
+            self.assertEqual(await redeem_rf.query_player_item_count(town, "viewer", ITEM), 3)
+
     async def test_count_query_needs_sender_data(self):
         town = SimpleNamespace(channel_id="v", channel_name="v")
         sender = {"Id": redeem_rf.NO_SENDER_ID, "PlatformId": None}

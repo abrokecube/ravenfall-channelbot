@@ -304,8 +304,10 @@ async def query_player_item_count(channel: RFChannel, user_name: str, item: Item
     """
     log = log or logger
     sender = await get_sender_str(channel, user_name)
-    if sender.get("Id") == NO_SENDER_ID or not sender.get("PlatformId"):
-        raise RecipientNotFoundError(f"No sender data for {user_name}")
+    # RavenBot leaves Id empty for almost everyone, and the game then finds the
+    # player by Platform and PlatformId, so only that has to be known
+    if not sender.get("PlatformId"):
+        raise RecipientNotFoundError(f"No sender data for {user_name} in {channel.channel_name}")
     try:
         response = await send_ravenfall(
             channel,
