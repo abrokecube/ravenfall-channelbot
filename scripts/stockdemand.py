@@ -49,8 +49,8 @@ INGREDIENT_USE_PERCENTAGE = 0.75  # share of raw resources in stock the plan may
 
 # Every redeemable item in a category is kept at least at this stock.
 CATEGORY_MIN_STOCK: dict[ravenpy.ItemCategory, int] = {
-    Cat.Weapon: 1,
-    Cat.Armor: 1,
+    Cat.Weapon: 4,
+    Cat.Armor: 4,
     Cat.Ring: 1,
     Cat.Amulet: 1,
     Cat.Food: 10,
