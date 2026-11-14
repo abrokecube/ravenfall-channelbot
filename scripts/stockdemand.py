@@ -317,8 +317,9 @@ def report(targets: list[Target], plan: Plan) -> list[str]:
         )
     lines.append("")
     lines.append("Materials (give these to the crafter):")
+    mat_w = max([len(n) for n in plan.taken] + [4])
     for name, amount in sorted(plan.taken.items()):
-        lines.append(f"{str(amount).rjust(8)} {name}")
+        lines.append(f"{name.ljust(mat_w)}  {amount:>8}")
     lines.append("")
     lines.append("Commands:")
     lines.extend(ordered_commands(plan.crafts))
