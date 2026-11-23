@@ -632,12 +632,14 @@ class InfoCog(Cog):
             action_symbol = " "
             is_event_island = char.island in (ravenpy.Islands.Mangrove, ravenpy.Islands.Ravebridge, ravenpy.Islands.War)
             training_skill_is_maxed = False
+            training_skill_at_999 = False
             if char.training:
                 if char.training in (Skills.All, Skills.Health):
                     t_skill = min(char.attack, char.defense, char.strength, key=lambda x: x.level)
                 else:
                     t_skill = char.get_skill(char.training)
-                training_skill_is_maxed = t_skill.level == 999 and (t_skill.level_exp / t_skill.total_exp_for_level) > 0.99                   
+                training_skill_at_999 = t_skill.level >= 999
+                training_skill_is_maxed = training_skill_at_999 and (t_skill.level_exp / t_skill.total_exp_for_level) > 0.99
             if training_skill_is_maxed:
                 action_symbol = "-"
                 
@@ -655,7 +657,7 @@ class InfoCog(Cog):
                     if is_training_combat and skill.level < char.combat_level:
                         recommended_island_max = max(ravenpy.get_island_for_level(char.combat_level), recommended_island_min, key=lambda x: x.value)
 
-                    if (not training_skill_is_maxed) and ((not char.island or char.island.value > recommended_island_max.value) or char.island.value < recommended_island_min.value):
+                    if (not training_skill_at_999) and ((not char.island or char.island.value > recommended_island_max.value) or char.island.value < recommended_island_min.value):
                         rec_island = f"Sail to {recommended_island_max.name.capitalize()}"
                         action_symbol = "*"
             
