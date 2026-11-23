@@ -23,7 +23,8 @@ QUEST_EXP_KEYS = frozenset({
 })
 EXP_PERCENT_ARG = "expPercent"
 
-REWARD_EXP: re.Pattern = re.compile(r"([\d,]+) ([A-Za-z]+) exp\b")
+# Anchored on "coins and" so the task of an exp quest, "Gain 28,402,852 Strength exp", isn't read as the reward.
+REWARD_EXP: re.Pattern = re.compile(r"coins and ([\d,]+) ([A-Za-z]+) exp\b")
 
 
 class RewardExp(NamedTuple):

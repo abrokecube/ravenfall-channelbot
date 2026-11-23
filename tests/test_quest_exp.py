@@ -25,6 +25,10 @@ class FindRewardExp(unittest.TestCase):
     def test_none_without_exp(self):
         self.assertIsNone(find_reward_exp(["Gather 1,680 times", "66,550 coins", 3]))
 
+    def test_skips_the_exp_in_an_exp_quests_task(self):
+        args = ["Gain 28,402,852 Strength exp", "7,970 coins and 1,000 Strength exp"]
+        self.assertEqual(find_reward_exp(args), RewardExp(1000, "strength"))
+
 
 class ExpPercent(unittest.TestCase):
     def test_share_of_the_current_level(self):
