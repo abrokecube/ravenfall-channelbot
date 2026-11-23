@@ -122,5 +122,8 @@ enchant_cooldown_active: "Cooldown: {timeLeft}. Cost to clear: {totalCost} coins
 village_updated: "Updated village target. Active boosts: {activeBoosts}"
 village_boost_no_boost: "Current town level: {townHallLevel} ({levelPercent}) {currentExp} / {requiredExp} EXP – Active boosts: None"
 village_boost: "Current town level: {townHallLevel} ({levelPercent}) {currentExp} / {requiredExp} EXP – Active boosts: {activeBoosts}"
+# {expPercent}: the reward exp as a share of the player's current level in that skill, "?%" if it can't be read.
+# Also on quest_done, quest_weekly_done, quest_event_done, quest_event_today and quest_chain_finished.
+quest_taken: "Quest taken: {quest}. Reward: {reward} ({expPercent} of a level)."
 
 twitch_subscription: you're cool

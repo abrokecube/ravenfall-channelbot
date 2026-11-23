@@ -22,6 +22,7 @@ from .multichat_command import send_multichat_command, get_scroll_counts
 from .messageprocessor import RavenMessage, MessageMetadata
 from .ravenfallloc import RavenfallLocalization, round_skill_bonuses
 from .ravenbotfallback import RavenBotChatFallback
+from .questexp import QUEST_EXP_KEYS, EXP_PERCENT_ARG, find_reward_exp, exp_percent
 from .message_templates import RavenBotTemplates
 from .message_builders import SenderBuilder
 from .streamquests import (
@@ -508,6 +509,11 @@ class RFChannel:
                 else:
                     await self.send_chat_message(f"{', '.join(loots)}", reply_id=message['CorrelationId'])
                 return {'block': True}
+            elif key in QUEST_EXP_KEYS and self._translation_uses(key, EXP_PERCENT_ARG):
+                reward = find_reward_exp(message_args)
+                if reward is not None:
+                    player = await self.get_player(message['Recipent']['PlatformUserName'])
+                    additional_args[EXP_PERCENT_ARG] = exp_percent(reward, player) or "?%"
         if self.ravenfall_loc_strings_path:
             trans_str = self.rfloc.translate_string(message['Format'], message['Args'], match, additional_args).strip()
             if len(trans_str) == 0:
@@ -523,6 +529,11 @@ class RFChannel:
             message['Args'] = []
         return message
     
+    def _translation_uses(self, key: str, arg: str) -> bool:
+        """Whether any translation for this key mentions the argument, so it's worth working out."""
+        translation = self.rfloc.translated_strings.get(key)
+        return translation is not None and any(arg in s for s in translation.strings)
+
     async def record_character(
         self, 
         char_id: str, 
