@@ -644,7 +644,8 @@ class InfoCog(Cog):
                 action_symbol = "-"
                 
             rec_island = ""
-            if char.training and not char.training == Skills.Sailing and not is_event_island and not char.in_duel:
+            sailing_and_fishing = char.is_sailing and char.training == Skills.Fishing
+            if char.training and not char.training == Skills.Sailing and not is_event_island and not char.in_duel and not sailing_and_fishing:
                 if not (char.in_raid or char.in_dungeon):
                     if char.training in (Skills.All, Skills.Health):
                         skill = max(char.attack, char.defense, char.strength, key=lambda x: x.level)
